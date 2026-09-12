@@ -15,7 +15,7 @@ def test_the_documented_case_three_bps_against_nine(envelope: Envelope) -> None:
     check = cost_floor(envelope, Decimal("3.0"), venue="hyperliquid")
     # The cheapest hyperliquid channel is maker-maker at 3.0, so the check passes on quote...
     assert check.channel.key == "hyperliquid/maker-maker"
-    assert check.outcome is FloorOutcome.PASS
+    assert check.outcome is FloorOutcome.CLEARED
     assert check.margin_bps == Decimal("0.0")
 
     taker_only = Envelope(tuple(c for c in envelope.channels if c.name == "taker-taker"))
@@ -46,14 +46,14 @@ def test_a_stop_becomes_a_closed_row_on_the_cost_axis(envelope: Envelope, now: d
 
 def test_passing_layer_zero_is_not_a_verdict(envelope: Envelope, now: datetime) -> None:
     check = cost_floor(envelope, Decimal("20"))
-    assert check.outcome is FloorOutcome.PASS
+    assert check.outcome is FloorOutcome.CLEARED
     with pytest.raises(ValueError, match="nothing to record"):
         check.to_entry(entry_id="H-021", subject="x", recorded_at=now)
 
 
 def test_equal_to_the_floor_is_not_below_it(envelope: Envelope) -> None:
     check = cost_floor(envelope, Decimal("3.0"))
-    assert check.outcome is FloorOutcome.PASS
+    assert check.outcome is FloorOutcome.CLEARED
     assert check.margin_bps == 0
 
 
@@ -61,7 +61,7 @@ def test_measured_cost_is_reported_but_does_not_decide(envelope: Envelope, now: 
     bybit_taker = Envelope(tuple(c for c in envelope.channels if c.key == "bybit/taker-taker"))
     check = cost_floor(bybit_taker, Decimal("12.0"))
     # Clears the 11.0 quote, does not clear the 15.02 that execution actually cost.
-    assert check.outcome is FloorOutcome.PASS
+    assert check.outcome is FloorOutcome.CLEARED
     assert check.margin_bps == Decimal("1.0")
     assert check.measured_margin_bps == Decimal("-3.02")
     assert check.clears_measured_cost is False

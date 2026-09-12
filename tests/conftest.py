@@ -18,4 +18,3 @@ def now() -> datetime:
 @pytest.fixture
 def envelope() -> Envelope:
     return load_envelope(EXAMPLES / "envelope.toml")
-

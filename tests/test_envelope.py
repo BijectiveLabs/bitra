@@ -20,18 +20,14 @@ def test_example_envelope_reproduces_the_published_schedule(envelope: Envelope) 
 
 
 def test_toml_numbers_arrive_as_exact_decimals() -> None:
-    env = parse_envelope(
-        '[[channel]]\nvenue="v"\nname="n"\nentry_fee_bps=0.1\nexit_fee_bps=0.2\n'
-    )
+    env = parse_envelope('[[channel]]\nvenue="v"\nname="n"\nentry_fee_bps=0.1\nexit_fee_bps=0.2\n')
     c = env.channels[0]
     assert isinstance(c.entry_fee_bps, Decimal)
     assert str(c.round_trip_bps) == "0.3"
 
 
 def test_integers_and_strings_are_accepted_as_numbers() -> None:
-    env = parse_envelope(
-        '[[channel]]\nvenue="v"\nname="n"\nentry_fee_bps=5\nexit_fee_bps="5.5"\n'
-    )
+    env = parse_envelope('[[channel]]\nvenue="v"\nname="n"\nentry_fee_bps=5\nexit_fee_bps="5.5"\n')
     assert env.channels[0].round_trip_bps == Decimal("10.5")
 
 

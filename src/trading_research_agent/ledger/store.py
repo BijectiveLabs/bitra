@@ -162,6 +162,4 @@ class Ledger:
             raise LedgerError("a retraction cannot itself be retracted")
         already = [e for e in existing if e.retracts == entry.retracts]
         if already:
-            raise LedgerError(
-                f"{entry.retracts!r} is already retracted by {already[0].entry_id!r}"
-            )
+            raise LedgerError(f"{entry.retracts!r} is already retracted by {already[0].entry_id!r}")

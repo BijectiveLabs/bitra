@@ -6,10 +6,10 @@ after thirty entries, and it is how "not proven" quietly turns into "falsified" 
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class Verdict(str, Enum):
+class Verdict(StrEnum):
     """How a ledger row ended, or that it has not."""
 
     FALSIFIED = "FALSIFIED"
@@ -34,7 +34,7 @@ class Verdict(str, Enum):
         return self in (Verdict.CONFIRMED, Verdict.VALIDATED)
 
 
-class Axis(str, Enum):
+class Axis(StrEnum):
     """What ended a hypothesis, or what is standing in its way."""
 
     IDEA = "idea"
@@ -50,7 +50,7 @@ class Axis(str, Enum):
     MECHANISM_INVERTED = "mechanism inverted"
 
 
-class Transferability(str, Enum):
+class Transferability(StrEnum):
     """Whether a verdict carries to an operator on different infrastructure."""
 
     UNIVERSAL = "UNIVERSAL"

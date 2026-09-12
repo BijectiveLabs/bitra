@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from enum import Enum
+from enum import StrEnum
 
 from trading_research_agent.envelope.model import Channel, Envelope
 from trading_research_agent.ledger.entry import LedgerEntry, ReversalPoint
@@ -22,8 +22,8 @@ from trading_research_agent.ledger.vocabulary import Axis, Transferability, Verd
 LAYER = 0
 
 
-class FloorOutcome(str, Enum):
-    PASS = "pass"
+class FloorOutcome(StrEnum):
+    CLEARED = "cleared"
     STOP = "stop"
 
 
@@ -114,7 +114,7 @@ def cost_floor(
         measured_margin = plausible_magnitude_bps - channel.measured_round_trip_bps
 
     stopped = plausible_magnitude_bps < channel.round_trip_bps
-    outcome = FloorOutcome.STOP if stopped else FloorOutcome.PASS
+    outcome = FloorOutcome.STOP if stopped else FloorOutcome.CLEARED
     return FloorCheck(
         plausible_magnitude_bps=plausible_magnitude_bps,
         channel=channel,
