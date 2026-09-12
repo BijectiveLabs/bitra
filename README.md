@@ -43,7 +43,8 @@ what each one died of. The agent inherits that discipline as code:
 | `trading_research_agent.ledger` | The kill ledger: a closed vocabulary of verdicts and axes, an append-only store, and the consistency rules between them |
 | `trading_research_agent.envelope` | The operating envelope: fees per channel, measured round trips, latency. Configuration, never constants |
 | `trading_research_agent.data` | The data gate: Bybit and Binance public archives to canonical trades, a one-pass audit with findings, a manifest with checksums, and exact `DECIMAL` Parquet with the `[data]` extra |
-| `trading_research_agent.cli` | The `tra` command: fetch, audit, floor, check, show |
+| `trading_research_agent.agent` | An idea through layers 0, 2 and 3: bound, cost floor, mechanism memo with a critic, sealed pre-registration; refusals and verdicts recorded apart. Providers as extras: `[anthropic]`, `[openai]` |
+| `trading_research_agent.cli` | The `tra` command: fetch, audit, floor, check, show, propose, refusals |
 | `trading_research_agent.chain` | The falsification chain. Layer 0 (cost floor) and layer 3 (sealed pre-registration with numeric kill criteria and tighten-only amendments) are implemented |
 
 Layer 0 in six lines:
@@ -72,6 +73,8 @@ tra data audit data/BTCUSDT-trades-2025-01.zip --venue binance --instrument BTCU
 tra chain floor --envelope examples/envelope.toml --magnitude 3.0 --venue hyperliquid     --subject "informed-flow burst drift" --ledger ledger.jsonl --id H-001
 tra chain check preregistration.json
 tra ledger show
+tra agent propose --idea "Longs paying high funding get squeezed into settlement"     --envelope examples/envelope.toml --provider anthropic
+tra agent refusals
 ```
 
 `data fetch` streams the archive to a `.part` file, hashes it as it arrives, and keeps it only
@@ -83,7 +86,7 @@ dataset the way the gate would, and writes the manifest with the finding either 
 | Release | Adds |
 |---|---|
 | 0.1 | Ledger, envelope, layer 0, pre-registration with numeric kill criteria, public-archive ingestion and dataset audit for two venues, `tra` CLI |
-| 0.2 | The agent: mechanism memo and falsifiable claim written by a language model, validated by code, recorded to the ledger; bounded revision loop |
+| 0.2 | The agent: bound, mechanism memo with a critic, and pre-registration drafted by a language model, validated by the existing gates, recorded to the ledger; bounded revision loop; Anthropic and OpenAI adapters |
 | 0.3 | Execution realism: cost identity, latency-shifted fills, trade-through matching, fill probability as its own quantity; statistical validation with matched nulls |
 | 0.4 | Shadow harness on one code path; MCP server exposing the gates to any agent host |
 
@@ -102,8 +105,8 @@ uv run pytest
 
 See `CONTRIBUTING.md` for the branch flow and the standards the code is held to,
 `docs/architecture.md` for the package boundaries and the file formats at them, `docs/data.md`
-for the data gate, `docs/chain.md` for the chain, and `docs/ledger.md` for the verdict
-vocabulary.
+for the data gate, `docs/chain.md` for the chain, `docs/agent.md` for the agent, and
+`docs/ledger.md` for the verdict vocabulary.
 
 ## License
 

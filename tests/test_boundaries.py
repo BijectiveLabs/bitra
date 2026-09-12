@@ -59,11 +59,11 @@ def test_subpackage_only_reaches_downward(subpackage: str) -> None:
 
 @pytest.mark.parametrize("subpackage", _subpackages())
 def test_only_agent_talks_to_a_language_model(subpackage: str) -> None:
-    if subpackage == "agent":
-        return
     for path in (SRC / subpackage).rglob("*.py"):
+        if subpackage == "agent" and path.parent.name == "providers":
+            continue
         roots = {n.split(".")[0] for n in _imports(path)}
-        assert roots.isdisjoint(LLM_CLIENTS), f"{path}: {subpackage} imports an LLM client"
+        assert roots.isdisjoint(LLM_CLIENTS), f"{path}: vendor SDKs live only in agent/providers"
 
 
 def test_nothing_reaches_into_a_private_platform() -> None:

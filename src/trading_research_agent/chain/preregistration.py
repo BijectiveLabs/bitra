@@ -213,6 +213,15 @@ class Preregistration:
         return hashlib.sha256(payload.encode("ascii")).hexdigest()
 
 
+def validate_mechanism(text: str) -> None:
+    """The form of a mechanism memo: one sentence, on one line, long enough to name a party.
+
+    Only the form. Whether the sentence names somebody who is structurally forced to lose is
+    a question for a reader, or for the data at layer 5; it is not decided here.
+    """
+    _one_sentence(text)
+
+
 def _one_sentence(text: str) -> None:
     body = text.strip()
     if "\n" in body:

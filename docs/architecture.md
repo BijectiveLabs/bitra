@@ -30,7 +30,7 @@ Rules, each enforced by a test in `tests/test_boundaries.py`:
 4. Source files are ASCII.
 
 Not every package exists yet. The list is the plan; a package is added when its first gate
-lands with tests. Today: `ledger`, `envelope`, `data`, `chain`, `cli`.
+lands with tests. Today: `ledger`, `envelope`, `data`, `chain`, `agent`, `cli`.
 
 ## The chain
 
@@ -38,7 +38,7 @@ lands with tests. Today: `ledger`, `envelope`, `data`, `chain`, `cli`.
 |---|---|---|---|---|
 | 0 | Cost floor | plausible magnitude below the cheapest round trip | minutes | implemented |
 | 1 | Market observation | the phenomenon does not recur | hours | planned |
-| 2 | Mechanism memo | nobody can be named who is structurally forced to lose | minutes | 0.2 |
+| 2 | Mechanism memo | nobody can be named who is structurally forced to lose | minutes | implemented (model writes, code checks the form, a critic objects once) |
 | 3 | Pre-registration | the claim cannot be stated so data could refute it | hours | implemented |
 | 4 | Data requirements | no available instrument can measure the premise | hours to days | 0.3 |
 | 5 | Statistical validation | interval spans zero, loses to a matched null, or lives in one subperiod | days | 0.3 |

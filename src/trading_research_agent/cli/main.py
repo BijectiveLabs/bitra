@@ -17,6 +17,9 @@ from pathlib import Path
 from typing import Any
 
 from trading_research_agent import __version__
+from trading_research_agent.agent import Completer, Outcome, RunConfig, propose
+from trading_research_agent.agent.pipeline import read_refusals
+from trading_research_agent.agent.providers.anthropic import DEFAULT_MODEL, ProviderError
 from trading_research_agent.chain import cost_floor
 from trading_research_agent.chain.preregistration import PreregistrationError
 from trading_research_agent.chain.preregistration import from_record as prereg_from_record
@@ -114,6 +117,28 @@ def build_parser() -> argparse.ArgumentParser:
     check_cmd.add_argument("file", type=Path)
     check_cmd.add_argument("--json", action="store_true")
 
+    agent = top.add_parser("agent", help="an idea through layers 0, 2 and 3").add_subparsers(
+        dest="command", required=True
+    )
+    propose_cmd = agent.add_parser("propose", help="bound, floor, memo, registration")
+    propose_cmd.add_argument("--idea", required=True, help="the idea, in plain language")
+    propose_cmd.add_argument("--envelope", type=Path, required=True)
+    propose_cmd.add_argument("--provider", choices=("anthropic", "openai"), required=True)
+    propose_cmd.add_argument("--model", help="model name; anthropic defaults to " + DEFAULT_MODEL)
+    propose_cmd.add_argument("--venue")
+    propose_cmd.add_argument(
+        "--magnitude", type=parse_decimal, help="declare the bound yourself, bps"
+    )
+    propose_cmd.add_argument("--max-revisions", type=int, default=2)
+    propose_cmd.add_argument("--ledger", type=Path, default=Path("ledger.jsonl"))
+    propose_cmd.add_argument("--refusals", type=Path, default=Path("refusals.jsonl"))
+    propose_cmd.add_argument("--runs", type=Path, default=Path("runs"))
+    propose_cmd.add_argument("--json", action="store_true")
+
+    refusals_cmd = agent.add_parser("refusals", help="ideas the gates would not let through")
+    refusals_cmd.add_argument("--path", type=Path, default=Path("refusals.jsonl"))
+    refusals_cmd.add_argument("--json", action="store_true")
+
     ledger = top.add_parser("ledger", help="the kill ledger").add_subparsers(
         dest="command", required=True
     )
@@ -138,6 +163,7 @@ def main(argv: list[str] | None = None) -> int:
         LedgerError,
         ParquetError,
         PreregistrationError,
+        ProviderError,
         OSError,
         ValueError,
     ) as exc:
@@ -320,7 +346,95 @@ def ledger_show(args: argparse.Namespace) -> int:
     return CLEARED
 
 
+def _completer(provider: str, model: str | None) -> Completer:
+    if provider == "anthropic":
+        from trading_research_agent.agent.providers.anthropic import AnthropicCompleter
+
+        return AnthropicCompleter(model or DEFAULT_MODEL)
+    from trading_research_agent.agent.providers.openai import OpenAICompleter
+
+    if not model:
+        raise ValueError("--model is required for the openai provider")
+    return OpenAICompleter(model)
+
+
+def agent_propose(args: argparse.Namespace) -> int:
+    config = RunConfig(
+        envelope=load_envelope(args.envelope),
+        completer=_completer(args.provider, args.model),
+        venue=args.venue,
+        magnitude_bps=args.magnitude,
+        max_revisions=args.max_revisions,
+        ledger=Ledger(args.ledger),
+        refusals=args.refusals,
+        runs_dir=args.runs,
+    )
+    result = propose(args.idea, config)
+    lines = [f"{result.run_id}: {result.outcome.value}"]
+    if result.floor is not None:
+        c = result.floor.channel
+        lines.append(
+            f"layer 0: {result.floor.plausible_magnitude_bps} bps against "
+            f"{c.round_trip_bps} bps on {c.key} ({result.floor.outcome.value})"
+        )
+    if result.refusal is not None:
+        lines.append(
+            f"refused at layer {result.refusal.layer} after {result.refusal.revisions} "
+            f"revisions: {result.refusal.reason}"
+        )
+    if result.preregistration is not None:
+        lines.append(
+            f"registered: {result.preregistration.name}, seal {result.preregistration.seal()}"
+        )
+    if result.ledger_entry_id is not None:
+        lines.append(f"ledger: {result.ledger_entry_id} in {args.ledger}")
+    lines.append(
+        f"{len(result.exchanges)} model calls, {result.input_tokens} in / "
+        f"{result.output_tokens} out tokens; run written to {args.runs / result.run_id}"
+    )
+    payload = {
+        "run_id": result.run_id,
+        "outcome": result.outcome.value,
+        "ledger_entry_id": result.ledger_entry_id,
+        "seal": None if result.preregistration is None else result.preregistration.seal(),
+        "refusal": None if result.refusal is None else result.refusal.reason,
+        "exchanges": len(result.exchanges),
+        "input_tokens": result.input_tokens,
+        "output_tokens": result.output_tokens,
+        "run_dir": str(args.runs / result.run_id),
+    }
+    emit(payload, args.json, lines)
+    return CLEARED if result.outcome is Outcome.REGISTERED else REFUSED
+
+
+def agent_refusals(args: argparse.Namespace) -> int:
+    refusals = read_refusals(args.path)
+    lines = [f"{len(refusals)} refused"] if refusals else ["none"]
+    for r in refusals:
+        lines.append(
+            f"{r.run_id:22} layer {r.layer} after {r.revisions}: {r.reason[:60]}  | {r.idea[:50]}"
+        )
+    payload = {
+        "count": len(refusals),
+        "refusals": [
+            {
+                "run_id": r.run_id,
+                "at": r.at,
+                "layer": r.layer,
+                "revisions": r.revisions,
+                "reason": r.reason,
+                "idea": r.idea,
+            }
+            for r in refusals
+        ],
+    }
+    emit(payload, args.json, lines)
+    return CLEARED
+
+
 HANDLERS = {
+    ("agent", "propose"): agent_propose,
+    ("agent", "refusals"): agent_refusals,
     ("data", "fetch"): data_fetch,
     ("data", "audit"): data_audit,
     ("chain", "floor"): chain_floor,

@@ -17,6 +17,7 @@ from trading_research_agent.chain.preregistration import (
     SealedEra,
     Universe,
     amend,
+    validate_mechanism,
 )
 
 __all__ = [
@@ -34,4 +35,5 @@ __all__ = [
     "Universe",
     "amend",
     "cost_floor",
+    "validate_mechanism",
 ]

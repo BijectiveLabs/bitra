@@ -6,6 +6,24 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-13
+
+### Added
+
+- The agent: an idea through layers 0, 2 and 3. A language model bounds the magnitude
+  (with its basis), writes the mechanism memo, critiques it, and drafts the pre-registration;
+  the cost floor, the memo's form and the registration's validity are decided by the gates
+  that already exist. Two bounded revision loops; defects of form go back to the model with
+  the gate's own words, facts about the idea are final.
+- Refusals at layers 0, 2 and 3 recorded in `refusals.jsonl`, apart from the kill ledger.
+- Every run written to `runs/<run_id>/` with each exchange, the sealed registration and a
+  summary.
+- Provider adapters on the official SDKs as extras: `[anthropic]` (default model
+  `claude-opus-5`, cached system prompt, structured output) and `[openai]` (strict JSON
+  schema, model named by the operator). Tests use a scripted fake and never touch the network.
+- `tra agent propose` and `tra agent refusals`.
+- `validate_mechanism` exposed from `chain`.
+
 ## [0.1.0] - 2026-09-13
 
 ### Added

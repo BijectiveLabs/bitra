@@ -5,6 +5,7 @@ import json
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -303,3 +304,103 @@ def test_chain_check_validates_a_registration_file(
     path.write_text(json.dumps(record), encoding="utf-8")
     code = main(["chain", "check", str(path)])
     assert code == 1 and "altered" in capsys.readouterr().err
+
+
+def test_agent_propose_and_refusals(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import importlib
+
+    from trading_research_agent.agent import FakeCompleter
+
+    cli_main = importlib.import_module("trading_research_agent.cli.main")
+
+    memo = {
+        "mechanism": "Longs paying funding are forced by margin to reduce into settlement.",
+        "forced_loser": "longs paying funding",
+        "forcing_structure": "margin at settlement",
+    }
+    draft = {
+        "name": "funding settlement squeeze",
+        "claim": "Net return over 4h after settlement is positive when funding exceeds 15 bps.",
+        "metric": "net_return_bps",
+        "horizon_seconds": 14400,
+        "universe": {"instruments": ["BTCUSDT"], "rule": "top 15 by volume"},
+        "era": {
+            "research_start": "2022-01-01",
+            "research_end": "2025-06-30",
+            "sealed": [{"name": "B", "start": "2025-07-01", "end": None}],
+        },
+        "cost_model": [
+            {"name": "fee", "source": "schedule"},
+            {"name": "spread_cost", "source": "book"},
+            {"name": "slippage", "source": "book"},
+            {"name": "funding_accrual", "source": "settlements"},
+        ],
+        "power": {"required_sample": 1200, "effect_bps": "8.0", "basis": "two-sided, 80 pct"},
+        "kill_criteria": [
+            {
+                "metric": "net_return_bps",
+                "comparison": "<",
+                "threshold": "0",
+                "verdict": "FALSIFIED",
+            }
+        ],
+    }
+    scripted: list[dict[str, Any]] = [memo, {"accepted": True, "objection": ""}, draft]
+    monkeypatch.setattr(cli_main, "_completer", lambda provider, model: FakeCompleter(scripted))
+    common = [
+        "agent",
+        "propose",
+        "--idea",
+        "funding squeeze",
+        "--envelope",
+        str(EXAMPLES / "envelope.toml"),
+        "--provider",
+        "anthropic",
+        "--magnitude",
+        "20",
+        "--ledger",
+        str(tmp_path / "ledger.jsonl"),
+        "--refusals",
+        str(tmp_path / "refusals.jsonl"),
+        "--runs",
+        str(tmp_path / "runs"),
+    ]
+    code = main([*common, "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 0 and payload["outcome"] == "registered" and payload["exchanges"] == 3
+    assert (Path(payload["run_dir"]) / "preregistration.json").exists()
+    assert next(iter(Ledger(tmp_path / "ledger.jsonl").entries())).verdict is Verdict.OPEN
+
+    refused: list[dict[str, Any]] = [
+        {
+            "mechanism": "Price tends to revert after a spike for reasons.",
+            "forced_loser": "-",
+            "forcing_structure": "-",
+        },
+        {"accepted": False, "objection": "a pattern, not a mechanism"},
+    ] * 3
+    monkeypatch.setattr(cli_main, "_completer", lambda provider, model: FakeCompleter(refused))
+    code = main(common)
+    out = capsys.readouterr().out
+    assert code == 1 and "refused at layer 2 after 2 revisions: a pattern" in out
+
+    code = main(["agent", "refusals", "--path", str(tmp_path / "refusals.jsonl")])
+    out = capsys.readouterr().out
+    assert code == 0 and out.startswith("1 refused") and "layer 2 after 2" in out
+
+    monkeypatch.undo()
+    code = main(
+        [
+            "agent",
+            "propose",
+            "--idea",
+            "x",
+            "--envelope",
+            str(EXAMPLES / "envelope.toml"),
+            "--provider",
+            "openai",
+        ]
+    )
+    assert code == 1 and "--model is required" in capsys.readouterr().err
