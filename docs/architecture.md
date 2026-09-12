@@ -30,7 +30,7 @@ Rules, each enforced by a test in `tests/test_boundaries.py`:
 4. Source files are ASCII.
 
 Not every package exists yet. The list is the plan; a package is added when its first gate
-lands with tests.
+lands with tests. Today: `ledger`, `envelope`, `data`, `chain`.
 
 ## The chain
 
