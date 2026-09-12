@@ -15,6 +15,17 @@ class Side(StrEnum):
     SELL = "sell"
 
 
+class Direction(StrEnum):
+    """The side of a held position, as distinct from the side of the trade that opened it."""
+
+    LONG = "long"
+    SHORT = "short"
+
+    @property
+    def sign(self) -> int:
+        return 1 if self is Direction.LONG else -1
+
+
 def scale_of(value: Decimal) -> int:
     """Decimal places carried by the value as written: 93530.00 has scale 2, 0.003 has 3."""
     exponent = value.as_tuple().exponent

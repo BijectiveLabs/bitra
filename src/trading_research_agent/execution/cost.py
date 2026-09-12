@@ -17,8 +17,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
-from enum import StrEnum
 
+from trading_research_agent.data.schema import Direction
 from trading_research_agent.envelope.model import Channel
 
 BPS = Decimal(10_000)
@@ -29,13 +29,16 @@ class CostError(ValueError):
     """A cost term could not be computed honestly. Never a silent zero."""
 
 
-class Direction(StrEnum):
-    LONG = "long"
-    SHORT = "short"
-
-    @property
-    def sign(self) -> int:
-        return 1 if self is Direction.LONG else -1
+__all__ = [
+    "BPS",
+    "CostBreakdown",
+    "CostError",
+    "Direction",
+    "FundingSchedule",
+    "funding_accrual_bps",
+    "pair_leg_fee_bps",
+    "realised_cost",
+]
 
 
 @dataclass(frozen=True)

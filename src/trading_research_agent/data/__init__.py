@@ -28,13 +28,14 @@ from trading_research_agent.data.normalise import (
     binance_trades,
     bybit_trades,
 )
-from trading_research_agent.data.schema import Rejection, Side, Trade, scale_of
+from trading_research_agent.data.schema import Direction, Rejection, Side, Trade, scale_of
 
 __all__ = [
     "NORMALISER_VERSION",
     "ArchiveError",
     "ArchiveFormatError",
     "AuditReport",
+    "Direction",
     "FetchError",
     "Finding",
     "Manifest",
