@@ -116,7 +116,7 @@ from trading_research_agent.chain import Seal, research_only
 
 research_only(timestamps, registration.era, who="my instrument")
 seal = Seal("held-out B", specification_hash=registration.seal(), gates=("net > 0",), path=...)
-seal.open(registration.seal(), opened_at=now)     # once
+seal.open(registration.seal(), opened_at=now)  # once
 ```
 
 Research never touches sealed data, and a seal is opened once. `research_only` raises on a

@@ -20,12 +20,13 @@ from trading_research_agent.execution import Direction, FundingSchedule, realise
 breakdown = realised_cost(
     channel=envelope.cheapest("bybit"),
     direction=Direction.LONG,
-    entry_ts_ns=..., exit_ts_ns=...,
-    spread_cost_bps=Decimal("3.0"),   # half-spread from the recorded book at the decision
-    slippage_bps=walk.slippage_bps,   # from walking the recorded depth at the intended size
+    entry_ts_ns=...,
+    exit_ts_ns=...,
+    spread_cost_bps=Decimal("3.0"),  # half-spread from the recorded book at the decision
+    slippage_bps=walk.slippage_bps,  # from walking the recorded depth at the intended size
     funding=FundingSchedule(interval_s=8 * 3600, rates={...}),
 )
-breakdown.round_trip_bps            # the sum, and the four terms beside it
+breakdown.round_trip_bps  # the sum, and the four terms beside it
 ```
 
 - One function owns the identity, every term is an explicit argument, and the terms come
@@ -64,7 +65,9 @@ refused.
 ```python
 from trading_research_agent.execution import FillMode, Print, passive_fill, entry_after_latency
 
-fill_ts = passive_fill(prints, limit=..., side=Side.BUY, t0_ns=..., budget_ns=..., mode=FillMode.THROUGH)
+fill_ts = passive_fill(
+    prints, limit=..., side=Side.BUY, t0_ns=..., budget_ns=..., mode=FillMode.THROUGH
+)
 first = entry_after_latency(prints, signal_ts_ns=..., latency_ns=...)
 ```
 
