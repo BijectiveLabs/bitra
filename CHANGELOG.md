@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-13
+
 ### Added
 
 - Kill ledger: closed vocabulary for verdicts, axes and transferability; `LedgerEntry`
