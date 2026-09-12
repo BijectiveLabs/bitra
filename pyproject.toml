@@ -25,6 +25,9 @@ classifiers = [
 ]
 dependencies = []
 
+[project.scripts]
+tra = "trading_research_agent.cli:main"
+
 [project.urls]
 Repository = "https://github.com/BijectiveLabs/trading-research-agent"
 Changelog = "https://github.com/BijectiveLabs/trading-research-agent/blob/master/CHANGELOG.md"

@@ -81,5 +81,6 @@ parse as this schema is refused, and a manifest is never written for a dataset w
 ## What is not here yet
 
 Parquet output with `DECIMAL` columns is the storage contract in `docs/architecture.md`; the
-writer lands with an optional `[data]` extra. Downloading the archives is a CLI concern and
-arrives with `tra`.
+writer lands with an optional `[data]` extra. Downloading is `tra data fetch`: the archive is
+streamed to a `.part` file, hashed as it arrives, checked against the declared length and,
+for Binance, against the venue's published `.CHECKSUM`, and renamed only then.

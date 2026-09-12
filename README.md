@@ -43,6 +43,7 @@ what each one died of. The agent inherits that discipline as code:
 | `trading_research_agent.ledger` | The kill ledger: a closed vocabulary of verdicts and axes, an append-only store, and the consistency rules between them |
 | `trading_research_agent.envelope` | The operating envelope: fees per channel, measured round trips, latency. Configuration, never constants |
 | `trading_research_agent.data` | The data gate: Bybit and Binance public archives to canonical trades, a one-pass audit with findings, and a manifest with checksums |
+| `trading_research_agent.cli` | The `tra` command: fetch, audit, floor, check, show |
 | `trading_research_agent.chain` | The falsification chain. Layer 0 (cost floor) and layer 3 (sealed pre-registration with numeric kill criteria and tighten-only amendments) are implemented |
 
 Layer 0 in six lines:
@@ -59,6 +60,23 @@ print(check.outcome, check.margin_bps)
 
 A stop at layer 0 becomes a `CLOSED` row on the cost axis, envelope-bound, with the reversal
 point recorded. A pass records nothing, because clearing the cheapest test is not a verdict.
+
+## Command line
+
+The same gates from a shell. Exit code 0 means the gate was cleared, 1 means it said no, 2 is
+a usage error; add `--json` to any command for machine-readable output.
+
+```bash
+tra data fetch --venue binance --instrument BTCUSDT --month 2025-01 --out data/
+tra data audit data/BTCUSDT-trades-2025-01.zip --venue binance --instrument BTCUSDT     --max-gap 5m --manifest data/manifest.json
+tra chain floor --envelope examples/envelope.toml --magnitude 3.0 --venue hyperliquid     --subject "informed-flow burst drift" --ledger ledger.jsonl --id H-001
+tra chain check preregistration.json
+tra ledger show
+```
+
+`data fetch` streams the archive to a `.part` file, hashes it as it arrives, and keeps it only
+if the size and, where the venue publishes one, the checksum agree. `data audit` refuses a
+dataset the way the gate would, and writes the manifest with the finding either way.
 
 ## Roadmap
 

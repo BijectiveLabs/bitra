@@ -13,6 +13,7 @@ from trading_research_agent.data.archive import (
     sha256_of,
 )
 from trading_research_agent.data.audit import AuditReport, Finding, audit
+from trading_research_agent.data.fetch import FetchError, fetch, fetch_checksum
 from trading_research_agent.data.manifest import (
     Manifest,
     ManifestError,
@@ -34,6 +35,7 @@ __all__ = [
     "ArchiveError",
     "ArchiveFormatError",
     "AuditReport",
+    "FetchError",
     "Finding",
     "Manifest",
     "ManifestError",
@@ -46,6 +48,8 @@ __all__ = [
     "binance_trades",
     "bybit_trades",
     "bybit_trades_url",
+    "fetch",
+    "fetch_checksum",
     "manifest_from_audit",
     "open_archive_lines",
     "read_manifest",

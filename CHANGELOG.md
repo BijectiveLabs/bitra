@@ -21,5 +21,9 @@ All notable changes to this project are recorded here. The format follows
   reject bad rows with line and reason; a one-pass bounded-memory audit (duplicates,
   ordering, sequence resets, gaps, scale changes, concentration, rejected fraction); a
   manifest with source checksums and the audit result.
+- Archive download with `.part` staging, size check and, for Binance, verification against
+  the venue's published checksum.
+- The `tra` command: `data fetch`, `data audit`, `chain floor`, `chain check`, `ledger show`,
+  with exit codes a pipeline can act on and `--json` output.
 - Tests that enforce the dependency direction between packages and ASCII-only source.
 - CI on Linux and Windows across Python 3.11, 3.12 and 3.13.
