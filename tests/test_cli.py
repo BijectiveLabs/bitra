@@ -21,6 +21,7 @@ from trading_research_agent.chain import (
 from trading_research_agent.chain.preregistration import to_record
 from trading_research_agent.cli import main
 from trading_research_agent.data import read_manifest
+from trading_research_agent.data.parquet import read_trades
 from trading_research_agent.ledger import Ledger, Verdict
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
@@ -179,6 +180,29 @@ def test_audit_passes_writes_a_manifest_and_fails_on_duplicates(
     assert "bybit BTCUSDT: 5 trades, 0 rejected" in out and out.strip().endswith("PASSED")
     m = read_manifest(manifest)
     assert m.audit_passed and m.rows_accepted == 5 and m.sources[0].path == good.name
+
+    pytest.importorskip("pyarrow")
+    parquet = tmp_path / "btc.parquet"
+    code = main(
+        [
+            "data",
+            "audit",
+            str(good),
+            "--venue",
+            "bybit",
+            "--instrument",
+            "BTCUSDT",
+            "--max-gap",
+            "5m",
+            "--parquet",
+            str(parquet),
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 0 and payload["parquet"] == str(parquet)
+    back = list(read_trades(parquet))
+    assert len(back) == 5 and str(back[0].price) == "93530.00" and str(back[0].qty) == "0.01"
 
     dupes = bybit_archive(
         tmp_path / "dupes.csv.gz",

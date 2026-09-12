@@ -25,6 +25,7 @@ from trading_research_agent.data import (
     ArchiveError,
     ArchiveFormatError,
     Source,
+    Trade,
     audit,
     binance_spot_trades_url,
     binance_trades,
@@ -36,6 +37,7 @@ from trading_research_agent.data import (
     write_manifest,
 )
 from trading_research_agent.data.fetch import FetchError, fetch, fetch_checksum
+from trading_research_agent.data.parquet import ParquetError, write_trades
 from trading_research_agent.envelope import EnvelopeError, load_envelope
 from trading_research_agent.ledger import Ledger, LedgerError
 from trading_research_agent.ledger.store import to_record as ledger_to_record
@@ -91,6 +93,9 @@ def build_parser() -> argparse.ArgumentParser:
     audit_cmd.add_argument("--max-gap", type=parse_duration, required=True, help="e.g. 5m")
     audit_cmd.add_argument("--max-rejected", type=parse_decimal, default=Decimal("0.001"))
     audit_cmd.add_argument("--manifest", type=Path, help="write manifest.json here")
+    audit_cmd.add_argument(
+        "--parquet", type=Path, help="if the audit passes, write the canonical dataset here"
+    )
     audit_cmd.add_argument("--json", action="store_true")
 
     chain = top.add_parser("chain", help="the falsification chain").add_subparsers(
@@ -131,6 +136,7 @@ def main(argv: list[str] | None = None) -> int:
         EnvelopeError,
         FetchError,
         LedgerError,
+        ParquetError,
         PreregistrationError,
         OSError,
         ValueError,
@@ -199,8 +205,24 @@ def data_audit(args: argparse.Namespace) -> int:
         lines.append(f"  {finding.severity.upper():4} {finding.check}: {finding.detail}")
         for example in report.examples.get(finding.check, ()):
             lines.append(f"         {example}")
+    written = None
+    if args.parquet is not None and report.passed:
+        # Second pass over the archive. The audit already told us the scales the venue uses.
+        again = normalise(open_archive_lines(args.archive), instrument=args.instrument)
+        result = write_trades(
+            (r for r in again if isinstance(r, Trade)),
+            args.parquet,
+            price_scale=max(report.price_scales),
+            qty_scale=max(report.qty_scales),
+        )
+        written = str(result.path)
+        lines.append(
+            f"wrote {result.rows} trades to {result.path} "
+            f"(decimal scales {result.price_scale}/{result.qty_scale})"
+        )
     lines.append("PASSED" if report.passed else "FAILED")
     payload = {
+        "parquet": written,
         "passed": report.passed,
         "venue": report.venue,
         "instrument": report.instrument,

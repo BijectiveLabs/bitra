@@ -42,7 +42,7 @@ what each one died of. The agent inherits that discipline as code:
 |---|---|
 | `trading_research_agent.ledger` | The kill ledger: a closed vocabulary of verdicts and axes, an append-only store, and the consistency rules between them |
 | `trading_research_agent.envelope` | The operating envelope: fees per channel, measured round trips, latency. Configuration, never constants |
-| `trading_research_agent.data` | The data gate: Bybit and Binance public archives to canonical trades, a one-pass audit with findings, and a manifest with checksums |
+| `trading_research_agent.data` | The data gate: Bybit and Binance public archives to canonical trades, a one-pass audit with findings, a manifest with checksums, and exact `DECIMAL` Parquet with the `[data]` extra |
 | `trading_research_agent.cli` | The `tra` command: fetch, audit, floor, check, show |
 | `trading_research_agent.chain` | The falsification chain. Layer 0 (cost floor) and layer 3 (sealed pre-registration with numeric kill criteria and tighten-only amendments) are implemented |
 

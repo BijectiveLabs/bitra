@@ -32,6 +32,11 @@ tra = "trading_research_agent.cli:main"
 Repository = "https://github.com/BijectiveLabs/trading-research-agent"
 Changelog = "https://github.com/BijectiveLabs/trading-research-agent/blob/master/CHANGELOG.md"
 
+[project.optional-dependencies]
+data = [
+    "pyarrow>=18",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.3",
@@ -65,6 +70,10 @@ python_version = "3.11"
 strict = true
 files = ["src", "tests"]
 warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = ["pyarrow", "pyarrow.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

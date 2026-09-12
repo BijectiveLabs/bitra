@@ -21,6 +21,9 @@ All notable changes to this project are recorded here. The format follows
   reject bad rows with line and reason; a one-pass bounded-memory audit (duplicates,
   ordering, sequence resets, gaps, scale changes, concentration, rejected fraction); a
   manifest with source checksums and the audit result.
+- Parquet dataset writer and reader (`[data]` extra): `decimal128(38, s)` price and quantity
+  at the venue's scale, UTC nanosecond timestamps, exact round trip, refusal of any value
+  that does not fit the declared scale.
 - Archive download with `.part` staging, size check and, for Binance, verification against
   the venue's published checksum.
 - The `tra` command: `data fetch`, `data audit`, `chain floor`, `chain check`, `ledger show`,

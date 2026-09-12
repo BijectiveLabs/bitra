@@ -78,9 +78,30 @@ rows accepted and rejected, every source file with its SHA-256 and size, the nor
 version, the audit result with all findings, and the creation time. A manifest that does not
 parse as this schema is refused, and a manifest is never written for a dataset with no rows.
 
-## What is not here yet
+## The dataset
 
-Parquet output with `DECIMAL` columns is the storage contract in `docs/architecture.md`; the
-writer lands with an optional `[data]` extra. Downloading is `tra data fetch`: the archive is
-streamed to a `.part` file, hashed as it arrives, checked against the declared length and,
-for Binance, against the venue's published `.CHECKSUM`, and renamed only then.
+`pip install 'trading-research-agent[data]'` adds `pyarrow`, and with it the storage contract:
+one Parquet file per archive, price and quantity as `decimal128(38, s)` with the scale the
+venue actually uses, timestamps as UTC nanoseconds, `zstd` compressed, the scales recorded in
+the file's own metadata.
+
+```python
+from trading_research_agent.data.parquet import read_trades, write_trades
+
+write_trades(trades, path, price_scale=2, qty_scale=3)
+for trade in read_trades(path):
+    ...
+```
+
+- A value that cannot be represented exactly at the declared scale is refused, and no file is
+  left behind. A wider scale pads; it never rounds.
+- Reading returns the trades exactly as written, nanoseconds included, so a round trip is an
+  equality check and not an approximation.
+- `tra data audit ... --parquet out.parquet` writes the dataset only when the audit passed,
+  in a second pass over the archive, with the scales the audit observed.
+
+## Downloading
+
+`tra data fetch` streams the archive to a `.part` file, hashes it as it arrives, checks it
+against the declared length and, for Binance, against the venue's published `.CHECKSUM`, and
+renames it only then. A mismatch leaves nothing on disk.
