@@ -42,7 +42,7 @@ what each one died of. The agent inherits that discipline as code:
 |---|---|
 | `trading_research_agent.ledger` | The kill ledger: a closed vocabulary of verdicts and axes, an append-only store, and the consistency rules between them |
 | `trading_research_agent.envelope` | The operating envelope: fees per channel, measured round trips, latency. Configuration, never constants |
-| `trading_research_agent.chain` | The falsification chain. Layer 0 (cost floor) is implemented |
+| `trading_research_agent.chain` | The falsification chain. Layer 0 (cost floor) and layer 3 (sealed pre-registration with numeric kill criteria and tighten-only amendments) are implemented |
 
 Layer 0 in six lines:
 
@@ -81,8 +81,9 @@ uv run mypy
 uv run pytest
 ```
 
-See `CONTRIBUTING.md` for the branch flow and the standards the code is held to, and
-`docs/architecture.md` for the package boundaries and the file formats at them.
+See `CONTRIBUTING.md` for the branch flow and the standards the code is held to,
+`docs/architecture.md` for the package boundaries and the file formats at them, `docs/chain.md`
+for the gates, and `docs/ledger.md` for the verdict vocabulary.
 
 ## License
 

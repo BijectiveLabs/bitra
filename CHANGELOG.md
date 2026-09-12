@@ -14,5 +14,7 @@ All notable changes to this project are recorded here. The format follows
   from TOML into exact decimals.
 - Falsification chain, layer 0: the cost floor, issuing `CLOSED` on the cost axis with a
   recorded reversal point.
+- Falsification chain, layer 3: the pre-registration with its nine required elements, a
+  content-hash seal, numeric kill criteria, and amendments that may tighten but never loosen.
 - Tests that enforce the dependency direction between packages and ASCII-only source.
 - CI on Linux and Windows across Python 3.11, 3.12 and 3.13.
