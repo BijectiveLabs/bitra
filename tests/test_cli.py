@@ -404,3 +404,127 @@ def test_agent_propose_and_refusals(
         ]
     )
     assert code == 1 and "--model is required" in capsys.readouterr().err
+
+
+def test_chain_requirements_and_validate(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from trading_research_agent.chain import Preregistration
+    from trading_research_agent.chain.seal import day_start_ns
+    from trading_research_agent.data import Manifest, Source, write_manifest
+
+    prereg = Preregistration(
+        name="funding settlement squeeze",
+        mechanism="Longs paying funding are forced by margin to reduce into settlement.",
+        claim="Net return over 4h after settlement is positive when funding exceeds 15 bps.",
+        metric="net_return_bps",
+        horizon=timedelta(hours=4),
+        universe=Universe(("BTCUSDT",), "top 15 by volume"),
+        era=Era(date(2022, 1, 1), date(2025, 6, 30), (SealedEra("B", date(2025, 7, 1), None),)),
+        cost_model=CostModel(
+            (
+                CostTerm("fee", "schedule"),
+                CostTerm("spread_cost", "book"),
+                CostTerm("slippage", "book"),
+                CostTerm("funding_accrual", "settlements"),
+            )
+        ),
+        power=Power(20, Decimal("8.0"), "declared"),
+        kill_criteria=(KillCriterion("net_return_bps", "<", Decimal("0"), Verdict.FALSIFIED),),
+        registered_at=datetime(2026, 9, 13, tzinfo=UTC),
+    )
+    registration = tmp_path / "preregistration.json"
+    registration.write_text(json.dumps(to_record(prereg)), encoding="utf-8")
+
+    manifest = tmp_path / "manifest.json"
+    write_manifest(
+        manifest,
+        Manifest(
+            venue="bybit",
+            instrument="BTCUSDT",
+            first_ts=datetime(2021, 12, 1, tzinfo=UTC),
+            last_ts=datetime(2025, 8, 1, tzinfo=UTC),
+            rows_accepted=5_000_000,
+            rows_rejected=0,
+            sources=(Source("x", "ab" * 32, 1),),
+            normaliser_version="t",
+            audit_passed=True,
+            findings=(),
+            created_at=datetime(2026, 9, 13, tzinfo=UTC),
+        ),
+    )
+    code = main(
+        ["chain", "requirements", "--registration", str(registration), "--manifest", str(manifest)]
+    )
+    out = capsys.readouterr().out
+    assert code == 0 and out.strip().endswith("PASSED")
+
+    trades = tmp_path / "trades.jsonl"
+    start = day_start_ns(date(2022, 1, 1))
+    day = 86_400 * 1_000_000_000
+    with trades.open("w", encoding="utf-8") as fh:
+        for i in range(40):
+            fh.write(
+                json.dumps(
+                    {
+                        "instrument": "BTCUSDT",
+                        "entry_ts_ns": start + i * day,
+                        "exit_ts_ns": start + i * day + 4 * 3600 * 1_000_000_000,
+                        "direction": "long",
+                        "weight": "1",
+                        "gross_return_bps": "25.0" if i % 2 else "35.0",
+                    }
+                )
+                + "\n"
+            )
+    ledger = tmp_path / "ledger.jsonl"
+    code = main(
+        [
+            "chain",
+            "validate",
+            "--registration",
+            str(registration),
+            "--trades",
+            str(trades),
+            "--cost-bps",
+            "10",
+            "--block-length",
+            "5",
+            "--n-resamples",
+            "1000",
+            "--n-perm",
+            "1000",
+            "--out",
+            str(tmp_path / "validation.json"),
+            "--ledger",
+            str(ledger),
+            "--id",
+            "V-1",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 0 and payload["decision"]["verdict"] == "OPEN" and payload["recorded"] == "V-1"
+    assert (tmp_path / "validation.json").exists()
+    assert next(iter(Ledger(ledger).entries())).layer == 5
+
+    code = main(
+        [
+            "chain",
+            "validate",
+            "--registration",
+            str(registration),
+            "--trades",
+            str(trades),
+            "--cost-bps",
+            "40",
+            "--block-length",
+            "5",
+            "--n-resamples",
+            "1000",
+            "--n-perm",
+            "1000",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert code == 1 and "FALSIFIED (idea)" in out

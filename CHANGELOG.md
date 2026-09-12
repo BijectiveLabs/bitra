@@ -6,6 +6,26 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-13
+
+### Added
+
+- `execution`: the round-trip cost identity with one owner and four separate terms, signed
+  funding accrual that refuses a spanned settlement without a rate, hedged-pair fees, walk the
+  book with refusal instead of extrapolation and a staleness tolerance, passive fills with
+  trade-through and both queue bounds, entries at the tick after the measured latency,
+  effective cost across unfilled orders with their drift, and markout beside its half-spread.
+- `chain` layer 4: coverage, resolution and power feasibility from the manifest; a failure is
+  `NOT PROVEN` with a blocking axis, never a death.
+- `chain` layer 5: net returns, collapse per timestamp, moving-block bootstrap (specification
+  followed where the reference implementation clamped or dropped), costed sign-permutation and
+  cross-sectional nulls with a turnover guard, subperiods, Benjamini-Hochberg, two-sided anchor
+  robustness, declared power, and the verdict from the registration's own kill criteria.
+- The era seal: `research_only` raises on one leaked timestamp; `Seal` opens once against the
+  registration's hash with the gates fixed in advance, persisted in a file written once.
+- `tra chain requirements`, `tra chain validate`; `trades.jsonl` and `validation.json`.
+- `numpy` as the first required dependency. Money stays `Decimal`; statistics are float.
+
 ## [0.2.0] - 2026-09-13
 
 ### Added

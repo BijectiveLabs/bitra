@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -653,3 +654,27 @@ def _trades_hash(trades: Sequence[TradeRecord]) -> str:
     ]
     payload = json.dumps(rows, separators=(",", ":"))
     return hashlib.sha256(payload.encode("ascii")).hexdigest()
+
+
+def read_trades(path: Path) -> tuple[TradeRecord, ...]:
+    """`trades.jsonl`: one trade per line, every number as a decimal string. A bad line stops it."""
+    out: list[TradeRecord] = []
+    with path.open("r", encoding="utf-8") as fh:
+        for number, line in enumerate(fh, start=1):
+            if not line.strip():
+                continue
+            try:
+                d = json.loads(line)
+                out.append(
+                    TradeRecord(
+                        instrument=str(d["instrument"]),
+                        entry_ts_ns=int(d["entry_ts_ns"]),
+                        exit_ts_ns=int(d["exit_ts_ns"]),
+                        direction=Direction(str(d["direction"])),
+                        weight=Decimal(str(d["weight"])),
+                        gross_return_bps=Decimal(str(d["gross_return_bps"])),
+                    )
+                )
+            except (json.JSONDecodeError, KeyError, ValueError, ArithmeticError) as exc:
+                raise ValidationError(f"{path}:{number}: unreadable trade: {exc}") from exc
+    return tuple(out)

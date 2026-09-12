@@ -24,13 +24,14 @@ trading_research_agent/
 Rules, each enforced by a test in `tests/test_boundaries.py`:
 
 1. `ledger` and `envelope` import nothing else from this project. They are vocabulary.
-2. Arrows point only downward through the list. `chain` does not know `execution` exists.
+2. Arrows point only downward through the list. `chain` does not know `execution` exists; layer 5
+   takes the cost of a trade as a function argument, and `execution` supplies one.
 3. Only `agent` imports a language-model client. Layers 0, 1, 4, 5 and 7 are arithmetic and
    statistics and have no path to a model.
 4. Source files are ASCII.
 
 Not every package exists yet. The list is the plan; a package is added when its first gate
-lands with tests. Today: `ledger`, `envelope`, `data`, `chain`, `agent`, `cli`.
+lands with tests. Today: `ledger`, `envelope`, `data`, `chain`, `execution`, `agent`, `cli`.
 
 ## The chain
 
@@ -40,9 +41,9 @@ lands with tests. Today: `ledger`, `envelope`, `data`, `chain`, `agent`, `cli`.
 | 1 | Market observation | the phenomenon does not recur | hours | planned |
 | 2 | Mechanism memo | nobody can be named who is structurally forced to lose | minutes | implemented (model writes, code checks the form, a critic objects once) |
 | 3 | Pre-registration | the claim cannot be stated so data could refute it | hours | implemented |
-| 4 | Data requirements | no available instrument can measure the premise | hours to days | 0.3 |
-| 5 | Statistical validation | interval spans zero, loses to a matched null, or lives in one subperiod | days | 0.3 |
-| 6 | Strategy design | the exit is not bound to the mechanism | weeks | 0.3 |
+| 4 | Data requirements | no available instrument can measure the premise | hours to days | implemented |
+| 5 | Statistical validation | interval spans zero, loses to a matched null, or lives in one subperiod | days | implemented |
+| 6 | Strategy design | the exit is not bound to the mechanism | weeks | 0.4 |
 | 7 | Shadow | net expectation negative in the live market, zero orders placed | weeks of calendar | 0.4 |
 | 8 | Live capital | | capital | out of scope |
 
@@ -58,6 +59,9 @@ confident about it.
 | `preregistration.json` | JSON, sealed by content hash | mechanism, claim, metric, horizon, universe, era, cost model, power, kill criteria; amendments are separate dated files referencing the original hash and may never loosen a threshold or move a horizon |
 | `ledger.jsonl` | JSON Lines, append-only | one row per entry; nothing is rewritten; a retraction is a new `WITHDRAWN` row naming the row it retracts |
 | `envelope.toml` | TOML | one `[[channel]]` per venue and execution channel; see `examples/envelope.toml` |
+| `trades.jsonl` | JSON Lines | layer 5 input: `instrument`, `entry_ts_ns`, `exit_ts_ns`, `direction`, `weight`, `gross_return_bps`, numbers as decimal strings |
+| `validation.json` | JSON | layer 5 output: interval, null report, subperiods, power, metrics, the decision with every fired criterion, the registration seal and the trades hash |
+| `seal.json` | JSON, written once | era, opened_at, specification hash, gates |
 
 ## Numbers
 

@@ -20,9 +20,20 @@ from trading_research_agent import __version__
 from trading_research_agent.agent import Completer, Outcome, RunConfig, propose
 from trading_research_agent.agent.pipeline import read_refusals
 from trading_research_agent.agent.providers.anthropic import DEFAULT_MODEL, ProviderError
-from trading_research_agent.chain import cost_floor
+from trading_research_agent.chain import (
+    EraLeakageError,
+    NullMode,
+    ValidationError,
+    check_requirements,
+    cost_floor,
+    read_trades,
+    validate,
+)
 from trading_research_agent.chain.preregistration import PreregistrationError
 from trading_research_agent.chain.preregistration import from_record as prereg_from_record
+from trading_research_agent.chain.requirements import to_entry as requirements_entry
+from trading_research_agent.chain.validation import to_entry as validation_entry
+from trading_research_agent.chain.validation import to_record as validation_record
 from trading_research_agent.data import (
     NORMALISER_VERSION,
     ArchiveError,
@@ -36,13 +47,14 @@ from trading_research_agent.data import (
     bybit_trades_url,
     manifest_from_audit,
     open_archive_lines,
+    read_manifest,
     sha256_of,
     write_manifest,
 )
 from trading_research_agent.data.fetch import FetchError, fetch, fetch_checksum
 from trading_research_agent.data.parquet import ParquetError, write_trades
 from trading_research_agent.envelope import EnvelopeError, load_envelope
-from trading_research_agent.ledger import Ledger, LedgerError
+from trading_research_agent.ledger import Ledger, LedgerError, Verdict
 from trading_research_agent.ledger.store import to_record as ledger_to_record
 
 CLEARED, REFUSED, USAGE = 0, 1, 2
@@ -117,6 +129,29 @@ def build_parser() -> argparse.ArgumentParser:
     check_cmd.add_argument("file", type=Path)
     check_cmd.add_argument("--json", action="store_true")
 
+    req_cmd = chain.add_parser("requirements", help="layer 4: can the data measure the claim?")
+    req_cmd.add_argument("--registration", type=Path, required=True)
+    req_cmd.add_argument("--manifest", type=Path, required=True)
+    req_cmd.add_argument("--ledger", type=Path, help="record a block here")
+    req_cmd.add_argument("--id", dest="entry_id")
+    req_cmd.add_argument("--json", action="store_true")
+
+    val_cmd = chain.add_parser("validate", help="layer 5: a verdict on a set of trades")
+    val_cmd.add_argument("--registration", type=Path, required=True)
+    val_cmd.add_argument("--trades", type=Path, required=True, help="trades.jsonl")
+    val_cmd.add_argument(
+        "--cost-bps", type=parse_decimal, required=True, help="declared round trip per trade"
+    )
+    val_cmd.add_argument("--block-length", type=int, required=True, help="exceeds the horizon")
+    val_cmd.add_argument("--n-resamples", type=int, default=5000)
+    val_cmd.add_argument("--n-perm", type=int, default=1000)
+    val_cmd.add_argument("--null", choices=("sign", "cross_sectional"), default="sign")
+    val_cmd.add_argument("--seed", type=int, default=0)
+    val_cmd.add_argument("--out", type=Path, help="write validation.json here")
+    val_cmd.add_argument("--ledger", type=Path, help="record the verdict here")
+    val_cmd.add_argument("--id", dest="entry_id")
+    val_cmd.add_argument("--json", action="store_true")
+
     agent = top.add_parser("agent", help="an idea through layers 0, 2 and 3").add_subparsers(
         dest="command", required=True
     )
@@ -159,11 +194,13 @@ def main(argv: list[str] | None = None) -> int:
         ArchiveError,
         ArchiveFormatError,
         EnvelopeError,
+        EraLeakageError,
         FetchError,
         LedgerError,
         ParquetError,
         PreregistrationError,
         ProviderError,
+        ValidationError,
         OSError,
         ValueError,
     ) as exc:
@@ -326,6 +363,92 @@ def chain_check(args: argparse.Namespace) -> int:
     return CLEARED
 
 
+def chain_requirements(args: argparse.Namespace) -> int:
+    registration = prereg_from_record(json.loads(args.registration.read_text(encoding="utf-8")))
+    manifest = read_manifest(args.manifest)
+    requirements = check_requirements(registration, manifest)
+    lines = [
+        f"{f.check}: {'ok' if f.ok else 'BLOCKED'} - {f.detail}" for f in requirements.findings
+    ]
+    recorded = None
+    if not requirements.passed and args.ledger is not None:
+        if not args.entry_id:
+            raise ValueError("--ledger needs --id for the new row")
+        entry = requirements_entry(
+            requirements, registration, entry_id=args.entry_id, recorded_at=datetime.now(UTC)
+        )
+        Ledger(args.ledger).append(entry)
+        recorded = entry.entry_id
+        lines.append(f"recorded {entry.entry_id} as NOT PROVEN in {args.ledger}")
+    lines.append("PASSED" if requirements.passed else f"BLOCKED on {requirements.blocking_axis}")
+    payload = {
+        "passed": requirements.passed,
+        "blocking_axis": (
+            None if requirements.blocking_axis is None else requirements.blocking_axis.value
+        ),
+        "findings": [
+            {"check": f.check, "ok": f.ok, "detail": f.detail, "axis": f.axis.value}
+            for f in requirements.findings
+        ],
+        "recorded": recorded,
+    }
+    emit(payload, args.json, lines)
+    return CLEARED if requirements.passed else REFUSED
+
+
+def chain_validate(args: argparse.Namespace) -> int:
+    registration = prereg_from_record(json.loads(args.registration.read_text(encoding="utf-8")))
+    trades = read_trades(args.trades)
+    cost = args.cost_bps
+    result = validate(
+        registration,
+        trades,
+        lambda _trade: cost,
+        block_length=args.block_length,
+        n_resamples=args.n_resamples,
+        n_perm=args.n_perm,
+        seed=args.seed,
+        null_mode=NullMode(args.null),
+    )
+    if args.out is not None:
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(
+            json.dumps(validation_record(result), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+    d = result.decision
+    m = result.metrics
+    lines = [
+        f"{registration.name}: {result.n_trades} trades, {result.n_timestamps} timestamps, "
+        f"power {'achieved' if result.power_achieved else 'NOT achieved'} "
+        f"({result.n_timestamps} of {result.power_required})",
+        f"net {m['net_return_bps']} bps, CI95 [{m['net_return_ci95_lower_bps']}, "
+        f"{m['net_return_ci95_upper_bps']}], gross {m['gross_return_bps']} bps (never a verdict)",
+        f"null ({result.null.mode.value}): mean {m['null_mean_bps']} bps, "
+        f"p {m['permutation_p_value']}, {m['sigma_above_null']} sigma above",
+        f"subperiods: {', '.join(f'{x:.2f}' for x in result.subperiods)} bps",
+    ]
+    for f in d.fired:
+        lines.append(
+            f"  fired {f.criterion.metric} {f.criterion.comparison} {f.criterion.threshold} "
+            f"(observed {f.value}) -> {f.effective.value}"
+        )
+    recorded = None
+    if args.ledger is not None:
+        if not args.entry_id:
+            raise ValueError("--ledger needs --id for the new row")
+        entry = validation_entry(
+            result, registration, entry_id=args.entry_id, recorded_at=datetime.now(UTC)
+        )
+        Ledger(args.ledger).append(entry)
+        recorded = entry.entry_id
+        lines.append(f"recorded {entry.entry_id} in {args.ledger}")
+    lines.append(f"{d.verdict.value} ({d.axis.value}): {d.note}")
+    payload = {**validation_record(result), "recorded": recorded}
+    emit(payload, args.json, lines)
+    return CLEARED if d.verdict is Verdict.OPEN else REFUSED
+
+
 def ledger_show(args: argparse.Namespace) -> int:
     ledger = Ledger(args.path)
     rows = ledger.effective()
@@ -439,6 +562,8 @@ HANDLERS = {
     ("data", "audit"): data_audit,
     ("chain", "floor"): chain_floor,
     ("chain", "check"): chain_check,
+    ("chain", "requirements"): chain_requirements,
+    ("chain", "validate"): chain_validate,
     ("ledger", "show"): ledger_show,
 }
 

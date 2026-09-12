@@ -29,6 +29,7 @@ from trading_research_agent.chain.validation import (
     TradeRecord,
     Validation,
     ValidationError,
+    read_trades,
     validate,
 )
 
@@ -59,6 +60,7 @@ __all__ = [
     "amend",
     "check_requirements",
     "cost_floor",
+    "read_trades",
     "research_only",
     "validate",
     "validate_mechanism",

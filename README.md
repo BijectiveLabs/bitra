@@ -36,6 +36,9 @@ what each one died of. The agent inherits that discipline as code:
   claim and the exit design. The arithmetic and the statistics are code, and cannot be argued
   with.
 
+`numpy` is the one required dependency; everything that touches money is `Decimal`, and the
+statistics run in floating point from the collapsed series on.
+
 ## What is here today
 
 | Package | Purpose |
@@ -44,8 +47,9 @@ what each one died of. The agent inherits that discipline as code:
 | `trading_research_agent.envelope` | The operating envelope: fees per channel, measured round trips, latency. Configuration, never constants |
 | `trading_research_agent.data` | The data gate: Bybit and Binance public archives to canonical trades, a one-pass audit with findings, a manifest with checksums, and exact `DECIMAL` Parquet with the `[data]` extra |
 | `trading_research_agent.agent` | An idea through layers 0, 2 and 3: bound, cost floor, mechanism memo with a critic, sealed pre-registration; refusals and verdicts recorded apart. Providers as extras: `[anthropic]`, `[openai]` |
-| `trading_research_agent.cli` | The `tra` command: fetch, audit, floor, check, show, propose, refusals |
-| `trading_research_agent.chain` | The falsification chain. Layer 0 (cost floor) and layer 3 (sealed pre-registration with numeric kill criteria and tighten-only amendments) are implemented |
+| `trading_research_agent.cli` | The `tra` command: fetch, audit, floor, check, requirements, validate, show, propose, refusals |
+| `trading_research_agent.chain` | The falsification chain: layer 0 (cost floor), layer 3 (sealed pre-registration), layer 4 (data requirements), layer 5 (validation: net returns, block bootstrap, matched null, subperiods, power, BH, anchor robustness), and the era seal |
+| `trading_research_agent.execution` | Execution realism: the cost identity with funding, walk-the-book, passive fills with trade-through, effective cost across unfilled orders, markout |
 
 Layer 0 in six lines:
 
@@ -75,6 +79,9 @@ tra chain check preregistration.json
 tra ledger show
 tra agent propose --idea "Longs paying high funding get squeezed into settlement"     --envelope examples/envelope.toml --provider anthropic
 tra agent refusals
+tra chain requirements --registration runs/<id>/preregistration.json --manifest data/manifest.json
+tra chain validate --registration runs/<id>/preregistration.json --trades trades.jsonl \
+    --cost-bps 15.0 --block-length 7 --ledger ledger.jsonl --id V-001
 ```
 
 `data fetch` streams the archive to a `.part` file, hashes it as it arrives, and keeps it only
@@ -87,8 +94,8 @@ dataset the way the gate would, and writes the manifest with the finding either 
 |---|---|
 | 0.1 | Ledger, envelope, layer 0, pre-registration with numeric kill criteria, public-archive ingestion and dataset audit for two venues, `tra` CLI |
 | 0.2 | The agent: bound, mechanism memo with a critic, and pre-registration drafted by a language model, validated by the existing gates, recorded to the ledger; bounded revision loop; Anthropic and OpenAI adapters |
-| 0.3 | Execution realism: cost identity, latency-shifted fills, trade-through matching, fill probability as its own quantity; statistical validation with matched nulls |
-| 0.4 | Shadow harness on one code path; MCP server exposing the gates to any agent host |
+| 0.3 | Execution realism: cost identity, latency-shifted fills, trade-through matching, fill probability, markout; layers 4 and 5 with the era seal |
+| 0.4 | Layer 6 (exits bound to the mechanism), the walk-forward harness, shadow on one code path; MCP server exposing the gates to any agent host |
 
 Crypto perpetuals first. The core vocabulary is market-agnostic (`venue`, `instrument`,
 `session`), but every number in the gates was measured on crypto venues and nothing is promised
@@ -105,8 +112,8 @@ uv run pytest
 
 See `CONTRIBUTING.md` for the branch flow and the standards the code is held to,
 `docs/architecture.md` for the package boundaries and the file formats at them, `docs/data.md`
-for the data gate, `docs/chain.md` for the chain, `docs/agent.md` for the agent, and
-`docs/ledger.md` for the verdict vocabulary.
+for the data gate, `docs/chain.md` for the chain, `docs/execution.md` for execution realism,
+`docs/agent.md` for the agent, and `docs/ledger.md` for the verdict vocabulary.
 
 ## License
 
