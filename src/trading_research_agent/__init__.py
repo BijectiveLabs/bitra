@@ -9,4 +9,4 @@ Recommended import style::
     import trading_research_agent as tra
 """
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"

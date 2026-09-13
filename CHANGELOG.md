@@ -6,6 +6,31 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-13
+
+### Changed
+
+- No strategy ships inside the package. The reference cores moved to
+  `examples/strategies/` as examples; `strategy.toml` names a core by `file` and `class`
+  (looked up next to the config first) or by `import`. The `builtin` key is gone.
+- The walk-forward harness is generic: `walk_forward(panel, core, lookback=...)` takes a
+  `FittedCore` and knows nothing about pairs or z-scores. The pair core is now the example.
+- Venues are plugins. Archive layouts live in `data/venues/` behind `ArchiveVenue` and the
+  `trading_research_agent.venues` entry point; live feeds in `trading/feeds/` behind
+  `LiveFeedFactory` and `trading_research_agent.feeds`. `tra data fetch|audit --venue` and
+  `tra trade shadow --feed` take any registered name; shadow defaults to the venue in
+  `[run].venue_key`.
+- `data.normalise` keeps only what every layout shares; the venue URL builders and
+  normalisers moved into their plugins.
+
+### Added
+
+- Column maps: `tra data audit --mapping mapping.toml` takes any CSV through the same audit,
+  manifest and Parquet contract. `examples/mapping.toml` documents every field.
+- Architecture tests for the adoption rules: no decision core inside the package, no venue
+  named outside the plugin directories, no example imported by the package.
+- `docs/venues.md`: how to add a venue.
+
 ## [0.4.0] - 2026-09-13
 
 ### Added
