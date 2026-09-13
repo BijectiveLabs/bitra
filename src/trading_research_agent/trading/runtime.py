@@ -162,7 +162,9 @@ class _Loop:
     def on_bar(self, bar: Bar) -> None:
         self.report.bars += 1
         if self.c.canary is not None and self.report.stopped_by is None:
-            over = self.c.canary.session_over(bar.end_ns)
+            over = self.c.canary.session_over(bar.end_ns) or self.c.canary.caps_reached(
+                round_trips=self.report.round_trips, net_bps=self.report.net_bps_total
+            )
             if over is not None:
                 self.report.stopped_by = over
                 if self.position is not None and not self.pending_close:

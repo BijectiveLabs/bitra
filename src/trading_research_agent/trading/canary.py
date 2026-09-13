@@ -64,6 +64,15 @@ class CanaryGuard:
             return f"canary: session ran {elapsed} minutes, cap {self.limits.max_session_minutes}"
         return None
 
+    def caps_reached(self, *, round_trips: int, net_bps: Decimal) -> str | None:
+        """A cap that is already met ends the session; there is nothing left to learn from it."""
+        lim = self.limits
+        if round_trips >= lim.max_round_trips:
+            return f"canary: {round_trips} round trips reached the cap of {lim.max_round_trips}"
+        if net_bps <= -lim.session_loss_limit_bps:
+            return f"canary: session net {net_bps} bps at or below -{lim.session_loss_limit_bps}"
+        return None
+
     def _start(self, ts_ns: int) -> int:
         if self._started_ns is None:
             self._started_ns = ts_ns
