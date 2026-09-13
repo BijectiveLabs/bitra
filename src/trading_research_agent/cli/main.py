@@ -25,6 +25,7 @@ from uuid import uuid4
 from trading_research_agent import __version__
 from trading_research_agent.agent import Completer, Outcome, RunConfig, propose
 from trading_research_agent.agent.pipeline import read_refusals
+from trading_research_agent.agent.providers import UnknownProviderError, provider, providers
 from trading_research_agent.agent.providers.anthropic import DEFAULT_MODEL, ProviderError
 from trading_research_agent.chain import (
     EraLeakageError,
@@ -205,11 +206,11 @@ def build_parser() -> argparse.ArgumentParser:
     propose_cmd = agent.add_parser("propose", help="bound, floor, memo, registration")
     propose_cmd.add_argument("--idea", required=True, help="the idea, in plain language")
     propose_cmd.add_argument("--envelope", type=Path, required=True)
-    propose_cmd.add_argument("--provider", choices=("anthropic", "openai"), required=True)
+    propose_cmd.add_argument("--provider", choices=providers(), required=True)
     propose_cmd.add_argument("--model", help="model name; anthropic defaults to " + DEFAULT_MODEL)
     propose_cmd.add_argument(
         "--base-url",
-        help="an OpenAI-compatible endpoint (or TRA_OPENAI_BASE_URL); openai provider only",
+        help="an OpenAI-compatible endpoint (or TRA_OPENAI_BASE_URL) for the compatible providers",
     )
     propose_cmd.add_argument("--venue")
     propose_cmd.add_argument(
@@ -320,6 +321,7 @@ def main(argv: list[str] | None = None) -> int:
         ParquetError,
         PreregistrationError,
         ProviderError,
+        UnknownProviderError,
         ValidationError,
         ImportError,
         OSError,
@@ -852,18 +854,8 @@ def ledger_show(args: argparse.Namespace) -> int:
     return CLEARED
 
 
-def _completer(provider: str, model: str | None, base_url: str | None = None) -> Completer:
-    if provider == "anthropic":
-        from trading_research_agent.agent.providers.anthropic import AnthropicCompleter
-
-        if base_url:
-            raise ValueError("--base-url applies to the openai provider")
-        return AnthropicCompleter(model or DEFAULT_MODEL)
-    from trading_research_agent.agent.providers.openai import OpenAICompleter
-
-    if not model:
-        raise ValueError("--model is required for the openai provider")
-    return OpenAICompleter(model, base_url=base_url)
+def _completer(provider_name: str, model: str | None, base_url: str | None = None) -> Completer:
+    return provider(provider_name).build(model, base_url)
 
 
 def agent_propose(args: argparse.Namespace) -> int:

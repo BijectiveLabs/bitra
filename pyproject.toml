@@ -41,6 +41,9 @@ anthropic = [
 data = [
     "pyarrow>=18",
 ]
+google = [
+    "google-genai>=1",
+]
 mcp = [
     "mcp>=2,<3",
 ]
@@ -94,6 +97,8 @@ module = [
     "openai.*",
     "websockets",
     "websockets.*",
+    "google",
+    "google.*",
 ]
 ignore_missing_imports = true
 
