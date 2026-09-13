@@ -1,0 +1,12 @@
+# `docker compose run --rm tra init .` then `docker compose run --rm tra backtest ...`.
+# The working directory is the project; keys come from .env and never from the image.
+
+services:
+  tra:
+    build: .
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - .:/work
+    working_dir: /work

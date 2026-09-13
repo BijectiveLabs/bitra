@@ -1,0 +1,60 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build and attach
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install
+        run: uv sync --locked --all-extras
+
+      - name: Checks
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run mypy
+          uv run pytest
+
+      - name: Build
+        run: uv build
+
+      - name: Tag matches the package version
+        run: |
+          expected="v$(uv run python -c 'import trading_research_agent as t; print(t.__version__)')"
+          test "${GITHUB_REF_NAME}" = "${expected}" || { echo "tag ${GITHUB_REF_NAME} is not ${expected}"; exit 1; }
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/* \
+            --title "${GITHUB_REF_NAME}" \
+            --notes "See CHANGELOG.md for ${GITHUB_REF_NAME}."
+
+  # Publishing to PyPI is a separate decision, taken when the repository goes public: a
+  # `pypi` environment with trusted publishing, and this job enabled.
+  # publish:
+  #   needs: build
+  #   runs-on: ubuntu-latest
+  #   environment: pypi
+  #   permissions:
+  #     id-token: write
+  #   steps:
+  #     - uses: actions/checkout@v7
+  #     - uses: astral-sh/setup-uv@v10.1.0
+  #     - run: uv build
+  #     - run: uv publish

@@ -29,3 +29,4 @@ Thumbs.db
 *.parquet
 ledger.jsonl
 /data/
+/reference
