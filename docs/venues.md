@@ -19,24 +19,30 @@ gate. See `docs/data.md`, section "Any other source".
 ## An archive venue
 
 ```python
+import csv
 from collections.abc import Iterable, Iterator
 from datetime import date
 from trading_research_agent.data import Rejection, Trade
 
-class MyVenue:
-    name = "my-venue"          # what `--venue` accepts; lower-cased on registration
-    cadence = "daily"          # or "monthly": how the venue slices its archives
 
-    def archive_url(self, instrument: str, *, day: date | None, month: tuple[int, int] | None) -> str:
+class MyVenue:
+    name = "my-venue"  # what `--venue` accepts; lower-cased on registration
+    cadence = "daily"  # or "monthly": how the venue slices its archives
+
+    def archive_url(
+        self, instrument: str, *, day: date | None, month: tuple[int, int] | None
+    ) -> str:
         if day is None:
             raise ValueError("my-venue archives are daily; pass --day")
         return f"https://archive.example/{instrument}/{day.isoformat()}.csv.gz"
 
     def checksum_url(self, archive_url: str) -> str | None:
-        return None            # or the URL of a published digest, which fetch verifies
+        return None  # or the URL of a published digest, which fetch verifies
 
     def normalise(self, lines: Iterable[str], *, instrument: str) -> Iterator[Trade | Rejection]:
-        ...                    # rows to canonical trades; a bad row is a Rejection, never dropped
+        # Rows to canonical trades. A bad row is a Rejection with its line, never dropped.
+        for number, row in enumerate(csv.reader(lines), start=1):
+            ...
 ```
 
 `normalise` is held to the same standard as the bundled ones: it checks the layout it was
@@ -58,6 +64,7 @@ Or in a script, before the CLI or the gate is used:
 
 ```python
 from trading_research_agent.data.venues import register
+
 register(MyVenue())
 ```
 
@@ -72,10 +79,13 @@ returns a `Feed`: an iterator of `Trade` that the runtime pulls prints from.
 import threading
 from trading_research_agent.trading.feed import Feed
 
+
 class MyFeedFactory:
     name = "my-venue"
 
-    def __call__(self, instrument: str, *, stop: threading.Event, max_reconnects: int | None) -> Feed:
+    def __call__(
+        self, instrument: str, *, stop: threading.Event, max_reconnects: int | None
+    ) -> Feed:
         return MyPublicFeed(instrument, stop=stop, max_reconnects=max_reconnects)
 ```
 
