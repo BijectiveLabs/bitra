@@ -13,6 +13,7 @@ import os
 import re
 import sys
 import threading
+import tomllib
 from collections.abc import Iterable, Iterator
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
@@ -86,6 +87,7 @@ from trading_research_agent.trading import (
 )
 from trading_research_agent.trading import run as run_trading
 from trading_research_agent.trading.canary import CanaryError, CanaryGuard
+from trading_research_agent.trading.config import load_funding
 from trading_research_agent.trading.feed import FeedError
 from trading_research_agent.trading.feeds import UnknownFeedError, live_feed
 from trading_research_agent.trading.venues import (
@@ -139,6 +141,19 @@ def build_parser() -> argparse.ArgumentParser:
     when.add_argument("--month", type=parse_month, help="monthly archives: YYYY-MM")
     fetch_cmd.add_argument("--out", type=Path, default=Path("data"), help="directory to write into")
     fetch_cmd.add_argument("--json", action="store_true")
+
+    get_cmd = data.add_parser(
+        "get", help="fetch, audit, Parquet and funding for one day, into data/"
+    )
+    get_cmd.add_argument("instrument")
+    get_cmd.add_argument("when", help="YYYY-MM-DD for daily venues, YYYY-MM for monthly ones")
+    get_cmd.add_argument("--venue", choices=venues, help="defaults to the venue in strategy.toml")
+    get_cmd.add_argument("--config", type=Path, default=Path("strategy.toml"))
+    get_cmd.add_argument("--out", type=Path, default=Path("data"))
+    get_cmd.add_argument(
+        "--max-gap", type=parse_duration, default=None, help="default: [data].max_gap or 5m"
+    )
+    get_cmd.add_argument("--json", action="store_true")
 
     funding_cmd = data.add_parser("funding", help="settlement rates from a venue plugin")
     funding_cmd.add_argument("--venue", choices=venues, required=True)
@@ -226,21 +241,22 @@ def build_parser() -> argparse.ArgumentParser:
     session_cmd = agent.add_parser(
         "session", help="the seven roles over recorded data, in the sandbox"
     )
-    session_cmd.add_argument(
-        "--config", type=Path, required=True, help="strategy.toml with [agents]"
-    )
-    session_cmd.add_argument("--envelope", type=Path, required=True)
+    session_cmd.add_argument("--config", type=Path, default=Path("strategy.toml"))
+    session_cmd.add_argument("--envelope", type=Path, default=Path("envelope.toml"))
     session_cmd.add_argument(
         "--dataset",
         action="append",
-        required=True,
+        default=None,
         metavar="INSTRUMENT=PATH",
-        help="a Parquet dataset from data audit; repeat per instrument",
+        help="default: every dataset in data/, newest per instrument",
     )
     session_cmd.add_argument(
-        "--magnitude", type=parse_decimal, required=True, help="the claimed edge, bps"
+        "--magnitude",
+        type=parse_decimal,
+        default=None,
+        help="the claimed edge, bps; default [agents].magnitude_bps",
     )
-    session_cmd.add_argument("--out", type=Path, required=True)
+    session_cmd.add_argument("--out", type=Path, default=None, help="default: runs/session-<time>")
     session_cmd.add_argument("--ladder", type=Path, default=Path("ladder.json"))
     session_cmd.add_argument(
         "--macro", type=Path, help="a JSON file of macro series for the macro analyst"
@@ -267,12 +283,14 @@ def build_parser() -> argparse.ArgumentParser:
     live_alias = top.add_parser("live", help="alias of trade live")
     live_alias.set_defaults(command="live")
     for cmd in (replay_cmd, shadow_cmd, live_cmd, backtest_cmd, paper_cmd, live_alias):
-        cmd.add_argument("--config", type=Path, required=True, help="strategy.toml")
-        cmd.add_argument("--envelope", type=Path, required=True)
-        cmd.add_argument("--out", type=Path, required=True, help="run directory")
+        cmd.add_argument("--config", type=Path, default=Path("strategy.toml"))
+        cmd.add_argument("--envelope", type=Path, default=Path("envelope.toml"))
+        cmd.add_argument("--out", type=Path, default=None, help="default: runs/<command>-<time>")
         cmd.add_argument("--json", action="store_true")
     for cmd in (replay_cmd, backtest_cmd):
-        cmd.add_argument("--parquet", type=Path, required=True, help="a dataset from data audit")
+        cmd.add_argument(
+            "--parquet", type=Path, default=None, help="default: the newest dataset in data/"
+        )
     for cmd in (shadow_cmd, live_cmd, paper_cmd, live_alias):
         cmd.add_argument("--max-reconnects", type=int, default=None)
         cmd.add_argument(
@@ -292,7 +310,19 @@ def build_parser() -> argparse.ArgumentParser:
     init_cmd = top.add_parser("init", help="a new project directory from the templates")
     init_cmd.set_defaults(command="init")
     init_cmd.add_argument("directory", type=Path)
+    init_cmd.add_argument(
+        "--agent", metavar="PROVIDER", help="make the technical analyst the core, on this provider"
+    )
+    init_cmd.add_argument("--model", help="the model for --agent")
     init_cmd.add_argument("--json", action="store_true")
+
+    check_cmd = top.add_parser("check", help="what is ready and what is missing, in plain words")
+    check_cmd.set_defaults(command="check")
+    check_cmd.add_argument("--config", type=Path, default=Path("strategy.toml"))
+    check_cmd.add_argument("--envelope", type=Path, default=Path("envelope.toml"))
+    check_cmd.add_argument("--ladder", type=Path, default=Path("ladder.json"))
+    check_cmd.add_argument("--env-file", type=Path, default=None)
+    check_cmd.add_argument("--json", action="store_true")
 
     ladder = top.add_parser("ladder", help="the promotion ladder").add_subparsers(
         dest="command", required=True
@@ -356,6 +386,12 @@ def main(argv: list[str] | None = None) -> int:
         ValueError,
     ) as exc:
         print(f"tra: {exc}", file=sys.stderr)
+        if "no funding rate" in str(exc):
+            print(
+                "tra: the run spans a settlement; `tra data get` fetches funding with the day, "
+                "or run `tra data funding` and set [run].funding",
+                file=sys.stderr,
+            )
         return REFUSED
 
 
@@ -655,11 +691,15 @@ def _trading_config(
 ) -> TradingConfig:
     cfg = load_strategy_config(args.config)
     strategy = cfg.strategy if cfg.agents is None else _agent_core(cfg, args.out)
+    funding = cfg.funding
+    if funding is None:
+        beside = _data_dir(args.config) / f"{cfg.run.instrument}-funding.json"
+        if beside.is_file():
+            funding = load_funding(beside, cfg.run.settlement_interval_s)
     if venue is None:
         venue = SimulatedVenue(
             channel=_channel(args, cfg),
-            funding=cfg.funding
-            or FundingSchedule(interval_s=cfg.run.settlement_interval_s, rates={}),
+            funding=funding or FundingSchedule(interval_s=cfg.run.settlement_interval_s, rates={}),
             latency_ns=int(cfg.run.latency_ms * 1_000_000),
             slippage_bps=cfg.run.slippage_bps,
         )
@@ -710,14 +750,44 @@ def _report(args: argparse.Namespace, report: Any) -> int:
     return CLEARED if report.stopped_by is None else REFUSED
 
 
+def _data_dir(config: Path) -> Path:
+    return config.resolve().parent / "data"
+
+
+def _datasets(config: Path) -> dict[str, Path]:
+    """`data/<INSTRUMENT>-<when>.parquet` as `tra data get` writes them: newest per instrument."""
+    found: dict[str, Path] = {}
+    for path in sorted(_data_dir(config).glob("*.parquet")):
+        instrument = path.stem.split("-", 1)[0]
+        found[instrument] = path
+    return found
+
+
+def _run_dir(args: argparse.Namespace, label: str) -> Path:
+    if args.out is None:
+        args.out = Path("runs") / f"{label}-{datetime.now(UTC):%Y%m%dT%H%M%SZ}"
+    out: Path = args.out
+    return out
+
+
 def trade_replay(args: argparse.Namespace) -> int:
     cfg = load_strategy_config(args.config)
-    feed = RecordedFeed.from_parquet(args.parquet, instrument=cfg.run.instrument)
+    _run_dir(args, "backtest")
+    parquet = args.parquet
+    if parquet is None:
+        parquet = _datasets(args.config).get(cfg.run.instrument)
+        if parquet is None:
+            raise ValueError(
+                f"no dataset for {cfg.run.instrument} in {_data_dir(args.config)}; "
+                f"run `tra data get {cfg.run.instrument} YYYY-MM-DD` or pass --parquet"
+            )
+    feed = RecordedFeed.from_parquet(parquet, instrument=cfg.run.instrument)
     return _report(args, run_trading(_trading_config(args, feed, "replay")))
 
 
 def trade_shadow(args: argparse.Namespace) -> int:
     cfg = load_strategy_config(args.config)
+    _run_dir(args, "paper")
     # The channel key is venue/channel; the venue half names the feed unless told otherwise.
     feed = _live_feed(args, cfg, args.feed or cfg.run.venue_key.partition("/")[0])
     return _report(args, run_trading(_trading_config(args, feed, "shadow")))
@@ -759,6 +829,7 @@ def _environment(env_file: Path | None) -> dict[str, str]:
 
 def trade_live(args: argparse.Namespace) -> int:
     cfg = load_strategy_config(args.config)
+    _run_dir(args, "live")
     if cfg.live is None or cfg.canary is None:
         raise ConfigError("a live session needs both [live] and [canary] in strategy.toml")
     ladder = Ladder(args.ladder, live_available=bool(live_venues()))
@@ -813,13 +884,178 @@ def init_project(args: argparse.Namespace) -> int:
     existing = [name for name in TEMPLATE_FILES if (target / name).exists()]
     if existing:
         raise ValueError(f"{target}: already has {existing}; init never overwrites")
+    if args.agent and not args.model:
+        raise ValueError("--agent needs --model")
+    if args.agent:
+        provider(args.agent)
     for name, source in TEMPLATE_FILES.items():
         out = target / name
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(templates.joinpath(source).read_text(encoding="utf-8"), encoding="utf-8")
+        text = templates.joinpath(source).read_text(encoding="utf-8")
+        if name == "strategy.toml" and args.agent:
+            text = _agent_config(text, args.agent, args.model)
+        out.write_text(text, encoding="utf-8")
     lines = [f"{target}: {len(TEMPLATE_FILES)} files", *(f"  {n}" for n in TEMPLATE_FILES)]
-    lines.append("next: tra data fetch, tra data audit, tra backtest (see README.md)")
+    if args.agent:
+        key = provider(args.agent).key_env
+        if key:
+            lines.append(f"put {key} in .env (copy .env.example)")
+    lines.append("next: cd there, `tra data get BTCUSDT 2025-01-01`, then `tra backtest`")
     emit({"directory": str(target), "files": list(TEMPLATE_FILES)}, args.json, lines)
+    return CLEARED
+
+
+def _agent_config(text: str, provider_name: str, model: str) -> str:
+    """The template with the technical analyst as the core and the [agents] table live."""
+    start = text.index("[strategy]")
+    end = text.index("[exit]")
+    head = (
+        "[strategy]\n"
+        'agent = "technical_analyst"          # the model decides on each closed bar\n'
+        "# file = ... / class = ...             # or a code core instead (docs/trading.md)\n\n"
+    )
+    text = text[:start] + head + text[end:]
+    marker = "# [agents]"
+    if marker in text:
+        text = text[: text.index(marker)]
+    text = text.rstrip() + (
+        "\n\n[agents]\n"
+        f'provider = "{provider_name}"\n'
+        f'model = "{model}"\n'
+        'mechanism = "state the mechanism the analyst reasons from"\n'
+        "token_budget = 200000              # the whole session, every role\n"
+        "max_calls_per_hour = 60\n"
+        "min_interval_s = 60\n"
+        "lookback_bars = 60\n"
+        "min_confidence = 0.6\n"
+        "magnitude_bps = 20                 # the claimed edge, for the cost floor\n"
+        f"\n[agents.pricing.{model}]           # what you were quoted; never a constant\n"
+        "input_per_million = 0\n"
+        "output_per_million = 0\n"
+    )
+    return text
+
+
+def check_project(args: argparse.Namespace) -> int:
+    """What a first run needs, checked in the order it would fail, said in plain words."""
+    good: list[str] = []
+    bad: list[str] = []
+    env = _environment(args.env_file)
+    cfg = None
+    try:
+        cfg = load_strategy_config(args.config)
+        good.append(
+            f"{args.config}: valid; core {cfg.strategy.name!r}; instrument {cfg.run.instrument}"
+        )
+    except (ConfigError, OSError, ValueError) as exc:
+        bad.append(f"{args.config}: {exc}")
+    try:
+        envelope = load_envelope(args.envelope)
+        good.append(f"{args.envelope}: {len(envelope.channels)} channels")
+        if cfg is not None and not any(c.key == cfg.run.venue_key for c in envelope.channels):
+            bad.append(f"[run].venue_key {cfg.run.venue_key!r} is not a channel in {args.envelope}")
+    except (EnvelopeError, OSError, ValueError) as exc:
+        bad.append(f"{args.envelope}: {exc}")
+    if cfg is not None:
+        found = _datasets(args.config)
+        if cfg.run.instrument in found:
+            good.append(f"dataset: {found[cfg.run.instrument]}")
+        else:
+            bad.append(
+                f"no dataset for {cfg.run.instrument} in {_data_dir(args.config)}: "
+                f"run `tra data get {cfg.run.instrument} YYYY-MM-DD`"
+            )
+        funding = _data_dir(args.config) / f"{cfg.run.instrument}-funding.json"
+        if cfg.funding is not None or funding.is_file():
+            good.append("funding: present")
+        else:
+            bad.append(
+                "funding: none; a run that spans a settlement will refuse (tra data get fetches it)"
+            )
+        if cfg.agents is not None:
+            try:
+                p = provider(cfg.agents.provider)
+            except UnknownProviderError as exc:
+                bad.append(str(exc))
+            else:
+                if p.key_env and not env.get(p.key_env):
+                    bad.append(f"{p.key_env} is not set; put it in .env and pass --env-file .env")
+                else:
+                    good.append(f"provider {p.name}: ready")
+        if cfg.live is not None:
+            tier = Ladder(args.ladder).tier
+            if tier is Tier.CANARY:
+                good.append(f"ladder: {tier.name}; live sessions may run")
+            else:
+                bad.append(f"ladder: {tier.name}; `tra live` needs CANARY (promote with evidence)")
+            missing = [k for k in live_venue(cfg.live.venue).env_keys if not env.get(k)]
+            if missing:
+                bad.append(f"missing {', '.join(missing)} for the live venue")
+    lines = [*(f"ok    {g}" for g in good), *(f"todo  {b}" for b in bad)]
+    lines.append("ready to run `tra backtest`" if not bad else f"{len(bad)} thing(s) to fix first")
+    emit({"ok": good, "todo": bad}, args.json, lines)
+    return CLEARED if not bad else REFUSED
+
+
+def data_get(args: argparse.Namespace) -> int:
+    """One day of one instrument, from the venue to a dataset the runs can use."""
+    venue_name = args.venue
+    max_gap = args.max_gap
+    if args.config.is_file():
+        raw = tomllib.loads(args.config.read_text(encoding="utf-8"))
+        venue_name = venue_name or str(raw.get("run", {}).get("venue_key", "")).partition("/")[0]
+        declared = raw.get("data", {}).get("max_gap")
+        if max_gap is None and declared:
+            max_gap = parse_duration(str(declared))
+    if not venue_name:
+        raise ValueError("no strategy.toml here to take the venue from; pass --venue")
+    if max_gap is None:
+        max_gap = timedelta(minutes=5)
+    day = month = None
+    try:
+        day = date.fromisoformat(args.when)
+    except ValueError:
+        month = parse_month(args.when)
+    venue = archive_venue(venue_name)
+    args.out.mkdir(parents=True, exist_ok=True)
+    fetched = argparse.Namespace(
+        venue=venue_name, instrument=args.instrument, day=day, month=month, out=args.out, json=False
+    )
+    data_fetch(fetched)
+    url = venue.archive_url(args.instrument, day=day, month=month)
+    archive = args.out / url.rsplit("/", 1)[1]
+    stem = f"{args.instrument}-{args.when}"
+    audited = argparse.Namespace(
+        archive=archive,
+        venue=venue_name,
+        mapping=None,
+        instrument=args.instrument,
+        max_gap=max_gap,
+        max_rejected=Decimal("0.001"),
+        manifest=args.out / f"{stem}.manifest.json",
+        parquet=args.out / f"{stem}.parquet",
+        json=False,
+    )
+    code = data_audit(audited)
+    if code != CLEARED:
+        return code
+    if getattr(venue, "funding_rates", None) is not None:
+        if day is not None:
+            start, end = day - timedelta(days=1), day + timedelta(days=1)
+        else:
+            year, mon = month or (1970, 1)
+            start = date(year, mon, 1) - timedelta(days=1)
+            end = start + timedelta(days=33)
+        funded = argparse.Namespace(
+            venue=venue_name,
+            instrument=args.instrument,
+            start=start,
+            end=end,
+            out=args.out / f"{args.instrument}-funding.json",
+            json=False,
+        )
+        data_funding(funded)
+    print(f"ready: {audited.parquet}  (max gap {max_gap}; now `tra backtest`)")
     return CLEARED
 
 
@@ -879,12 +1115,20 @@ def agent_session(args: argparse.Namespace) -> int:
     if cfg.agents is None:
         raise ConfigError("a session needs [strategy].agent and [agents] in strategy.toml")
     datasets: dict[str, Path] = {}
-    for item in args.dataset:
+    for item in args.dataset or ():
         name, sep, path = item.partition("=")
         if not sep or not name or not path:
             raise ValueError(f"--dataset takes INSTRUMENT=PATH, got {item!r}")
         datasets[name] = Path(path)
+    if not datasets:
+        datasets = _datasets(args.config)
+    if not datasets:
+        raise ValueError(f"no datasets in {_data_dir(args.config)}; run `tra data get` first")
     a = cfg.agents
+    magnitude = args.magnitude if args.magnitude is not None else a.magnitude_bps
+    if magnitude is None:
+        raise ConfigError("the claimed edge: --magnitude, or [agents].magnitude_bps")
+    _run_dir(args, "session")
     args.out.mkdir(parents=True, exist_ok=True)
     usage = UsageLedger(args.out / "usage.jsonl")
     limits = BudgetLimits(
@@ -913,7 +1157,7 @@ def agent_session(args: argparse.Namespace) -> int:
             out_dir=args.out,
             completer_for=completer_for,
             usage=usage,
-            magnitude_bps=args.magnitude,
+            magnitude_bps=magnitude,
             ladder_path=args.ladder,
             kill_file=cfg.kill_switch,
             macro_series=args.macro,
@@ -1092,6 +1336,8 @@ HANDLERS = {
     ("data", "fetch"): data_fetch,
     ("data", "audit"): data_audit,
     ("data", "funding"): data_funding,
+    ("data", "get"): data_get,
+    ("check", "check"): check_project,
     ("chain", "floor"): chain_floor,
     ("chain", "check"): chain_check,
     ("chain", "requirements"): chain_requirements,

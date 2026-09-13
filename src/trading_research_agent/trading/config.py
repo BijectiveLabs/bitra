@@ -55,6 +55,7 @@ class AgentSettings:
     lookback_bars: int
     min_confidence: float
     pricing: dict[str, tuple[Decimal, Decimal]]
+    magnitude_bps: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -204,6 +205,7 @@ def _agents(raw: dict[str, Any], strategy_raw: dict[str, Any]) -> AgentSettings 
         lookback_bars=int(table.get("lookback_bars", 60)),
         min_confidence=float(confidence),
         pricing=pricing,
+        magnitude_bps=_dec(table, "magnitude_bps") if "magnitude_bps" in table else None,
     )
 
 
