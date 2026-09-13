@@ -50,8 +50,11 @@ TEMPLATES = SRC / "templates"
 EXAMPLES = SRC.parent.parent / "examples"
 VENUE_NAMES = ("bybit", "binance", "hyperliquid", "okx", "coinbase", "deribit", "kraken")
 
-# A decision core is a class with these methods, however it is spelled.
+# A decision core is a class with these methods, however it is spelled. Two classes carry the
+# methods without carrying a rule about the market: the agent core, where a model decides
+# from the operator's mechanism, and the config placeholder that stands in for it.
 STRATEGY_METHODS = {"on_bar"}
+MECHANISMS = {"agent/strategy.py:AgentStrategy", "trading/config.py:_Pending"}
 FITTED_CORE_METHODS = {"fit", "entry", "exit", "mark"}
 
 
@@ -147,7 +150,9 @@ def test_no_strategy_ships_inside_the_package() -> None:
             methods = _methods(cls)
             strategy = methods >= STRATEGY_METHODS and _names_itself(cls)
             if strategy or methods >= FITTED_CORE_METHODS:
-                offenders.append(f"{path.relative_to(SRC)}:{cls.name}")
+                label = f"{path.relative_to(SRC).as_posix()}:{cls.name}"
+                if label not in MECHANISMS:
+                    offenders.append(label)
     assert not offenders, f"decision cores belong in examples/ or your own package: {offenders}"
 
 
