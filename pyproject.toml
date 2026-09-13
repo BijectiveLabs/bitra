@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "trading-research-agent"
-version = "0.4.1"
+version = "0.5.0"
 description = "A trading research agent that refuses to claim what its gates have not measured. Crypto-first."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -40,6 +40,9 @@ anthropic = [
 ]
 data = [
     "pyarrow>=18",
+]
+mcp = [
+    "mcp>=2,<3",
 ]
 openai = [
     "openai>=1",

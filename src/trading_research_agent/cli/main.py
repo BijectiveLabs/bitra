@@ -207,6 +207,10 @@ def build_parser() -> argparse.ArgumentParser:
     propose_cmd.add_argument("--envelope", type=Path, required=True)
     propose_cmd.add_argument("--provider", choices=("anthropic", "openai"), required=True)
     propose_cmd.add_argument("--model", help="model name; anthropic defaults to " + DEFAULT_MODEL)
+    propose_cmd.add_argument(
+        "--base-url",
+        help="an OpenAI-compatible endpoint (or TRA_OPENAI_BASE_URL); openai provider only",
+    )
     propose_cmd.add_argument("--venue")
     propose_cmd.add_argument(
         "--magnitude", type=parse_decimal, help="declare the bound yourself, bps"
@@ -251,6 +255,11 @@ def build_parser() -> argparse.ArgumentParser:
         cmd.add_argument(
             "--env-file", type=Path, help="KEY=VALUE lines read explicitly; the environment wins"
         )
+
+    mcp_p = top.add_parser("mcp", help="the gates as MCP tools").add_subparsers(
+        dest="command", required=True
+    )
+    mcp_p.add_parser("serve", help="serve the read tools over stdio (needs the [mcp] extra)")
 
     init_cmd = top.add_parser("init", help="a new project directory from the templates")
     init_cmd.set_defaults(command="init")
@@ -312,6 +321,7 @@ def main(argv: list[str] | None = None) -> int:
         PreregistrationError,
         ProviderError,
         ValidationError,
+        ImportError,
         OSError,
         ValueError,
     ) as exc:
@@ -789,6 +799,13 @@ def data_funding(args: argparse.Namespace) -> int:
     return CLEARED
 
 
+def mcp_serve(args: argparse.Namespace) -> int:
+    from trading_research_agent.mcp import serve
+
+    serve()
+    return CLEARED
+
+
 def ladder_show(args: argparse.Namespace) -> int:
     ladder = Ladder(args.path)
     lines = [f"tier {ladder.tier.value} {ladder.tier.name}"]
@@ -835,22 +852,24 @@ def ledger_show(args: argparse.Namespace) -> int:
     return CLEARED
 
 
-def _completer(provider: str, model: str | None) -> Completer:
+def _completer(provider: str, model: str | None, base_url: str | None = None) -> Completer:
     if provider == "anthropic":
         from trading_research_agent.agent.providers.anthropic import AnthropicCompleter
 
+        if base_url:
+            raise ValueError("--base-url applies to the openai provider")
         return AnthropicCompleter(model or DEFAULT_MODEL)
     from trading_research_agent.agent.providers.openai import OpenAICompleter
 
     if not model:
         raise ValueError("--model is required for the openai provider")
-    return OpenAICompleter(model)
+    return OpenAICompleter(model, base_url=base_url)
 
 
 def agent_propose(args: argparse.Namespace) -> int:
     config = RunConfig(
         envelope=load_envelope(args.envelope),
-        completer=_completer(args.provider, args.model),
+        completer=_completer(args.provider, args.model, args.base_url),
         venue=args.venue,
         magnitude_bps=args.magnitude,
         max_revisions=args.max_revisions,
@@ -939,6 +958,7 @@ HANDLERS = {
     ("paper", "shadow"): trade_shadow,
     ("live", "live"): trade_live,
     ("init", "init"): init_project,
+    ("mcp", "serve"): mcp_serve,
     ("ladder", "show"): ladder_show,
     ("ladder", "promote"): ladder_promote,
     ("ladder", "demote"): ladder_demote,
