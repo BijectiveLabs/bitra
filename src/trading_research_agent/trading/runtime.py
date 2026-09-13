@@ -59,6 +59,12 @@ class TradingConfig:
             raise ValueError("spread_cost_bps must be a non-negative Decimal")
         if self.equity is not None and self.equity <= 0:
             raise ValueError("equity, when known, is positive")
+        floor_s = int(getattr(self.strategy, "min_bar_interval_s", 0) or 0)
+        if self.bar_interval_ns < floor_s * 1_000_000_000:
+            raise ValueError(
+                f"{self.strategy.name} needs bars of at least {floor_s}s; "
+                f"the run declares {self.bar_interval_ns // 1_000_000_000}s"
+            )
 
 
 @dataclass
@@ -181,6 +187,12 @@ class _Loop:
         signal = self.c.strategy.on_bar(bar)
         if signal is not None:
             self.on_signal(bar, signal)
+        # A core may ask the session to end (a spent budget); it can never ask for more.
+        halt = getattr(self.c.strategy, "halt", None)
+        if halt and self.report.stopped_by is None:
+            self.report.stopped_by = str(halt)
+            if self.position is not None and not self.pending_close:
+                self.request(bar.end_ns, Target.FLAT, str(halt))
 
     def evaluate_exits(self, position: Position, bar: Bar) -> None:
         position.bars_held += 1

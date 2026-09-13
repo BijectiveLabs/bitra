@@ -55,11 +55,11 @@ class OpenAICompleter:
             key = os.environ.get(key_env) if key_env else None
             if key:
                 options["api_key"] = key
+            elif key_env:
+                raise ProviderError(f"{key_env} is not set in the environment")
             elif base_url is not None:
                 # A local or keyless server: the client library insists on a value.
                 options["api_key"] = "not-needed"
-            elif key_env:
-                raise ProviderError(f"{key_env} is not set in the environment")
             client = openai.OpenAI(**options)
         self.model = model
         self.base_url = base_url

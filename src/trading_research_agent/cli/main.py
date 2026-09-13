@@ -584,6 +584,39 @@ def _channel(args: argparse.Namespace, cfg: Any) -> Any:
     return channel
 
 
+def _agent_core(cfg: Any, out_dir: Path) -> Any:
+    """The technical analyst as the core: a metered completer over the declared provider."""
+    from trading_research_agent.agent.strategy import AgentStrategy
+    from trading_research_agent.agent.usage import (
+        BudgetLimits,
+        MeteredCompleter,
+        Pricing,
+        UsageLedger,
+    )
+
+    a = cfg.agents
+    completer = provider(a.provider).build(a.model, a.base_url)
+    metered = MeteredCompleter(
+        completer,
+        role=a.role,
+        provider=a.provider,
+        limits=BudgetLimits(
+            token_budget=a.token_budget,
+            max_calls_per_hour=a.max_calls_per_hour,
+            min_interval_s=a.min_interval_s,
+            call_timeout_s=a.call_timeout_s,
+        ),
+        ledger=UsageLedger(out_dir / "usage.jsonl"),
+        pricing={m: Pricing(i, o) for m, (i, o) in a.pricing.items()},
+    )
+    return AgentStrategy(
+        metered,
+        mechanism=a.mechanism,
+        lookback_bars=a.lookback_bars,
+        min_confidence=a.min_confidence,
+    )
+
+
 def _trading_config(
     args: argparse.Namespace,
     feed: Any,
@@ -593,6 +626,7 @@ def _trading_config(
     canary: CanaryGuard | None = None,
 ) -> TradingConfig:
     cfg = load_strategy_config(args.config)
+    strategy = cfg.strategy if cfg.agents is None else _agent_core(cfg, args.out)
     if venue is None:
         venue = SimulatedVenue(
             channel=_channel(args, cfg),
@@ -605,7 +639,7 @@ def _trading_config(
     return TradingConfig(
         feed=feed,
         venue=venue,
-        strategy=cfg.strategy,
+        strategy=strategy,
         exit_rule=cfg.exit_rule,
         controls=controls,
         out_dir=args.out,

@@ -1,0 +1,123 @@
+"""The technical analyst as a decision core: a model decides, the runtime and controls execute.
+
+It satisfies the `Strategy` protocol like any code core, so replay, paper, shadow and canary
+run it unchanged. What differs is the cadence and the budget: the model is asked once per
+closed bar, at most as often as the budget allows, and only on bars a minute or longer, since
+a call takes seconds. A call that fails, times out or comes back malformed is no signal, and
+is counted. A spent budget asks the runtime to end the session; it never asks it to hold on.
+"""
+
+from __future__ import annotations
+
+import json
+from collections import deque
+from dataclasses import dataclass
+from decimal import Decimal
+
+from trading_research_agent.agent.completer import Completer
+from trading_research_agent.agent.roles import RoleError, prompt
+from trading_research_agent.agent.technical_analyst import ROLE, SCHEMA, parse
+from trading_research_agent.agent.usage import BudgetSpentError
+from trading_research_agent.strategy.core import Bar, Signal, Target
+
+MIN_BAR_INTERVAL_S = 60
+MIN_BARS = 3
+
+
+@dataclass(frozen=True)
+class Held:
+    target: Target
+    entry_px: Decimal | None
+    bars: int
+
+
+class AgentStrategy:
+    """`name` and `on_bar`, and a `halt` the runtime reads when the budget is spent."""
+
+    name = "agent-technical-analyst"
+    min_bar_interval_s = MIN_BAR_INTERVAL_S
+
+    def __init__(
+        self,
+        completer: Completer,
+        *,
+        mechanism: str,
+        lookback_bars: int = 60,
+        min_confidence: float = 0.5,
+    ) -> None:
+        if not mechanism.strip():
+            raise ValueError("the registered mechanism is what the analyst reasons from")
+        if lookback_bars < MIN_BARS:
+            raise ValueError(f"lookback_bars must be at least {MIN_BARS}")
+        if not 0 <= min_confidence <= 1:
+            raise ValueError("min_confidence is in [0, 1]")
+        self.completer = completer
+        self.mechanism = mechanism.strip()
+        self.lookback_bars = lookback_bars
+        self.min_confidence = min_confidence
+        self._bars: deque[Bar] = deque(maxlen=lookback_bars)
+        self._held = Held(Target.FLAT, None, 0)
+        self.halt: str | None = None
+        self.calls = 0
+        self.failures = 0
+        self.below_confidence = 0
+        self.last_reason: str | None = None
+
+    def on_bar(self, bar: Bar) -> Signal | None:
+        self._bars.append(bar)
+        if self._held.target is not Target.FLAT:
+            self._held = Held(self._held.target, self._held.entry_px, self._held.bars + 1)
+        if self.halt is not None or bar.empty or len(self._bars) < MIN_BARS:
+            return None
+        try:
+            done = self.completer.complete(system=prompt(ROLE), user=self._user(), schema=SCHEMA)
+        except BudgetSpentError as exc:
+            self.halt = str(exc)
+            return None
+        except (RoleError, RuntimeError, OSError, TimeoutError, ValueError):
+            self.failures += 1
+            return None
+        self.calls += 1
+        try:
+            answer = parse(done.text)
+        except RoleError:
+            self.failures += 1
+            return None
+        self.last_reason = answer.reason
+        if answer.confidence < self.min_confidence:
+            self.below_confidence += 1
+            return None
+        wanted = Target(answer.target)
+        if wanted is self._held.target:
+            return None
+        if wanted is Target.FLAT:
+            self._held = Held(Target.FLAT, None, 0)
+        else:
+            self._held = Held(wanted, bar.close, 0)
+        return Signal(wanted, f"{answer.reason} (confidence {answer.confidence:.2f})")
+
+    def observe_flat(self) -> None:
+        self._held = Held(Target.FLAT, None, 0)
+
+    def _user(self) -> str:
+        rows = [
+            {
+                "start_ns": b.start_ns,
+                "open": str(b.open),
+                "high": str(b.high),
+                "low": str(b.low),
+                "close": str(b.close),
+                "volume": str(b.volume),
+                "trades": b.trades,
+            }
+            for b in self._bars
+            if not b.empty
+        ]
+        held = {
+            "target": self._held.target.value,
+            "entry_px": None if self._held.entry_px is None else str(self._held.entry_px),
+            "bars_held": self._held.bars,
+        }
+        return json.dumps(
+            {"mechanism": self.mechanism, "bars": rows, "position": held}, sort_keys=True
+        )

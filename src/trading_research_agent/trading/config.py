@@ -40,6 +40,24 @@ class RunSettings:
 
 
 @dataclass(frozen=True)
+class AgentSettings:
+    """[agents]: which model decides, how often it may be asked, and what that may cost."""
+
+    role: str
+    provider: str
+    model: str | None
+    base_url: str | None
+    mechanism: str
+    token_budget: int
+    max_calls_per_hour: int
+    min_interval_s: int
+    call_timeout_s: int
+    lookback_bars: int
+    min_confidence: float
+    pricing: dict[str, tuple[Decimal, Decimal]]
+
+
+@dataclass(frozen=True)
 class LiveSettings:
     """[live]: which plugin, which environment, and the two deliberate overrides."""
 
@@ -61,6 +79,7 @@ class StrategyConfig:
     live: LiveSettings | None = None
     canary: CanaryLimits | None = None
     funding: FundingSchedule | None = None
+    agents: AgentSettings | None = None
 
 
 def load_strategy_config(path: Path) -> StrategyConfig:
@@ -77,7 +96,8 @@ def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> S
     run_raw = _table(raw, "run")
     controls_raw = _table(raw, "controls")
 
-    strategy = _build_strategy(strategy_raw, base)
+    agents = _agents(raw, strategy_raw)
+    strategy = _build_strategy(strategy_raw, base) if agents is None else _placeholder(agents)
     exit_rule = ExitRule(
         stop_sigma_frac=_dec(exit_raw, "stop_sigma_frac"),
         timeout_bars=_int(exit_raw, "timeout_bars"),
@@ -126,6 +146,64 @@ def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> S
         live=_live(raw, run.venue_key),
         canary=_canary(raw),
         funding=funding,
+        agents=agents,
+    )
+
+
+class _Pending:
+    """Stands in for the agent core until the CLI has built a completer for it."""
+
+    name = "agent-pending"
+
+    def __init__(self, settings: AgentSettings) -> None:
+        self.settings = settings
+
+    def on_bar(self, bar: Any) -> Any:
+        raise ConfigError("the agent core has not been built; the CLI builds it from [agents]")
+
+
+def _placeholder(settings: AgentSettings) -> Strategy:
+    return _Pending(settings)
+
+
+def _agents(raw: dict[str, Any], strategy_raw: dict[str, Any]) -> AgentSettings | None:
+    role = strategy_raw.get("agent")
+    if role is None:
+        return None
+    if role != "technical_analyst":
+        raise ConfigError("[strategy].agent names a decision role; only technical_analyst decides")
+    if strategy_raw.get("file") or strategy_raw.get("import"):
+        raise ConfigError("[strategy] names either a code core or an agent, not both")
+    table = raw.get("agents")
+    if not isinstance(table, dict):
+        raise ConfigError("[agents] is required when [strategy].agent is set")
+    provider = str(table.get("provider", ""))
+    if not provider:
+        raise ConfigError("[agents].provider names the model provider")
+    mechanism = str(table.get("mechanism", "")).strip()
+    if not mechanism:
+        raise ConfigError("[agents].mechanism states what the analyst reasons from")
+    pricing: dict[str, tuple[Decimal, Decimal]] = {}
+    for model_name, row in (table.get("pricing") or {}).items():
+        if not isinstance(row, dict):
+            raise ConfigError("[agents.pricing.<model>] is a table")
+        pricing[str(model_name)] = (_dec(row, "input_per_million"), _dec(row, "output_per_million"))
+    confidence = table.get("min_confidence", 0.5)
+    if isinstance(confidence, bool) or not isinstance(confidence, int | float | Decimal):
+        raise ConfigError("[agents].min_confidence is a number in [0, 1]")
+    return AgentSettings(
+        role=str(role),
+        provider=provider,
+        model=str(table["model"]) if table.get("model") else None,
+        base_url=str(table["base_url"]) if table.get("base_url") else None,
+        mechanism=mechanism,
+        token_budget=_int(table, "token_budget"),
+        max_calls_per_hour=_int(table, "max_calls_per_hour"),
+        min_interval_s=_int(table, "min_interval_s"),
+        call_timeout_s=int(table.get("call_timeout_s", 60)),
+        lookback_bars=int(table.get("lookback_bars", 60)),
+        min_confidence=float(confidence),
+        pricing=pricing,
     )
 
 
