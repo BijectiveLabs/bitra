@@ -45,7 +45,7 @@ __all__ = [
 class FundingSchedule:
     """The venue's settlement clock and the realised rates at each settlement.
 
-    The clock is structural (Bybit perpetuals settle every eight hours from the Unix epoch), so
+    The clock is structural (a perpetual settles on a fixed interval from a fixed anchor), so
     the interval and anchor are not economic assumptions. The rates are: they are what the venue
     actually charged, keyed by the settlement timestamp in epoch nanoseconds, as fractions
     (0.0001 is one basis point).

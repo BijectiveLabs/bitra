@@ -1,7 +1,9 @@
-"""Dependency direction between packages, checked from the source rather than trusted.
+"""Dependency direction and the adoption rules, checked from the source rather than trusted.
 
 ledger and envelope are vocabulary and import nothing else from this project. Arrows only
 point down the list in docs/architecture.md. Nothing imports a language model outside agent.
+No strategy ships inside the package, and no core module names a venue: both live behind
+the plugin directories or in examples/.
 """
 
 from __future__ import annotations
@@ -38,6 +40,14 @@ ALLOWED: dict[str, set[str]] = {
 }
 
 LLM_CLIENTS = {"anthropic", "openai", "langchain", "langgraph", "litellm", "ollama"}
+
+# Plugin directories are the only places a venue may be named in the package.
+PLUGIN_DIRS = {SRC / "data" / "venues", SRC / "trading" / "feeds"}
+VENUE_NAMES = ("bybit", "binance", "hyperliquid", "okx", "coinbase", "deribit", "kraken")
+
+# A decision core is a class with these methods, however it is spelled.
+STRATEGY_METHODS = {"on_bar"}
+FITTED_CORE_METHODS = {"fit", "entry", "exit", "mark"}
 
 
 def _imports(path: Path) -> set[str]:
@@ -88,3 +98,68 @@ def test_source_is_ascii() -> None:
     for path in SRC.rglob("*.py"):
         raw = path.read_bytes()
         assert raw.isascii(), f"{path} contains non-ASCII bytes"
+
+
+def _classes(path: Path) -> list[ast.ClassDef]:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    return [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]
+
+
+def _is_protocol(cls: ast.ClassDef) -> bool:
+    for base in cls.bases:
+        name = base.attr if isinstance(base, ast.Attribute) else getattr(base, "id", "")
+        if isinstance(base, ast.Subscript):
+            inner = base.value
+            name = inner.attr if isinstance(inner, ast.Attribute) else getattr(inner, "id", "")
+        if name == "Protocol":
+            return True
+    return False
+
+
+def _methods(cls: ast.ClassDef) -> set[str]:
+    return {n.name for n in cls.body if isinstance(n, ast.FunctionDef)}
+
+
+def _names_itself(cls: ast.ClassDef) -> bool:
+    # The Strategy protocol is `name` plus `on_bar`; a bar handler alone is not a strategy.
+    for node in cls.body:
+        if isinstance(node, ast.FunctionDef) and node.name == "name":
+            return True
+        targets = node.targets if isinstance(node, ast.Assign) else []
+        if isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+        if any(isinstance(t, ast.Name) and t.id == "name" for t in targets):
+            return True
+    return False
+
+
+def test_no_strategy_ships_inside_the_package() -> None:
+    offenders = []
+    for path in SRC.rglob("*.py"):
+        for cls in _classes(path):
+            if _is_protocol(cls):
+                continue
+            methods = _methods(cls)
+            strategy = methods >= STRATEGY_METHODS and _names_itself(cls)
+            if strategy or methods >= FITTED_CORE_METHODS:
+                offenders.append(f"{path.relative_to(SRC)}:{cls.name}")
+    assert not offenders, f"decision cores belong in examples/ or your own package: {offenders}"
+
+
+def test_no_core_module_names_a_venue() -> None:
+    offenders = []
+    for path in SRC.rglob("*"):
+        if path.suffix not in {".py", ".md"} or any(d in path.parents for d in PLUGIN_DIRS):
+            continue
+        text = path.read_text(encoding="utf-8").lower()
+        hits = [v for v in VENUE_NAMES if v in text]
+        if hits:
+            offenders.append(f"{path.relative_to(SRC)}: {hits}")
+    assert not offenders, f"venues are plugins; core modules stay venue-neutral: {offenders}"
+
+
+def test_examples_are_not_importable_from_the_package() -> None:
+    examples = SRC.parent.parent / "examples"
+    assert not (examples / "__init__.py").exists()
+    for path in SRC.rglob("*.py"):
+        assert "examples." not in " ".join(_imports(path)), f"{path} imports an example"
