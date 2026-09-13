@@ -9,9 +9,9 @@ is counted. A spent budget asks the runtime to end the session; it never asks it
 
 from __future__ import annotations
 
-import json
 from collections import deque
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from trading_research_agent.agent.completer import Completer
@@ -100,24 +100,17 @@ class AgentStrategy:
         self._held = Held(Target.FLAT, None, 0)
 
     def _user(self) -> str:
-        rows = [
-            {
-                "start_ns": b.start_ns,
-                "open": str(b.open),
-                "high": str(b.high),
-                "low": str(b.low),
-                "close": str(b.close),
-                "volume": str(b.volume),
-                "trades": b.trades,
-            }
-            for b in self._bars
-            if not b.empty
+        # Compact rows, not JSON: the bars are most of every call, and a call is paid per token.
+        lines = [
+            f"mechanism: {self.mechanism}",
+            f"position: target={self._held.target.value} "
+            f"entry_px={'-' if self._held.entry_px is None else self._held.entry_px} "
+            f"bars_held={self._held.bars}",
+            "bars (start_utc,open,high,low,close,volume,trades), oldest first:",
         ]
-        held = {
-            "target": self._held.target.value,
-            "entry_px": None if self._held.entry_px is None else str(self._held.entry_px),
-            "bars_held": self._held.bars,
-        }
-        return json.dumps(
-            {"mechanism": self.mechanism, "bars": rows, "position": held}, sort_keys=True
-        )
+        for b in self._bars:
+            if b.empty:
+                continue
+            start = datetime.fromtimestamp(b.start_ns / 1e9, tz=UTC).strftime("%Y-%m-%dT%H:%MZ")
+            lines.append(f"{start},{b.open},{b.high},{b.low},{b.close},{b.volume},{b.trades}")
+        return "\n".join(lines)

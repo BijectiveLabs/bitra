@@ -138,7 +138,7 @@ def test_a_session_runs_the_roles_in_order_and_records_everything(
     result, usage, fake = scripted_session(
         tmp_path, envelope, [screener, *analyst_calls, risk, allocation, audit]
     )
-    roles = [json.loads(c.user) and c.system[:40] for c in fake.calls]
+    roles = [c.system[:40] for c in fake.calls]
     assert len(fake.calls) == 10
     assert [k["instrument"] for k in result.kept] == ["AAAUSDT"]
     assert [e["instrument"] for e in result.excluded] == ["BBBUSDT"]

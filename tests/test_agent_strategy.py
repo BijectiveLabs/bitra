@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -73,9 +72,10 @@ def test_the_analyst_signals_only_on_change_and_only_above_its_confidence() -> N
     assert core.on_bar(bar(7)) is None and core.failures == 1
     assert core.on_bar(bar(8)) is None and core.failures == 2
     assert core.calls == 7
-    sent = json.loads(scripted.calls[-1].user)
-    assert sent["mechanism"] == "funding settlement flow" and len(sent["bars"]) == 5
-    assert sent["position"]["target"] == "flat"
+    sent = scripted.calls[-1].user.splitlines()
+    assert sent[0] == "mechanism: funding settlement flow"
+    assert sent[1].startswith("position: target=flat")
+    assert len(sent) == 3 + 5  # header lines, then the five bars of the lookback
 
 
 def test_a_spent_budget_ends_the_session_flat(envelope: Envelope, tmp_path: Path) -> None:
