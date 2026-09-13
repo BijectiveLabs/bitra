@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal
 from importlib import import_module
 from importlib.metadata import entry_points
 from typing import Protocol
@@ -14,6 +16,22 @@ BUNDLED = ("trading_research_agent.data.venues.bybit", "trading_research_agent.d
 
 class UnknownVenueError(KeyError):
     """No venue plugin with that name is registered."""
+
+
+@dataclass(frozen=True)
+class FundingRate:
+    """One settlement: when it happened (epoch ns) and the rate as a fraction."""
+
+    ts_ns: int
+    rate: Decimal
+
+
+class FundingSource(Protocol):
+    """A venue plugin that can also say what funding it charged. Optional."""
+
+    def funding_rates(
+        self, instrument: str, *, start_ms: int, end_ms: int
+    ) -> list[FundingRate]: ...
 
 
 class ArchiveVenue(Protocol):

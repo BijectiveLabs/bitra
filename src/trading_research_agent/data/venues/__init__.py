@@ -8,10 +8,20 @@ the package changes when a venue is added.
 
 from trading_research_agent.data.venues.registry import (
     ArchiveVenue,
+    FundingRate,
+    FundingSource,
     UnknownVenueError,
     archive_venue,
     archive_venues,
     register,
 )
 
-__all__ = ["ArchiveVenue", "UnknownVenueError", "archive_venue", "archive_venues", "register"]
+__all__ = [
+    "ArchiveVenue",
+    "FundingRate",
+    "FundingSource",
+    "UnknownVenueError",
+    "archive_venue",
+    "archive_venues",
+    "register",
+]

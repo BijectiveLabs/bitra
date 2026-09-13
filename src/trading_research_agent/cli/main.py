@@ -9,14 +9,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import threading
 from collections.abc import Iterable, Iterator
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
+from importlib.resources import files
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from trading_research_agent import __version__
 from trading_research_agent.agent import Completer, Outcome, RunConfig, propose
@@ -74,11 +78,20 @@ from trading_research_agent.trading import (
     SimulatedVenue,
     Tier,
     TradingConfig,
+    Venue,
+    VenueError,
     load_strategy_config,
 )
 from trading_research_agent.trading import run as run_trading
+from trading_research_agent.trading.canary import CanaryError, CanaryGuard
 from trading_research_agent.trading.feed import FeedError
 from trading_research_agent.trading.feeds import UnknownFeedError, live_feed
+from trading_research_agent.trading.venues import (
+    LiveVenueSettings,
+    UnknownLiveVenueError,
+    live_venue,
+    live_venues,
+)
 
 CLEARED, REFUSED, USAGE = 0, 1, 2
 
@@ -124,6 +137,14 @@ def build_parser() -> argparse.ArgumentParser:
     when.add_argument("--month", type=parse_month, help="monthly archives: YYYY-MM")
     fetch_cmd.add_argument("--out", type=Path, default=Path("data"), help="directory to write into")
     fetch_cmd.add_argument("--json", action="store_true")
+
+    funding_cmd = data.add_parser("funding", help="settlement rates from a venue plugin")
+    funding_cmd.add_argument("--venue", choices=venues, required=True)
+    funding_cmd.add_argument("--instrument", required=True)
+    funding_cmd.add_argument("--from", dest="start", type=date.fromisoformat, required=True)
+    funding_cmd.add_argument("--to", dest="end", type=date.fromisoformat, required=True)
+    funding_cmd.add_argument("--out", type=Path, required=True, help="funding.json")
+    funding_cmd.add_argument("--json", action="store_true")
 
     audit_cmd = data.add_parser("audit", help="is this file safe to backtest on?")
     audit_cmd.add_argument("archive", type=Path, help=".csv, .csv.gz or .zip of one CSV")
@@ -205,16 +226,36 @@ def build_parser() -> argparse.ArgumentParser:
     )
     replay_cmd = trade.add_parser("replay", help="recorded trades through the strategy")
     shadow_cmd = trade.add_parser("shadow", help="live public trades; zero orders sent")
-    for cmd in (replay_cmd, shadow_cmd):
+    live_cmd = trade.add_parser("live", help="the canary tier: real orders, hard caps")
+    # The common spellings are aliases of the tiers: backtest, paper, live.
+    backtest_cmd = top.add_parser("backtest", help="alias of trade replay")
+    backtest_cmd.set_defaults(command="replay")
+    paper_cmd = top.add_parser("paper", help="alias of trade shadow")
+    paper_cmd.set_defaults(command="shadow")
+    live_alias = top.add_parser("live", help="alias of trade live")
+    live_alias.set_defaults(command="live")
+    for cmd in (replay_cmd, shadow_cmd, live_cmd, backtest_cmd, paper_cmd, live_alias):
         cmd.add_argument("--config", type=Path, required=True, help="strategy.toml")
         cmd.add_argument("--envelope", type=Path, required=True)
         cmd.add_argument("--out", type=Path, required=True, help="run directory")
         cmd.add_argument("--json", action="store_true")
-    replay_cmd.add_argument("--parquet", type=Path, required=True, help="a dataset from data audit")
-    shadow_cmd.add_argument("--max-reconnects", type=int, default=None)
-    shadow_cmd.add_argument(
-        "--feed", help="live feed plugin; defaults to the venue named in [run].venue_key"
-    )
+    for cmd in (replay_cmd, backtest_cmd):
+        cmd.add_argument("--parquet", type=Path, required=True, help="a dataset from data audit")
+    for cmd in (shadow_cmd, live_cmd, paper_cmd, live_alias):
+        cmd.add_argument("--max-reconnects", type=int, default=None)
+        cmd.add_argument(
+            "--feed", help="live feed plugin; defaults to the venue named in [run].venue_key"
+        )
+    for cmd in (live_cmd, live_alias):
+        cmd.add_argument("--ladder", type=Path, default=Path("ladder.json"))
+        cmd.add_argument(
+            "--env-file", type=Path, help="KEY=VALUE lines read explicitly; the environment wins"
+        )
+
+    init_cmd = top.add_parser("init", help="a new project directory from the templates")
+    init_cmd.set_defaults(command="init")
+    init_cmd.add_argument("directory", type=Path)
+    init_cmd.add_argument("--json", action="store_true")
 
     ladder = top.add_parser("ladder", help="the promotion ladder").add_subparsers(
         dest="command", required=True
@@ -257,8 +298,11 @@ def main(argv: list[str] | None = None) -> int:
         EnvelopeError,
         EraLeakageError,
         ExitError,
+        CanaryError,
         FeedError,
         UnknownFeedError,
+        UnknownLiveVenueError,
+        VenueError,
         LadderError,
         FetchError,
         MappingError,
@@ -520,18 +564,31 @@ def chain_validate(args: argparse.Namespace) -> int:
     return CLEARED if d.verdict is Verdict.OPEN else REFUSED
 
 
-def _trading_config(args: argparse.Namespace, feed: Any, label: str) -> TradingConfig:
-    cfg = load_strategy_config(args.config)
+def _channel(args: argparse.Namespace, cfg: Any) -> Any:
     envelope = load_envelope(args.envelope)
     channel = next((c for c in envelope.channels if c.key == cfg.run.venue_key), None)
     if channel is None:
         raise ConfigError(f"venue_key {cfg.run.venue_key!r} is not a channel in {args.envelope}")
-    venue = SimulatedVenue(
-        channel=channel,
-        funding=FundingSchedule(interval_s=cfg.run.settlement_interval_s, rates={}),
-        latency_ns=int(cfg.run.latency_ms * 1_000_000),
-        slippage_bps=cfg.run.slippage_bps,
-    )
+    return channel
+
+
+def _trading_config(
+    args: argparse.Namespace,
+    feed: Any,
+    label: str,
+    *,
+    venue: Venue | None = None,
+    canary: CanaryGuard | None = None,
+) -> TradingConfig:
+    cfg = load_strategy_config(args.config)
+    if venue is None:
+        venue = SimulatedVenue(
+            channel=_channel(args, cfg),
+            funding=cfg.funding
+            or FundingSchedule(interval_s=cfg.run.settlement_interval_s, rates={}),
+            latency_ns=int(cfg.run.latency_ms * 1_000_000),
+            slippage_bps=cfg.run.slippage_bps,
+        )
     controls = Controls(cfg.limits, KillSwitch(cfg.kill_switch))
     return TradingConfig(
         feed=feed,
@@ -545,6 +602,7 @@ def _trading_config(args: argparse.Namespace, feed: Any, label: str) -> TradingC
         spread_cost_bps=cfg.run.spread_cost_bps,
         equity=cfg.run.equity,
         label=label,
+        canary=canary,
     )
 
 
@@ -587,11 +645,148 @@ def trade_replay(args: argparse.Namespace) -> int:
 def trade_shadow(args: argparse.Namespace) -> int:
     cfg = load_strategy_config(args.config)
     # The channel key is venue/channel; the venue half names the feed unless told otherwise.
-    feed_name = args.feed or cfg.run.venue_key.partition("/")[0]
-    feed = live_feed(feed_name)(
+    feed = _live_feed(args, cfg, args.feed or cfg.run.venue_key.partition("/")[0])
+    return _report(args, run_trading(_trading_config(args, feed, "shadow")))
+
+
+def _live_feed(args: argparse.Namespace, cfg: Any, name: str) -> Any:
+    return live_feed(name)(
         cfg.run.instrument, stop=threading.Event(), max_reconnects=args.max_reconnects
     )
-    return _report(args, run_trading(_trading_config(args, feed, "shadow")))
+
+
+def read_env_file(path: Path) -> dict[str, str]:
+    """KEY=VALUE lines. Blank lines and comments are skipped; quotes are stripped."""
+    values: dict[str, str] = {}
+    for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export ") :]
+        key, sep, value = line.partition("=")
+        key = key.strip()
+        if not sep or not key or not key.replace("_", "").isalnum():
+            raise ValueError(f"{path}:{number}: not a KEY=VALUE line")
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+            value = value[1:-1]
+        values[key] = value
+    return values
+
+
+def _environment(env_file: Path | None) -> dict[str, str]:
+    env = dict(os.environ)
+    if env_file is not None:
+        for key, value in read_env_file(env_file).items():
+            env.setdefault(key, value)
+    return env
+
+
+def trade_live(args: argparse.Namespace) -> int:
+    cfg = load_strategy_config(args.config)
+    if cfg.live is None or cfg.canary is None:
+        raise ConfigError("a live session needs both [live] and [canary] in strategy.toml")
+    ladder = Ladder(args.ladder, live_available=bool(live_venues()))
+    tier = ladder.tier
+    if tier is not Tier.CANARY:
+        raise LadderError(
+            f"live sessions run at {Tier.CANARY.name}; {args.ladder} is at {tier.name}. "
+            "Promote with evidence and a signature first."
+        )
+    run_id = uuid4().hex
+    settings = LiveVenueSettings(
+        instrument=cfg.run.instrument,
+        channel=_channel(args, cfg),
+        funding=cfg.funding or FundingSchedule(interval_s=cfg.run.settlement_interval_s, rates={}),
+        environment=cfg.live.environment,
+        run_id=run_id,
+        key_ip_unbound_ok=cfg.live.key_ip_unbound_ok,
+        adopt_open_position=cfg.live.adopt_open_position,
+        poll_interval_ms=cfg.live.poll_interval_ms,
+    )
+    venue = live_venue(cfg.live.venue)(settings, _environment(args.env_file))
+    checks = venue.preflight()
+    feed = _live_feed(args, cfg, args.feed or cfg.live.venue)
+    config = _trading_config(args, feed, "live-canary", venue=venue, canary=CanaryGuard(cfg.canary))
+    args.out.mkdir(parents=True, exist_ok=True)
+    (args.out / "preflight.json").write_text(
+        json.dumps({"run_id": run_id, "venue": venue.label, **checks}, indent=2, sort_keys=True)
+        + "\n",
+        encoding="utf-8",
+    )
+    report = run_trading(config)
+    events = getattr(venue, "events", [])
+    if events:
+        (args.out / "venue_events.txt").write_text("\n".join(events) + "\n", encoding="utf-8")
+    return _report(args, report)
+
+
+TEMPLATE_FILES = {
+    "strategy.toml": "strategy.toml",
+    "envelope.toml": "envelope.toml",
+    "mapping.toml": "mapping.toml",
+    "strategies/trailing_zscore.py": "core.py.tmpl",
+    ".env.example": "env.example",
+    ".gitignore": "gitignore",
+    "README.md": "README.md",
+}
+
+
+def init_project(args: argparse.Namespace) -> int:
+    target: Path = args.directory
+    templates = files("trading_research_agent").joinpath("templates")
+    existing = [name for name in TEMPLATE_FILES if (target / name).exists()]
+    if existing:
+        raise ValueError(f"{target}: already has {existing}; init never overwrites")
+    for name, source in TEMPLATE_FILES.items():
+        out = target / name
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(templates.joinpath(source).read_text(encoding="utf-8"), encoding="utf-8")
+    lines = [f"{target}: {len(TEMPLATE_FILES)} files", *(f"  {n}" for n in TEMPLATE_FILES)]
+    lines.append("next: tra data fetch, tra data audit, tra backtest (see README.md)")
+    emit({"directory": str(target), "files": list(TEMPLATE_FILES)}, args.json, lines)
+    return CLEARED
+
+
+def data_funding(args: argparse.Namespace) -> int:
+    venue = archive_venue(args.venue)
+    fetch_rates = getattr(venue, "funding_rates", None)
+    if fetch_rates is None:
+        raise ValueError(f"venue {args.venue!r} does not publish funding through its plugin")
+    if args.end < args.start:
+        raise ValueError("--to is before --from")
+    start_ms = int(datetime.combine(args.start, time.min, tzinfo=UTC).timestamp() * 1000)
+    end_ms = int(datetime.combine(args.end, time.max, tzinfo=UTC).timestamp() * 1000)
+    rates = fetch_rates(args.instrument, start_ms=start_ms, end_ms=end_ms)
+    if not rates:
+        raise ValueError(
+            f"no settlements for {args.instrument} between {args.start} and {args.end}"
+        )
+    gaps = sorted((b.ts_ns - a.ts_ns) // 1_000_000_000 for a, b in pairwise(rates))
+    payload: dict[str, Any] = {
+        "venue": args.venue,
+        "instrument": args.instrument,
+        "from": args.start.isoformat(),
+        "to": args.end.isoformat(),
+        "fetched_at": datetime.now(UTC).isoformat(),
+        "rates": {str(r.ts_ns): str(r.rate) for r in rates},
+    }
+    if gaps:
+        # The settlement clock is measured from the data, never assumed.
+        payload["interval_s"] = gaps[len(gaps) // 2]
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    first = datetime.fromtimestamp(rates[0].ts_ns / 1e9, tz=UTC)
+    last = datetime.fromtimestamp(rates[-1].ts_ns / 1e9, tz=UTC)
+    lines = [
+        f"{args.venue} {args.instrument}: {len(rates)} settlements, "
+        f"{first:%Y-%m-%d %H:%M}Z to {last:%Y-%m-%d %H:%M}Z"
+        + (f", every {payload['interval_s']} s" if gaps else ""),
+        f"wrote {args.out}",
+    ]
+    emit({**payload, "count": len(rates), "out": str(args.out)}, args.json, lines)
+    return CLEARED
 
 
 def ladder_show(args: argparse.Namespace) -> int:
@@ -605,7 +800,8 @@ def ladder_show(args: argparse.Namespace) -> int:
 
 
 def ladder_promote(args: argparse.Namespace) -> int:
-    receipt = Ladder(args.path).promote(evidence=args.evidence, signed_by=args.signed_by)
+    ladder = Ladder(args.path, live_available=bool(live_venues()))
+    receipt = ladder.promote(evidence=args.evidence, signed_by=args.signed_by)
     payload = {"from": receipt.from_tier.name, "to": receipt.to_tier.name, "at": receipt.at}
     emit(payload, args.json, [f"{receipt.from_tier.name} -> {receipt.to_tier.name}"])
     return CLEARED
@@ -730,6 +926,7 @@ HANDLERS = {
     ("agent", "refusals"): agent_refusals,
     ("data", "fetch"): data_fetch,
     ("data", "audit"): data_audit,
+    ("data", "funding"): data_funding,
     ("chain", "floor"): chain_floor,
     ("chain", "check"): chain_check,
     ("chain", "requirements"): chain_requirements,
@@ -737,6 +934,11 @@ HANDLERS = {
     ("ledger", "show"): ledger_show,
     ("trade", "replay"): trade_replay,
     ("trade", "shadow"): trade_shadow,
+    ("trade", "live"): trade_live,
+    ("backtest", "replay"): trade_replay,
+    ("paper", "shadow"): trade_shadow,
+    ("live", "live"): trade_live,
+    ("init", "init"): init_project,
     ("ladder", "show"): ladder_show,
     ("ladder", "promote"): ladder_promote,
     ("ladder", "demote"): ladder_demote,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import json
 import sys
 import tomllib
 from dataclasses import dataclass
@@ -11,9 +12,14 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from trading_research_agent.execution.cost import CostError, FundingSchedule
 from trading_research_agent.strategy.core import Strategy
 from trading_research_agent.strategy.exits import ExitRule
+from trading_research_agent.trading.canary import CanaryError, CanaryLimits
 from trading_research_agent.trading.controls import Limits
+
+# Keys never live in a config file. Any of these under [live] is refused by name.
+SECRET_LIKE = ("api_key", "api_secret", "secret", "key", "token", "password", "passphrase")
 
 
 class ConfigError(ValueError):
@@ -34,6 +40,17 @@ class RunSettings:
 
 
 @dataclass(frozen=True)
+class LiveSettings:
+    """[live]: which plugin, which environment, and the two deliberate overrides."""
+
+    venue: str
+    environment: str
+    key_ip_unbound_ok: bool = False
+    adopt_open_position: bool = False
+    poll_interval_ms: int = 250
+
+
+@dataclass(frozen=True)
 class StrategyConfig:
     strategy: Strategy
     exit_rule: ExitRule
@@ -41,6 +58,9 @@ class StrategyConfig:
     kill_switch: Path | None
     run: RunSettings
     registration_seal: str | None
+    live: LiveSettings | None = None
+    canary: CanaryLimits | None = None
+    funding: FundingSchedule | None = None
 
 
 def load_strategy_config(path: Path) -> StrategyConfig:
@@ -92,6 +112,10 @@ def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> S
     seal = strategy_raw.get("registration_seal")
     if seal is not None and (not isinstance(seal, str) or len(seal) != 64):
         raise ConfigError("[strategy].registration_seal is the 64-character pre-registration seal")
+    funding = None
+    funding_file = run_raw.get("funding")
+    if funding_file is not None:
+        funding = load_funding(_resolve(Path(str(funding_file)), base), run.settlement_interval_s)
     return StrategyConfig(
         strategy=strategy,
         exit_rule=exit_rule,
@@ -99,7 +123,85 @@ def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> S
         kill_switch=Path(str(kill)) if kill else None,
         run=run,
         registration_seal=seal,
+        live=_live(raw, run.venue_key),
+        canary=_canary(raw),
+        funding=funding,
     )
+
+
+def _live(raw: dict[str, Any], venue_key: str) -> LiveSettings | None:
+    table = raw.get("live")
+    if table is None:
+        return None
+    if not isinstance(table, dict):
+        raise ConfigError("[live] must be a table")
+    leaked = [k for k in table if any(word in k.lower() for word in SECRET_LIKE)]
+    if leaked:
+        raise ConfigError(
+            f"[live] carries {leaked}; keys come from the environment, never from a file"
+        )
+    environment = str(table.get("environment", "demo"))
+    poll = table.get("poll_interval_ms", 250)
+    if isinstance(poll, bool) or not isinstance(poll, int) or poll < 0:
+        raise ConfigError("[live].poll_interval_ms is a non-negative integer")
+    return LiveSettings(
+        venue=str(table.get("venue") or venue_key.partition("/")[0]),
+        environment=environment,
+        key_ip_unbound_ok=_flag(table, "key_ip_unbound_ok"),
+        adopt_open_position=_flag(table, "adopt_open_position"),
+        poll_interval_ms=poll,
+    )
+
+
+def _canary(raw: dict[str, Any]) -> CanaryLimits | None:
+    table = raw.get("canary")
+    if table is None:
+        return None
+    if not isinstance(table, dict):
+        raise ConfigError("[canary] must be a table")
+    try:
+        return CanaryLimits(
+            max_notional=_dec(table, "max_notional"),
+            max_round_trips=_int(table, "max_round_trips"),
+            session_loss_limit_bps=_dec(table, "session_loss_limit_bps"),
+            max_session_minutes=_int(table, "max_session_minutes"),
+        )
+    except CanaryError as exc:
+        raise ConfigError(f"[canary]: {exc}") from exc
+
+
+def _flag(table: dict[str, Any], key: str) -> bool:
+    value = table.get(key, False)
+    if not isinstance(value, bool):
+        raise ConfigError(f"[live].{key} is true or false")
+    return value
+
+
+def load_funding(path: Path, interval_s: int) -> FundingSchedule:
+    """`funding.json` as written by `tra data funding`: settlement timestamps to rates."""
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ConfigError(f"{path}: cannot read funding: {exc}") from exc
+    rates = raw.get("rates") if isinstance(raw, dict) else None
+    if not isinstance(rates, dict) or not rates:
+        raise ConfigError(f"{path}: funding has no rates")
+    parsed: dict[int, Decimal] = {}
+    for ts, rate in rates.items():
+        try:
+            parsed[int(ts)] = Decimal(str(rate))
+        except (ValueError, ArithmeticError) as exc:
+            raise ConfigError(f"{path}: bad funding row {ts!r}: {rate!r}") from exc
+    declared = raw.get("interval_s")
+    if declared is not None and int(declared) != interval_s:
+        raise ConfigError(
+            f"{path}: funding interval {declared}s differs from [run].settlement_interval_s "
+            f"{interval_s}s"
+        )
+    try:
+        return FundingSchedule(interval_s=interval_s, rates=parsed)
+    except CostError as exc:
+        raise ConfigError(f"{path}: {exc}") from exc
 
 
 def _build_strategy(raw: dict[str, Any], base: Path | None) -> Strategy:

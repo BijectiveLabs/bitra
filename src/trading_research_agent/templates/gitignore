@@ -1,0 +1,7 @@
+.env
+KILL
+runs/
+data/
+*.parquet
+ledger.jsonl
+__pycache__/

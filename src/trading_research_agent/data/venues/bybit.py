@@ -7,6 +7,11 @@ Layout read from the venue's own archive on 2026-09-12::
 
 The header is checked on every file. A venue that changes a column stops the pipeline here,
 with the header it actually sent, rather than producing a dataset that looks right.
+
+Funding comes from the public v5 endpoint `GET /v5/market/funding/history` (category, symbol,
+startTime, endTime, limit 1..200; `fundingRate` and `fundingRateTimestamp` in milliseconds as
+strings), read from the venue's documentation on 2026-09-13. Pages walk backwards from
+`endTime`, newest first, which is how the venue orders them.
 """
 
 from __future__ import annotations
@@ -15,12 +20,17 @@ import csv
 from collections.abc import Iterable, Iterator
 from datetime import date
 from decimal import Decimal, InvalidOperation
+from urllib.parse import urlencode
 
+from trading_research_agent.data.fetch import FetchError, fetch_json
 from trading_research_agent.data.normalise import ArchiveFormatError
 from trading_research_agent.data.schema import Rejection, Side, Trade
-from trading_research_agent.data.venues.registry import register
+from trading_research_agent.data.venues.registry import FundingRate, register
 
 BASE = "https://public.bybit.com/trading"
+API = "https://api.bybit.com"
+FUNDING_PAGE = 200
+NS_PER_MS = 1_000_000
 HEADER = (
     "timestamp",
     "symbol",
@@ -40,6 +50,9 @@ class Bybit:
     name = "bybit"
     cadence = "daily"
 
+    def __init__(self, *, api_base: str = API) -> None:
+        self.api_base = api_base.rstrip("/")
+
     def archive_url(
         self, instrument: str, *, day: date | None, month: tuple[int, int] | None
     ) -> str:
@@ -49,6 +62,47 @@ class Bybit:
 
     def checksum_url(self, archive_url: str) -> str | None:
         return None
+
+    def funding_rates(self, instrument: str, *, start_ms: int, end_ms: int) -> list[FundingRate]:
+        """Every settlement in [start_ms, end_ms], oldest first. A page that lies is refused."""
+        if end_ms < start_ms:
+            raise ValueError("end is before start")
+        rows: dict[int, Decimal] = {}
+        cursor = end_ms
+        while cursor >= start_ms:
+            query = urlencode(
+                {
+                    "category": "linear",
+                    "symbol": instrument,
+                    "startTime": str(start_ms),
+                    "endTime": str(cursor),
+                    "limit": str(FUNDING_PAGE),
+                }
+            )
+            payload = fetch_json(f"{self.api_base}/v5/market/funding/history?{query}")
+            if not isinstance(payload, dict) or payload.get("retCode") != 0:
+                raise FetchError(f"funding history refused: {payload!r}"[:300])
+            page = (payload.get("result") or {}).get("list") or []
+            if not page:
+                break
+            oldest = cursor
+            for row in page:
+                try:
+                    ts_ms = int(row["fundingRateTimestamp"])
+                    rate = Decimal(str(row["fundingRate"]))
+                except (KeyError, ValueError, InvalidOperation) as exc:
+                    raise FetchError(f"funding row is not a settlement: {row!r}") from exc
+                if row.get("symbol") not in (None, instrument):
+                    raise FetchError(
+                        f"funding row is for {row.get('symbol')!r}, not {instrument!r}"
+                    )
+                if start_ms <= ts_ms <= end_ms:
+                    rows[ts_ms * NS_PER_MS] = rate
+                oldest = min(oldest, ts_ms)
+            if len(page) < FUNDING_PAGE or oldest <= start_ms:
+                break
+            cursor = oldest - 1
+        return [FundingRate(ts, rows[ts]) for ts in sorted(rows)]
 
     def normalise(self, lines: Iterable[str], *, instrument: str) -> Iterator[Trade | Rejection]:
         reader = csv.reader(lines)

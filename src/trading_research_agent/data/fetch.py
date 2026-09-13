@@ -9,10 +9,12 @@ the cross-source check the data integrity protocol asks for before a file is tru
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlsplit
 
 from trading_research_agent import __version__
@@ -97,3 +99,22 @@ def fetch_checksum(url: str, filename: str, *, timeout: float = 30.0) -> str:
             f"{url}: checksum sidecar does not describe {filename!r}: {text.strip()!r}"
         )
     return fields[0].lower()
+
+
+def fetch_json(url: str, *, timeout: float = 30.0, max_bytes: int = 1 << 22) -> Any:
+    """One GET, parsed as JSON. Bounded in size; never a venue over plain http."""
+    url = _checked_url(url)
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})  # noqa: S310
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+            raw: bytes = response.read(max_bytes + 1)
+    except urllib.error.HTTPError as exc:
+        raise FetchError(f"{url}: HTTP {exc.code}") from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise FetchError(f"{url}: {exc}") from exc
+    if len(raw) > max_bytes:
+        raise FetchError(f"{url}: response larger than {max_bytes} bytes")
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise FetchError(f"{url}: not JSON: {exc}") from exc

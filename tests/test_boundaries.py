@@ -41,8 +41,11 @@ ALLOWED: dict[str, set[str]] = {
 
 LLM_CLIENTS = {"anthropic", "openai", "langchain", "langgraph", "litellm", "ollama"}
 
-# Plugin directories are the only places a venue may be named in the package.
+# Plugin directories are the only places a venue may be named in the package. Templates are
+# copies of examples/ that `tra init` writes into a project; they are never imported.
 PLUGIN_DIRS = {SRC / "data" / "venues", SRC / "trading" / "feeds", SRC / "trading" / "venues"}
+TEMPLATES = SRC / "templates"
+EXAMPLES = SRC.parent.parent / "examples"
 VENUE_NAMES = ("bybit", "binance", "hyperliquid", "okx", "coinbase", "deribit", "kraken")
 
 # A decision core is a class with these methods, however it is spelled.
@@ -151,6 +154,8 @@ def test_no_core_module_names_a_venue() -> None:
     for path in SRC.rglob("*"):
         if path.suffix not in {".py", ".md"} or any(d in path.parents for d in PLUGIN_DIRS):
             continue
+        if TEMPLATES in path.parents:
+            continue
         text = path.read_text(encoding="utf-8").lower()
         hits = [v for v in VENUE_NAMES if v in text]
         if hits:
@@ -163,3 +168,25 @@ def test_examples_are_not_importable_from_the_package() -> None:
     assert not (examples / "__init__.py").exists()
     for path in SRC.rglob("*.py"):
         assert "examples." not in " ".join(_imports(path)), f"{path} imports an example"
+
+
+def test_templates_are_the_examples_with_the_core_beside_the_config() -> None:
+    same = {"envelope.toml": "envelope.toml", "mapping.toml": "mapping.toml"}
+    for template, example in same.items():
+        assert (TEMPLATES / template).read_text(encoding="utf-8") == (EXAMPLES / example).read_text(
+            encoding="utf-8"
+        ), template
+    config = (TEMPLATES / "strategy.toml").read_text(encoding="utf-8")
+    example = (EXAMPLES / "strategy.toml").read_text(encoding="utf-8")
+    assert (
+        config.replace(
+            '"strategies/trailing_zscore.py"            ',
+            '"examples/strategies/trailing_zscore.py"   ',
+        )
+        == example
+    )
+    core = (TEMPLATES / "core.py.tmpl").read_text(encoding="utf-8")
+    source = (EXAMPLES / "strategies" / "trailing_zscore.py").read_text(encoding="utf-8")
+    assert core.replace('file = "strategies/', 'file = "examples/strategies/') == source
+    assert not (TEMPLATES / "__init__.py").exists()
+    assert not list(TEMPLATES.glob("*.py")), "a template is not an importable module"

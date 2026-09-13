@@ -28,6 +28,7 @@ equity = 10000                     # in quote currency; leave out and every entr
 latency_ms = 6                     # measured order round trip on a persistent connection
 slippage_bps = 1.0
 settlement_interval_s = 28800      # the venue's funding clock
+# funding = "funding.json"         # from `tra data funding`; absent means no settlement spanned
 
 [controls]
 max_risk_per_trade_bps = 50
@@ -35,3 +36,18 @@ max_position = 0.05
 max_orders_per_minute = 6
 daily_loss_limit_bps = 300
 kill_switch = "KILL"               # touch this file to flatten and stop
+
+# ---- live tier (T3 canary). Keys never live here: BYBIT_API_KEY / BYBIT_API_SECRET come from
+# the environment or `--env-file`. Uncomment both tables to run `tra live`.
+# [live]
+# venue = "bybit"                  # a live venue plugin; defaults to the venue half of venue_key
+# environment = "demo"             # demo | testnet | mainnet
+# key_ip_unbound_ok = false        # accept a key with no IP binding, deliberately
+# adopt_open_position = false      # take over a position the venue already holds, deliberately
+# poll_interval_ms = 250
+
+# [canary]
+# max_notional = 200               # per order, in quote currency
+# max_round_trips = 5
+# session_loss_limit_bps = 100
+# max_session_minutes = 120
