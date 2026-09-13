@@ -6,6 +6,27 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-13
+
+### Added
+
+- The trading agent. `strategy`: a pure decision core protocol, bars that are empty rather
+  than filled, causal exits with adverse fill assumptions (touch is a fire, gap fills at the
+  worse open, two-sided bar is a stop, take-profit at its limit), `ExitRule` that must name
+  the mechanism it is bound to, and the walk-forward harness that fits every parameter on
+  trailing data, freezes it at entry, evaluates the open position on every bar, and refuses a
+  precomputed one.
+- `trading`: recorded feed and bar builder; a simulated venue that fills after the measured
+  latency with the cost identity; controls that fail closed (risk per trade, position, order
+  rate, daily loss, kill switch; flattening always admitted); the promotion ladder, up with
+  evidence and a signature, down on a reason; one runtime for replay and shadow writing
+  `intents.jsonl`, `fills.jsonl`, `trades.jsonl` and `run.json`.
+- The Bybit public trade feed as the `[shadow]` extra: no key, acknowledged subscribe,
+  silence detection, reconnect, unrecognised frames counted.
+- `strategy.toml` with a built-in reference core; `tra trade replay`, `tra trade shadow`,
+  `tra ladder show|promote|demote`.
+- No live venue and no real orders in this release, by design.
+
 ## [0.3.0] - 2026-09-13
 
 ### Added

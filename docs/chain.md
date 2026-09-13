@@ -13,8 +13,8 @@ forbids skipping forward.
 | 3 | Pre-registration | the claim cannot be stated so that data could refute it | hours | implemented |
 | 4 | Data requirements | no available instrument can measure the premise | hours to days | implemented |
 | 5 | Statistical validation | interval spans zero, loses to a matched null, or lives in one subperiod | days | implemented |
-| 6 | Strategy design | the exit is not bound to the mechanism | weeks | 0.4 |
-| 7 | Shadow | net expectation negative in the live market, zero orders placed | weeks of calendar | 0.4 |
+| 6 | Strategy design | the exit is not bound to the mechanism | weeks | implemented (`docs/trading.md`) |
+| 7 | Shadow | net expectation negative in the live market, zero orders placed | weeks of calendar | implemented (`tra trade shadow`, then `tra chain validate` on its trades) |
 | 8 | Live capital | | capital | out of scope |
 
 ## Layer 0: the cost floor

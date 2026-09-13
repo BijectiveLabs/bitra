@@ -15,8 +15,10 @@ trading_research_agent/
   data/        public-archive ingestion to Parquet, dataset audit, manifest     -> ledger, envelope
   chain/       falsification chain, layers 0 to 5                               -> ledger, envelope, data
   execution/   cost identity, fills after latency, trade-through matching,
-               fill probability, versioned universe, shadow harness             -> ledger, envelope, data, chain
-  agent/       language-model roles at layers 2, 3 and 6; orchestration          -> everything above
+               fill probability, markout                                        -> ledger, envelope, data, chain
+  strategy/    decision cores, exits bound to the mechanism, walk-forward       -> everything above
+  trading/     feeds, simulated venue, controls, ladder, the runtime            -> everything above
+  agent/       language-model roles at layers 2 and 3; orchestration            -> ledger, envelope, data, chain, execution
   mcp/         the gates as MCP tools                                            -> everything except agent
   cli/         the `tra` command                                                 -> everything
 ```
@@ -31,7 +33,7 @@ Rules, each enforced by a test in `tests/test_boundaries.py`:
 4. Source files are ASCII.
 
 Not every package exists yet. The list is the plan; a package is added when its first gate
-lands with tests. Today: `ledger`, `envelope`, `data`, `chain`, `execution`, `agent`, `cli`.
+lands with tests. Today: `ledger`, `envelope`, `data`, `chain`, `execution`, `strategy`, `trading`, `agent`, `cli`.
 
 ## The chain
 
@@ -43,8 +45,8 @@ lands with tests. Today: `ledger`, `envelope`, `data`, `chain`, `execution`, `ag
 | 3 | Pre-registration | the claim cannot be stated so data could refute it | hours | implemented |
 | 4 | Data requirements | no available instrument can measure the premise | hours to days | implemented |
 | 5 | Statistical validation | interval spans zero, loses to a matched null, or lives in one subperiod | days | implemented |
-| 6 | Strategy design | the exit is not bound to the mechanism | weeks | 0.4 |
-| 7 | Shadow | net expectation negative in the live market, zero orders placed | weeks of calendar | 0.4 |
+| 6 | Strategy design | the exit is not bound to the mechanism | weeks | implemented |
+| 7 | Shadow | net expectation negative in the live market, zero orders placed | weeks of calendar | implemented (`tra trade shadow`, then layer 5 on its trades) |
 | 8 | Live capital | | capital | out of scope |
 
 The chain is strictly ordered by cost. A hypothesis does not reach layer 5 because somebody is
@@ -62,6 +64,9 @@ confident about it.
 | `trades.jsonl` | JSON Lines | layer 5 input: `instrument`, `entry_ts_ns`, `exit_ts_ns`, `direction`, `weight`, `gross_return_bps`, numbers as decimal strings |
 | `validation.json` | JSON | layer 5 output: interval, null report, subperiods, power, metrics, the decision with every fired criterion, the registration seal and the trades hash |
 | `seal.json` | JSON, written once | era, opened_at, specification hash, gates |
+| `strategy.toml` | TOML | a run of the trading agent: core, exit rule, run settings, controls; see `examples/strategy.toml` |
+| `intents.jsonl`, `fills.jsonl` | JSON Lines | every intent with its admission decision; every simulated fill |
+| `ladder.json` | JSON | current tier and the history of promotions (with evidence and signature) and demotions (with reason) |
 
 ## Numbers
 

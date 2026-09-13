@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "trading-research-agent"
-version = "0.3.0"
+version = "0.4.0"
 description = "A trading research agent that refuses to claim what its gates have not measured. Crypto-first."
 readme = "README.md"
 requires-python = ">=3.11"
