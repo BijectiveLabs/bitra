@@ -89,17 +89,32 @@ tra agent refusals
 tra chain requirements --registration runs/<id>/preregistration.json --manifest data/manifest.json
 tra chain validate --registration runs/<id>/preregistration.json --trades trades.jsonl \
     --cost-bps 15.0 --block-length 7 --ledger ledger.jsonl --id V-001
-tra trade replay --config examples/strategy.toml --envelope examples/envelope.toml \
-    --parquet data/btc.parquet --out runs/replay-1
-tra trade shadow --config examples/strategy.toml --envelope examples/envelope.toml \
-    --out runs/shadow-1
-tra ladder promote --evidence "layer 5 OPEN on replay-1" --signed-by operator
+tra init my-run
+tra backtest --config my-run/strategy.toml --envelope my-run/envelope.toml \
+    --parquet data/btc.parquet --out runs/backtest-1
+tra paper --config my-run/strategy.toml --envelope my-run/envelope.toml --out runs/paper-1
+tra ladder promote --evidence "layer 5 OPEN on backtest-1" --signed-by operator
+tra data funding --venue bybit --instrument BTCUSDT --from 2025-01-01 --to 2025-01-31 \
+    --out funding.json
+tra live --config my-run/strategy.toml --envelope my-run/envelope.toml \
+    --out runs/live-1 --env-file .env       # canary tier; docs/live.md
+tra mcp serve                               # the read gates for any agent host; docs/mcp.md
 ```
 
 `data fetch` streams the archive to a `.part` file, hashes it as it arrives, and keeps it only
 if the size and, where the venue publishes one, the checksum agree. `data audit` refuses a
 dataset the way the gate would, and writes the manifest with the finding either way. A venue
 is a plugin (`docs/venues.md`); data from anywhere else comes through a column map.
+
+## Common conventions
+
+The spellings people expect are the tiers of the ladder: `tra backtest` is `trade replay`
+(T0), `tra paper` is `trade shadow` (T1/T2), `tra live` is `trade live` (T3, canary). `tra
+init DIR` writes a project: `strategy.toml`, `envelope.toml`, `mapping.toml`, an example core
+beside the config, `.env.example`, `.gitignore`. Keys come from the environment
+(`BYBIT_API_KEY`, `BYBIT_API_SECRET`) or an explicit `--env-file`; nothing is read silently.
+Venues, feeds and live adapters register through entry points. The MCP server behind the
+`[mcp]` extra exposes the gates as read-only tools to any host.
 
 ## What the package does not contain
 
@@ -110,7 +125,10 @@ is a plugin (`docs/venues.md`); data from anywhere else comes through a column m
   third-party one. Nothing in the gates names a venue, and a test fails the build if it does.
 - **A data vendor.** Any CSV with a declared column map goes through the same gate.
 - **A model on the order path.** Language models draft and critique at layers 2 and 3; code
-  decides everywhere, and nothing that places an order can reach a model.
+  decides everywhere, and nothing that places an order can reach a model. The MCP server
+  has no tool that trades, promotes or records.
+- **A production tier.** Real orders exist at canary only, with hard caps, behind a ladder
+  that needs evidence and a signature at every step and refuses production outright.
 
 ## Roadmap
 
@@ -121,7 +139,8 @@ is a plugin (`docs/venues.md`); data from anywhere else comes through a column m
 | 0.3 | Execution realism: cost identity, latency-shifted fills, trade-through matching, fill probability, markout; layers 4 and 5 with the era seal |
 | 0.4 | The trading agent: layer 6 exits, walk-forward harness, replay and shadow on one code path, controls, ladder, a live public feed (`[shadow]`) |
 | 0.4.1 | Adoption rules: no strategy in the core, venues as plugins with entry points, any data through a column map |
-| 0.5 | Live venue adapter behind a security review (canary and production tiers); MCP server exposing the gates to any agent host |
+| 0.5 | The canary tier: a live venue plugin behind a security review that runs as tests, hard caps, the ladder gate; funding as charged; MCP server exposing the read gates to any agent host; `tra init`, `backtest`, `paper`, `live` |
+| 0.6 | Production tier behind an operational runbook; private execution stream; maker channels; a second live venue |
 
 Crypto perpetuals first. The core vocabulary is market-agnostic (`venue`, `instrument`,
 `session`), but every number in the gates was measured on crypto venues and nothing is promised

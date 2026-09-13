@@ -68,6 +68,11 @@ pip install 'trading-research-agent[anthropic]'   # ANTHROPIC_API_KEY, default m
 pip install 'trading-research-agent[openai]'      # OPENAI_API_KEY, --model required
 ```
 
+Any server that speaks the OpenAI API (a local model server, a relay, another vendor's
+compatible endpoint) is reached through the openai adapter with `--base-url` or
+`TRA_OPENAI_BASE_URL`; a local server that needs no key gets a placeholder. The URL is https,
+or http on localhost only.
+
 Both adapters request structured output against the role's JSON schema and both results are
 still validated by the caller. The Anthropic adapter marks the system prompt for prompt
 caching, since it is the frozen doctrine and never changes between calls. Tests use a

@@ -5,12 +5,13 @@ found the same way a third-party one is: through a registry. Nothing in the gate
 the runtime or the agent names a venue, and a test fails the build if one does. The research
 this project descends from ran on particular venues; the software does not inherit that.
 
-There are two plugin kinds, one per direction of data.
+There are three plugin kinds: archived data in, live data in, orders out.
 
 | Kind | Protocol | Registry | Entry point group | Used by |
 |---|---|---|---|---|
-| Archive venue | `data.venues.ArchiveVenue` | `data.venues.register` | `trading_research_agent.venues` | `tra data fetch`, `tra data audit --venue` |
-| Live feed | `trading.feeds.LiveFeedFactory` | `trading.feeds.register` | `trading_research_agent.feeds` | `tra trade shadow` |
+| Archive venue | `data.venues.ArchiveVenue` (+ optional `FundingSource`) | `data.venues.register` | `trading_research_agent.venues` | `tra data fetch`, `tra data audit --venue`, `tra data funding` |
+| Live feed | `trading.feeds.LiveFeedFactory` | `trading.feeds.register` | `trading_research_agent.feeds` | `tra paper`, `tra live` |
+| Live venue | `trading.venues.LiveVenueFactory` | `trading.venues.register` | `trading_research_agent.live_venues` | `tra live` |
 
 Data that comes from somewhere other than a venue's public archive (a vendor export, a
 Client's own recorder) does not need a plugin at all: a column map takes it through the same
@@ -104,16 +105,48 @@ if the socket looks open; a frame it does not recognise is counted and shown, no
 runtime does not care how the venue frames a trade. It cares that every `Trade` is exact
 `Decimal`, timestamped in UTC nanoseconds, and that silence is reported rather than waited out.
 
+## A live venue
+
+A live venue plugin is a factory that takes `LiveVenueSettings` (instrument, channel,
+funding schedule, environment, run id, the two deliberate overrides) and the environment
+mapping, and returns an object satisfying `trading.venue.Venue` plus `preflight()`. The
+factory declares which environment variables it needs (`env_keys`) so the CLI can say which
+one is missing, and which environments it knows (`environments`).
+
+```python
+class MyLiveFactory:
+    name = "my-venue"
+    env_keys = ("MY_VENUE_API_KEY", "MY_VENUE_API_SECRET")
+    environments = ("demo", "mainnet")
+
+    def __call__(self, settings: LiveVenueSettings, env: Mapping[str, str]) -> LiveVenue:
+        return MyLiveVenue(settings, env)
+```
+
+```toml
+[project.entry-points."trading_research_agent.live_venues"]
+my-venue = "my_package.live:MyLiveFactory"
+```
+
+What the runtime expects of it, and what the bundled adapter does: `routes_exits = True`;
+`submit` accepts one intent at a time and sends it with an idempotent client order id;
+`poll(trade)` confirms the fill from the venue's own order state and reconciles the position
+after every fill, raising `VenueError` on any disagreement; closes are reduce-only;
+`preflight()` refuses a key with more or fewer permissions than a trade key, a clock too far
+from the venue's, and a position the run was not told to adopt; `cost_of` charges the fees
+the venue reported. `docs/live.md` is the review a new adapter is held to, and
+`tests/test_live_venue.py` is the shape of the tests it should ship with.
+
 ## The bundled plugins
 
-| Name | Archive | Live feed |
-|---|---|---|
-| `bybit` | daily `.csv.gz`, header row, no published checksum | public v5 trade stream, `[shadow]` extra |
-| `binance` | monthly `.zip` of one CSV, no header, `.CHECKSUM` sidecar verified | none |
+| Name | Archive | Funding | Live feed | Live venue |
+|---|---|---|---|---|
+| `bybit` | daily `.csv.gz`, header row, no published checksum | `GET /v5/market/funding/history`, paged | public v5 trade stream, `[shadow]` extra | v5 REST, market IOC, canary only |
+| `binance` | monthly `.zip` of one CSV, no header, `.CHECKSUM` sidecar verified | none | none | none |
 
-They live in `data/venues/` and `trading/feeds/` and nowhere else. They are examples of the
-protocols as much as they are integrations, and a plugin for another venue is expected to be
-about the same size.
+They live in `data/venues/`, `trading/feeds/` and `trading/venues/` and nowhere else. They
+are examples of the protocols as much as they are integrations, and a plugin for another
+venue is expected to be about the same size.
 
 ## Fees, latency, settlement
 

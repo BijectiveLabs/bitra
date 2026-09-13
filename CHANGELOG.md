@@ -6,6 +6,44 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-13
+
+### Added
+
+- The canary tier. `tra live` (`trade live`) runs the same loop as replay and shadow against
+  a live venue plugin, with stops and take-profits routed through the venue as reduce-only
+  orders, hard caps from `[canary]` (notional, round trips, session loss, minutes), and the
+  ladder as the gate: the run refuses unless `ladder.json` stands at canary. Production
+  stays refused.
+- Live venues are plugins: `trading/venues/` with `LiveVenueFactory`, `LiveVenueSettings`,
+  the `trading_research_agent.live_venues` entry point, and one bundled adapter (v5 REST,
+  market IOC, idempotent `orderLinkId`, fills confirmed from order state, position
+  reconciled after every fill, fees as charged). Its security review is
+  `tests/test_live_venue.py`, run against a local double that verifies every signature.
+- Preflight before the first print: clock skew against the venue, key permissions (trade
+  only, no wallet, IP-bound, not expiring), no foreign position unless adopted deliberately.
+  Keys come from the environment or `--env-file`; a key-like field in `[live]` is refused.
+- Funding as charged: `FundingSource` on archive plugins, `tra data funding` writing
+  `funding.json` with the measured settlement interval, `[run].funding` feeding the cost
+  identity in every tier.
+- The MCP server behind the `[mcp]` extra: seven read tools over the gates (`tra mcp serve`),
+  none of which trades, promotes or records.
+- Conventions: `tra init DIR` from bundled templates; `tra backtest`, `tra paper`, `tra
+  live` as aliases of the tiers; `.env.example`.
+- Release workflow: wheel and sdist built and attached on a version tag.
+
+### Changed
+
+- The `Venue` protocol carries `routes_exits`, `poll` and `pending`; the runtime is typed
+  against the protocol, not the simulation, and a `VenueError` mid-session stops the loop
+  and arms the kill switch.
+- A partial closing fill leaves a smaller position and a second reduce-only request.
+
+### Deliberately absent
+
+- Production (T4), limit and maker orders, the private execution stream, a second live
+  venue, Docker. Each is scheduled, none is a missing line of code.
+
 ## [0.4.1] - 2026-09-13
 
 ### Changed

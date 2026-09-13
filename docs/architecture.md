@@ -19,8 +19,9 @@ trading_research_agent/
                fill probability, markout                                        -> ledger, envelope, data, chain
   strategy/    the core protocol, exits bound to the mechanism, the walk-forward
                harness; no strategy of its own                                 -> everything above
-  trading/     feeds (live plugins in trading/feeds), simulated venue,
-               controls, ladder, the runtime                                   -> everything above
+  trading/     feeds (live plugins in trading/feeds), simulated venue, live
+               venue plugins in trading/venues, controls, canary caps, ladder,
+               the runtime                                                     -> everything above
   agent/       language-model roles at layers 2 and 3; orchestration            -> ledger, envelope, data, chain, execution
   mcp/         the gates as MCP tools                                            -> everything except agent
   cli/         the `tra` command                                                 -> everything
@@ -37,7 +38,8 @@ Rules, each enforced by a test in `tests/test_boundaries.py`:
 5. No class in the package implements `Strategy` or `FittedCore`. Decision cores live in
    `examples/strategies/` or in the operator's own package, and the package never imports
    an example.
-6. No module outside `data/venues/` and `trading/feeds/` names a venue.
+6. No module outside `data/venues/`, `trading/feeds/` and `trading/venues/` names a venue.
+7. `mcp` reaches everything except `agent`, and its tools only read.
 
 ## Adoption rules
 
@@ -63,8 +65,10 @@ the research it descends from.
 
 Not every package exists yet. The list is the plan; a package is added when its first gate
 lands with tests. Today: `ledger`, `envelope`, `data`, `chain`, `execution`, `strategy`,
-`trading`, `agent`, `cli`. Outside the package: `examples/` (an envelope, a run config, a
-column map, two example cores), never imported by it.
+`trading`, `agent`, `mcp`, `cli`. Outside the package: `examples/` (an envelope, a run
+config, a column map, two example cores), never imported by it; `templates/` inside the
+package is a copy of those examples that `tra init` writes into a new project, and is never
+imported either.
 
 ## The chain
 
@@ -77,8 +81,8 @@ column map, two example cores), never imported by it.
 | 4 | Data requirements | no available instrument can measure the premise | hours to days | implemented |
 | 5 | Statistical validation | interval spans zero, loses to a matched null, or lives in one subperiod | days | implemented |
 | 6 | Strategy design | the exit is not bound to the mechanism | weeks | implemented |
-| 7 | Shadow | net expectation negative in the live market, zero orders placed | weeks of calendar | implemented (`tra trade shadow`, then layer 5 on its trades) |
-| 8 | Live capital | | capital | out of scope |
+| 7 | Shadow | net expectation negative in the live market, zero orders placed | weeks of calendar | implemented (`tra paper`, then layer 5 on its trades) |
+| 8 | Live capital | the venue does not behave as the simulation assumed | capital | canary tier only (`tra live`), hard caps, behind the ladder |
 
 The chain is strictly ordered by cost. A hypothesis does not reach layer 5 because somebody is
 confident about it.
@@ -99,6 +103,8 @@ confident about it.
 | `mapping.toml` | TOML | a column map that takes any CSV through the data gate; see `examples/mapping.toml` |
 | `intents.jsonl`, `fills.jsonl` | JSON Lines | every intent with its admission decision; every simulated fill |
 | `ladder.json` | JSON | current tier and the history of promotions (with evidence and signature) and demotions (with reason) |
+| `funding.json` | JSON | settlement timestamps (epoch ns) to rates as fractions, the measured interval, the venue and the range; written by `tra data funding`, read by `[run].funding` |
+| `preflight.json` | JSON | what a live venue checked before the first print: clock skew, key permissions, position adopted |
 
 ## Numbers
 

@@ -15,18 +15,18 @@ narrate an incident mid-run. Capital is governed by code that is tested and fail
 
 ## What this release runs, and what it does not
 
-| Tier | Feed | Venue | In this release |
+| Tier | Feed | Venue | Command |
 |---|---|---|---|
-| T0 research | recorded (Parquet from `tra data audit`) | simulated | `tra trade replay` |
-| T1 paper | live public trades | simulated | `tra trade shadow` |
-| T2 shadow | live public trades | simulated, intents recorded, zero orders | `tra trade shadow` |
-| T3 canary, T4 production | live | live venue with keys | **not in this release** |
+| T0 research | recorded (Parquet from `tra data audit`) | simulated | `tra backtest` (`trade replay`) |
+| T1 paper | live public trades | simulated | `tra paper` (`trade shadow`) |
+| T2 shadow | live public trades | simulated, intents recorded, zero orders | `tra paper` (`trade shadow`) |
+| T3 canary | live public trades | a live venue plugin, hard caps | `tra live` (`trade live`), see `docs/live.md` |
+| T4 production | | | **not in this release**; the ladder refuses it |
 
-Real orders are deliberately absent. Code that holds a trade key needs its own security
-review (key segmentation, storage, rotation, idempotent submission) before it ships, and the
-research this descends from never reached the live tier because its funnel worked. The
-`Venue` protocol that a live adapter will satisfy exists now, and the controls run today in
-simulation, so the live tier is an adapter, not a redesign.
+The common spellings are aliases of the tiers. Real orders exist only at canary, through a
+plugin behind a security review that runs as tests (`docs/live.md`); the research this
+descends from never reached the live tier because its funnel worked, and the canary exists
+to find out whether the venue behaves the way the simulation assumed, not to make money.
 
 ## The decision core
 
@@ -108,24 +108,30 @@ A clock that goes backwards refuses rather than evaluating.
 
 `tra ladder promote --evidence "..." --signed-by "..."` moves one tier up and needs both. `tra
 ladder demote --reason "..."` moves down on a reason alone. The asymmetry is deliberate: up
-slowly with evidence, down instantly. The two live tiers are refused by this release, and the
-ladder says so.
+slowly with evidence, down instantly. Canary is reachable when a live venue plugin is
+registered; production is refused by this release, and the ladder says so. `tra live` runs
+only when `ladder.json` stands at canary.
 
 ## Running it
 
 ```bash
+tra init my-run && cd my-run       # strategy.toml, envelope.toml, an example core, .env.example
 tra data audit BTCUSDT2025-01-01.csv.gz --venue bybit --instrument BTCUSDT \
     --max-gap 5m --parquet data/btc.parquet
-tra trade replay --config examples/strategy.toml --envelope examples/envelope.toml \
-    --parquet data/btc.parquet --out runs/replay-1
+tra backtest --config strategy.toml --envelope envelope.toml \
+    --parquet data/btc.parquet --out runs/backtest-1
 tra chain validate --registration runs/<id>/preregistration.json \
-    --trades runs/replay-1/trades.jsonl --cost-bps 15 --block-length 7
+    --trades runs/backtest-1/trades.jsonl --cost-bps 15 --block-length 7
 pip install 'trading-research-agent[shadow]'
-tra trade shadow --config examples/strategy.toml --envelope examples/envelope.toml \
-    --out runs/shadow-1        # live public trades; touch KILL to flatten and stop
+tra paper --config strategy.toml --envelope envelope.toml \
+    --out runs/paper-1         # live public trades; touch KILL to flatten and stop
+tra data funding --venue bybit --instrument BTCUSDT --from 2025-01-01 --to 2025-01-31 \
+    --out funding.json         # then [run].funding = "funding.json" charges what was charged
 ```
 
-`examples/strategy.toml` carries every parameter of a run; nothing is a constant in the logic.
+`strategy.toml` carries every parameter of a run; nothing is a constant in the logic. A
+relative `[strategy].file` is looked up next to the config first, so a run directory carries
+its own core.
 
 ## The live feed
 
