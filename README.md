@@ -17,6 +17,29 @@ yet on PyPI.
 
 ---
 
+## Four commands
+
+```bash
+pip install 'trading-research-agent[data]'     # numpy and pyarrow; nothing else
+tra init my-run && cd my-run                  # strategy.toml, envelope.toml, an example core
+tra data get BTCUSDT 2025-01-01               # fetch, audit, Parquet and funding, into data/
+tra backtest                                  # the example core on that day, net of costs
+```
+
+`tra check` says what is ready and what is still missing, in plain words, before you run.
+Every file `tra init` wrote is commented line by line; nothing in the logic is a constant.
+To make a model the decision core instead of a code core:
+
+```bash
+tra init my-run --agent deepseek --model deepseek-flash   # any provider in docs/providers.md
+cp .env.example .env                                      # and put the key in it
+tra backtest --env-file .env                              # or: tra agent session
+```
+
+The same four commands take you to paper (`tra paper`) and, behind the ladder, to a canary
+session on a live venue (`tra live`, `docs/live.md`). Total time from install to a first
+backtest is a few minutes, most of it the download.
+
 ## Why this exists
 
 Most trading-agent frameworks are good at producing a decision and silent about whether the
@@ -78,6 +101,8 @@ The same gates from a shell. Exit code 0 means the gate was cleared, 1 means it 
 a usage error; add `--json` to any command for machine-readable output.
 
 ```bash
+tra data get BTCUSDT 2025-01-01                 # fetch + audit + Parquet + funding
+tra check                                        # what is ready, what is missing
 tra data fetch --venue binance --instrument BTCUSDT --month 2025-01 --out data/
 tra data audit data/BTCUSDT-trades-2025-01.zip --venue binance --instrument BTCUSDT \
     --max-gap 5m --manifest data/manifest.json
@@ -90,18 +115,15 @@ tra agent refusals
 tra chain requirements --registration runs/<id>/preregistration.json --manifest data/manifest.json
 tra chain validate --registration runs/<id>/preregistration.json --trades trades.jsonl \
     --cost-bps 15.0 --block-length 7 --ledger ledger.jsonl --id V-001
-tra init my-run
-tra backtest --config my-run/strategy.toml --envelope my-run/envelope.toml \
-    --parquet data/btc.parquet --out runs/backtest-1
-tra paper --config my-run/strategy.toml --envelope my-run/envelope.toml --out runs/paper-1
+tra init my-run                                  # or: --agent deepseek --model deepseek-flash
+tra backtest                                     # config, envelope, dataset, out: by convention
+tra paper
 tra ladder promote --evidence "layer 5 OPEN on backtest-1" --signed-by operator
 tra data funding --venue bybit --instrument BTCUSDT --from 2025-01-01 --to 2025-01-31 \
     --out funding.json
-tra live --config my-run/strategy.toml --envelope my-run/envelope.toml \
-    --out runs/live-1 --env-file .env       # canary tier; docs/live.md
+tra live --env-file .env                        # canary tier, behind the ladder; docs/live.md
 tra mcp serve                               # the read gates for any agent host; docs/mcp.md
-tra agent session --config my-run/strategy.toml --envelope my-run/envelope.toml \
-    --dataset BTCUSDT=data/btc.parquet --magnitude 20 --out runs/session-1   # docs/agents.md
+tra agent session --env-file .env               # the seven roles over data/; docs/agents.md
 ```
 
 `data fetch` streams the archive to a `.part` file, hashes it as it arrives, and keeps it only
@@ -114,8 +136,11 @@ is a plugin (`docs/venues.md`); data from anywhere else comes through a column m
 The spellings people expect are the tiers of the ladder: `tra backtest` is `trade replay`
 (T0), `tra paper` is `trade shadow` (T1/T2), `tra live` is `trade live` (T3, canary). `tra
 init DIR` writes a project: `strategy.toml`, `envelope.toml`, `mapping.toml`, an example core
-beside the config, `.env.example`, `.gitignore`. Keys come from the environment
-(`BYBIT_API_KEY`, `BYBIT_API_SECRET`) or an explicit `--env-file`; nothing is read silently.
+beside the config, `.env.example`, `.gitignore`. Inside a project the run commands need no
+flags: `strategy.toml` and `envelope.toml` from the directory, the newest dataset in `data/`,
+funding beside it, a run directory under `runs/`. Every flag still exists for anyone who wants
+it elsewhere. Keys come from the environment (`BYBIT_API_KEY`, `BYBIT_API_SECRET`) or an
+explicit `--env-file`; nothing is read silently.
 Venues, feeds and live adapters register through entry points. The MCP server behind the
 `[mcp]` extra exposes the gates as read-only tools to any host.
 

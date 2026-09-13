@@ -66,3 +66,6 @@ kill_switch = "KILL"               # touch this file to flatten and stop
 # [agents.pricing.deepseek-flash]  # what the operator was quoted; never a constant
 # input_per_million = 0.14
 # output_per_million = 0.28
+
+[data]
+max_gap = "5m"                     # the longest silence the audit accepts for this instrument

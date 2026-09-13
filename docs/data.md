@@ -146,6 +146,18 @@ for trade in read_trades(path):
 - `tra data audit ... --parquet out.parquet` writes the dataset only when the audit passed,
   in a second pass over the archive, with the scales the audit observed.
 
+## One command for a day
+
+```bash
+tra data get BTCUSDT 2025-01-01          # venue from strategy.toml, or --venue
+```
+
+fetches the archive, audits it, writes `data/BTCUSDT-2025-01-01.parquet` with its manifest,
+and, when the venue plugin publishes funding, `data/BTCUSDT-funding.json` for the day and
+its neighbours. `--max-gap` defaults to `[data].max_gap` in `strategy.toml`, else five
+minutes, and the choice is printed. The steps below are what it does, one by one, for anyone
+who needs them apart.
+
 ## Downloading
 
 `tra data fetch --venue NAME` asks the venue plugin for the archive URL and, when the venue

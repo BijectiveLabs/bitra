@@ -28,9 +28,10 @@ wrote, and records every answer as a numbered file in the session directory.
 ## A session
 
 ```
+tra agent session --env-file .env       # every dataset in data/, [agents].magnitude_bps
 tra agent session --config strategy.toml --envelope envelope.toml \
     --dataset BTCUSDT=data/btc.parquet --dataset ETHUSDT=data/eth.parquet \
-    --magnitude 20 --out runs/session-1 --env-file .env
+    --magnitude 20 --out runs/session-1 --env-file .env     # the same, spelled out
 ```
 
 ```
@@ -64,6 +65,7 @@ max_calls_per_hour = 60
 min_interval_s = 60
 lookback_bars = 60
 min_confidence = 0.6
+magnitude_bps = 20                    # the claimed edge, for the cost floor
 
 [agents.pricing.deepseek-flash]       # what the operator was quoted; never a constant
 input_per_million = 0.14

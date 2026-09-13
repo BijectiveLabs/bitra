@@ -116,18 +116,20 @@ only when `ladder.json` stands at canary.
 
 ```bash
 tra init my-run && cd my-run       # strategy.toml, envelope.toml, an example core, .env.example
-tra data audit BTCUSDT2025-01-01.csv.gz --venue bybit --instrument BTCUSDT \
-    --max-gap 5m --parquet data/btc.parquet
-tra backtest --config strategy.toml --envelope envelope.toml \
-    --parquet data/btc.parquet --out runs/backtest-1
+tra data get BTCUSDT 2025-01-01    # fetch, audit, Parquet, funding: data/BTCUSDT-2025-01-01.parquet
+tra check                          # what is ready, what is missing, in plain words
+tra backtest                       # newest dataset in data/, funding beside it, out under runs/
 tra chain validate --registration runs/<id>/preregistration.json \
-    --trades runs/backtest-1/trades.jsonl --cost-bps 15 --block-length 7
+    --trades runs/backtest-<time>/trades.jsonl --cost-bps 15 --block-length 7
 pip install 'trading-research-agent[shadow]'
-tra paper --config strategy.toml --envelope envelope.toml \
-    --out runs/paper-1         # live public trades; touch KILL to flatten and stop
-tra data funding --venue bybit --instrument BTCUSDT --from 2025-01-01 --to 2025-01-31 \
-    --out funding.json         # then [run].funding = "funding.json" charges what was charged
+tra paper                          # live public trades; touch KILL to flatten and stop
 ```
+
+Every flag the commands used to need still exists (`--config`, `--envelope`, `--parquet`,
+`--out`, `--dataset`); inside a project they default to the convention above. A run that
+spans a funding settlement without a rate on record is refused, because a missing rate is
+not zero; `tra data get` fetches the rates with the day, and `[run].funding` or
+`data/<INSTRUMENT>-funding.json` is where they are read from.
 
 `strategy.toml` carries every parameter of a run; nothing is a constant in the logic. A
 relative `[strategy].file` is looked up next to the config first, so a run directory carries

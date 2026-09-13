@@ -24,6 +24,14 @@ All notable changes to this project are recorded here. The format follows
 - `surface/`: the seven read tools shared by the MCP server and the roles, and the only
   actions a role may take: tighten limits, demote, arm the kill switch.
 - `docs/agents.md`, `docs/providers.md`, `docs/liability.md`.
+- Four commands from nothing to a backtest: `tra data get INSTRUMENT DAY` (fetch, audit,
+  Parquet, manifest and funding into `data/`), `tra check` (what is ready and what is
+  missing, in plain words), flagless `tra backtest` / `tra paper` / `tra live` / `tra agent
+  session` inside a project (config, envelope, newest dataset, funding beside it, a run
+  directory under `runs/`), and `tra init --agent PROVIDER --model M` for a model as the
+  core. `[data].max_gap` and `[agents].magnitude_bps` in `strategy.toml`.
+- The analyst's bars go to the model as compact rows: half the tokens per call, measured on
+  a real day.
 
 ### Changed
 

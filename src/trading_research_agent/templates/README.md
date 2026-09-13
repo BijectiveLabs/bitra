@@ -1,18 +1,22 @@
 # A trading-research-agent project
 
-    tra data fetch --venue bybit --instrument BTCUSDT --day 2025-01-01 --out data/
-    tra data audit data/BTCUSDT2025-01-01.csv.gz --venue bybit --instrument BTCUSDT         --max-gap 5m --parquet data/btc.parquet
-    tra backtest --config strategy.toml --envelope envelope.toml         --parquet data/btc.parquet --out runs/backtest-1
-    tra paper --config strategy.toml --envelope envelope.toml --out runs/paper-1
+    tra check                                  # what is ready, what is missing
+    tra data get BTCUSDT 2025-01-01            # fetch, audit, Parquet and funding into data/
+    tra backtest                               # the core in strategy.toml over the newest dataset
+    tra paper                                  # live public trades, simulated fills, zero orders
 
-`strategies/trailing_zscore.py` is an example core, not a recommendation. Replace it with your
-own: a class with `name` and `on_bar(bar) -> Signal | None`, pointed at by `[strategy]` in
-`strategy.toml`. The gates do the rest.
+Everything a run needs is in `strategy.toml`, commented line by line. `strategies/
+trailing_zscore.py` is an example core, not a recommendation; replace it with your own (a
+class with `name` and `on_bar(bar) -> Signal | None`), or make a model the core with
+`agent = "technical_analyst"` and an `[agents]` table (`tra init --agent PROVIDER --model M`
+writes one). Keys go in `.env` (copy `.env.example`) and are read only with `--env-file .env`.
 
-The live tier needs `[live]` and `[canary]` in `strategy.toml`, keys in `.env` (see
-`.env.example`), and a ladder promoted to canary with evidence:
+The live tier needs `[live]` and `[canary]` in `strategy.toml`, keys in `.env`, and a ladder
+promoted to canary with evidence and your signature:
 
     tra ladder promote --evidence "layer 5 OPEN on paper-1" --signed-by you   # to T1
     tra ladder promote --evidence "..." --signed-by you                        # to T2
     tra ladder promote --evidence "..." --signed-by you                        # to T3
-    tra live --config strategy.toml --envelope envelope.toml --out runs/live-1 --env-file .env
+    tra live --env-file .env
+
+Where the responsibility sits: docs/liability.md in the project's repository.
