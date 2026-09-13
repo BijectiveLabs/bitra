@@ -20,9 +20,21 @@ ALLOWED: dict[str, set[str]] = {
     "data": {"ledger", "envelope"},
     "chain": {"ledger", "envelope", "data"},
     "execution": {"ledger", "envelope", "data", "chain"},
+    "strategy": {"ledger", "envelope", "data", "chain", "execution"},
+    "trading": {"ledger", "envelope", "data", "chain", "execution", "strategy"},
     "agent": {"ledger", "envelope", "data", "chain", "execution"},
-    "mcp": {"ledger", "envelope", "data", "chain", "execution"},
-    "cli": {"ledger", "envelope", "data", "chain", "execution", "agent", "mcp"},
+    "mcp": {"ledger", "envelope", "data", "chain", "execution", "strategy", "trading"},
+    "cli": {
+        "ledger",
+        "envelope",
+        "data",
+        "chain",
+        "execution",
+        "strategy",
+        "trading",
+        "agent",
+        "mcp",
+    },
 }
 
 LLM_CLIENTS = {"anthropic", "openai", "langchain", "langgraph", "litellm", "ollama"}
