@@ -51,3 +51,18 @@ kill_switch = "KILL"               # touch this file to flatten and stop
 # max_round_trips = 5
 # session_loss_limit_bps = 100
 # max_session_minutes = 120
+
+# ---- the technical analyst as the core instead of a code core (docs/agents.md). Replace the
+# [strategy] table with `agent = "technical_analyst"` and declare the budget:
+# [agents]
+# provider = "deepseek"            # any registered provider (docs/providers.md)
+# model = "deepseek-flash"
+# mechanism = "positions forced to close into the settlement window"
+# token_budget = 200000            # the whole session, every role
+# max_calls_per_hour = 60
+# min_interval_s = 60
+# lookback_bars = 60
+# min_confidence = 0.6
+# [agents.pricing.deepseek-flash]  # what the operator was quoted; never a constant
+# input_per_million = 0.14
+# output_per_million = 0.28
