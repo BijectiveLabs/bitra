@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib
+import importlib.util
+import sys
 import tomllib
 from dataclasses import dataclass
 from decimal import Decimal
@@ -11,10 +13,7 @@ from typing import Any
 
 from trading_research_agent.strategy.core import Strategy
 from trading_research_agent.strategy.exits import ExitRule
-from trading_research_agent.strategy.reference import TrailingZScore
 from trading_research_agent.trading.controls import Limits
-
-BUILTIN = {"trailing-zscore": TrailingZScore}
 
 
 class ConfigError(ValueError):
@@ -49,16 +48,16 @@ def load_strategy_config(path: Path) -> StrategyConfig:
         raw = tomllib.loads(path.read_text(encoding="utf-8"), parse_float=Decimal)
     except tomllib.TOMLDecodeError as exc:
         raise ConfigError(f"{path}: not valid TOML: {exc}") from exc
-    return parse_strategy_config(raw)
+    return parse_strategy_config(raw, base=path.resolve().parent)
 
 
-def parse_strategy_config(raw: dict[str, Any]) -> StrategyConfig:
+def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> StrategyConfig:
     strategy_raw = _table(raw, "strategy")
     exit_raw = _table(raw, "exit")
     run_raw = _table(raw, "run")
     controls_raw = _table(raw, "controls")
 
-    strategy = _build_strategy(strategy_raw)
+    strategy = _build_strategy(strategy_raw, base)
     exit_rule = ExitRule(
         stop_sigma_frac=_dec(exit_raw, "stop_sigma_frac"),
         timeout_bars=_int(exit_raw, "timeout_bars"),
@@ -103,33 +102,71 @@ def parse_strategy_config(raw: dict[str, Any]) -> StrategyConfig:
     )
 
 
-def _build_strategy(raw: dict[str, Any]) -> Strategy:
+def _build_strategy(raw: dict[str, Any], base: Path | None) -> Strategy:
+    """A decision core named by `import = "pkg.mod:Class"` or `file = "x.py"` + `class`.
+
+    The package ships no strategy of its own. `examples/strategies/` holds two that a run can
+    point at by file; they are examples, not recommendations.
+    """
     params = raw.get("params", {})
     if not isinstance(params, dict):
         raise ConfigError("[strategy.params] must be a table")
-    name = raw.get("builtin")
-    if name is not None:
-        if name not in BUILTIN:
-            raise ConfigError(f"unknown builtin strategy {name!r}; have {sorted(BUILTIN)}")
-        try:
-            return BUILTIN[str(name)](**params)
-        except (TypeError, ValueError) as exc:
-            raise ConfigError(f"strategy {name!r}: {exc}") from exc
     target = raw.get("import")
-    if not isinstance(target, str) or ":" not in target:
-        raise ConfigError("[strategy] needs `builtin = ...` or `import = 'package.module:Class'`")
-    module_name, _, class_name = target.partition(":")
-    try:
-        cls = getattr(importlib.import_module(module_name), class_name)
-    except (ImportError, AttributeError) as exc:
-        raise ConfigError(f"cannot import strategy {target!r}: {exc}") from exc
+    file = raw.get("file")
+    if isinstance(target, str) and target:
+        if ":" not in target:
+            raise ConfigError("[strategy].import is 'package.module:Class'")
+        module_name, _, class_name = target.partition(":")
+        try:
+            cls = getattr(importlib.import_module(module_name), class_name)
+        except (ImportError, AttributeError) as exc:
+            raise ConfigError(f"cannot import strategy {target!r}: {exc}") from exc
+        label = target
+    elif isinstance(file, str) and file:
+        class_name = str(raw.get("class", ""))
+        if not class_name:
+            raise ConfigError("[strategy].file needs [strategy].class naming the core")
+        cls = _class_from_file(_resolve(Path(file), base), class_name)
+        label = f"{file}:{class_name}"
+    else:
+        raise ConfigError(
+            "[strategy] names the core: import = 'package.module:Class', or "
+            "file = 'path/to/core.py' with class = 'Class'"
+        )
     try:
         instance = cls(**params)
     except (TypeError, ValueError) as exc:
-        raise ConfigError(f"strategy {target!r}: {exc}") from exc
+        raise ConfigError(f"strategy {label!r}: {exc}") from exc
     if not hasattr(instance, "on_bar") or not hasattr(instance, "name"):
-        raise ConfigError(f"{target!r} is not a Strategy: it needs `name` and `on_bar`")
+        raise ConfigError(f"{label!r} is not a Strategy: it needs `name` and `on_bar`")
     return instance  # type: ignore[no-any-return]
+
+
+def _resolve(file: Path, base: Path | None) -> Path:
+    # Relative to the config file first, so a run directory carries its own core.
+    if file.is_absolute() or base is None:
+        return file
+    beside = base / file
+    return beside if beside.is_file() else file
+
+
+def _class_from_file(path: Path, class_name: str) -> Any:
+    if not path.is_file():
+        raise ConfigError(f"strategy file {str(path)!r} does not exist")
+    spec = importlib.util.spec_from_file_location(f"strategy_file_{path.stem}", path)
+    if spec is None or spec.loader is None:
+        raise ConfigError(f"cannot load strategy file {str(path)!r}")
+    module = importlib.util.module_from_spec(spec)
+    # Registered before execution: a dataclass in the file looks itself up in sys.modules.
+    sys.modules[spec.name] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception as exc:
+        sys.modules.pop(spec.name, None)
+        raise ConfigError(f"strategy file {str(path)!r} failed to load: {exc}") from exc
+    if not hasattr(module, class_name):
+        raise ConfigError(f"{str(path)!r} has no class {class_name!r}")
+    return getattr(module, class_name)
 
 
 def _table(raw: dict[str, Any], key: str) -> dict[str, Any]:

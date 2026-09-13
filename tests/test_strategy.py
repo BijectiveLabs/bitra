@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import importlib.util
+import sys
 from decimal import Decimal
+from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -12,7 +16,6 @@ from trading_research_agent.strategy import (
     BracketOutcome,
     ExitError,
     ExitRule,
-    PairCost,
     PrecomputedParameterError,
     Signal,
     Target,
@@ -24,6 +27,19 @@ from trading_research_agent.strategy import (
 )
 
 S = 1_000_000_000
+EXAMPLES = Path(__file__).resolve().parent.parent / "examples" / "strategies"
+
+
+def example(name: str) -> Any:
+    spec = importlib.util.spec_from_file_location(f"example_{name}", EXAMPLES / f"{name}.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+PAIR = example("pair_reversion")
 
 
 def bar(i: int, o: str, h: str, lo: str, c: str) -> Bar:
@@ -187,68 +203,48 @@ def pair(n: int = 400, seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
     return y, x
 
 
-def cost(envelope: Envelope) -> PairCost:
+def cost(envelope: Envelope) -> Any:
     channel = next(c for c in envelope.channels if c.key == "bybit/taker-taker")
-    return PairCost(channel, spread_per_leg_bps=Decimal("3.0"))
+    return PAIR.PairCost(channel, spread_per_leg_bps=Decimal("3.0"))
+
+
+def core(envelope: Envelope, **kw: float) -> Any:
+    args: dict[str, Any] = {"entry_z": 2.0, "exit_z": 0.5, "stop_z": 4.0, "max_hold": 50}
+    args.update(kw)
+    return PAIR.PairReversion(cost=cost(envelope), **args)
+
+
+def panel(y: np.ndarray, x: np.ndarray) -> np.ndarray:
+    return np.column_stack([y, x])
 
 
 def test_a_precomputed_parameter_is_refused(envelope: Envelope) -> None:
     y, x = pair()
     with pytest.raises(PrecomputedParameterError):
-        walk_forward(
-            y,
-            x,
-            entry_z=2,
-            exit_z=0.5,
-            stop_z=4,
-            max_hold=50,
-            lookback=60,
-            cost=cost(envelope),
-            beta=1.4,
-        )
+        walk_forward(panel(y, x), core(envelope), lookback=60, precomputed={"beta": 1.4})
     with pytest.raises(ValueError, match="lookback"):
-        walk_forward(
-            y[:50],
-            x[:50],
-            entry_z=2,
-            exit_z=0.5,
-            stop_z=4,
-            max_hold=50,
-            lookback=60,
-            cost=cost(envelope),
-        )
+        walk_forward(panel(y[:50], x[:50]), core(envelope), lookback=60)
     with pytest.raises(ValueError, match="train_bound"):
-        walk_forward(
-            y,
-            x,
-            entry_z=2,
-            exit_z=0.5,
-            stop_z=4,
-            max_hold=50,
-            lookback=60,
-            cost=cost(envelope),
-            train_bound=10,
-        )
+        walk_forward(panel(y, x), core(envelope), lookback=60, train_bound=10)
     with pytest.raises(ValueError, match="thresholds"):
-        walk_forward(
-            y, x, entry_z=1, exit_z=2, stop_z=4, max_hold=50, lookback=60, cost=cost(envelope)
-        )
+        core(envelope, entry_z=1, exit_z=2)
 
 
 def test_parameters_are_trailing_and_frozen_at_entry(envelope: Envelope) -> None:
     y, x = pair()
     result = walk_forward(
-        y, x, entry_z=1.5, exit_z=0.3, stop_z=4.0, max_hold=40, lookback=60, cost=cost(envelope)
+        panel(y, x), core(envelope, entry_z=1.5, exit_z=0.3, max_hold=40), lookback=60
     )
     assert result.trades, "the constructed pair should produce trades"
     assert set(result.fits) == set(range(60, 400))
     for trade in result.trades:
-        assert result.fits[trade.entry_t] == (trade.beta, trade.alpha)
+        assert result.fits[trade.entry_t] == trade.params
         beta_expected, _ = ols(
             y[trade.entry_t - 60 : trade.entry_t], x[trade.entry_t - 60 : trade.entry_t]
         )
-        assert trade.beta == pytest.approx(beta_expected)
-        assert trade.cost_bps == pytest.approx(float(cost(envelope).round_trip_bps(trade.beta)))
+        assert trade.params.beta == pytest.approx(beta_expected)
+        expected_cost = float(cost(envelope).round_trip_bps(trade.params.beta))
+        assert trade.cost_bps == pytest.approx(expected_cost)
         assert trade.cost_bps > 11.0 + 6.0  # the (1 + beta) factor, never two plain legs
 
 
@@ -265,23 +261,18 @@ def test_the_timeout_fires_even_when_every_later_window_is_flat(envelope: Envelo
     x[101:] = x[100]
     y[101:] = y[100]
     result = walk_forward(
-        y,
-        x,
-        entry_z=5.0,
-        exit_z=0.5,
-        stop_z=500.0,
-        max_hold=10,
+        panel(y, x),
+        core(envelope, entry_z=5.0, exit_z=0.5, stop_z=500.0, max_hold=10),
         lookback=lookback,
-        cost=cost(envelope),
     )
     assert [(t.entry_t, t.exit_t) for t in result.trades] == [(100, 110)]
-    assert result.fits[150] == (0.0, 0.0)
+    assert (result.fits[150].beta, result.fits[150].alpha) == (0.0, 0.0)
 
 
 def test_walk_forward_does_not_pass_the_full_sample_fit(envelope: Envelope) -> None:
     y, x = pair(seed=7)
     full_beta, _ = ols(y, x)
     result = walk_forward(
-        y, x, entry_z=1.5, exit_z=0.3, stop_z=4.0, max_hold=40, lookback=60, cost=cost(envelope)
+        panel(y, x), core(envelope, entry_z=1.5, exit_z=0.3, max_hold=40), lookback=60
     )
-    assert any(abs(t.beta - full_beta) > 1e-9 for t in result.trades)
+    assert any(abs(t.params.beta - full_beta) > 1e-9 for t in result.trades)

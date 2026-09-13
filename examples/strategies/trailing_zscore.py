@@ -1,10 +1,15 @@
-"""A reference decision core, so the runtime can be exercised end to end. It claims nothing.
+"""Example: a trailing z-score decision core, so the trading runtime can be run end to end.
 
-Trailing z-score of the close over a lookback window: enter against the deviation at
-`entry_z`, ask to flatten at `exit_z`. Every parameter is declared at construction and fixed;
-the window is strictly the bars already seen. The research this package descends from
-falsified z-score reversion on its substrate, which is exactly why this core is a reference
-and not a recommendation: the gates exist to say so again, on the reader's data.
+This is an example, not a recommendation, and not part of the package. The research record
+this project descends from falsified z-score reversion on its substrate, which is the point of
+shipping it as an example: the gates exist to say so again, on your data.
+
+Every parameter is declared at construction and fixed; the window is strictly the bars already
+seen. Point `strategy.toml` at it::
+
+    [strategy]
+    file = "examples/strategies/trailing_zscore.py"
+    class = "TrailingZScore"
 """
 
 from __future__ import annotations
@@ -16,7 +21,7 @@ from trading_research_agent.strategy.core import Bar, Signal, Target
 
 
 class TrailingZScore:
-    name = "trailing-zscore"
+    name = "example-trailing-zscore"
 
     def __init__(self, *, lookback: int, entry_z: Decimal, exit_z: Decimal) -> None:
         if lookback < 3:

@@ -1,7 +1,8 @@
-"""Decision cores and the exits bound to them (layer 6).
+"""The mechanism a strategy runs under: what it may see, how it exits, how it is fitted.
 
-A strategy is a pure function of the bars it has seen. It holds no clock, opens no socket and
-places no order; it says what it wants and the trading runtime decides whether it may have it.
+No strategy lives here. The package ships the decision-core protocol, the causal exits of
+layer 6, and a walk-forward harness that refuses precomputed parameters; what is fitted and
+what signal comes out of it is the caller's, and `examples/strategies/` shows two.
 """
 
 from trading_research_agent.strategy.core import Bar, Signal, Strategy, Target
@@ -15,15 +16,14 @@ from trading_research_agent.strategy.exits import (
     simulate_with_stop,
     stop_price,
 )
-from trading_research_agent.strategy.pair_reversion import (
-    PairCost,
-    PairTrade,
+from trading_research_agent.strategy.harness import (
+    FittedCore,
+    HarnessResult,
+    HarnessTrade,
     PrecomputedParameterError,
-    WalkForwardResult,
     ols,
     walk_forward,
 )
-from trading_research_agent.strategy.reference import TrailingZScore
 
 __all__ = [
     "Bar",
@@ -31,15 +31,14 @@ __all__ = [
     "BracketResult",
     "ExitError",
     "ExitRule",
-    "PairCost",
-    "PairTrade",
+    "FittedCore",
+    "HarnessResult",
+    "HarnessTrade",
     "PrecomputedParameterError",
     "Signal",
     "StopOutcome",
     "Strategy",
     "Target",
-    "TrailingZScore",
-    "WalkForwardResult",
     "ols",
     "simulate_with_bracket",
     "simulate_with_stop",
