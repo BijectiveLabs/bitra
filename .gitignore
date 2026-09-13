@@ -1,5 +1,7 @@
-# Secret
+# Keys. The example is committed; the real file never is.
 .env
+.env.*
+!.env.example
 
 # Python
 __pycache__/
@@ -33,8 +35,3 @@ Thumbs.db
 ledger.jsonl
 /data/
 /reference
-
-# Keys. The example is committed; the real file never is.
-.env
-.env.*
-!.env.example
