@@ -95,3 +95,18 @@ def test_openai_request_is_a_strict_json_schema_and_needs_a_model_name() -> None
                 chat=SimpleNamespace(completions=FakeMessages(openai_response(None, refusal="no")))
             ),
         ).complete(system="s", user="u", schema=BOUND_SCHEMA)
+
+
+def test_openai_base_url_reaches_a_compatible_server(monkeypatch: pytest.MonkeyPatch) -> None:
+    from trading_research_agent.agent.providers.openai import BASE_URL_ENV, OpenAICompleter
+
+    class Client:
+        pass
+
+    monkeypatch.setenv(BASE_URL_ENV, "http://localhost:11434/v1")
+    completer = OpenAICompleter("local-model", client=Client())
+    assert completer.base_url == "http://localhost:11434/v1"
+    monkeypatch.delenv(BASE_URL_ENV)
+    with pytest.raises(ProviderError, match="https"):
+        OpenAICompleter("m", client=Client(), base_url="http://example.com/v1")
+    assert OpenAICompleter("m", client=Client()).base_url is None

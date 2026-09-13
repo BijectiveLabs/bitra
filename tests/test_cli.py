@@ -354,7 +354,9 @@ def test_agent_propose_and_refusals(
         ],
     }
     scripted: list[dict[str, Any]] = [memo, {"accepted": True, "objection": ""}, draft]
-    monkeypatch.setattr(cli_main, "_completer", lambda provider, model: FakeCompleter(scripted))
+    monkeypatch.setattr(
+        cli_main, "_completer", lambda provider, model, base_url=None: FakeCompleter(scripted)
+    )
     common = [
         "agent",
         "propose",
@@ -387,7 +389,9 @@ def test_agent_propose_and_refusals(
         },
         {"accepted": False, "objection": "a pattern, not a mechanism"},
     ] * 3
-    monkeypatch.setattr(cli_main, "_completer", lambda provider, model: FakeCompleter(refused))
+    monkeypatch.setattr(
+        cli_main, "_completer", lambda provider, model, base_url=None: FakeCompleter(refused)
+    )
     code = main(common)
     out = capsys.readouterr().out
     assert code == 1 and "refused at layer 2 after 2 revisions: a pattern" in out

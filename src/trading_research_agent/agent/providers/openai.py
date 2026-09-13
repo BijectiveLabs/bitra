@@ -1,22 +1,40 @@
 """OpenAI adapter, on the official SDK (`pip install 'trading-research-agent[openai]'`).
 
 No default model: the operator names one. Structured output is requested as a strict JSON
-schema, and the result is still validated by the caller.
+schema, and the result is still validated by the caller. Any server that speaks the same API
+(a local model server, a relay, another vendor's compatible endpoint) is reached through
+`base_url`; for a server that needs no key, the SDK still wants one, so a placeholder is used
+when `OPENAI_API_KEY` is absent and a base URL is set.
 """
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping
 from typing import Any
 
 from trading_research_agent.agent.completer import Completion
 from trading_research_agent.agent.providers.anthropic import ProviderError
 
+BASE_URL_ENV = "TRA_OPENAI_BASE_URL"
+
 
 class OpenAICompleter:
-    def __init__(self, model: str, *, client: Any = None, max_tokens: int = 4096) -> None:
+    def __init__(
+        self,
+        model: str,
+        *,
+        client: Any = None,
+        max_tokens: int = 4096,
+        base_url: str | None = None,
+    ) -> None:
         if not model.strip():
             raise ValueError("an OpenAI model name is required")
+        base_url = base_url or os.environ.get(BASE_URL_ENV) or None
+        if base_url is not None and not base_url.startswith(
+            ("https://", "http://localhost", "http://127.0.0.1")
+        ):
+            raise ProviderError("base_url is https, or http on localhost only")
         if client is None:
             try:
                 import openai
@@ -26,8 +44,14 @@ class OpenAICompleter:
                 raise ProviderError(
                     "the openai SDK is not installed; pip install 'trading-research-agent[openai]'"
                 ) from exc
-            client = openai.OpenAI()
+            options: dict[str, Any] = {}
+            if base_url is not None:
+                options["base_url"] = base_url
+                if not os.environ.get("OPENAI_API_KEY"):
+                    options["api_key"] = "not-needed"
+            client = openai.OpenAI(**options)
         self.model = model
+        self.base_url = base_url
         self.max_tokens = max_tokens
         self._client = client
 
