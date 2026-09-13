@@ -27,6 +27,7 @@ from trading_research_agent.agent import Completer, Outcome, RunConfig, propose
 from trading_research_agent.agent.pipeline import read_refusals
 from trading_research_agent.agent.providers import UnknownProviderError, provider, providers
 from trading_research_agent.agent.providers.anthropic import DEFAULT_MODEL, ProviderError
+from trading_research_agent.agent.session import SessionError
 from trading_research_agent.chain import (
     EraLeakageError,
     NullMode,
@@ -222,6 +223,32 @@ def build_parser() -> argparse.ArgumentParser:
     propose_cmd.add_argument("--runs", type=Path, default=Path("runs"))
     propose_cmd.add_argument("--json", action="store_true")
 
+    session_cmd = agent.add_parser(
+        "session", help="the seven roles over recorded data, in the sandbox"
+    )
+    session_cmd.add_argument(
+        "--config", type=Path, required=True, help="strategy.toml with [agents]"
+    )
+    session_cmd.add_argument("--envelope", type=Path, required=True)
+    session_cmd.add_argument(
+        "--dataset",
+        action="append",
+        required=True,
+        metavar="INSTRUMENT=PATH",
+        help="a Parquet dataset from data audit; repeat per instrument",
+    )
+    session_cmd.add_argument(
+        "--magnitude", type=parse_decimal, required=True, help="the claimed edge, bps"
+    )
+    session_cmd.add_argument("--out", type=Path, required=True)
+    session_cmd.add_argument("--ladder", type=Path, default=Path("ladder.json"))
+    session_cmd.add_argument(
+        "--macro", type=Path, help="a JSON file of macro series for the macro analyst"
+    )
+    session_cmd.add_argument("--onchain", type=Path, help="a JSON file of on-chain series")
+    session_cmd.add_argument("--env-file", type=Path)
+    session_cmd.add_argument("--json", action="store_true")
+
     refusals_cmd = agent.add_parser("refusals", help="ideas the gates would not let through")
     refusals_cmd.add_argument("--path", type=Path, default=Path("refusals.jsonl"))
     refusals_cmd.add_argument("--json", action="store_true")
@@ -321,6 +348,7 @@ def main(argv: list[str] | None = None) -> int:
         ParquetError,
         PreregistrationError,
         ProviderError,
+        SessionError,
         UnknownProviderError,
         ValidationError,
         ImportError,
@@ -835,6 +863,97 @@ def data_funding(args: argparse.Namespace) -> int:
     return CLEARED
 
 
+def agent_session(args: argparse.Namespace) -> int:
+    from trading_research_agent.agent.session import SessionConfig, run_session
+    from trading_research_agent.agent.usage import (
+        BudgetLimits,
+        MeteredCompleter,
+        Pricing,
+        UsageLedger,
+    )
+
+    if args.env_file is not None:
+        for key, value in read_env_file(args.env_file).items():
+            os.environ.setdefault(key, value)
+    cfg = load_strategy_config(args.config)
+    if cfg.agents is None:
+        raise ConfigError("a session needs [strategy].agent and [agents] in strategy.toml")
+    datasets: dict[str, Path] = {}
+    for item in args.dataset:
+        name, sep, path = item.partition("=")
+        if not sep or not name or not path:
+            raise ValueError(f"--dataset takes INSTRUMENT=PATH, got {item!r}")
+        datasets[name] = Path(path)
+    a = cfg.agents
+    args.out.mkdir(parents=True, exist_ok=True)
+    usage = UsageLedger(args.out / "usage.jsonl")
+    limits = BudgetLimits(
+        token_budget=a.token_budget,
+        max_calls_per_hour=a.max_calls_per_hour,
+        min_interval_s=a.min_interval_s,
+        call_timeout_s=a.call_timeout_s,
+    )
+    pricing = {m: Pricing(i, o) for m, (i, o) in a.pricing.items()}
+    inner = provider(a.provider).build(a.model, a.base_url)
+    metered: dict[str, MeteredCompleter] = {}
+
+    def completer_for(role: str) -> MeteredCompleter:
+        # One budget for the whole session; the ledger is shared, the cadence is per role.
+        if role not in metered:
+            metered[role] = MeteredCompleter(
+                inner, role=role, provider=a.provider, limits=limits, ledger=usage, pricing=pricing
+            )
+        return metered[role]
+
+    result = run_session(
+        SessionConfig(
+            strategy=cfg,
+            envelope=load_envelope(args.envelope),
+            datasets=datasets,
+            out_dir=args.out,
+            completer_for=completer_for,
+            usage=usage,
+            magnitude_bps=args.magnitude,
+            ladder_path=args.ladder,
+            kill_file=cfg.kill_switch,
+            macro_series=args.macro,
+            onchain_series=args.onchain,
+        )
+    )
+    lines = [
+        f"session {result.session_id}: {len(result.kept)} kept, {len(result.excluded)} excluded, "
+        f"{sum(r.round_trips for r in result.reports.values())} round trips, "
+        f"{usage.tokens} tokens, cost {usage.cost}",
+    ]
+    for name, r in result.reports.items():
+        lines.append(f"  {name}: {r.round_trips} round trips, net {r.net_bps_total} bps")
+    if result.risk is not None:
+        lines.append(f"risk manager: {result.risk['decision']}: {result.risk['reason']}")
+    if result.audit is not None:
+        lines.append(f"auditor: {result.audit['verdict']}: {result.audit['summary']}")
+    for refusal in result.refusals[:5]:
+        lines.append(f"  refused {refusal}")
+    if result.stopped_by:
+        lines.append(f"stopped by: {result.stopped_by}")
+    lines.append(f"session.json, audit.json, usage.jsonl in {args.out}")
+    payload = {
+        "session_id": result.session_id,
+        "kept": result.kept,
+        "excluded": result.excluded,
+        "runs": {n: r.round_trips for n, r in result.reports.items()},
+        "risk": result.risk,
+        "allocation": result.allocation,
+        "audit": result.audit,
+        "tokens": usage.tokens,
+        "cost": str(usage.cost),
+        "refusals": result.refusals,
+        "stopped_by": result.stopped_by,
+        "out": str(args.out),
+    }
+    emit(payload, args.json, lines)
+    return CLEARED if result.stopped_by is None else REFUSED
+
+
 def mcp_serve(args: argparse.Namespace) -> int:
     from trading_research_agent.mcp import serve
 
@@ -969,6 +1088,7 @@ def agent_refusals(args: argparse.Namespace) -> int:
 HANDLERS = {
     ("agent", "propose"): agent_propose,
     ("agent", "refusals"): agent_refusals,
+    ("agent", "session"): agent_session,
     ("data", "fetch"): data_fetch,
     ("data", "audit"): data_audit,
     ("data", "funding"): data_funding,

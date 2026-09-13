@@ -35,3 +35,6 @@ Thumbs.db
 ledger.jsonl
 /data/
 /reference
+
+# Run directories are research artefacts; evidence is copied out deliberately.
+runs/

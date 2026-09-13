@@ -5,6 +5,15 @@ nothing here can loosen one. A role or a host that wants more than this surface 
 asking for something the package refuses on purpose.
 """
 
+from trading_research_agent.surface.actions import (
+    FORBIDDEN,
+    ActionRefusedError,
+    Tightened,
+    arm_kill_switch,
+    demote,
+    refuse,
+    tighten_limits,
+)
 from trading_research_agent.surface.tools import (
     READ_TOOLS,
     audit_dataset,
@@ -17,12 +26,19 @@ from trading_research_agent.surface.tools import (
 )
 
 __all__ = [
+    "FORBIDDEN",
     "READ_TOOLS",
+    "ActionRefusedError",
+    "Tightened",
+    "arm_kill_switch",
     "audit_dataset",
     "check_registration",
     "cost_floor_check",
+    "demote",
     "ladder_show",
     "ledger_show",
+    "refuse",
     "run_report",
+    "tighten_limits",
     "validate_trades",
 ]
