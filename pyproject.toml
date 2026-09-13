@@ -44,6 +44,9 @@ data = [
 openai = [
     "openai>=1",
 ]
+shadow = [
+    "websockets>=13",
+]
 
 [dependency-groups]
 dev = [
@@ -79,7 +82,16 @@ files = ["src", "tests"]
 warn_unreachable = true
 
 [[tool.mypy.overrides]]
-module = ["pyarrow", "pyarrow.*", "anthropic", "anthropic.*", "openai", "openai.*"]
+module = [
+    "pyarrow",
+    "pyarrow.*",
+    "anthropic",
+    "anthropic.*",
+    "openai",
+    "openai.*",
+    "websockets",
+    "websockets.*",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
