@@ -14,20 +14,32 @@ with the header it actually sent.
 | Field | Type | Meaning |
 |---|---|---|
 | `ts_ns` | int | UTC epoch nanoseconds |
-| `venue` | str | `bybit`, `binance` |
-| `instrument` | str | venue symbol, e.g. `BTCUSDT` |
-| `price` | Decimal | as written by the venue, scale preserved |
-| `qty` | Decimal | as written by the venue, scale preserved |
+| `venue` | str | the plugin's name, or the `source` of a column map |
+| `instrument` | str | the source's symbol, e.g. `BTCUSDT` |
+| `price` | Decimal | as written by the source, scale preserved |
+| `qty` | Decimal | as written by the source, scale preserved |
 | `side` | `buy` / `sell` | the taker's side |
-| `trade_id` | str | the venue's own id |
-| `seq` | int or none | a monotonic sequence when the venue provides one |
+| `trade_id` | str | the source's own id |
+| `seq` | int or none | a monotonic sequence when the source provides one |
 
 Zero is not a price and not a quantity. A trade with either is refused at construction,
 because a zero there is a defaulted field.
 
 ## Sources
 
-Both venues publish their trade history without an API key.
+Data reaches the gate one of two ways, and the gate does not distinguish them afterwards.
+
+A **venue plugin** knows where a venue's public archive lives and how its rows are laid out.
+Two ship with the package; any other is a small class registered under the
+`trading_research_agent.venues` entry point (see `docs/venues.md`). `tra data fetch --venue`
+and `tra data audit --venue` take any registered name.
+
+A **column map** takes any other CSV: a vendor export, a Client's own recorder, a venue with
+no plugin yet. See the next section.
+
+### Bundled venue plugins
+
+Both publish their trade history without an API key.
 
 | Venue | URL | Layout |
 |---|---|---|
@@ -41,16 +53,50 @@ side is `sell`.
 Archives are read in place (`.csv.gz`, `.zip` with one member, or `.csv`); nothing is unpacked
 to disk.
 
+### Any other source: a column map
+
+A `mapping.toml` names every field and its unit; nothing is guessed.
+
+```toml
+[mapping]
+source = "vendor-x"            # recorded as the trade's venue field
+ts = "timestamp"
+ts_unit = "ms"                 # s | ms | us | ns | iso8601 (must carry a timezone)
+price = "price"
+qty = "amount"
+trade_id = "id"
+side = { column = "side", buy = ["buy", "BUY"], sell = ["sell", "SELL"] }
+# seq = "sequence"             # optional monotonic sequence
+# instrument = "symbol"        # optional; rows for another instrument are rejected
+has_header = true
+delimiter = ","
+# columns = ["timestamp", "price", "amount", "side", "id"]   # headerless files only
+```
+
+```bash
+tra data audit export.csv --mapping mapping.toml --instrument BTCUSDT --max-gap 5m \
+    --manifest data/manifest.json --parquet data/btc.parquet
+```
+
+Columns are matched by name, in any order. A column the map names and the file lacks stops
+the file with the header it actually had. A row whose time, price, quantity or side cannot
+be read is a `Rejection` with its line number. An ISO 8601 time without a timezone is
+rejected rather than assumed UTC. The audit, the manifest and the Parquet that follow are
+the same as for a venue archive; the manifest records `source` as the venue.
+
 ## The audit
 
 ```python
 from datetime import timedelta
-from trading_research_agent.data import audit, bybit_trades, open_archive_lines
+from trading_research_agent.data import archive_venue, audit, open_archive_lines
 
-lines = open_archive_lines(path)
-report = audit(bybit_trades(lines, instrument="BTCUSDT"), max_gap=timedelta(minutes=5))
+rows = archive_venue("bybit").normalise(open_archive_lines(path), instrument="BTCUSDT")
+report = audit(rows, max_gap=timedelta(minutes=5))
 report.passed, report.findings
 ```
+
+With a column map, `mapped_trades(lines, load_mapping(path), instrument=...)` stands in for
+the plugin's `normalise`; everything after it is the same call.
 
 One pass, bounded memory. `max_gap` is declared by the caller because it belongs to the
 instrument: a quiet hour on a thin listing is normal, on the largest perpetual it is a dead
@@ -102,6 +148,7 @@ for trade in read_trades(path):
 
 ## Downloading
 
-`tra data fetch` streams the archive to a `.part` file, hashes it as it arrives, checks it
-against the declared length and, for Binance, against the venue's published `.CHECKSUM`, and
-renames it only then. A mismatch leaves nothing on disk.
+`tra data fetch --venue NAME` asks the venue plugin for the archive URL and, when the venue
+publishes one, the URL of its checksum. The archive streams to a `.part` file, is hashed as
+it arrives, checked against the declared length and the checksum, and renamed only then. A
+mismatch leaves nothing on disk.

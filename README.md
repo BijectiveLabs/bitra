@@ -48,9 +48,9 @@ statistics run in floating point from the collapsed series on.
 |---|---|
 | `trading_research_agent.ledger` | The kill ledger: a closed vocabulary of verdicts and axes, an append-only store, and the consistency rules between them |
 | `trading_research_agent.envelope` | The operating envelope: fees per channel, measured round trips, latency. Configuration, never constants |
-| `trading_research_agent.data` | The data gate: Bybit and Binance public archives to canonical trades, a one-pass audit with findings, a manifest with checksums, and exact `DECIMAL` Parquet with the `[data]` extra |
-| `trading_research_agent.strategy` | Decision cores, exits bound to the mechanism (layer 6, causal stops with adverse fills), the walk-forward harness that refuses precomputed parameters |
-| `trading_research_agent.trading` | The trading agent: recorded and live feeds, a simulated venue on the execution rules, controls that fail closed, the promotion ladder, one runtime for replay and shadow |
+| `trading_research_agent.data` | The data gate: any trade data to canonical trades, through a venue plugin or a declared column map; a one-pass audit with findings, a manifest with checksums, and exact `DECIMAL` Parquet with the `[data]` extra |
+| `trading_research_agent.strategy` | The decision-core protocol, exits bound to the mechanism (layer 6, causal stops with adverse fills), the walk-forward harness that refuses precomputed parameters. No strategy of its own |
+| `trading_research_agent.trading` | The trading agent: recorded feeds and live feed plugins, a simulated venue on the execution rules, controls that fail closed, the promotion ladder, one runtime for replay and shadow |
 | `trading_research_agent.agent` | An idea through layers 0, 2 and 3: bound, cost floor, mechanism memo with a critic, sealed pre-registration; refusals and verdicts recorded apart. Providers as extras: `[anthropic]`, `[openai]` |
 | `trading_research_agent.cli` | The `tra` command: data, chain, agent, trade, ladder, ledger |
 | `trading_research_agent.chain` | The falsification chain: layer 0 (cost floor), layer 3 (sealed pre-registration), layer 4 (data requirements), layer 5 (validation: net returns, block bootstrap, matched null, subperiods, power, BH, anchor robustness), and the era seal |
@@ -78,7 +78,9 @@ a usage error; add `--json` to any command for machine-readable output.
 
 ```bash
 tra data fetch --venue binance --instrument BTCUSDT --month 2025-01 --out data/
-tra data audit data/BTCUSDT-trades-2025-01.zip --venue binance --instrument BTCUSDT     --max-gap 5m --manifest data/manifest.json
+tra data audit data/BTCUSDT-trades-2025-01.zip --venue binance --instrument BTCUSDT \
+    --max-gap 5m --manifest data/manifest.json
+tra data audit export.csv --mapping examples/mapping.toml --instrument BTCUSDT --max-gap 5m
 tra chain floor --envelope examples/envelope.toml --magnitude 3.0 --venue hyperliquid     --subject "informed-flow burst drift" --ledger ledger.jsonl --id H-001
 tra chain check preregistration.json
 tra ledger show
@@ -96,7 +98,19 @@ tra ladder promote --evidence "layer 5 OPEN on replay-1" --signed-by operator
 
 `data fetch` streams the archive to a `.part` file, hashes it as it arrives, and keeps it only
 if the size and, where the venue publishes one, the checksum agree. `data audit` refuses a
-dataset the way the gate would, and writes the manifest with the finding either way.
+dataset the way the gate would, and writes the manifest with the finding either way. A venue
+is a plugin (`docs/venues.md`); data from anywhere else comes through a column map.
+
+## What the package does not contain
+
+- **A strategy.** The mechanism ships (the protocol, the exits, the walk-forward harness); the
+  cores in `examples/strategies/` are examples of it, measured and closed in the research it
+  descends from, and a run points at them by file like it would at your own.
+- **A venue.** The two that ship are plugins found through the same registry as a
+  third-party one. Nothing in the gates names a venue, and a test fails the build if it does.
+- **A data vendor.** Any CSV with a declared column map goes through the same gate.
+- **A model on the order path.** Language models draft and critique at layers 2 and 3; code
+  decides everywhere, and nothing that places an order can reach a model.
 
 ## Roadmap
 
@@ -105,7 +119,8 @@ dataset the way the gate would, and writes the manifest with the finding either 
 | 0.1 | Ledger, envelope, layer 0, pre-registration with numeric kill criteria, public-archive ingestion and dataset audit for two venues, `tra` CLI |
 | 0.2 | The agent: bound, mechanism memo with a critic, and pre-registration drafted by a language model, validated by the existing gates, recorded to the ledger; bounded revision loop; Anthropic and OpenAI adapters |
 | 0.3 | Execution realism: cost identity, latency-shifted fills, trade-through matching, fill probability, markout; layers 4 and 5 with the era seal |
-| 0.4 | The trading agent: layer 6 exits, walk-forward harness, replay and shadow on one code path, controls, ladder, live Bybit public feed (`[shadow]`) |
+| 0.4 | The trading agent: layer 6 exits, walk-forward harness, replay and shadow on one code path, controls, ladder, a live public feed (`[shadow]`) |
+| 0.4.1 | Adoption rules: no strategy in the core, venues as plugins with entry points, any data through a column map |
 | 0.5 | Live venue adapter behind a security review (canary and production tiers); MCP server exposing the gates to any agent host |
 
 Crypto perpetuals first. The core vocabulary is market-agnostic (`venue`, `instrument`,

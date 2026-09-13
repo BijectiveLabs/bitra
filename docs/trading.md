@@ -39,8 +39,32 @@ class Strategy(Protocol):
 
 Pure: internal state is built only from bars already seen; no clock, no socket, no order. A
 `Bar` with no trades is empty and is never filled from the previous close. `Signal` says what
-the core wants (`long`, `short`, `flat`) and why, in words the ledger keeps. The built-in
-`trailing-zscore` core exists so the runtime can be exercised end to end; it claims nothing.
+the core wants (`long`, `short`, `flat`) and why, in words the ledger keeps.
+
+The package ships no strategy. A run names its core in `strategy.toml`, by file or by
+import, and the parameters it is built with:
+
+```toml
+[strategy]
+file = "cores/my_core.py"        # looked up next to strategy.toml first, then from the cwd
+class = "MyCore"
+# import = "my_package.cores:MyCore"   # or a core installed as a package
+
+[strategy.params]
+lookback = 60
+```
+
+`examples/strategies/` holds two cores so the runtime and the harness can be exercised end
+to end: `trailing_zscore.py` for the runtime and `pair_reversion.py` for the walk-forward
+harness. They come from the research record this project descends from, where both were
+measured and closed. They are examples of the mechanism, not recommendations, and nothing
+in the package imports them. A test fails the build if a decision core appears inside the
+package.
+
+The walk-forward harness is the same shape: `walk_forward(panel, core, lookback=...)` takes
+a `FittedCore` that says how to fit a trailing window and what to do with the fit, refits
+at every bar, freezes the parameters at entry, and refuses a precomputed one. The harness
+is the mechanism; the core is yours.
 
 ## Exits bound to the mechanism (layer 6)
 
@@ -98,15 +122,20 @@ tra chain validate --registration runs/<id>/preregistration.json \
     --trades runs/replay-1/trades.jsonl --cost-bps 15 --block-length 7
 pip install 'trading-research-agent[shadow]'
 tra trade shadow --config examples/strategy.toml --envelope examples/envelope.toml \
-    --out runs/shadow-1        # live Bybit public trades; touch KILL to flatten and stop
+    --out runs/shadow-1        # live public trades; touch KILL to flatten and stop
 ```
 
 `examples/strategy.toml` carries every parameter of a run; nothing is a constant in the logic.
 
 ## The live feed
 
-`BybitPublicFeed` subscribes to `publicTrade.<SYMBOL>` on the venue's public v5 stream with
-no key. A subscribe that is not acknowledged within ten seconds is not a subscription. A link
-carrying nothing for two ping intervals is treated as dead and reconnected. A frame it does not
-recognise is counted and shown, not dropped. The message shape was taken from the venue's own
-documentation and checked against recorded frames.
+Live feeds are plugins, found by name through `trading.feeds`. `tra trade shadow` takes the
+name from the venue half of `[run].venue_key` (`bybit/taker-taker` selects `bybit`) or from
+`--feed NAME`, and refuses a name with no plugin before opening a connection. One feed ships,
+behind the `[shadow]` extra; `docs/venues.md` says how to add another.
+
+The bundled feed subscribes to the venue's public trade stream with no key. A subscribe that
+is not acknowledged within ten seconds is not a subscription. A link carrying nothing for two
+ping intervals is treated as dead and reconnected. A frame it does not recognise is counted
+and shown, not dropped. The message shape was taken from the venue's own documentation and
+checked against recorded frames.
