@@ -23,6 +23,7 @@ from trading_research_agent.strategy.pair_reversion import (
     ols,
     walk_forward,
 )
+from trading_research_agent.strategy.reference import TrailingZScore
 
 __all__ = [
     "Bar",
@@ -37,6 +38,7 @@ __all__ = [
     "StopOutcome",
     "Strategy",
     "Target",
+    "TrailingZScore",
     "WalkForwardResult",
     "ols",
     "simulate_with_bracket",

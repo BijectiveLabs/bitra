@@ -54,8 +54,25 @@ from trading_research_agent.data import (
 from trading_research_agent.data.fetch import FetchError, fetch, fetch_checksum
 from trading_research_agent.data.parquet import ParquetError, write_trades
 from trading_research_agent.envelope import EnvelopeError, load_envelope
+from trading_research_agent.execution import FundingSchedule
 from trading_research_agent.ledger import Ledger, LedgerError, Verdict
 from trading_research_agent.ledger.store import to_record as ledger_to_record
+from trading_research_agent.strategy import ExitError
+from trading_research_agent.trading import (
+    ConfigError,
+    ControlError,
+    Controls,
+    KillSwitch,
+    Ladder,
+    LadderError,
+    RecordedFeed,
+    SimulatedVenue,
+    Tier,
+    TradingConfig,
+    load_strategy_config,
+)
+from trading_research_agent.trading import run as run_trading
+from trading_research_agent.trading.feed import FeedError
 
 CLEARED, REFUSED, USAGE = 0, 1, 2
 
@@ -174,10 +191,40 @@ def build_parser() -> argparse.ArgumentParser:
     refusals_cmd.add_argument("--path", type=Path, default=Path("refusals.jsonl"))
     refusals_cmd.add_argument("--json", action="store_true")
 
-    ledger = top.add_parser("ledger", help="the kill ledger").add_subparsers(
+    trade = top.add_parser("trade", help="the trading agent: replay, shadow").add_subparsers(
         dest="command", required=True
     )
-    show_cmd = ledger.add_parser("show", help="the kill count and every row that stands")
+    replay_cmd = trade.add_parser("replay", help="recorded trades through the strategy")
+    shadow_cmd = trade.add_parser("shadow", help="live public trades; zero orders sent")
+    for cmd in (replay_cmd, shadow_cmd):
+        cmd.add_argument("--config", type=Path, required=True, help="strategy.toml")
+        cmd.add_argument("--envelope", type=Path, required=True)
+        cmd.add_argument("--out", type=Path, required=True, help="run directory")
+        cmd.add_argument("--json", action="store_true")
+    replay_cmd.add_argument("--parquet", type=Path, required=True, help="a dataset from data audit")
+    shadow_cmd.add_argument("--max-reconnects", type=int, default=None)
+
+    ladder = top.add_parser("ladder", help="the promotion ladder").add_subparsers(
+        dest="command", required=True
+    )
+    show_ladder = ladder.add_parser("show")
+    show_ladder.add_argument("--path", type=Path, default=Path("ladder.json"))
+    show_ladder.add_argument("--json", action="store_true")
+    promote = ladder.add_parser("promote", help="one step up, with evidence and a signature")
+    promote.add_argument("--path", type=Path, default=Path("ladder.json"))
+    promote.add_argument("--evidence", required=True)
+    promote.add_argument("--signed-by", required=True)
+    promote.add_argument("--json", action="store_true")
+    demote = ladder.add_parser("demote", help="down, on a reason alone")
+    demote.add_argument("--path", type=Path, default=Path("ladder.json"))
+    demote.add_argument("--reason", required=True)
+    demote.add_argument("--to", choices=[t.name.lower() for t in Tier])
+    demote.add_argument("--json", action="store_true")
+
+    ledger_p = top.add_parser("ledger", help="the kill ledger").add_subparsers(
+        dest="command", required=True
+    )
+    show_cmd = ledger_p.add_parser("show", help="the kill count and every row that stands")
     show_cmd.add_argument("--path", type=Path, default=Path("ledger.jsonl"))
     show_cmd.add_argument("--json", action="store_true")
 
@@ -193,8 +240,13 @@ def main(argv: list[str] | None = None) -> int:
     except (
         ArchiveError,
         ArchiveFormatError,
+        ConfigError,
+        ControlError,
         EnvelopeError,
         EraLeakageError,
+        ExitError,
+        FeedError,
+        LadderError,
         FetchError,
         LedgerError,
         ParquetError,
@@ -449,6 +501,103 @@ def chain_validate(args: argparse.Namespace) -> int:
     return CLEARED if d.verdict is Verdict.OPEN else REFUSED
 
 
+def _trading_config(args: argparse.Namespace, feed: Any, label: str) -> TradingConfig:
+    cfg = load_strategy_config(args.config)
+    envelope = load_envelope(args.envelope)
+    channel = next((c for c in envelope.channels if c.key == cfg.run.venue_key), None)
+    if channel is None:
+        raise ConfigError(f"venue_key {cfg.run.venue_key!r} is not a channel in {args.envelope}")
+    venue = SimulatedVenue(
+        channel=channel,
+        funding=FundingSchedule(interval_s=cfg.run.settlement_interval_s, rates={}),
+        latency_ns=int(cfg.run.latency_ms * 1_000_000),
+        slippage_bps=cfg.run.slippage_bps,
+    )
+    controls = Controls(cfg.limits, KillSwitch(cfg.kill_switch))
+    return TradingConfig(
+        feed=feed,
+        venue=venue,
+        strategy=cfg.strategy,
+        exit_rule=cfg.exit_rule,
+        controls=controls,
+        out_dir=args.out,
+        bar_interval_ns=cfg.run.bar_interval_s * 1_000_000_000,
+        size=cfg.run.size,
+        spread_cost_bps=cfg.run.spread_cost_bps,
+        equity=cfg.run.equity,
+        label=label,
+    )
+
+
+def _report(args: argparse.Namespace, report: Any) -> int:
+    lines = [
+        f"{report.label} {report.instrument}: {report.prints} prints, {report.bars} bars, "
+        f"{report.intents} intents ({report.refused} refused), {report.fills} fills, "
+        f"{report.round_trips} round trips, net {report.net_bps_total} bps",
+    ]
+    for refusal in report.refusals[:5]:
+        lines.append(f"  refused {refusal}")
+    if report.open_position:
+        lines.append(f"open position at end: {report.open_position}")
+    if report.stopped_by:
+        lines.append(f"stopped by: {report.stopped_by}")
+    lines.append(f"trades.jsonl, intents.jsonl, fills.jsonl, run.json in {args.out}")
+    payload = {
+        "label": report.label,
+        "prints": report.prints,
+        "bars": report.bars,
+        "intents": report.intents,
+        "refused": report.refused,
+        "fills": report.fills,
+        "round_trips": report.round_trips,
+        "net_bps_total": str(report.net_bps_total),
+        "stopped_by": report.stopped_by,
+        "open_position": report.open_position,
+        "out": str(args.out),
+    }
+    emit(payload, args.json, lines)
+    return CLEARED if report.stopped_by is None else REFUSED
+
+
+def trade_replay(args: argparse.Namespace) -> int:
+    cfg = load_strategy_config(args.config)
+    feed = RecordedFeed.from_parquet(args.parquet, instrument=cfg.run.instrument)
+    return _report(args, run_trading(_trading_config(args, feed, "replay")))
+
+
+def trade_shadow(args: argparse.Namespace) -> int:
+    from trading_research_agent.trading.feed_bybit import BybitPublicFeed
+
+    cfg = load_strategy_config(args.config)
+    feed = BybitPublicFeed(cfg.run.instrument, max_reconnects=args.max_reconnects)
+    return _report(args, run_trading(_trading_config(args, feed, "shadow")))
+
+
+def ladder_show(args: argparse.Namespace) -> int:
+    ladder = Ladder(args.path)
+    lines = [f"tier {ladder.tier.value} {ladder.tier.name}"]
+    for h in ladder.history:
+        detail = h.get("evidence") or h.get("reason")
+        lines.append(f"  {h['at']} {h['kind']} {h['from']} -> {h['to']}: {detail}")
+    emit({"tier": ladder.tier.name, "history": list(ladder.history)}, args.json, lines)
+    return CLEARED
+
+
+def ladder_promote(args: argparse.Namespace) -> int:
+    receipt = Ladder(args.path).promote(evidence=args.evidence, signed_by=args.signed_by)
+    payload = {"from": receipt.from_tier.name, "to": receipt.to_tier.name, "at": receipt.at}
+    emit(payload, args.json, [f"{receipt.from_tier.name} -> {receipt.to_tier.name}"])
+    return CLEARED
+
+
+def ladder_demote(args: argparse.Namespace) -> int:
+    to = None if args.to is None else Tier[args.to.upper()]
+    demotion = Ladder(args.path).demote(reason=args.reason, to=to)
+    payload = {"from": demotion.from_tier.name, "to": demotion.to_tier.name, "at": demotion.at}
+    emit(payload, args.json, [f"{demotion.from_tier.name} -> {demotion.to_tier.name}"])
+    return CLEARED
+
+
 def ledger_show(args: argparse.Namespace) -> int:
     ledger = Ledger(args.path)
     rows = ledger.effective()
@@ -565,6 +714,11 @@ HANDLERS = {
     ("chain", "requirements"): chain_requirements,
     ("chain", "validate"): chain_validate,
     ("ledger", "show"): ledger_show,
+    ("trade", "replay"): trade_replay,
+    ("trade", "shadow"): trade_shadow,
+    ("ladder", "show"): ladder_show,
+    ("ladder", "promote"): ladder_promote,
+    ("ladder", "demote"): ladder_demote,
 }
 
 

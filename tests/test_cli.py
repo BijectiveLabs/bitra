@@ -528,3 +528,64 @@ def test_chain_requirements_and_validate(
     )
     out = capsys.readouterr().out
     assert code == 1 and "FALSIFIED (idea)" in out
+
+
+def test_trade_replay_and_ladder(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    pytest.importorskip("pyarrow")
+    from trading_research_agent.data import Side, Trade
+    from trading_research_agent.data.parquet import write_trades
+
+    base = 1_735_689_600 * 1_000_000_000
+    minute = 60 * 1_000_000_000
+    prices = [100 + (i % 7) - 3 for i in range(240)]
+    rows = [
+        Trade(
+            base + i * minute,
+            "bybit",
+            "BTCUSDT",
+            Decimal(prices[i]),
+            Decimal("0.01"),
+            Side.BUY,
+            f"t{i}",
+        )
+        for i in range(240)
+    ]
+    parquet = tmp_path / "btc.parquet"
+    write_trades(rows, parquet, price_scale=2, qty_scale=3)
+
+    config = tmp_path / "strategy.toml"
+    config.write_text(
+        (EXAMPLES / "strategy.toml")
+        .read_text(encoding="utf-8")
+        .replace('kill_switch = "KILL"', ""),
+        encoding="utf-8",
+    )
+    code = main(
+        [
+            "trade",
+            "replay",
+            "--config",
+            str(config),
+            "--envelope",
+            str(EXAMPLES / "envelope.toml"),
+            "--parquet",
+            str(parquet),
+            "--out",
+            str(tmp_path / "run"),
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 0 and payload["prints"] == 240 and payload["bars"] == 240
+    assert (tmp_path / "run" / "run.json").exists()
+
+    ladder = tmp_path / "ladder.json"
+    assert main(["ladder", "show", "--path", str(ladder)]) == 0
+    assert capsys.readouterr().out.startswith("tier 0 RESEARCH")
+    promote = ["ladder", "promote", "--path", str(ladder), "--signed-by", "op", "--evidence"]
+    assert main([*promote, "replay OPEN"]) == 0
+    capsys.readouterr()
+    assert main(["ladder", "demote", "--path", str(ladder), "--reason", "limit tripped"]) == 0
+    capsys.readouterr()
+    assert main([*promote, ""]) == 1
+    assert "names its evidence" in capsys.readouterr().err

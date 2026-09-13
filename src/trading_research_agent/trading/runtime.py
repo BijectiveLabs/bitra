@@ -283,6 +283,9 @@ class _Loop:
         self.report.net_bps_total += net_bps
         self.c.controls.record_pnl(ts_ns, net_bps)
         self.position = None
+        notify = getattr(self.c.strategy, "observe_flat", None)
+        if callable(notify):
+            notify()
 
     def finish(self) -> RunReport:
         last = self.builder.flush()
