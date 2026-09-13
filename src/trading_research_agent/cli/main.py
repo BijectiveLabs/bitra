@@ -11,6 +11,8 @@ import argparse
 import json
 import re
 import sys
+import threading
+from collections.abc import Iterable, Iterator
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -38,14 +40,17 @@ from trading_research_agent.data import (
     NORMALISER_VERSION,
     ArchiveError,
     ArchiveFormatError,
+    MappingError,
+    Rejection,
     Source,
     Trade,
+    UnknownVenueError,
+    archive_venue,
+    archive_venues,
     audit,
-    binance_spot_trades_url,
-    binance_trades,
-    bybit_trades,
-    bybit_trades_url,
+    load_mapping,
     manifest_from_audit,
+    mapped_trades,
     open_archive_lines,
     read_manifest,
     sha256_of,
@@ -73,6 +78,7 @@ from trading_research_agent.trading import (
 )
 from trading_research_agent.trading import run as run_trading
 from trading_research_agent.trading.feed import FeedError
+from trading_research_agent.trading.feeds import UnknownFeedError, live_feed
 
 CLEARED, REFUSED, USAGE = 0, 1, 2
 
@@ -106,21 +112,24 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"tra {__version__}")
     top = parser.add_subparsers(dest="group", required=True)
 
-    data = top.add_parser("data", help="fetch and audit public trade archives").add_subparsers(
+    data = top.add_parser("data", help="fetch and audit trade data").add_subparsers(
         dest="command", required=True
     )
-    fetch_cmd = data.add_parser("fetch", help="download one archive and verify it")
-    fetch_cmd.add_argument("--venue", choices=("bybit", "binance"), required=True)
+    venues = archive_venues()
+    fetch_cmd = data.add_parser("fetch", help="download one venue archive and verify it")
+    fetch_cmd.add_argument("--venue", choices=venues, required=True)
     fetch_cmd.add_argument("--instrument", required=True)
     when = fetch_cmd.add_mutually_exclusive_group(required=True)
-    when.add_argument("--day", type=date.fromisoformat, help="bybit: one UTC day, YYYY-MM-DD")
-    when.add_argument("--month", type=parse_month, help="binance: one month, YYYY-MM")
+    when.add_argument("--day", type=date.fromisoformat, help="daily archives: YYYY-MM-DD (UTC)")
+    when.add_argument("--month", type=parse_month, help="monthly archives: YYYY-MM")
     fetch_cmd.add_argument("--out", type=Path, default=Path("data"), help="directory to write into")
     fetch_cmd.add_argument("--json", action="store_true")
 
-    audit_cmd = data.add_parser("audit", help="is this archive safe to backtest on?")
-    audit_cmd.add_argument("archive", type=Path)
-    audit_cmd.add_argument("--venue", choices=("bybit", "binance"), required=True)
+    audit_cmd = data.add_parser("audit", help="is this file safe to backtest on?")
+    audit_cmd.add_argument("archive", type=Path, help=".csv, .csv.gz or .zip of one CSV")
+    layout = audit_cmd.add_mutually_exclusive_group(required=True)
+    layout.add_argument("--venue", choices=venues, help="a bundled or installed venue layout")
+    layout.add_argument("--mapping", type=Path, help="a column map for any other source")
     audit_cmd.add_argument("--instrument", required=True)
     audit_cmd.add_argument("--max-gap", type=parse_duration, required=True, help="e.g. 5m")
     audit_cmd.add_argument("--max-rejected", type=parse_decimal, default=Decimal("0.001"))
@@ -203,6 +212,9 @@ def build_parser() -> argparse.ArgumentParser:
         cmd.add_argument("--json", action="store_true")
     replay_cmd.add_argument("--parquet", type=Path, required=True, help="a dataset from data audit")
     shadow_cmd.add_argument("--max-reconnects", type=int, default=None)
+    shadow_cmd.add_argument(
+        "--feed", help="live feed plugin; defaults to the venue named in [run].venue_key"
+    )
 
     ladder = top.add_parser("ladder", help="the promotion ladder").add_subparsers(
         dest="command", required=True
@@ -246,8 +258,11 @@ def main(argv: list[str] | None = None) -> int:
         EraLeakageError,
         ExitError,
         FeedError,
+        UnknownFeedError,
         LadderError,
         FetchError,
+        MappingError,
+        UnknownVenueError,
         LedgerError,
         ParquetError,
         PreregistrationError,
@@ -268,17 +283,12 @@ def emit(payload: dict[str, Any], as_json: bool, lines: list[str]) -> None:
 
 
 def data_fetch(args: argparse.Namespace) -> int:
-    if args.venue == "bybit":
-        if args.day is None:
-            raise ValueError("bybit archives are daily; pass --day")
-        url = bybit_trades_url(args.instrument, args.day)
-        expected = None
-    else:
-        if args.month is None:
-            raise ValueError("binance archives are monthly; pass --month")
-        url = binance_spot_trades_url(args.instrument, *args.month)
-        expected = fetch_checksum(url + ".CHECKSUM", url.rsplit("/", 1)[1])
-    dest = args.out / url.rsplit("/", 1)[1]
+    venue = archive_venue(args.venue)
+    url = venue.archive_url(args.instrument, day=args.day, month=args.month)
+    filename = url.rsplit("/", 1)[1]
+    checksum_url = venue.checksum_url(url)
+    expected = fetch_checksum(checksum_url, filename) if checksum_url else None
+    dest = args.out / filename
     source = fetch(url, dest, expected_sha256=expected)
     payload = {"path": str(dest), "sha256": source.sha256, "size": source.size, "url": url}
     verified = "verified against the venue's checksum" if expected else "sha256 recorded"
@@ -291,13 +301,22 @@ def data_fetch(args: argparse.Namespace) -> int:
 
 
 def data_audit(args: argparse.Namespace) -> int:
-    normalise = bybit_trades if args.venue == "bybit" else binance_trades
+    if args.venue is not None:
+        source_name = str(args.venue)
+        normalise = archive_venue(source_name).normalise
+    else:
+        mapping = load_mapping(args.mapping)
+        source_name = mapping.source
+
+        def normalise(lines: Iterable[str], *, instrument: str) -> Iterator[Trade | Rejection]:
+            return mapped_trades(lines, mapping, instrument=instrument)
+
     records = normalise(open_archive_lines(args.archive), instrument=args.instrument)
     report = audit(
         records,
         max_gap=args.max_gap,
         max_rejected_fraction=args.max_rejected,
-        expected_venue=args.venue,
+        expected_venue=source_name,
         expected_instrument=args.instrument,
     )
     if args.manifest is not None and report.rows_accepted:
@@ -311,7 +330,7 @@ def data_audit(args: argparse.Namespace) -> int:
         write_manifest(args.manifest, manifest)
 
     lines = [
-        f"{report.venue or args.venue} {report.instrument or args.instrument}: "
+        f"{report.venue or source_name} {report.instrument or args.instrument}: "
         f"{report.rows_accepted} trades, {report.rows_rejected} rejected",
     ]
     if report.first_ts and report.last_ts:
@@ -322,7 +341,7 @@ def data_audit(args: argparse.Namespace) -> int:
             lines.append(f"         {example}")
     written = None
     if args.parquet is not None and report.passed:
-        # Second pass over the archive. The audit already told us the scales the venue uses.
+        # Second pass over the file. The audit already told us the scales the source uses.
         again = normalise(open_archive_lines(args.archive), instrument=args.instrument)
         result = write_trades(
             (r for r in again if isinstance(r, Trade)),
@@ -566,10 +585,12 @@ def trade_replay(args: argparse.Namespace) -> int:
 
 
 def trade_shadow(args: argparse.Namespace) -> int:
-    from trading_research_agent.trading.feed_bybit import BybitPublicFeed
-
     cfg = load_strategy_config(args.config)
-    feed = BybitPublicFeed(cfg.run.instrument, max_reconnects=args.max_reconnects)
+    # The channel key is venue/channel; the venue half names the feed unless told otherwise.
+    feed_name = args.feed or cfg.run.venue_key.partition("/")[0]
+    feed = live_feed(feed_name)(
+        cfg.run.instrument, stop=threading.Event(), max_reconnects=args.max_reconnects
+    )
     return _report(args, run_trading(_trading_config(args, feed, "shadow")))
 
 

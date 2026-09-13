@@ -12,7 +12,8 @@ import pytest
 
 from trading_research_agent.data import Side
 from trading_research_agent.trading.feed import FeedError
-from trading_research_agent.trading.feed_bybit import BybitPublicFeed, parse_public_trade
+from trading_research_agent.trading.feeds import UnknownFeedError, live_feed, live_feeds
+from trading_research_agent.trading.feeds.bybit import BybitPublicFeed, parse_public_trade
 
 pytest.importorskip("websockets")
 
@@ -112,7 +113,7 @@ def test_an_unacknowledged_subscribe_is_not_a_subscription() -> None:
         thread = threading.Thread(target=srv.serve_forever, daemon=True)
         thread.start()
         port = srv.socket.getsockname()[1]
-        import trading_research_agent.trading.feed_bybit as module
+        import trading_research_agent.trading.feeds.bybit as module
 
         original = module.SUBSCRIBE_ACK_TIMEOUT_S
         module.SUBSCRIBE_ACK_TIMEOUT_S = 0.5
@@ -124,3 +125,11 @@ def test_an_unacknowledged_subscribe_is_not_a_subscription() -> None:
         finally:
             module.SUBSCRIBE_ACK_TIMEOUT_S = original
             srv.shutdown()
+
+
+def test_the_feed_is_a_registered_plugin() -> None:
+    assert "bybit" in live_feeds()
+    feed = live_feed("BYBIT")("BTCUSDT", stop=threading.Event(), max_reconnects=0)
+    assert isinstance(feed, BybitPublicFeed)
+    with pytest.raises(UnknownFeedError, match="registered"):
+        live_feed("no-such-feed")

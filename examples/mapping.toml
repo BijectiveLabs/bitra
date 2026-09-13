@@ -1,0 +1,17 @@
+# A column map for a CSV from any source: a vendor export, a venue download, a Client's own
+# recorder. Name every field and its unit; nothing is guessed. The rows then pass through the
+# same audit, manifest and Parquet contract as a bundled venue.
+
+[mapping]
+source = "vendor-x"            # recorded as the trade's venue field
+ts = "timestamp"               # column holding the time
+ts_unit = "ms"                 # s | ms | us | ns | iso8601 (must carry a timezone)
+price = "price"
+qty = "amount"
+trade_id = "id"
+side = { column = "side", buy = ["buy", "BUY"], sell = ["sell", "SELL"] }
+# seq = "sequence"             # optional monotonic sequence, if the source has one
+# instrument = "symbol"        # optional; rows for another instrument are rejected
+has_header = true
+delimiter = ","
+# columns = ["timestamp", "price", "amount", "side", "id"]   # only for headerless files

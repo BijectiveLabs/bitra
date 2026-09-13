@@ -1,9 +1,9 @@
 """Download a public archive, hash it as it arrives, and refuse to keep it if the hash is wrong.
 
 The file is written to a `.part` path and renamed only after the size and the checksum have
-been checked, so a half-downloaded archive is never mistaken for a complete one. Binance
-publishes a `.CHECKSUM` sidecar per file; when a checksum is available it is verified, which
-is the cross-source check the data integrity protocol asks for before a file is trusted.
+been checked, so a half-downloaded archive is never mistaken for a complete one. Some venues
+publish a checksum sidecar per file; when the venue plugin names one it is verified, which is
+the cross-source check the data integrity protocol asks for before a file is trusted.
 """
 
 from __future__ import annotations

@@ -22,7 +22,8 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from trading_research_agent.data.schema import Side, Trade
-from trading_research_agent.trading.feed import FeedError
+from trading_research_agent.trading.feed import Feed, FeedError
+from trading_research_agent.trading.feeds.registry import register
 
 PUBLIC_LINEAR = "wss://stream.bybit.com/v5/public/linear"
 PING_INTERVAL_S = 20.0
@@ -200,3 +201,15 @@ class BybitPublicFeed:
             return
         self.health.trades += len(trades)
         yield from trades
+
+
+class BybitFeedFactory:
+    name = "bybit"
+
+    def __call__(
+        self, instrument: str, *, stop: threading.Event, max_reconnects: int | None
+    ) -> Feed:
+        return BybitPublicFeed(instrument, stop=stop, max_reconnects=max_reconnects)
+
+
+register(BybitFeedFactory())

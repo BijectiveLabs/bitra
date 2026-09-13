@@ -18,11 +18,10 @@ from trading_research_agent.data import (
     Side,
     Source,
     Trade,
+    UnknownVenueError,
+    archive_venue,
+    archive_venues,
     audit,
-    binance_spot_trades_url,
-    binance_trades,
-    bybit_trades,
-    bybit_trades_url,
     manifest_from_audit,
     open_archive_lines,
     read_manifest,
@@ -47,6 +46,10 @@ BINANCE_ROWS = [
     "4359935387,93576.00000000,0.00212000,198.38112000,1735689600074095,True,True",
     "4359935391,93576.01000000,0.00182000,170.30833820,1735689600266955,False,True",
 ]
+
+
+bybit_trades = archive_venue("bybit").normalise
+binance_trades = archive_venue("binance").normalise
 
 
 def trades(rows: list[Trade | Rejection]) -> list[Trade]:
@@ -126,14 +129,27 @@ def test_binance_milliseconds_and_bad_rows() -> None:
 
 
 def test_archive_urls_match_the_venues_layout() -> None:
-    assert (
-        bybit_trades_url("BTCUSDT", date(2025, 1, 1))
-        == "https://public.bybit.com/trading/BTCUSDT/BTCUSDT2025-01-01.csv.gz"
+    bybit = archive_venue("bybit")
+    binance = archive_venue("binance")
+    assert bybit.cadence == "daily" and binance.cadence == "monthly"
+    url = bybit.archive_url("BTCUSDT", day=date(2025, 1, 1), month=None)
+    assert url == "https://public.bybit.com/trading/BTCUSDT/BTCUSDT2025-01-01.csv.gz"
+    assert bybit.checksum_url(url) is None
+    url = binance.archive_url("BTCUSDT", day=None, month=(2025, 1))
+    assert url == (
+        "https://data.binance.vision/data/spot/monthly/trades/BTCUSDT/BTCUSDT-trades-2025-01.zip"
     )
-    assert (
-        binance_spot_trades_url("BTCUSDT", 2025, 1)
-        == "https://data.binance.vision/data/spot/monthly/trades/BTCUSDT/BTCUSDT-trades-2025-01.zip"
-    )
+    assert binance.checksum_url(url) == url + ".CHECKSUM"
+    with pytest.raises(ValueError, match="daily"):
+        bybit.archive_url("BTCUSDT", day=None, month=(2025, 1))
+    with pytest.raises(ValueError, match="monthly"):
+        binance.archive_url("BTCUSDT", day=date(2025, 1, 1), month=None)
+
+
+def test_bundled_venues_are_found_through_the_registry() -> None:
+    assert set(archive_venues()) >= {"bybit", "binance"}
+    with pytest.raises(UnknownVenueError, match="registered"):
+        archive_venue("no-such-venue")
 
 
 def test_archives_are_read_in_place(tmp_path: Path) -> None:

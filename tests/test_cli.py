@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import gzip
+import hashlib
 import json
+import threading
+from collections.abc import Iterable, Iterator
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from functools import partial
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
@@ -21,8 +26,9 @@ from trading_research_agent.chain import (
 )
 from trading_research_agent.chain.preregistration import to_record
 from trading_research_agent.cli import main
-from trading_research_agent.data import read_manifest
+from trading_research_agent.data import Rejection, Trade, read_manifest
 from trading_research_agent.data.parquet import read_trades
+from trading_research_agent.data.venues import register as register_venue
 from trading_research_agent.ledger import Ledger, Verdict
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
@@ -589,3 +595,142 @@ def test_trade_replay_and_ladder(tmp_path: Path, capsys: pytest.CaptureFixture[s
     capsys.readouterr()
     assert main([*promote, ""]) == 1
     assert "names its evidence" in capsys.readouterr().err
+
+
+def test_audit_takes_any_csv_through_a_column_map(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    csv = tmp_path / "vendor.csv"
+    csv.write_text(
+        "timestamp,price,amount,side,id\n"
+        "1735689600097,93530.00,0.003,sell,a-1\n"
+        "1735689600144,93530.00,0.991,SELL,a-2\n"
+        "1735689600266,93531.50,0.010,buy,a-3\n",
+        encoding="utf-8",
+    )
+    code = main(
+        [
+            "data",
+            "audit",
+            str(csv),
+            "--mapping",
+            str(EXAMPLES / "mapping.toml"),
+            "--instrument",
+            "BTCUSDT",
+            "--max-gap",
+            "5m",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert code == 0
+    assert out.startswith("vendor-x BTCUSDT: 3 trades, 0 rejected") and out.strip().endswith(
+        "PASSED"
+    )
+
+    with pytest.raises(SystemExit) as exit_:
+        main(
+            [
+                "data",
+                "audit",
+                str(csv),
+                "--venue",
+                "bybit",
+                "--mapping",
+                "m.toml",
+                "--instrument",
+                "X",
+            ]
+        )
+    assert exit_.value.code == 2
+
+
+class Quiet(SimpleHTTPRequestHandler):
+    def log_message(self, format: str, *args: object) -> None:
+        pass
+
+
+class LocalVenue:
+    """A venue plugin registered by a test: daily archives served from a local directory."""
+
+    name = "local-test"
+    cadence = "daily"
+
+    def __init__(self, base: str) -> None:
+        self.base = base
+
+    def archive_url(
+        self, instrument: str, *, day: date | None, month: tuple[int, int] | None
+    ) -> str:
+        if day is None:
+            raise ValueError("local-test archives are daily; pass --day")
+        return f"{self.base}/{instrument}{day.isoformat()}.csv.gz"
+
+    def checksum_url(self, archive_url: str) -> str | None:
+        return archive_url + ".sha256"
+
+    def normalise(self, lines: Iterable[str], *, instrument: str) -> Iterator[Trade | Rejection]:
+        yield from ()
+
+
+def test_fetch_goes_through_the_venue_plugin_and_its_checksum(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = tmp_path / "www"
+    root.mkdir()
+    body = b"timestamp,symbol\n1,BTCUSDT\n" * 50
+    (root / "BTCUSDT2025-01-01.csv.gz").write_bytes(body)
+    (root / "BTCUSDT2025-01-01.csv.gz.sha256").write_text(
+        f"{hashlib.sha256(body).hexdigest()}  BTCUSDT2025-01-01.csv.gz\n", encoding="ascii"
+    )
+    server = ThreadingHTTPServer(("127.0.0.1", 0), partial(Quiet, directory=str(root)))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        register_venue(LocalVenue(f"http://127.0.0.1:{server.server_address[1]}"))
+        out_dir = tmp_path / "data"
+        code = main(
+            [
+                "data",
+                "fetch",
+                "--venue",
+                "local-test",
+                "--instrument",
+                "BTCUSDT",
+                "--day",
+                "2025-01-01",
+                "--out",
+                str(out_dir),
+                "--json",
+            ]
+        )
+        payload = json.loads(capsys.readouterr().out)
+        assert code == 0 and payload["size"] == len(body)
+        assert (out_dir / "BTCUSDT2025-01-01.csv.gz").read_bytes() == body
+
+        code = main(
+            ["data", "fetch", "--venue", "local-test", "--instrument", "X", "--month", "2025-01"]
+        )
+        assert code == 1 and "daily" in capsys.readouterr().err
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_shadow_refuses_an_unknown_feed_before_touching_the_network(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code = main(
+        [
+            "trade",
+            "shadow",
+            "--config",
+            str(EXAMPLES / "strategy.toml"),
+            "--envelope",
+            str(EXAMPLES / "envelope.toml"),
+            "--out",
+            str(tmp_path / "run"),
+            "--feed",
+            "no-such-venue",
+        ]
+    )
+    err = capsys.readouterr().err
+    assert code == 1 and "no live feed named 'no-such-venue'" in err

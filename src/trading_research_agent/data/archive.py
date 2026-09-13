@@ -1,4 +1,4 @@
-"""Where the public archives live, and how to read one without unpacking it to disk."""
+"""Read an archive without unpacking it to disk, and hash it."""
 
 from __future__ import annotations
 
@@ -7,23 +7,11 @@ import hashlib
 import io
 import zipfile
 from collections.abc import Iterator
-from datetime import date
 from pathlib import Path
-
-BYBIT_BASE = "https://public.bybit.com/trading"
-BINANCE_BASE = "https://data.binance.vision/data/spot/monthly/trades"
 
 
 class ArchiveError(ValueError):
     """The archive on disk is not one file of one CSV."""
-
-
-def bybit_trades_url(instrument: str, day: date) -> str:
-    return f"{BYBIT_BASE}/{instrument}/{instrument}{day.isoformat()}.csv.gz"
-
-
-def binance_spot_trades_url(instrument: str, year: int, month: int) -> str:
-    return f"{BINANCE_BASE}/{instrument}/{instrument}-trades-{year:04d}-{month:02d}.zip"
 
 
 def sha256_of(path: Path) -> str:
