@@ -51,7 +51,8 @@ statistics run in floating point from the collapsed series on.
 | `trading_research_agent.data` | The data gate: any trade data to canonical trades, through a venue plugin or a declared column map; a one-pass audit with findings, a manifest with checksums, and exact `DECIMAL` Parquet with the `[data]` extra |
 | `trading_research_agent.strategy` | The decision-core protocol, exits bound to the mechanism (layer 6, causal stops with adverse fills), the walk-forward harness that refuses precomputed parameters. No strategy of its own |
 | `trading_research_agent.trading` | The trading agent: recorded feeds and live feed plugins, a simulated venue on the execution rules, controls that fail closed, the promotion ladder, one runtime for replay and shadow |
-| `trading_research_agent.agent` | An idea through layers 0, 2 and 3: bound, cost floor, mechanism memo with a critic, sealed pre-registration; refusals and verdicts recorded apart. Providers as extras: `[anthropic]`, `[openai]` |
+| `trading_research_agent.agent` | Agents with full access through the gates: an idea through layers 0, 2 and 3; seven roles (screener, technical analyst as a decision core, macro, on-chain, risk manager, executor, auditor) in a fixed session; every call metered in `usage.jsonl`. Providers as plugins with verified presets; `[anthropic]`, `[openai]`, `[google]` |
+| `trading_research_agent.surface` | The gates as callable tools for the MCP server and the roles: seven reads, and actions that only tighten, demote or halt |
 | `trading_research_agent.cli` | The `tra` command: data, chain, agent, trade, ladder, ledger |
 | `trading_research_agent.chain` | The falsification chain: layer 0 (cost floor), layer 3 (sealed pre-registration), layer 4 (data requirements), layer 5 (validation: net returns, block bootstrap, matched null, subperiods, power, BH, anchor robustness), and the era seal |
 | `trading_research_agent.execution` | Execution realism: the cost identity with funding, walk-the-book, passive fills with trade-through, effective cost across unfilled orders, markout |
@@ -99,6 +100,8 @@ tra data funding --venue bybit --instrument BTCUSDT --from 2025-01-01 --to 2025-
 tra live --config my-run/strategy.toml --envelope my-run/envelope.toml \
     --out runs/live-1 --env-file .env       # canary tier; docs/live.md
 tra mcp serve                               # the read gates for any agent host; docs/mcp.md
+tra agent session --config my-run/strategy.toml --envelope my-run/envelope.toml \
+    --dataset BTCUSDT=data/btc.parquet --magnitude 20 --out runs/session-1   # docs/agents.md
 ```
 
 `data fetch` streams the archive to a `.part` file, hashes it as it arrives, and keeps it only
@@ -124,9 +127,10 @@ Venues, feeds and live adapters register through entry points. The MCP server be
 - **A venue.** The two that ship are plugins found through the same registry as a
   third-party one. Nothing in the gates names a venue, and a test fails the build if it does.
 - **A data vendor.** Any CSV with a declared column map goes through the same gate.
-- **A model on the order path.** Language models draft and critique at layers 2 and 3; code
-  decides everywhere, and nothing that places an order can reach a model. The MCP server
-  has no tool that trades, promotes or records.
+- **A model that can loosen a control.** Agents have full access to data, gates and, as the
+  technical analyst, to the decision on each bar; the limits, the caps, the ladder and the kill
+  switch are code that a role can only tighten, step down or arm. The MCP server has no tool
+  that trades, promotes or records. `docs/liability.md` says where the responsibility sits.
 - **A production tier.** Real orders exist at canary only, with hard caps, behind a ladder
   that needs evidence and a signature at every step and refuses production outright.
 
@@ -140,7 +144,8 @@ Venues, feeds and live adapters register through entry points. The MCP server be
 | 0.4 | The trading agent: layer 6 exits, walk-forward harness, replay and shadow on one code path, controls, ladder, a live public feed (`[shadow]`) |
 | 0.4.1 | Adoption rules: no strategy in the core, venues as plugins with entry points, any data through a column map |
 | 0.5 | The canary tier: a live venue plugin behind a security review that runs as tests, hard caps, the ladder gate; funding as charged; MCP server exposing the read gates to any agent host; `tra init`, `backtest`, `paper`, `live` |
-| 0.6 | Production tier behind an operational runbook; private execution stream; maker channels; a second live venue |
+| 0.6 | Agents with full access through the gates: seven roles in a fixed session, the technical analyst as a metered decision core, providers as plugins with verified presets, `usage.jsonl` |
+| 0.7 | Production tier behind an operational runbook; private execution stream; maker channels; a second live venue |
 
 Crypto perpetuals first. The core vocabulary is market-agnostic (`venue`, `instrument`,
 `session`), but every number in the gates was measured on crypto venues and nothing is promised

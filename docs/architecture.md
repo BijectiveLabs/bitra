@@ -22,7 +22,10 @@ trading_research_agent/
   trading/     feeds (live plugins in trading/feeds), simulated venue, live
                venue plugins in trading/venues, controls, canary caps, ladder,
                the runtime                                                     -> everything above
-  agent/       language-model roles at layers 2 and 3; orchestration            -> ledger, envelope, data, chain, execution
+  surface/     the gates as callable tools: seven reads, three tightening
+               actions; shared by mcp and agent                                 -> everything above
+  agent/       the research roles at layers 0, 2 and 3; the seven session roles;
+               the technical analyst as a decision core; providers; usage       -> everything above, surface
   mcp/         the gates as MCP tools                                            -> everything except agent
   cli/         the `tra` command                                                 -> everything
 ```
@@ -40,6 +43,8 @@ Rules, each enforced by a test in `tests/test_boundaries.py`:
    an example.
 6. No module outside `data/venues/`, `trading/feeds/` and `trading/venues/` names a venue.
 7. `mcp` reaches everything except `agent`, and its tools only read.
+8. The only actions on `surface` tighten a limit, step the ladder down, or arm the kill
+   switch. A role holding the surface holds nothing that loosens.
 
 ## Adoption rules
 
@@ -59,9 +64,9 @@ the research it descends from.
    declared column map (`examples/mapping.toml`), ends in the same audit, the same manifest
    and the same Parquet. Nothing about where a row came from changes what the gate demands
    of it.
-4. **Agents are a surface.** The language-model roles and the MCP tools call the gates; they
-   never are the gates. Rule 3 above and the absence of a model on the order path enforce
-   it.
+4. **Agents are a surface, with full access.** The roles and the MCP tools call the gates;
+   they never are the gates. A model may decide (the technical analyst is a decision core);
+   code executes and refuses (controls, caps, ladder, kill switch). Rules 3 and 8 enforce it.
 
 Not every package exists yet. The list is the plan; a package is added when its first gate
 lands with tests. Today: `ledger`, `envelope`, `data`, `chain`, `execution`, `strategy`,
@@ -105,6 +110,8 @@ confident about it.
 | `ladder.json` | JSON | current tier and the history of promotions (with evidence and signature) and demotions (with reason) |
 | `funding.json` | JSON | settlement timestamps (epoch ns) to rates as fractions, the measured interval, the venue and the range; written by `tra data funding`, read by `[run].funding` |
 | `preflight.json` | JSON | what a live venue checked before the first print: clock skew, key permissions, position adopted |
+| `usage.jsonl` | JSON Lines | one model call per line: role, provider, model, tokens, latency, declared cost, outcome |
+| `session.json`, `audit.json` | JSON | a session of the seven roles: what was kept and why, the runs, the risk decision and the limits after it, the allocation, the auditor's verdict |
 
 ## Numbers
 

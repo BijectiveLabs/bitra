@@ -61,6 +61,13 @@ is skipped and the basis is recorded as `declared`.
 - They do not hold credentials. Keys are read by the vendor SDKs from the environment and are
   written nowhere by this package.
 
+## The session roles
+
+The three research roles above are one of two things the package calls an agent. The
+other is the session: seven roles with full access to the gates, the technical analyst
+among them as a decision core. `docs/agents.md` describes it; `docs/providers.md` lists the
+model providers both share.
+
 ## Providers
 
 ```

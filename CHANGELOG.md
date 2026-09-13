@@ -6,6 +6,30 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Agents with full access through the gates. Seven role packages under `agent/`
+  (market screener, technical analyst, macro analyst, on-chain analyst, risk manager,
+  executor, auditor), each a schema, a parser and a venue-neutral prompt. `tra agent
+  session` runs them in a fixed order over recorded data in the sandbox and records every
+  answer.
+- The technical analyst as a decision core (`[strategy].agent = "technical_analyst"`),
+  satisfying the `Strategy` protocol: asked on closed bars of a minute or longer, within a
+  budget; a spent budget ends the session flat.
+- `usage.jsonl` and `MeteredCompleter`: every model call written down with tokens, latency
+  and the declared price; a budget that refuses before the call.
+- Providers as plugins with verified presets (deepseek, groq, xai, mistral, openrouter, qwen,
+  ollama, local) through the OpenAI-compatible adapter, and a Google adapter behind the
+  `[google]` extra. `tra agent propose --provider` takes any registered name.
+- `surface/`: the seven read tools shared by the MCP server and the roles, and the only
+  actions a role may take: tighten limits, demote, arm the kill switch.
+- `docs/agents.md`, `docs/providers.md`, `docs/liability.md`.
+
+### Changed
+
+- A canary cap that is already met ends the session when flat.
+- The runtime reads a `halt` from its core and ends the session flat.
+
 ## [0.5.0] - 2026-09-13
 
 ### Added
