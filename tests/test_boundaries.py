@@ -42,7 +42,7 @@ ALLOWED: dict[str, set[str]] = {
 LLM_CLIENTS = {"anthropic", "openai", "langchain", "langgraph", "litellm", "ollama"}
 
 # Plugin directories are the only places a venue may be named in the package.
-PLUGIN_DIRS = {SRC / "data" / "venues", SRC / "trading" / "feeds"}
+PLUGIN_DIRS = {SRC / "data" / "venues", SRC / "trading" / "feeds", SRC / "trading" / "venues"}
 VENUE_NAMES = ("bybit", "binance", "hyperliquid", "okx", "coinbase", "deribit", "kraken")
 
 # A decision core is a class with these methods, however it is spelled.

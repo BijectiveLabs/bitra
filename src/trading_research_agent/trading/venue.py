@@ -1,9 +1,11 @@
-"""Where intents go. A simulated venue fills by the execution rules; no live venue exists yet.
+"""Where intents go. A simulated venue fills by the execution rules; live venues are plugins.
 
 The simulated venue is the same object for replay, paper and shadow. It fills an entry at the
 first print after the measured latency, never at the print that fired the signal, and it prices
 the round trip with the cost identity from the operator's envelope. Nothing here places an
-order anywhere, and the protocol a live venue would satisfy is the only thing that mentions one.
+order anywhere. A live venue satisfies the same protocol from `trading/venues/`, and the
+runtime cannot tell the two apart except by one flag: a live venue routes exits through
+itself instead of settling them against the bar.
 """
 
 from __future__ import annotations
@@ -45,9 +47,19 @@ class Venue(Protocol):
     @property
     def label(self) -> str: ...
 
+    @property
+    def routes_exits(self) -> bool:
+        """True when a stop or take-profit must be sent as an order rather than settled."""
+        ...
+
+    @property
+    def pending(self) -> Intent | None: ...
+
     def observe(self, trade: Trade) -> None: ...
 
     def submit(self, intent: Intent) -> Fill | None: ...
+
+    def poll(self, trade: Trade) -> Fill | None: ...
 
     def cost_of(
         self, direction: Direction, entry_ts_ns: int, exit_ts_ns: int, spread_cost_bps: Decimal
@@ -58,6 +70,7 @@ class SimulatedVenue:
     """Fills against the print stream by the execution rules. Sends nothing anywhere."""
 
     label = "simulated"
+    routes_exits = False
 
     def __init__(
         self,

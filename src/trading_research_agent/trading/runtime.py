@@ -27,9 +27,10 @@ from trading_research_agent.strategy.exits import (
     simulate_with_bracket,
     simulate_with_stop,
 )
-from trading_research_agent.trading.controls import Controls
+from trading_research_agent.trading.canary import CanaryGuard
+from trading_research_agent.trading.controls import Admission, Controls
 from trading_research_agent.trading.feed import BarBuilder, Feed
-from trading_research_agent.trading.venue import Fill, Intent, SimulatedVenue
+from trading_research_agent.trading.venue import Fill, Intent, Venue, VenueError
 
 BPS = Decimal(10_000)
 
@@ -37,7 +38,7 @@ BPS = Decimal(10_000)
 @dataclass(frozen=True)
 class TradingConfig:
     feed: Feed
-    venue: SimulatedVenue
+    venue: Venue
     strategy: Strategy
     exit_rule: ExitRule
     controls: Controls
@@ -47,6 +48,7 @@ class TradingConfig:
     spread_cost_bps: Decimal
     equity: Decimal | None = None
     label: str = "replay"
+    canary: CanaryGuard | None = None
 
     def __post_init__(self) -> None:
         if self.bar_interval_ns <= 0:
@@ -104,6 +106,7 @@ class _Loop:
         self.builder = BarBuilder(config.bar_interval_ns)
         self.position: Position | None = None
         self.pending_close: bool = False
+        self.pending_cause: str = "intent"
         self.report = RunReport(
             label=config.label, instrument=config.feed.instrument, started_at=datetime.now(UTC)
         )
@@ -135,8 +138,15 @@ class _Loop:
             }
         )
         if self.pending_close and self.position is not None:
-            self.close(self.position, fill.ts_ns, fill.price, cause="intent")
             self.pending_close = False
+            if fill.size < self.position.size:
+                # A partial close leaves a smaller position; ask again for the rest.
+                self.position.size -= fill.size
+                self.request(
+                    fill.ts_ns, Target.FLAT, f"remainder after partial {self.pending_cause}"
+                )
+                return
+            self.close(self.position, fill.ts_ns, fill.price, cause=self.pending_cause)
             return
         self.position = Position(
             direction=fill.direction,
@@ -151,6 +161,12 @@ class _Loop:
 
     def on_bar(self, bar: Bar) -> None:
         self.report.bars += 1
+        if self.c.canary is not None and self.report.stopped_by is None:
+            over = self.c.canary.session_over(bar.end_ns)
+            if over is not None:
+                self.report.stopped_by = over
+                if self.position is not None and not self.pending_close:
+                    self.request(bar.end_ns, Target.FLAT, over)
         if self.position is not None and not self.pending_close:
             self.evaluate_exits(self.position, bar)
         if (
@@ -180,7 +196,7 @@ class _Loop:
                 rule.slip_bps,
             )
             if bracket.cause.value != "exit":
-                self.close(position, bar.end_ns, bracket.exit_px, cause=bracket.cause.value)
+                self.leave(position, bar.end_ns, bracket.exit_px, bracket.cause.value)
                 return
         else:
             outcome = simulate_with_stop(
@@ -191,10 +207,17 @@ class _Loop:
                 rule.slip_bps,
             )
             if outcome.stopped:
-                self.close(position, bar.end_ns, outcome.exit_px, cause="sl")
+                self.leave(position, bar.end_ns, outcome.exit_px, "sl")
                 return
         if position.bars_held >= rule.timeout_bars:
             self.request(bar.end_ns, Target.FLAT, f"timeout after {position.bars_held} bars")
+
+    def leave(self, position: Position, ts_ns: int, px: Decimal, cause: str) -> None:
+        """A stop or take-profit fired on the bar. Simulation settles it; a live venue routes it."""
+        if self.c.venue.routes_exits:
+            self.request(ts_ns, Target.FLAT, cause)
+            return
+        self.close(position, ts_ns, px, cause=cause)
 
     def on_signal(self, bar: Bar, signal: Signal) -> None:
         if self.c.venue.pending is not None:
@@ -222,6 +245,17 @@ class _Loop:
         admission = self.c.controls.admit(
             ts_ns=ts_ns, target=target, size=self.c.size, risk_bps=risk, equity_known=equity_known
         )
+        if admission.admitted and target is not Target.FLAT and self.c.canary is not None:
+            capped = self.c.canary.refuse_entry(
+                ts_ns=ts_ns,
+                notional=None if self.last_price is None else self.c.size * self.last_price,
+                round_trips=self.report.round_trips,
+                net_bps=self.report.net_bps_total,
+            )
+            if capped is not None:
+                admission = Admission(False, capped)
+                if self.report.stopped_by is None:
+                    self.report.stopped_by = capped
         self.report.intents += 1
         self.intents.append(
             {
@@ -241,12 +275,14 @@ class _Loop:
                 self.report.stopped_by = self.c.controls.tripped
             return
         if target is Target.FLAT:
-            if self.position is None:
+            if self.position is None or self.c.venue.pending is not None:
                 return
             direction = (
                 Direction.SHORT if self.position.direction is Direction.LONG else Direction.LONG
             )
             self.pending_close = True
+            # trades.jsonl keeps the short causes of layer 6; everything else is an intent.
+            self.pending_cause = reason if reason in ("sl", "tp") else "intent"
             self.c.venue.submit(
                 Intent(ts_ns, self.c.feed.instrument, direction, self.position.size, reason)
             )
@@ -327,12 +363,19 @@ class _Loop:
 
 def run(config: TradingConfig) -> RunReport:
     loop = _Loop(config)
-    for trade in config.feed:
-        loop.on_print(trade)
-        if (
-            loop.report.stopped_by is not None
-            and loop.position is None
-            and loop.c.venue.pending is None
-        ):
-            break
+    try:
+        for trade in config.feed:
+            loop.on_print(trade)
+            if (
+                loop.report.stopped_by is not None
+                and loop.position is None
+                and loop.c.venue.pending is None
+            ):
+                break
+    except VenueError as exc:
+        # The venue and the model disagree, or the venue is unreachable. Nothing more is
+        # sent: an order into an unknown position is the one thing worse than a stuck one.
+        loop.report.stopped_by = f"venue: {exc}"
+        loop.report.refusals.append(str(exc))
+        config.controls.kill_switch.arm()
     return loop.finish()
