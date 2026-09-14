@@ -43,10 +43,18 @@ All notable changes to this project are recorded here. The format follows
 - `ledger_search` and `runs_index` on the surface and the MCP server (nine tools).
 - `tra agent session --resume`: recorded answers and finished runs are reused, and the
   reuse is written down.
+- `tra agent eval --model PROVIDER:MODEL ...`: the analyst once per model over the same
+  bars; net bps, round trips, calls, tokens, latency median and p90, tokens per bps, cost;
+  `eval.json` and one run per model.
+- `tra agent trace RUN|SESSION`: the role answers, the auditor's steps, every model call on
+  the wall clock and every intent, fill and round trip on the bar clock, from the files a
+  run wrote.
 
 ### Changed
 
 - A canary cap that is already met ends the session when flat.
+- The console output escapes what the terminal's encoding cannot show instead of ending
+  the command.
 - The runtime reads a `halt` from its core and ends the session flat.
 
 ## [0.5.0] - 2026-09-13

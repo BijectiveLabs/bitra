@@ -124,6 +124,8 @@ tra data funding --venue bybit --instrument BTCUSDT --from 2025-01-01 --to 2025-
 tra live --env-file .env                        # canary tier, behind the ladder; docs/live.md
 tra mcp serve                               # the read gates for any agent host; docs/mcp.md
 tra agent session --env-file .env               # the seven roles over data/; docs/agents.md
+tra agent eval --model groq:openai/gpt-oss-120b --model deepseek:deepseek-flash --env-file .env
+tra agent trace runs/session-1                  # the record of a run or a session, in order
 ```
 
 `data fetch` streams the archive to a `.part` file, hashes it as it arrives, and keeps it only

@@ -345,26 +345,17 @@ class _Session:
             min_confidence=a.min_confidence,
             decide_every_bars=a.decide_every_bars,
         )
-        config = TradingConfig(
-            feed=RecordedFeed.from_parquet(path, instrument=instrument),
-            venue=SimulatedVenue(
-                channel=channel,
-                funding=s.funding
-                or FundingSchedule(interval_s=s.run.settlement_interval_s, rates={}),
-                latency_ns=int(s.run.latency_ms * 1_000_000),
-                slippage_bps=s.run.slippage_bps,
-            ),
-            strategy=core,
-            exit_rule=s.exit_rule,
-            controls=Controls(limits, KillSwitch(self.cfg.kill_file)),
-            out_dir=out,
-            bar_interval_ns=s.run.bar_interval_s * 1_000_000_000,
-            size=s.run.size,
-            spread_cost_bps=s.run.spread_cost_bps,
-            equity=s.run.equity,
+        report = replay_instrument(
+            s,
+            channel,
+            instrument=instrument,
+            path=path,
+            core=core,
+            limits=limits,
+            kill_file=self.cfg.kill_file,
+            out=out,
             label="session-replay",
         )
-        report = run(config)
         if report.stopped_by and "token budget" in report.stopped_by:
             self.stopped_by = report.stopped_by
         return report
@@ -565,6 +556,40 @@ class _Session:
         except RoleError as exc:
             self.refusals.append(f"auditor: {exc}")
             return None
+
+
+def replay_instrument(
+    s: StrategyConfig,
+    channel: Any,
+    *,
+    instrument: str,
+    path: Path,
+    core: Any,
+    limits: Limits,
+    kill_file: Path | None,
+    out: Path,
+    label: str,
+) -> RunReport:
+    """The replay every session and eval runs: recorded prints, simulated venue, one core."""
+    config = TradingConfig(
+        feed=RecordedFeed.from_parquet(path, instrument=instrument),
+        venue=SimulatedVenue(
+            channel=channel,
+            funding=s.funding or FundingSchedule(interval_s=s.run.settlement_interval_s, rates={}),
+            latency_ns=int(s.run.latency_ms * 1_000_000),
+            slippage_bps=s.run.slippage_bps,
+        ),
+        strategy=core,
+        exit_rule=s.exit_rule,
+        controls=Controls(limits, KillSwitch(kill_file)),
+        out_dir=out,
+        bar_interval_ns=s.run.bar_interval_s * 1_000_000_000,
+        size=s.run.size,
+        spread_cost_bps=s.run.spread_cost_bps,
+        equity=s.run.equity,
+        label=label,
+    )
+    return run(config)
 
 
 def _report_from_disk(out: Path, instrument: str) -> RunReport:

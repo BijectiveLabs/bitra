@@ -269,6 +269,32 @@ def build_parser() -> argparse.ArgumentParser:
     )
     session_cmd.add_argument("--json", action="store_true")
 
+    eval_cmd = agent.add_parser("eval", help="the analyst over one dataset, once per model")
+    eval_cmd.add_argument(
+        "--model",
+        action="append",
+        required=True,
+        metavar="PROVIDER:MODEL",
+        help="a model to compare; repeat for several",
+    )
+    eval_cmd.add_argument("--config", type=Path, default=Path("strategy.toml"))
+    eval_cmd.add_argument("--envelope", type=Path, default=Path("envelope.toml"))
+    eval_cmd.add_argument(
+        "--dataset",
+        metavar="INSTRUMENT=PATH",
+        help="default: the newest dataset in data/ for [run].instrument, or the only one",
+    )
+    eval_cmd.add_argument(
+        "--base-url", help="an OpenAI-compatible endpoint for the compatible providers"
+    )
+    eval_cmd.add_argument("--out", type=Path, default=None, help="default: runs/eval-<time>")
+    eval_cmd.add_argument("--env-file", type=Path)
+    eval_cmd.add_argument("--json", action="store_true")
+
+    trace_cmd = agent.add_parser("trace", help="the timeline of a run or a session")
+    trace_cmd.add_argument("path", type=Path, help="a run directory or a session directory")
+    trace_cmd.add_argument("--json", action="store_true")
+
     refusals_cmd = agent.add_parser("refusals", help="ideas the gates would not let through")
     refusals_cmd.add_argument("--path", type=Path, default=Path("refusals.jsonl"))
     refusals_cmd.add_argument("--json", action="store_true")
@@ -365,6 +391,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Model answers carry any character; a console that cannot show one must not end the run.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="backslashreplace")
     parser = build_parser()
     args = parser.parse_args(argv)
     handler = HANDLERS[(args.group, args.command)]
@@ -1222,6 +1252,79 @@ def agent_session(args: argparse.Namespace) -> int:
     return CLEARED if result.stopped_by is None else REFUSED
 
 
+def agent_eval(args: argparse.Namespace) -> int:
+    from trading_research_agent.agent.evals import EvalConfig, ModelSpec, evaluate, table
+
+    if args.env_file is not None:
+        for key, value in read_env_file(args.env_file).items():
+            os.environ.setdefault(key, value)
+    cfg = load_strategy_config(args.config)
+    if cfg.agents is None:
+        raise ConfigError("an eval needs [strategy].agent and [agents] in strategy.toml")
+    models = tuple(ModelSpec.parse(text) for text in args.model)
+    if args.dataset:
+        name, sep, path = args.dataset.partition("=")
+        if not sep or not name or not path:
+            raise ValueError(f"--dataset takes INSTRUMENT=PATH, got {args.dataset!r}")
+        instrument, dataset = name, Path(path)
+    else:
+        found = _datasets(args.config)
+        wanted = cfg.run.instrument
+        if wanted in found:
+            instrument, dataset = wanted, found[wanted]
+        elif len(found) == 1:
+            ((instrument, dataset),) = found.items()
+        else:
+            raise ValueError(
+                f"no dataset for {wanted!r} in {_data_dir(args.config)}; --dataset INSTRUMENT=PATH"
+            )
+    _run_dir(args, "eval")
+    a = cfg.agents
+
+    def completer_for(spec: ModelSpec) -> Completer:
+        p = provider(spec.provider)
+        base_url = args.base_url or a.base_url
+        if p.build_with is not None:
+            return p.build_with(spec.model, base_url, a.max_output_tokens)
+        return p.build(spec.model, base_url)
+
+    rows = evaluate(
+        EvalConfig(
+            strategy=cfg,
+            envelope=load_envelope(args.envelope),
+            instrument=instrument,
+            dataset=dataset,
+            models=models,
+            completer_for=completer_for,
+            out_dir=args.out,
+            kill_file=cfg.kill_switch,
+        )
+    )
+    lines = [f"eval {instrument} over {dataset}: {len(rows)} models, same bars, same controls"]
+    lines.extend(table(rows))
+    for r in rows:
+        if r.stopped_by:
+            lines.append(f"  {r.provider}:{r.model} stopped by: {r.stopped_by}")
+    lines.append(f"eval.json and one run per model in {args.out}")
+    payload = {
+        "instrument": instrument,
+        "dataset": str(dataset),
+        "rows": [r.record() for r in rows],
+        "out": str(args.out),
+    }
+    emit(payload, args.json, lines)
+    return CLEARED
+
+
+def agent_trace(args: argparse.Namespace) -> int:
+    from trading_research_agent.agent.trace import lines as trace_lines
+    from trading_research_agent.agent.trace import trace
+
+    t = trace(args.path)
+    emit(t.record(), args.json, trace_lines(t))
+    return CLEARED
+
+
 def signals_export(args: argparse.Namespace) -> int:
     from trading_research_agent.agent.executor.tools import export_signals
 
@@ -1370,6 +1473,8 @@ HANDLERS = {
     ("agent", "propose"): agent_propose,
     ("agent", "refusals"): agent_refusals,
     ("agent", "session"): agent_session,
+    ("agent", "eval"): agent_eval,
+    ("agent", "trace"): agent_trace,
     ("data", "fetch"): data_fetch,
     ("data", "audit"): data_audit,
     ("data", "funding"): data_funding,

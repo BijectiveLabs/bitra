@@ -138,8 +138,36 @@ never after; a spent budget ends the session flat with `stopped_by` saying so. T
 asked only on bars of a minute or longer, because a call takes seconds and a bar shorter than
 that would be decided on stale prints; `decide_every_bars` spaces the calls further apart while
 the stops and timeouts keep running on every bar, and `max_output_tokens` caps what a model
-may spend thinking, which is most of the latency and the cost of a reasoning model. The auditor reports tokens per closed round trip, which
-is the figure that says whether an agent is worth running on that instrument at all.
+may spend thinking, which is most of the latency and the cost of a reasoning model. The
+auditor reports tokens per closed round trip, which is the figure that says whether an agent
+is worth running on that instrument at all.
+
+### Comparing models on the same bars
+
+```
+tra agent eval --model groq:openai/gpt-oss-120b --model deepseek:deepseek-flash     --model ollama:qwen3:8b --env-file .env          # the newest dataset in data/
+```
+
+An eval runs the analyst once per model over one dataset, under the same controls and in the
+same order, and prints one row per model: net basis points after costs, round trips, calls,
+failed calls, tokens, latency at the median and the 90th percentile, tokens per basis point
+earned, and the cost at the declared price. Each model has its own budget and its own
+`usage.jsonl` under `runs/eval-<time>/<provider>-<model>/`, so one that runs out does not
+starve the next; `eval.json` holds every row. A model that earned nothing has no
+tokens-per-bps figure. This is not a benchmark score: it is the same replay a session runs,
+reduced to what a trader compares before choosing which model to pay for.
+
+### Reading a run back
+
+```
+tra agent trace runs/session-1              # or a single run directory
+```
+
+A trace is the run's own record put in order: the role answers as they were asked, the
+auditor's tool steps with what each returned or refused, every model call on the wall clock
+with running tokens and cost, and the intents, fills and round trips on the bar clock. The
+two clocks are never mixed; a replay of last January runs today. `--json` returns the same
+events for anything that wants to draw them.
 
 ## What a role cannot do
 
