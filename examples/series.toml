@@ -1,0 +1,80 @@
+# External series for the macro and on-chain analysts. Any source: a vendor export, a central
+# bank CSV, your own recorder. Name the file, the columns, the unit of time, and how long after
+# the observation the figure was actually published (publish_lag): a value is never used before
+# the moment it was known. Thresholds are yours, labelled as declared; the correlation of each
+# series with the instrument's returns is measured on your data, with its sample size, and is
+# never a constant here.
+
+[[series]]
+name = "us10y"
+file = "series/us10y.csv"           # columns: date,value
+ts = "date"
+ts_unit = "iso8601"
+value = "value"
+unit = "percent"
+publish_lag = "0s"                   # a market yield is known when it prints
+source = "your-data-vendor"
+threshold = { bullish_below = 3.5, bearish_above = 4.25 }
+
+[[series]]
+name = "cpi_yoy"
+file = "series/cpi_yoy.csv"
+ts = "date"
+ts_unit = "iso8601"
+value = "value"
+unit = "percent"
+publish_lag = "14d"                  # a monthly print is released about two weeks after the month
+source = "statistics-office"
+threshold = { bullish_above = 3.0, bearish_below = 2.0 }
+
+[[series]]
+name = "dxy"
+file = "series/dxy.csv"
+ts = "date"
+ts_unit = "iso8601"
+value = "value"
+unit = "index"
+publish_lag = "0s"
+source = "your-data-vendor"
+threshold = { bullish_below = 103, bearish_above = 106 }
+
+[[series]]
+name = "fed_funds"
+file = "series/fed_funds.csv"
+ts = "date"
+ts_unit = "iso8601"
+value = "value"
+unit = "percent"
+publish_lag = "0s"
+source = "central-bank"
+# no threshold: the direction of the cycle is what the analyst reads from the series' changes
+
+[[series]]
+name = "m2"
+file = "series/m2.csv"
+ts = "date"
+ts_unit = "iso8601"
+value = "value"
+unit = "billions"
+publish_lag = "21d"
+source = "central-bank"
+
+[[series]]
+name = "nasdaq100"
+file = "series/nasdaq100.csv"
+ts = "date"
+ts_unit = "iso8601"
+value = "close"
+unit = "index"
+publish_lag = "0s"
+source = "your-data-vendor"
+
+[[series]]
+name = "exchange_netflow_btc"       # an on-chain series goes through the same map
+file = "series/exchange_netflow_btc.csv"
+ts = "date"
+ts_unit = "iso8601"
+value = "btc"
+unit = "BTC"
+publish_lag = "1h"
+source = "your-onchain-vendor"
