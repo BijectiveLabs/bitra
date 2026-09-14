@@ -14,7 +14,13 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from trading_research_agent.chain import cost_floor, read_trades, validate
+from trading_research_agent.chain import (
+    cost_floor,
+    load_observation,
+    observe,
+    read_trades,
+    validate,
+)
 from trading_research_agent.chain.preregistration import from_record as prereg_from_record
 from trading_research_agent.chain.validation import NullMode
 from trading_research_agent.chain.validation import to_record as validation_record
@@ -87,6 +93,15 @@ def check_registration(registration_path: str) -> dict[str, Any]:
         ],
         "amends": prereg.amends,
     }
+
+
+def observe_events(dataset_path: str, observation_path: str) -> dict[str, Any]:
+    """Layer 1: does the event declared in observation.toml recur in a Parquet dataset?"""
+    from trading_research_agent.data.parquet import read_trades as read_prints
+
+    dataset = _path(dataset_path, kind="dataset")
+    observation = load_observation(_path(observation_path, kind="observation"))
+    return observe(observation, read_prints(dataset), dataset=str(dataset)).record()
 
 
 def audit_dataset(
@@ -238,6 +253,7 @@ def runs_index(runs_dir: str, instrument: str = "") -> dict[str, Any]:
 # Name, title, function. The order is the order a host lists them in.
 READ_TOOLS: tuple[tuple[str, str, Callable[..., dict[str, Any]]], ...] = (
     ("cost_floor_check", "Cost floor (layer 0)", cost_floor_check),
+    ("observe_events", "Market observation (layer 1)", observe_events),
     ("check_registration", "Check a pre-registration (layer 3)", check_registration),
     ("audit_dataset", "Audit a dataset (data gate)", audit_dataset),
     ("validate_trades", "Validate trades (layer 5)", validate_trades),

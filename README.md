@@ -108,6 +108,7 @@ tra data audit data/BTCUSDT-trades-2025-01.zip --venue binance --instrument BTCU
     --max-gap 5m --manifest data/manifest.json
 tra data audit export.csv --mapping examples/mapping.toml --instrument BTCUSDT --max-gap 5m
 tra chain floor --envelope examples/envelope.toml --magnitude 3.0 --venue hyperliquid     --subject "informed-flow burst drift" --ledger ledger.jsonl --id H-001
+tra chain observe --dataset data/BTCUSDT-2025-01-01.parquet   # layer 1: does the event recur? observation.toml
 tra chain check preregistration.json
 tra ledger show
 tra agent propose --idea "Longs paying high funding get squeezed into settlement"     --envelope examples/envelope.toml --provider anthropic

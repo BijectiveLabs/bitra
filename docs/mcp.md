@@ -19,13 +19,14 @@ A host configuration names the command and nothing else:
 
 ## Tools
 
-Every tool is annotated read-only and closed-world; nine of them, the same nine the agent
+Every tool is annotated read-only and closed-world; ten of them, the same ten the agent
 roles hold. Paths are resolved on the machine running the server; every number in basis
 points is a decimal string; every time is UTC.
 
 | Tool | Reads | Returns |
 |---|---|---|
 | `cost_floor_check(envelope_path, magnitude_bps, venue="")` | `envelope.toml` | layer 0: outcome, cheapest channel, round trip, margin, whether the claim stops here |
+| `observe_events(dataset_path, observation_path)` | a Parquet dataset, `observation.toml` | layer 1: events, events per subperiod, the response distribution and curve, whether the phenomenon recurs |
 | `check_registration(registration_path)` | `preregistration.json` | name, seal, horizon, instruments, required sample, kill criteria, what it amends |
 | `audit_dataset(archive_path, instrument, venue="" \| mapping_path="", max_gap_minutes=5)` | a `.csv`, `.csv.gz` or `.zip` | the audit verdict with every finding |
 | `validate_trades(registration_path, trades_path, cost_bps, ...)` | `trades.jsonl` | the layer-5 record: interval, null, subperiods, power, the decision with every fired criterion |

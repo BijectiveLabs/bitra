@@ -1,0 +1,23 @@
+# Layer 1: does the phenomenon recur? An event you can mark on closed bars, and the response
+# measured strictly after it. This layer counts; it does not conclude. Every threshold here is
+# yours: the package supplies none. `tra chain observe` reads this file and the newest dataset.
+
+[observation]
+subject = "a burst of prints, then the close reverts"
+interval_s = 60                      # the bar
+horizon_bars = 5                     # the response is close(t+5) against close(t), in bps
+min_events = 30                      # fewer measured events than this: NOT PROVEN (a longer sample decides)
+subperiods = 4                       # equal time slices of the dataset
+min_subperiods_with_events = 4       # present in fewer slices than this: episodic, FALSIFIED on condition
+claimed_magnitude_bps = 20           # optional: reported against the median |response|; layer 0 owns the cost decision
+
+[event]                              # what marks an event, decided at the close of a bar
+feature = "volume_ratio"             # return_bps | abs_return_bps | zscore | volume_ratio | range_ratio | hour_utc
+window_bars = 60                     # the bars the feature is computed over, the marked bar included
+comparison = ">"                     # < | <= | > | >= | == | between (threshold = [lo, hi])
+threshold = 3.0
+
+# An external event instead of a feature: a calendar with `when` (ISO 8601, with timezone) and
+# `what`. The mark is the last bar that closed at or before `when`.
+# [event]
+# calendar = "events.csv"

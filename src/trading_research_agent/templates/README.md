@@ -2,6 +2,7 @@
 
     tra check                                  # what is ready, what is missing
     tra data get BTCUSDT 2025-01-01            # fetch, audit, Parquet and funding into data/
+    tra chain observe                          # layer 1: does the event in observation.toml recur?
     tra backtest                               # the core in strategy.toml over the newest dataset
     tra paper                                  # live public trades, simulated fills, zero orders
 

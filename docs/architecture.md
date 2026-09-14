@@ -80,7 +80,7 @@ imported either.
 | Layer | Test | Dies here when | Cost to run | Status |
 |---|---|---|---|---|
 | 0 | Cost floor | plausible magnitude below the cheapest round trip | minutes | implemented |
-| 1 | Market observation | the phenomenon does not recur | hours | planned |
+| 1 | Market observation | the phenomenon does not recur | minutes | implemented (`tra chain observe`) |
 | 2 | Mechanism memo | nobody can be named who is structurally forced to lose | minutes | implemented (model writes, code checks the form, a critic objects once) |
 | 3 | Pre-registration | the claim cannot be stated so data could refute it | hours | implemented |
 | 4 | Data requirements | no available instrument can measure the premise | hours to days | implemented |

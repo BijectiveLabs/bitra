@@ -178,7 +178,11 @@ def test_examples_are_not_importable_from_the_package() -> None:
 
 
 def test_templates_are_the_examples_with_the_core_beside_the_config() -> None:
-    same = {"envelope.toml": "envelope.toml", "mapping.toml": "mapping.toml"}
+    same = {
+        "envelope.toml": "envelope.toml",
+        "mapping.toml": "mapping.toml",
+        "observation.toml": "observation.toml",
+    }
     for template, example in same.items():
         assert (TEMPLATES / template).read_text(encoding="utf-8") == (EXAMPLES / example).read_text(
             encoding="utf-8"

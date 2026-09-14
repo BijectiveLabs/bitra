@@ -49,6 +49,10 @@ All notable changes to this project are recorded here. The format follows
 - `tra agent trace RUN|SESSION`: the role answers, the auditor's steps, every model call on
   the wall clock and every intent, fill and round trip on the bar clock, from the files a
   run wrote.
+- Layer 1 of the chain, market observation: `chain/observation.py`, `tra chain observe`,
+  `observation.toml` (an event on closed bars by feature or calendar, the response measured
+  after it, counts per subperiod, the operator's minimums), the `observe_events` read tool
+  (ten on the surface and the MCP server), and the example written by `tra init`.
 
 ### Changed
 

@@ -46,6 +46,7 @@ def test_init_writes_a_project_and_never_overwrites(
         "strategy.toml",
         "envelope.toml",
         "mapping.toml",
+        "observation.toml",
         "strategies/trailing_zscore.py",
         ".env.example",
         ".gitignore",

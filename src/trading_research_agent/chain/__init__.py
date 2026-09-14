@@ -5,6 +5,14 @@ with the era seal that layer 5 runs behind. See docs/chain.md.
 """
 
 from trading_research_agent.chain.floor import FloorCheck, FloorOutcome, cost_floor
+from trading_research_agent.chain.observation import (
+    Observation,
+    ObservationError,
+    ObservationReport,
+    Recurrence,
+    load_observation,
+    observe,
+)
 from trading_research_agent.chain.preregistration import (
     COST_TERMS,
     CostModel,
@@ -46,9 +54,13 @@ __all__ = [
     "KillCriterion",
     "NullMode",
     "NullReport",
+    "Observation",
+    "ObservationError",
+    "ObservationReport",
     "Power",
     "Preregistration",
     "PreregistrationError",
+    "Recurrence",
     "Requirements",
     "Seal",
     "SealError",
@@ -60,6 +72,8 @@ __all__ = [
     "amend",
     "check_requirements",
     "cost_floor",
+    "load_observation",
+    "observe",
     "read_trades",
     "research_only",
     "validate",

@@ -189,6 +189,18 @@ def build_parser() -> argparse.ArgumentParser:
     floor_cmd.add_argument("--id", dest="entry_id", help="ledger entry id for a stop")
     floor_cmd.add_argument("--json", action="store_true")
 
+    observe_cmd = chain.add_parser("observe", help="layer 1: does the phenomenon recur?")
+    observe_cmd.add_argument(
+        "--observation", type=Path, default=Path("observation.toml"), help="the declaration"
+    )
+    observe_cmd.add_argument(
+        "--dataset", type=Path, default=None, help="default: the newest dataset in data/"
+    )
+    observe_cmd.add_argument("--out", type=Path, help="write observation.json here")
+    observe_cmd.add_argument("--ledger", type=Path, help="record a death here")
+    observe_cmd.add_argument("--id", dest="entry_id", help="ledger entry id for a death")
+    observe_cmd.add_argument("--json", action="store_true")
+
     check_cmd = chain.add_parser("check", help="layer 3: validate a pre-registration file")
     check_cmd.add_argument("file", type=Path)
     check_cmd.add_argument("--json", action="store_true")
@@ -579,6 +591,58 @@ def chain_floor(args: argparse.Namespace) -> int:
     return REFUSED if check.stopped else CLEARED
 
 
+def chain_observe(args: argparse.Namespace) -> int:
+    from trading_research_agent.chain.observation import (
+        load_observation,
+        observe,
+        write_report,
+    )
+    from trading_research_agent.data.parquet import read_trades as read_prints
+
+    observation = load_observation(args.observation)
+    dataset = args.dataset
+    if dataset is None:
+        found = _datasets(args.observation)
+        if len(found) != 1:
+            where = _data_dir(args.observation)
+            raise ValueError(f"{len(found)} instruments in {where}; say which: --dataset PATH")
+        (dataset,) = found.values()
+    report = observe(observation, read_prints(dataset), dataset=str(dataset))
+    r = report.response_bps
+    lines = [
+        f"{report.recurrence.value.upper()}: {report.events} events over {report.bars} bars "
+        f"({report.measured} measured, {report.skipped} skipped), per subperiod "
+        f"{list(report.events_per_subperiod)}",
+    ]
+    if r["n"]:
+        lines.append(
+            f"response at {observation.horizon_bars} bars: median {r['median']} bps, mean "
+            f"{r['mean']} bps, q25 {r['q25']}, q75 {r['q75']}, positive {r['fraction_positive']}, "
+            f"median |response| {r['median_abs']} bps"
+        )
+    for fired in report.fired:
+        lines.append(f"  fired {fired}")
+    note = report.record()["magnitude"]
+    if note:
+        lines.append(note)
+    recorded = None
+    if not report.recurs and args.ledger is not None:
+        if not args.entry_id:
+            raise ValueError("--ledger needs --id for the new row")
+        entry = report.to_entry(
+            entry_id=args.entry_id, recorded_at=datetime.now(UTC), evidence=(str(dataset),)
+        )
+        Ledger(args.ledger).append(entry)
+        recorded = entry.entry_id
+        lines.append(f"recorded {entry.entry_id} as {entry.verdict.value} in {args.ledger}")
+    if args.out is not None:
+        write_report(report, args.out)
+        lines.append(f"observation.json in {args.out.parent}")
+    payload = {**report.record(), "recorded": recorded}
+    emit(payload, args.json, lines)
+    return CLEARED if report.recurs else REFUSED
+
+
 def chain_check(args: argparse.Namespace) -> int:
     record = json.loads(args.file.read_text(encoding="utf-8"))
     prereg = prereg_from_record(record)
@@ -925,6 +989,7 @@ TEMPLATE_FILES = {
     "strategy.toml": "strategy.toml",
     "envelope.toml": "envelope.toml",
     "mapping.toml": "mapping.toml",
+    "observation.toml": "observation.toml",
     "strategies/trailing_zscore.py": "core.py.tmpl",
     ".env.example": "env.example",
     ".gitignore": "gitignore",
@@ -1484,6 +1549,7 @@ HANDLERS = {
     ("data", "get"): data_get,
     ("check", "check"): check_project,
     ("chain", "floor"): chain_floor,
+    ("chain", "observe"): chain_observe,
     ("chain", "check"): chain_check,
     ("chain", "requirements"): chain_requirements,
     ("chain", "validate"): chain_validate,

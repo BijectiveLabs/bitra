@@ -44,6 +44,7 @@ def test_the_server_lists_exactly_the_read_tools() -> None:
         "ladder_show",
         "ledger_search",
         "ledger_show",
+        "observe_events",
         "run_report",
         "runs_index",
         "validate_trades",

@@ -8,7 +8,7 @@ forbids skipping forward.
 | Layer | Test | Dies here when | Cost | Status |
 |---|---|---|---|---|
 | 0 | Cost floor | plausible magnitude below the cheapest round trip | minutes | implemented |
-| 1 | Market observation | the phenomenon does not recur | hours | planned |
+| 1 | Market observation | the phenomenon does not recur | minutes | implemented |
 | 2 | Mechanism memo | nobody can be named who is structurally forced to lose | minutes | 0.2 (language model writes it, code checks the form) |
 | 3 | Pre-registration | the claim cannot be stated so that data could refute it | hours | implemented |
 | 4 | Data requirements | no available instrument can measure the premise | hours to days | implemented |
@@ -40,6 +40,55 @@ check = cost_floor(envelope, Decimal("3.0"), venue="hyperliquid")
 - The decision is made against the quoted schedule, which is the declared floor. Where the
   envelope also carries a measured round trip, the check reports whether the signal clears that
   too. Quoted cost is optimistic by roughly a third on the venues this was measured on.
+
+## Layer 1: market observation
+
+Before anyone explains a phenomenon, count it. An observation is an event the operator can
+mark on closed bars and a response measured strictly after it; the layer reports how many
+times the event fired, in how many slices of the sample, and what the response looked like.
+It does not compute a p-value (layer 5, behind a pre-registration) and it holds no threshold
+of its own: `observation.toml` declares the event, the horizon, the minimum count and the
+number of subperiods.
+
+```
+tra chain observe                                # observation.toml, the newest dataset in data/
+tra chain observe --dataset data/btc.parquet --ledger ledger.jsonl --id O-001 --out runs/o1/observation.json
+```
+
+```toml
+[observation]
+subject = "a burst of prints, then the close reverts"
+interval_s = 60
+horizon_bars = 5                     # close(t+5) against close(t), in bps
+min_events = 30
+subperiods = 4
+min_subperiods_with_events = 4
+claimed_magnitude_bps = 20           # optional; reported against the median |response|
+
+[event]
+feature = "volume_ratio"             # return_bps | abs_return_bps | zscore | volume_ratio | range_ratio | hour_utc
+window_bars = 60
+comparison = ">"                     # < <= > >= == between
+threshold = 3.0
+# or: calendar = "events.csv"        # `when`, `what`; the mark is the last bar closed at or before `when`
+```
+
+- The event is decided at the close of bar t from the `window_bars` ending there; the response
+  is the close `horizon_bars` later against the close at t. A horizon bar with no trades leaves
+  that response unmeasured, counted, never filled in.
+- Fewer measured events than `min_events`: `NOT PROVEN`, blocking axis `POWER`; a longer
+  sample decides. Events in fewer subperiods than declared: `FALSIFIED` on `CONDITION`,
+  `UNIVERSAL`; the phenomenon is episodic. A phenomenon that recurs records nothing; passing
+  layer 1 is not a verdict.
+- `claimed_magnitude_bps`, when given, is put beside the median absolute response. The cost
+  decision stays with layer 0: run `tra chain floor` again with the measured bound.
+- `observation.json` carries the declaration, the range, the counts per subperiod, the
+  response distribution at the horizon and the response curve bar by bar.
+
+On one day of BTCUSDT perpetual prints (2025-01-01, 909,330 prints, 1,440 bars) the example
+event fired 71 times across all four subperiods, so it recurs; its median absolute response
+at five bars was 5.6 bps against the 20 bps claimed, which is the layer-0 stop the research
+record kept reporting.
 
 ## Layer 3: the pre-registration
 
