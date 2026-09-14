@@ -75,6 +75,35 @@ config, a column map, two example cores), never imported by it; `templates/` ins
 package is a copy of those examples that `tra init` writes into a new project, and is never
 imported either.
 
+## The session, as it runs
+
+```mermaid
+sequenceDiagram
+    participant C as code
+    participant S as screener
+    participant A as analyst (core)
+    participant R as risk manager
+    participant E as executor
+    participant U as auditor
+    C->>C: figures per dataset, cost floor, layer 1 when declared
+    C->>S: figures only
+    S-->>C: kept / excluded, a reason each
+    loop every closed bar, per kept instrument
+        C->>A: compact bars, features
+        A-->>C: target, confidence, horizon
+        C->>C: controls admit or refuse; venue fills; exits run
+    end
+    C->>R: run reports, measured latency and costs
+    R-->>C: continue / tighten / demote / halt
+    C->>E: kept instruments, limits after
+    E-->>C: allocation fractions (nothing is sent)
+    C->>U: run reports, ledger, ladder, usage (a bounded tool loop)
+    U-->>C: verdict, findings
+```
+
+The macro and on-chain analysts, when series are declared, are asked between the screener
+and the runs; their briefs are measured by code and carry no action.
+
 ## The chain
 
 | Layer | Test | Dies here when | Cost to run | Status |

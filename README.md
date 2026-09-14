@@ -65,6 +65,53 @@ what each one died of. The agent inherits that discipline as code:
 `numpy` is the one required dependency; everything that touches money is `Decimal`, and the
 statistics run in floating point from the collapsed series on.
 
+## How it fits together
+
+```mermaid
+flowchart LR
+    subgraph gates["The falsification chain (docs/chain.md)"]
+        direction LR
+        L0["0 cost floor"] --> L1["1 observation"] --> L2["2 mechanism memo"] --> L3["3 pre-registration"]
+        L3 --> L4["4 data requirements"] --> L5["5 validation"] --> L6["6 exits bound to the mechanism"]
+    end
+    subgraph tiers["The ladder (docs/trading.md, docs/live.md)"]
+        direction LR
+        T0["T0 replay<br/>tra backtest"] --> T1["T1/T2 shadow<br/>tra paper"] --> T3["T3 canary<br/>tra live"]
+    end
+    data[("any trade data<br/>venue plugin or column map")] --> L1
+    data --> T0
+    L6 --> T0
+    T1 -- "layer 5 on its trades" --> L5
+    gates --> ledger[("kill ledger<br/>append-only")]
+    tiers --> ladder[("ladder.json<br/>promotions with evidence and a signature")]
+    agents["seven roles / any MCP host<br/>read the gates, tighten, demote, halt"] -.-> gates
+    agents -.-> tiers
+```
+
+An idea enters at layer 0 and dies at the cheapest layer that can kill it; what survives is
+a decision core the same runtime takes from replay to a capped live session, one tier at a
+time; the ledger records every death, the ladder every promotion. Models sit on the surface:
+they read what the gates measured and can only tighten what code enforces.
+
+```mermaid
+flowchart TB
+    cli["cli  (tra, the console face)"] --> agent["agent  (roles, session, tool loop, eval, trace)"]
+    cli --> mcp["mcp  (read-only server)"]
+    agent --> surface["surface  (the gates as tools, tighten-only actions)"]
+    mcp --> surface
+    surface --> trading["trading  (feeds, simulated venue, controls, ladder, runtime, live plugins)"]
+    trading --> strategy["strategy  (core protocol, exits, walk-forward)"]
+    strategy --> execution["execution  (cost identity, fills, markout)"]
+    execution --> chain["chain  (layers 0, 1, 3, 4, 5 and the era seal)"]
+    chain --> data["data  (venue plugins, column maps, audit, Parquet)"]
+    data --> envelope["envelope  (fees, round trips, latency)"]
+    data --> ledger["ledger  (verdicts, axes, store)"]
+```
+
+Imports go downward only, and a test enforces it (`tests/test_boundaries.py`). Only `agent`
+speaks to a language model; only the plugin directories (and the files `tra init` copies)
+name a venue.
+
 ## What is here today
 
 | Package | Purpose |
@@ -75,9 +122,9 @@ statistics run in floating point from the collapsed series on.
 | `trading_research_agent.strategy` | The decision-core protocol, exits bound to the mechanism (layer 6, causal stops with adverse fills), the walk-forward harness that refuses precomputed parameters. No strategy of its own |
 | `trading_research_agent.trading` | The trading agent: recorded feeds and live feed plugins, a simulated venue on the execution rules, controls that fail closed, the promotion ladder, one runtime for replay and shadow |
 | `trading_research_agent.agent` | Agents with full access through the gates: an idea through layers 0, 2 and 3; seven roles (screener, technical analyst as a decision core, macro, on-chain, risk manager, executor, auditor) in a fixed session; every call metered in `usage.jsonl`. Providers as plugins with verified presets; `[anthropic]`, `[openai]`, `[google]` |
-| `trading_research_agent.surface` | The gates as callable tools for the MCP server and the roles: seven reads, and actions that only tighten, demote or halt |
-| `trading_research_agent.cli` | The `tra` command: data, chain, agent, trade, ladder, ledger |
-| `trading_research_agent.chain` | The falsification chain: layer 0 (cost floor), layer 3 (sealed pre-registration), layer 4 (data requirements), layer 5 (validation: net returns, block bootstrap, matched null, subperiods, power, BH, anchor robustness), and the era seal |
+| `trading_research_agent.surface` | The gates as callable tools for the MCP server and the roles: ten reads, and actions that only tighten, demote or halt |
+| `trading_research_agent.cli` | The `tra` command: data, chain, agent, trade, ladder, ledger, and the console face |
+| `trading_research_agent.chain` | The falsification chain: layer 0 (cost floor), layer 1 (market observation), layer 3 (sealed pre-registration), layer 4 (data requirements), layer 5 (validation: net returns, block bootstrap, matched null, subperiods, power, BH, anchor robustness), and the era seal |
 | `trading_research_agent.execution` | Execution realism: the cost identity with funding, walk-the-book, passive fills with trade-through, effective cost across unfilled orders, markout |
 
 Layer 0 in six lines:
