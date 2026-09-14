@@ -66,6 +66,8 @@ min_interval_s = 60
 lookback_bars = 60
 min_confidence = 0.6
 magnitude_bps = 20                    # the claimed edge, for the cost floor
+decide_every_bars = 5                 # ask the model every fifth closed bar; exits run on every bar
+max_output_tokens = 512               # a reasoning model that thinks for 20 s is not a bar-cadence core
 
 [agents.pricing.deepseek-flash]       # what the operator was quoted; never a constant
 input_per_million = 0.14
@@ -110,7 +112,9 @@ Every model call is one line in `usage.jsonl`: role, provider, model, tokens in 
 latency, the cost at the declared price, and the outcome. The budget refuses before a call,
 never after; a spent budget ends the session flat with `stopped_by` saying so. The analyst is
 asked only on bars of a minute or longer, because a call takes seconds and a bar shorter than
-that would be decided on stale prints. The auditor reports tokens per closed round trip, which
+that would be decided on stale prints; `decide_every_bars` spaces the calls further apart while
+the stops and timeouts keep running on every bar, and `max_output_tokens` caps what a model
+may spend thinking, which is most of the latency and the cost of a reasoning model. The auditor reports tokens per closed round trip, which
 is the figure that says whether an agent is worth running on that instrument at all.
 
 ## What a role cannot do

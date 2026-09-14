@@ -63,6 +63,8 @@ kill_switch = "KILL"               # touch this file to flatten and stop
 # min_interval_s = 60
 # lookback_bars = 60
 # min_confidence = 0.6
+# decide_every_bars = 5           # ask every fifth bar; exits still run on every bar
+# max_output_tokens = 512         # caps a reasoning model's thinking, most of its latency
 # [agents.pricing.deepseek-flash]  # what the operator was quoted; never a constant
 # input_per_million = 0.14
 # output_per_million = 0.28
