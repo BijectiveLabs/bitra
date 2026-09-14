@@ -10,6 +10,7 @@ from trading_research_agent.agent.providers.google import GoogleCompleter
 from trading_research_agent.agent.providers.openai import OpenAICompleter
 from trading_research_agent.agent.providers.presets import PRESETS, Preset, preset
 from trading_research_agent.agent.providers.registry import (
+    CallOptions,
     Provider,
     UnknownProviderError,
     provider,
@@ -20,6 +21,7 @@ from trading_research_agent.agent.providers.registry import (
 __all__ = [
     "PRESETS",
     "AnthropicCompleter",
+    "CallOptions",
     "GoogleCompleter",
     "OpenAICompleter",
     "Preset",

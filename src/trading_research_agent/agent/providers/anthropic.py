@@ -27,6 +27,8 @@ class AnthropicCompleter:
         client: Any = None,
         max_tokens: int = 4096,
         effort: str = "high",
+        timeout_s: float = 60.0,
+        max_retries: int = 2,
     ) -> None:
         if client is None:
             try:
@@ -38,7 +40,7 @@ class AnthropicCompleter:
                     "the anthropic SDK is not installed; "
                     "pip install 'trading-research-agent[anthropic]'"
                 ) from exc
-            client = anthropic.Anthropic()
+            client = anthropic.Anthropic(timeout=timeout_s, max_retries=max_retries)
         self.model = model
         self.max_tokens = max_tokens
         self.effort = effort

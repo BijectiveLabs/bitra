@@ -17,7 +17,15 @@ from trading_research_agent.agent.providers.anthropic import ProviderError
 
 
 class GoogleCompleter:
-    def __init__(self, model: str, *, client: Any = None, max_tokens: int = 4096) -> None:
+    def __init__(
+        self,
+        model: str,
+        *,
+        client: Any = None,
+        max_tokens: int = 4096,
+        timeout_s: float = 60.0,
+        max_retries: int = 2,
+    ) -> None:
         if not model.strip():
             raise ValueError("a Google model name is required")
         if client is None:
@@ -28,7 +36,13 @@ class GoogleCompleter:
                     "the google-genai SDK is not installed; "
                     "pip install 'trading-research-agent[google]'"
                 ) from exc
-            client = genai.Client()
+            # HttpOptions takes milliseconds; retries are attempts beyond the first.
+            client = genai.Client(
+                http_options={
+                    "timeout": int(timeout_s * 1000),
+                    "retry_options": {"attempts": max_retries + 1},
+                }
+            )
         self.model = model
         self.max_tokens = max_tokens
         self._client = client

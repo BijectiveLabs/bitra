@@ -26,7 +26,12 @@ from uuid import uuid4
 from trading_research_agent import __version__
 from trading_research_agent.agent import Completer, Outcome, RunConfig, propose
 from trading_research_agent.agent.pipeline import read_refusals
-from trading_research_agent.agent.providers import UnknownProviderError, provider, providers
+from trading_research_agent.agent.providers import (
+    CallOptions,
+    UnknownProviderError,
+    provider,
+    providers,
+)
 from trading_research_agent.agent.providers.anthropic import DEFAULT_MODEL, ProviderError
 from trading_research_agent.agent.session import SessionError
 from trading_research_agent.chain import (
@@ -846,8 +851,16 @@ def _agent_core(cfg: Any, out_dir: Path) -> Any:
 def _build_completer(a: Any) -> Completer:
     p = provider(a.provider)
     if p.build_with is not None:
-        return p.build_with(a.model, a.base_url, a.max_output_tokens)
+        return p.build_with(a.model, a.base_url, _call_options(a))
     return p.build(a.model, a.base_url)
+
+
+def _call_options(a: Any) -> CallOptions:
+    return CallOptions(
+        max_output_tokens=a.max_output_tokens,
+        timeout_s=float(a.call_timeout_s),
+        max_retries=a.max_retries,
+    )
 
 
 def _trading_config(
@@ -1471,7 +1484,7 @@ def agent_eval(args: argparse.Namespace) -> int:
         p = provider(spec.provider)
         base_url = args.base_url or a.base_url
         if p.build_with is not None:
-            return p.build_with(spec.model, base_url, a.max_output_tokens)
+            return p.build_with(spec.model, base_url, _call_options(a))
         return p.build(spec.model, base_url)
 
     rows = evaluate(

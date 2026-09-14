@@ -67,6 +67,10 @@ All notable changes to this project are recorded here. The format follows
 - The console output escapes what the terminal's encoding cannot show instead of ending
   the command.
 - `tra agent session` exits refused when the session never reached its audit verdict.
+- `[agents].call_timeout_s` now reaches the vendor client as a per-request timeout, with
+  `[agents].max_retries` (default 2) for the SDK's own backoff on 429s and 5xx; before, the
+  declared timeout was recorded and not enforced. `CallOptions` carries all three to a
+  provider's `build_with`.
 - The runtime reads a `halt` from its core and ends the session flat.
 
 ## [0.5.0] - 2026-09-13

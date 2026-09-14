@@ -56,4 +56,7 @@ register(Provider("my-vendor", "MY_VENDOR_API_KEY", None, False, build_my_comple
 `build_my_completer(model, base_url)` returns anything with `complete(system=, user=,
 schema=) -> Completion`. The completion carries the model name and the token counts, which is
 what `usage.jsonl` records; a provider that cannot count tokens should say so rather than
-return zero.
+return zero. A provider that can honour the run's call settings also passes `build_with`:
+`build_with(model, base_url, options: CallOptions)`, where `CallOptions` carries
+`max_output_tokens`, `timeout_s` (per request) and `max_retries`; the bundled adapters hand
+all three to their SDK clients.

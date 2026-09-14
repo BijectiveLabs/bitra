@@ -71,6 +71,7 @@ min_confidence = 0.6
 magnitude_bps = 20                    # the claimed edge, for the cost floor
 decide_every_bars = 5                 # ask the model every fifth closed bar; exits run on every bar
 max_output_tokens = 512               # a reasoning model that thinks for 20 s is not a bar-cadence core
+call_timeout_s = 60                   # per request, enforced by the SDK client; max_retries = 2 by default
 
 [agents.pricing.deepseek-flash]       # what the operator was quoted; never a constant
 input_per_million = 0.14

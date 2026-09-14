@@ -23,6 +23,22 @@ class UnknownProviderError(KeyError):
 
 
 @dataclass(frozen=True)
+class CallOptions:
+    """What a run declares about each call: the output cap, the timeout, how often to retry."""
+
+    max_output_tokens: int = 4096
+    timeout_s: float = 60.0
+    max_retries: int = 2
+
+    def __post_init__(self) -> None:
+        if self.max_output_tokens < 1 or self.timeout_s <= 0 or self.max_retries < 0:
+            raise ValueError("call options: a positive output cap and timeout, retries >= 0")
+
+
+DEFAULT_OPTIONS = CallOptions()
+
+
+@dataclass(frozen=True)
 class Provider:
     """What the CLI needs to know: the name, which key it reads, and how to build a completer."""
 
@@ -32,7 +48,7 @@ class Provider:
     accepts_base_url: bool
     build: Callable[[str | None, str | None], Completer]
     note: str = ""
-    build_with: Callable[[str | None, str | None, int], Completer] | None = None
+    build_with: Callable[[str | None, str | None, CallOptions], Completer] | None = None
 
 
 _registry: dict[str, Provider] = {}
@@ -46,26 +62,42 @@ def register(provider: Provider) -> None:
     _registry[name] = provider
 
 
-def _anthropic(model: str | None, base_url: str | None, max_tokens: int = 4096) -> Completer:
+def _anthropic(
+    model: str | None, base_url: str | None, options: CallOptions = DEFAULT_OPTIONS
+) -> Completer:
     from trading_research_agent.agent.providers.anthropic import DEFAULT_MODEL, AnthropicCompleter
 
     if base_url:
         raise ValueError("--base-url does not apply to the anthropic provider")
-    return AnthropicCompleter(model or DEFAULT_MODEL, max_tokens=max_tokens)
+    return AnthropicCompleter(
+        model or DEFAULT_MODEL,
+        max_tokens=options.max_output_tokens,
+        timeout_s=options.timeout_s,
+        max_retries=options.max_retries,
+    )
 
 
-def _google(model: str | None, base_url: str | None, max_tokens: int = 4096) -> Completer:
+def _google(
+    model: str | None, base_url: str | None, options: CallOptions = DEFAULT_OPTIONS
+) -> Completer:
     from trading_research_agent.agent.providers.google import GoogleCompleter
 
     if base_url:
         raise ValueError("--base-url does not apply to the google provider")
     if not model:
         raise ValueError("--model is required for the google provider")
-    return GoogleCompleter(model, max_tokens=max_tokens)
+    return GoogleCompleter(
+        model,
+        max_tokens=options.max_output_tokens,
+        timeout_s=options.timeout_s,
+        max_retries=options.max_retries,
+    )
 
 
-def _compatible(name: str) -> Callable[[str | None, str | None, int], Completer]:
-    def build(model: str | None, base_url: str | None, max_tokens: int = 4096) -> Completer:
+def _compatible(name: str) -> Callable[[str | None, str | None, CallOptions], Completer]:
+    def build(
+        model: str | None, base_url: str | None, options: CallOptions = DEFAULT_OPTIONS
+    ) -> Completer:
         from trading_research_agent.agent.providers.openai import OpenAICompleter
 
         p = PRESETS[name]
@@ -75,17 +107,23 @@ def _compatible(name: str) -> Callable[[str | None, str | None, int], Completer]
         if url is None and name != "openai":
             raise ValueError(f"the {name} provider needs --base-url: {p.note}")
         return OpenAICompleter(
-            model, base_url=url, key_env=p.key_env, structured=p.structured, max_tokens=max_tokens
+            model,
+            base_url=url,
+            key_env=p.key_env,
+            structured=p.structured,
+            max_tokens=options.max_output_tokens,
+            timeout_s=options.timeout_s,
+            max_retries=options.max_retries,
         )
 
     return build
 
 
 def _two_args(
-    build: Callable[[str | None, str | None, int], Completer],
+    build: Callable[[str | None, str | None, CallOptions], Completer],
 ) -> Callable[[str | None, str | None], Completer]:
     def plain(model: str | None, base_url: str | None) -> Completer:
-        return build(model, base_url, 4096)
+        return build(model, base_url, DEFAULT_OPTIONS)
 
     return plain
 

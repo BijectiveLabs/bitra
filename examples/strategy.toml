@@ -65,6 +65,8 @@ kill_switch = "KILL"               # touch this file to flatten and stop
 # min_confidence = 0.6
 # decide_every_bars = 5           # ask every fifth bar; exits still run on every bar
 # max_output_tokens = 512         # caps a reasoning model's thinking, most of its latency
+# call_timeout_s = 60             # per request; the SDK retries 429s and 5xx with backoff
+# max_retries = 2
 # [agents.pricing.deepseek-flash]  # what the operator was quoted; never a constant
 # input_per_million = 0.14
 # output_per_million = 0.28

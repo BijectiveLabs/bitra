@@ -245,13 +245,18 @@ def test_the_analyst_is_asked_on_a_cadence_and_the_output_cap_reaches_the_provid
     with pytest.raises(ValueError, match="decide_every_bars"):
         AgentStrategy(scripted, mechanism="m", decide_every_bars=0)
 
-    from trading_research_agent.agent.providers import provider
+    from trading_research_agent.agent.providers import CallOptions, provider
 
     p = provider("ollama")  # keyless, so the client builds without the network
     assert p.build_with is not None
-    built = p.build_with("m", None, 256)
+    built = p.build_with("m", None, CallOptions(max_output_tokens=256, timeout_s=7, max_retries=1))
     assert getattr(built, "max_tokens", None) == 256
+    # The declared timeout and retry count reach the SDK client, per request.
+    client = built._client  # type: ignore[attr-defined]
+    assert client.timeout == 7 and client.max_retries == 1
     assert getattr(p.build("m", None), "max_tokens", None) == 4096
+    with pytest.raises(ValueError, match="call options"):
+        CallOptions(timeout_s=0)
 
 
 def test_a_vendor_error_is_a_failed_call_and_repeated_failures_halt() -> None:

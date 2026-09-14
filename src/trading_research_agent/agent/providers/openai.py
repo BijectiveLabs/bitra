@@ -30,6 +30,8 @@ class OpenAICompleter:
         base_url: str | None = None,
         key_env: str | None = "OPENAI_API_KEY",
         structured: str = "json_schema",
+        timeout_s: float = 60.0,
+        max_retries: int = 2,
     ) -> None:
         if not model.strip():
             raise ValueError("an OpenAI model name is required")
@@ -49,7 +51,8 @@ class OpenAICompleter:
                 raise ProviderError(
                     "the openai SDK is not installed; pip install 'trading-research-agent[openai]'"
                 ) from exc
-            options: dict[str, Any] = {}
+            # The declared timeout is per request; the SDK retries 429s and 5xx with backoff.
+            options: dict[str, Any] = {"timeout": timeout_s, "max_retries": max_retries}
             if base_url is not None:
                 options["base_url"] = base_url
             key = os.environ.get(key_env) if key_env else None
