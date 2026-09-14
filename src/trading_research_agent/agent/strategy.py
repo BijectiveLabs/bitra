@@ -45,6 +45,7 @@ class AgentStrategy:
         mechanism: str,
         lookback_bars: int = 60,
         min_confidence: float = 0.5,
+        decide_every_bars: int = 1,
     ) -> None:
         if not mechanism.strip():
             raise ValueError("the registered mechanism is what the analyst reasons from")
@@ -52,6 +53,10 @@ class AgentStrategy:
             raise ValueError(f"lookback_bars must be at least {MIN_BARS}")
         if not 0 <= min_confidence <= 1:
             raise ValueError("min_confidence is in [0, 1]")
+        if decide_every_bars < 1:
+            raise ValueError("decide_every_bars is at least 1")
+        self.decide_every_bars = decide_every_bars
+        self._seen = 0
         self.completer = completer
         self.mechanism = mechanism.strip()
         self.lookback_bars = lookback_bars
@@ -68,7 +73,11 @@ class AgentStrategy:
         self._bars.append(bar)
         if self._held.target is not Target.FLAT:
             self._held = Held(self._held.target, self._held.entry_px, self._held.bars + 1)
+        self._seen += 1
         if self.halt is not None or bar.empty or len(self._bars) < MIN_BARS:
+            return None
+        # The exits run on every bar in the runtime; the model is asked on a cadence.
+        if (self._seen - MIN_BARS) % self.decide_every_bars != 0:
             return None
         try:
             done = self.completer.complete(system=prompt(ROLE), user=self._user(), schema=SCHEMA)

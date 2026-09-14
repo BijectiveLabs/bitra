@@ -304,6 +304,7 @@ class _Session:
             mechanism=a.mechanism,
             lookback_bars=a.lookback_bars,
             min_confidence=a.min_confidence,
+            decide_every_bars=a.decide_every_bars,
         )
         out = self.out / instrument
         config = TradingConfig(

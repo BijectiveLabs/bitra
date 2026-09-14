@@ -161,6 +161,8 @@ mechanism = "positions forced to close into settlement"
 token_budget = 200000
 max_calls_per_hour = 60
 min_interval_s = 60
+decide_every_bars = 5
+max_output_tokens = 512
 
 [agents.pricing.local-model]
 input_per_million = 0
@@ -181,6 +183,7 @@ def test_the_config_declares_the_agent_core_and_its_budget(tmp_path: Path) -> No
     cfg = load_strategy_config(agent_config(tmp_path, '[strategy]\nagent = "technical_analyst"\n'))
     assert cfg.agents is not None and cfg.agents.provider == "ollama"
     assert cfg.agents.token_budget == 200000
+    assert cfg.agents.decide_every_bars == 5 and cfg.agents.max_output_tokens == 512
     assert cfg.agents.pricing["local-model"] == (Decimal(0), Decimal(0))
     assert cfg.strategy.name == "agent-pending"
     with pytest.raises(ConfigError, match="only technical_analyst decides"):
@@ -228,3 +231,24 @@ def test_backtest_with_an_agent_core_refuses_before_any_call_when_the_key_is_mis
         ]
     )
     assert code == 1 and "GROQ_API_KEY is not set" in capsys.readouterr().err
+
+
+def test_the_analyst_is_asked_on_a_cadence_and_the_output_cap_reaches_the_provider() -> None:
+    scripted = FakeCompleter([answer("flat")] * 10)
+    core = AgentStrategy(
+        scripted, mechanism="m", lookback_bars=5, decide_every_bars=3, min_confidence=0.0
+    )
+    for i in range(12):
+        core.on_bar(bar(i))
+    # Bars 0 and 1 are below the minimum; from bar 2 on, every third bar asks the model.
+    assert core.calls == 4 and len(scripted.calls) == 4
+    with pytest.raises(ValueError, match="decide_every_bars"):
+        AgentStrategy(scripted, mechanism="m", decide_every_bars=0)
+
+    from trading_research_agent.agent.providers import provider
+
+    p = provider("ollama")  # keyless, so the client builds without the network
+    assert p.build_with is not None
+    built = p.build_with("m", None, 256)
+    assert getattr(built, "max_tokens", None) == 256
+    assert getattr(p.build("m", None), "max_tokens", None) == 4096

@@ -32,6 +32,7 @@ class Provider:
     accepts_base_url: bool
     build: Callable[[str | None, str | None], Completer]
     note: str = ""
+    build_with: Callable[[str | None, str | None, int], Completer] | None = None
 
 
 _registry: dict[str, Provider] = {}
@@ -45,26 +46,26 @@ def register(provider: Provider) -> None:
     _registry[name] = provider
 
 
-def _anthropic(model: str | None, base_url: str | None) -> Completer:
+def _anthropic(model: str | None, base_url: str | None, max_tokens: int = 4096) -> Completer:
     from trading_research_agent.agent.providers.anthropic import DEFAULT_MODEL, AnthropicCompleter
 
     if base_url:
         raise ValueError("--base-url does not apply to the anthropic provider")
-    return AnthropicCompleter(model or DEFAULT_MODEL)
+    return AnthropicCompleter(model or DEFAULT_MODEL, max_tokens=max_tokens)
 
 
-def _google(model: str | None, base_url: str | None) -> Completer:
+def _google(model: str | None, base_url: str | None, max_tokens: int = 4096) -> Completer:
     from trading_research_agent.agent.providers.google import GoogleCompleter
 
     if base_url:
         raise ValueError("--base-url does not apply to the google provider")
     if not model:
         raise ValueError("--model is required for the google provider")
-    return GoogleCompleter(model)
+    return GoogleCompleter(model, max_tokens=max_tokens)
 
 
-def _compatible(name: str) -> Callable[[str | None, str | None], Completer]:
-    def build(model: str | None, base_url: str | None) -> Completer:
+def _compatible(name: str) -> Callable[[str | None, str | None, int], Completer]:
+    def build(model: str | None, base_url: str | None, max_tokens: int = 4096) -> Completer:
         from trading_research_agent.agent.providers.openai import OpenAICompleter
 
         p = PRESETS[name]
@@ -73,18 +74,37 @@ def _compatible(name: str) -> Callable[[str | None, str | None], Completer]:
         url = base_url or p.base_url
         if url is None and name != "openai":
             raise ValueError(f"the {name} provider needs --base-url: {p.note}")
-        return OpenAICompleter(model, base_url=url, key_env=p.key_env, structured=p.structured)
+        return OpenAICompleter(
+            model, base_url=url, key_env=p.key_env, structured=p.structured, max_tokens=max_tokens
+        )
 
     return build
+
+
+def _two_args(
+    build: Callable[[str | None, str | None, int], Completer],
+) -> Callable[[str | None, str | None], Completer]:
+    def plain(model: str | None, base_url: str | None) -> Completer:
+        return build(model, base_url, 4096)
+
+    return plain
 
 
 def _bundled() -> None:
     from trading_research_agent.agent.providers.anthropic import DEFAULT_MODEL
 
-    register(Provider("anthropic", "ANTHROPIC_API_KEY", DEFAULT_MODEL, False, _anthropic))
-    register(Provider("google", "GEMINI_API_KEY", None, False, _google, "or GOOGLE_API_KEY"))
+    register(
+        Provider("anthropic", "ANTHROPIC_API_KEY", DEFAULT_MODEL, False, _anthropic, "", _anthropic)
+    )
+    register(
+        Provider("google", "GEMINI_API_KEY", None, False, _google, "or GOOGLE_API_KEY", _google)
+    )
     for name, p in PRESETS.items():
-        register(Provider(name, p.key_env, None, True, _compatible(name), p.note))
+        register(
+            Provider(
+                name, p.key_env, None, True, _two_args(_compatible(name)), p.note, _compatible(name)
+            )
+        )
 
 
 def _discover() -> None:

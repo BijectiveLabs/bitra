@@ -55,6 +55,8 @@ class AgentSettings:
     lookback_bars: int
     min_confidence: float
     pricing: dict[str, tuple[Decimal, Decimal]]
+    decide_every_bars: int = 1
+    max_output_tokens: int = 1024
     magnitude_bps: Decimal | None = None
     screen: dict[str, float] = field(default_factory=dict)
 
@@ -206,6 +208,8 @@ def _agents(raw: dict[str, Any], strategy_raw: dict[str, Any]) -> AgentSettings 
         lookback_bars=int(table.get("lookback_bars", 60)),
         min_confidence=float(confidence),
         pricing=pricing,
+        decide_every_bars=int(table.get("decide_every_bars", 1)),
+        max_output_tokens=int(table.get("max_output_tokens", 1024)),
         magnitude_bps=_dec(table, "magnitude_bps") if "magnitude_bps" in table else None,
         screen=_screen(table.get("screen")),
     )

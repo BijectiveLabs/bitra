@@ -669,7 +669,7 @@ def _agent_core(cfg: Any, out_dir: Path) -> Any:
     )
 
     a = cfg.agents
-    completer = provider(a.provider).build(a.model, a.base_url)
+    completer = _build_completer(a)
     metered = MeteredCompleter(
         completer,
         role=a.role,
@@ -688,7 +688,15 @@ def _agent_core(cfg: Any, out_dir: Path) -> Any:
         mechanism=a.mechanism,
         lookback_bars=a.lookback_bars,
         min_confidence=a.min_confidence,
+        decide_every_bars=a.decide_every_bars,
     )
+
+
+def _build_completer(a: Any) -> Completer:
+    p = provider(a.provider)
+    if p.build_with is not None:
+        return p.build_with(a.model, a.base_url, a.max_output_tokens)
+    return p.build(a.model, a.base_url)
 
 
 def _trading_config(
@@ -1148,7 +1156,7 @@ def agent_session(args: argparse.Namespace) -> int:
         call_timeout_s=a.call_timeout_s,
     )
     pricing = {m: Pricing(i, o) for m, (i, o) in a.pricing.items()}
-    inner = provider(a.provider).build(a.model, a.base_url)
+    inner = _build_completer(a)
     metered: dict[str, MeteredCompleter] = {}
 
     def completer_for(role: str) -> MeteredCompleter:
