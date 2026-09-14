@@ -53,6 +53,8 @@ All notable changes to this project are recorded here. The format follows
   `observation.toml` (an event on closed bars by feature or calendar, the response measured
   after it, counts per subperiod, the operator's minimums), the `observe_events` read tool
   (ten on the surface and the MCP server), and the example written by `tra init`.
+- `tra check` reads `observation.toml` when present; a session hands the screener layer 1
+  per candidate (`--observation`, or the file beside the config).
 
 ### Changed
 

@@ -275,6 +275,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     session_cmd.add_argument("--onchain", type=Path, help="a series.toml of on-chain series")
     session_cmd.add_argument("--events", type=Path, help="a calendar (JSON or CSV: when, what)")
+    session_cmd.add_argument(
+        "--observation",
+        type=Path,
+        default=None,
+        help="layer 1 per candidate; default: observation.toml beside the config, if present",
+    )
     session_cmd.add_argument("--env-file", type=Path)
     session_cmd.add_argument(
         "--resume", action="store_true", help="reuse the answers and runs already in --out"
@@ -868,6 +874,13 @@ def _report(args: argparse.Namespace, report: Any) -> int:
     return CLEARED if report.stopped_by is None else REFUSED
 
 
+def _observation_beside(config: Path, explicit: Path | None) -> Path | None:
+    if explicit is not None:
+        return explicit
+    beside = config.resolve().parent / "observation.toml"
+    return beside if beside.is_file() else None
+
+
 def _data_dir(config: Path) -> Path:
     return config.resolve().parent / "data"
 
@@ -1091,6 +1104,18 @@ def check_project(args: argparse.Namespace) -> int:
             bad.append(
                 "funding: none; a run that spans a settlement will refuse (tra data get fetches it)"
             )
+        observation = args.config.resolve().parent / "observation.toml"
+        if observation.is_file():
+            from trading_research_agent.chain.observation import ObservationError, load_observation
+
+            try:
+                declared = load_observation(observation)
+            except ObservationError as exc:
+                bad.append(f"observation.toml: {exc}")
+            else:
+                good.append(
+                    f"observation.toml: {declared.subject!r}; `tra chain observe` before any memo"
+                )
         if cfg.agents is not None:
             try:
                 p = provider(cfg.agents.provider)
@@ -1283,6 +1308,7 @@ def agent_session(args: argparse.Namespace) -> int:
             onchain_series=args.onchain,
             events=args.events,
             screen=ScreenSettings(**a.screen) if a.screen else ScreenSettings(),
+            observation=_observation_beside(args.config, args.observation),
             resume=bool(args.resume),
         )
     )

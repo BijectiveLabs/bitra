@@ -116,6 +116,15 @@ def test_four_commands_from_nothing_to_a_backtest(
     assert main(["check"]) == 1  # funding is the one thing still flagged
     out = capsys.readouterr().out
     assert "ok    dataset:" in out and "todo  funding" in out
+    assert "ok    observation.toml: 'a burst of prints, then the close reverts'" in out
+
+    # Layer 1 runs flagless inside the project, over the dataset just fetched.
+    assert main(["chain", "observe", "--json"]) == 1
+    observed = json.loads(capsys.readouterr().out)
+    assert observed["layer"] == 1 and observed["bars"] > 0 and observed["recurrence"]
+    (project / "observation.toml").write_text("[observation]", "utf-8")
+    assert main(["check"]) == 1
+    assert "todo  observation.toml:" in capsys.readouterr().out
 
     assert main(["backtest", "--json"]) == 0
     payload = json.loads(capsys.readouterr().out)

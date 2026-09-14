@@ -39,7 +39,7 @@ from trading_research_agent.agent.risk_manager.tools import risk_brief
 from trading_research_agent.agent.roles import RoleError, prompt
 from trading_research_agent.agent.strategy import MAX_FAILURES_IN_A_ROW, AgentStrategy
 from trading_research_agent.agent.usage import BudgetSpentError, UsageLedger
-from trading_research_agent.chain import cost_floor
+from trading_research_agent.chain import cost_floor, load_observation, observe
 from trading_research_agent.data.parquet import read_trades
 from trading_research_agent.data.series import SeriesError, load_all, read_events
 from trading_research_agent.envelope.model import Envelope
@@ -91,10 +91,11 @@ class Figures:
     floor_outcome: str
     floor_margin_bps: str
     screen: ScreenFigures | None = None
+    observation: dict[str, Any] | None = None
 
     def record(self) -> dict[str, Any]:
         base = {} if self.screen is None else self.screen.record()
-        return {
+        out = {
             **base,
             "instrument": self.instrument,
             "rows": self.rows,
@@ -104,6 +105,9 @@ class Figures:
             "cost_floor": self.floor_outcome,
             "floor_margin_bps": self.floor_margin_bps,
         }
+        if self.observation is not None:
+            out["observation"] = self.observation
+        return out
 
 
 @dataclass(frozen=True)
@@ -129,6 +133,7 @@ class SessionConfig:
     onchain_series: Path | None = None
     events: Path | None = None
     screen: ScreenSettings = field(default_factory=ScreenSettings)
+    observation: Path | None = None
     resume: bool = False
     auditor_steps: int = 6
     clock: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
@@ -167,6 +172,7 @@ def figures_for(
     magnitude_bps: Decimal,
     *,
     screen: ScreenSettings,
+    observation: Path | None = None,
 ) -> Figures:
     figures = screen_figures(
         instrument,
@@ -177,6 +183,20 @@ def figures_for(
     if figures.rows == 0:
         raise SessionError(f"{instrument}: the dataset has no trades")
     check = cost_floor(envelope, magnitude_bps, venue=venue)
+    observed = None
+    if observation is not None:
+        # Layer 1 on the same prints: the screener sees whether the declared event recurs
+        # here, with its counts and response, before it labels a regime.
+        report = observe(load_observation(observation), read_trades(path), dataset=str(path))
+        observed = {
+            "subject": report.observation.subject,
+            "recurrence": report.recurrence.value,
+            "events": report.events,
+            "measured": report.measured,
+            "events_per_subperiod": list(report.events_per_subperiod),
+            "response_bps": report.response_bps,
+            "horizon_bars": report.observation.horizon_bars,
+        }
     return Figures(
         instrument=instrument,
         rows=figures.rows,
@@ -188,6 +208,7 @@ def figures_for(
         floor_outcome=check.outcome.value,
         floor_margin_bps=str(check.margin_bps),
         screen=figures,
+        observation=observed,
     )
 
 
@@ -619,7 +640,15 @@ def run_session(cfg: SessionConfig) -> SessionResult:
     s = _Session(cfg)
     venue = cfg.strategy.run.venue_key.partition("/")[0]
     figures = [
-        figures_for(name, path, cfg.envelope, venue, cfg.magnitude_bps, screen=cfg.screen)
+        figures_for(
+            name,
+            path,
+            cfg.envelope,
+            venue,
+            cfg.magnitude_bps,
+            screen=cfg.screen,
+            observation=cfg.observation,
+        )
         for name, path in cfg.datasets.items()
     ]
     (s.out / "figures.json").write_text(

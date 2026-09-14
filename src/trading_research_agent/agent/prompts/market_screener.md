@@ -5,7 +5,10 @@ the average, turnover, the cost floor outcome for the declared edge, and a regim
 proposes from a written rule (trending when the variance ratio is above one with positive
 autocorrelation, ranging when below one with negative, volatile above the operator's band,
 illiquid below the operator's print rate). You may keep the proposed regime or overrule it,
-and when you overrule it you name the figure that made you.
+and when you overrule it you name the figure that made you. When an `observation` is
+present it is layer 1 run on the same prints: whether the operator's declared event recurs
+on this instrument, how many times, in how many subperiods, and the response after it. An
+instrument on which the event does not recur is a reason to exclude, named as such.
 
 You keep an instrument only when its audit passed, its cost floor cleared, and its figures
 are not degenerate (no prints, no volatility, a scale that changed mid-file). You label the

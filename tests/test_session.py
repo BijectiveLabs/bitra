@@ -222,6 +222,46 @@ def test_a_resumed_session_reuses_recorded_answers_and_finished_runs(
     assert json.loads(run_json.read_text("utf-8"))["stopped_by"] is None
 
 
+def test_the_screener_sees_layer_one_when_an_observation_is_declared(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    (tmp_path / "observation.toml").write_text(
+        """
+[observation]
+subject = "any print at all"
+interval_s = 60
+horizon_bars = 1
+min_events = 3
+subperiods = 2
+min_subperiods_with_events = 2
+
+[event]
+feature = "abs_return_bps"
+window_bars = 1
+comparison = ">="
+threshold = 0
+""",
+        "utf-8",
+    )
+    screener = {"kept": [], "excluded": [{"instrument": "AAAUSDT", "reason": "does not recur"}]}
+    result, _, fake = scripted_session(
+        tmp_path,
+        envelope,
+        [screener, {"decision": "continue", "limits": {}, "reason": "r", "triggers": []}],
+        observation=tmp_path / "observation.toml",
+    )
+    candidates = {c["instrument"]: c for c in json.loads(fake.calls[0].user)["candidates"]}
+    observed = candidates["AAAUSDT"]["observation"]
+    assert observed["subject"] == "any print at all" and observed["recurrence"] == "recurs"
+    assert observed["events"] == 7 and observed["events_per_subperiod"] == [3, 4]
+    assert (
+        observed["response_bps"]["n"] == 6 and observed["horizon_bars"] == 1
+    )  # the last has no bar after
+    assert "observation" in candidates["BBBUSDT"] and result.kept == []
+    figures = json.loads((tmp_path / "out" / "figures.json").read_text("utf-8"))
+    assert all("observation" in f for f in figures)
+
+
 def test_the_screener_cannot_invent_and_unmentioned_candidates_are_excluded(
     tmp_path: Path, envelope: Envelope
 ) -> None:

@@ -40,7 +40,10 @@ figures (code) -> screener -> [macro] -> [onchain] -> one replay per kept instru
 ```
 
 Code measures each dataset first (rows, print rate, realised volatility, turnover, the cost
-floor for the claimed magnitude) and the screener sees only those figures. It keeps or
+floor for the claimed magnitude, and, when `observation.toml` sits beside the config or
+`--observation` names one, layer 1 on the same prints: whether the declared event recurs on
+that instrument, its counts per subperiod and its response) and the screener sees only those
+figures. It keeps or
 excludes; it cannot add an instrument it was not given, and a candidate it does not mention is
 excluded, not silently kept. Each kept instrument then runs through the same replay loop as
 `tra backtest`, with the analyst deciding on each closed bar and the controls admitting or
