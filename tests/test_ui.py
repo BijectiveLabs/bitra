@@ -27,6 +27,12 @@ def recorded(monkeypatch: pytest.MonkeyPatch) -> Console:
     return console
 
 
+def test_the_wordmark_fits_or_the_short_banner_is_used() -> None:
+    wide = ui.banner(140)
+    assert len(wide.splitlines()) == 6 and "/____/" in wide and wide.isascii()
+    assert ui.banner(80) == ui.BANNER and ui.BANNER.isascii()
+
+
 def test_the_console_is_off_for_scripts_and_json(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("TRA_PLAIN", raising=False)
     monkeypatch.setattr("sys.stdout", io.StringIO())
