@@ -1,6 +1,7 @@
 # A trading-research-agent project
 
-    tra check                                  # what is ready, what is missing
+    tra                                        # what is ready, and the next command
+    tra check                                  # the same, as a list
     tra data get BTCUSDT 2025-01-01            # fetch, audit, Parquet and funding into data/
     tra chain observe                          # layer 1: does the event in observation.toml recur?
     tra backtest                               # the core in strategy.toml over the newest dataset

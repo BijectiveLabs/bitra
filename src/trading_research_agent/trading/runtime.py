@@ -14,6 +14,7 @@ reads. That is the whole loop between the two agents.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -49,6 +50,8 @@ class TradingConfig:
     equity: Decimal | None = None
     label: str = "replay"
     canary: CanaryGuard | None = None
+    # Told after every closed bar; it reads the report and decides nothing.
+    observer: Callable[[RunReport, Bar], None] | None = None
 
     def __post_init__(self) -> None:
         if self.bar_interval_ns <= 0:
@@ -193,6 +196,8 @@ class _Loop:
             self.report.stopped_by = str(halt)
             if self.position is not None and not self.pending_close:
                 self.request(bar.end_ns, Target.FLAT, str(halt))
+        if self.c.observer is not None:
+            self.c.observer(self.report, bar)
 
     def evaluate_exits(self, position: Position, bar: Bar) -> None:
         position.bars_held += 1

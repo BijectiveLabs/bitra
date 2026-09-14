@@ -147,6 +147,11 @@ explicit `--env-file`; nothing is read silently.
 Venues, feeds and live adapters register through entry points. The MCP server behind the
 `[mcp]` extra exposes the gates as read-only tools to any host.
 
+At a terminal, `tra` alone shows what is ready and the one command to type next; a run shows
+a live panel of bars, intents, fills and net basis points, a session shows each role as it
+runs, and every report is a table. The figures are the same ones the plain output carries:
+`--json` is untouched, and `--plain` (or `TRA_PLAIN=1`, or a pipe) gives the text form.
+
 ## What the package does not contain
 
 - **A strategy.** The mechanism ships (the protocol, the exits, the walk-forward harness); the
@@ -172,7 +177,7 @@ Venues, feeds and live adapters register through entry points. The MCP server be
 | 0.4 | The trading agent: layer 6 exits, walk-forward harness, replay and shadow on one code path, controls, ladder, a live public feed (`[shadow]`) |
 | 0.4.1 | Adoption rules: no strategy in the core, venues as plugins with entry points, any data through a column map |
 | 0.5 | The canary tier: a live venue plugin behind a security review that runs as tests, hard caps, the ladder gate; funding as charged; MCP server exposing the read gates to any agent host; `tra init`, `backtest`, `paper`, `live` |
-| 0.6 | Agents with full access through the gates: seven roles in a fixed session, the technical analyst as a metered decision core, providers as plugins with verified presets, `usage.jsonl` |
+| 0.6 | Agents with full access through the gates: seven roles in a fixed session, the technical analyst as a metered decision core, providers as plugins with verified presets, `usage.jsonl`; the bounded tool loop, resume, eval and trace; layer 1 of the chain; the console face |
 | 0.7 | Production tier behind an operational runbook; private execution stream; maker channels; a second live venue |
 
 Crypto perpetuals first. The core vocabulary is market-agnostic (`venue`, `instrument`,

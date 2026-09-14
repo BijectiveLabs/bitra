@@ -14,7 +14,7 @@ import re
 import sys
 import threading
 import tomllib
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 from importlib.resources import files
@@ -127,7 +127,10 @@ def parse_month(text: str) -> tuple[int, int]:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="tra", description="the gates, from a shell")
     parser.add_argument("--version", action="version", version=f"tra {__version__}")
-    top = parser.add_subparsers(dest="group", required=True)
+    parser.add_argument(
+        "--plain", action="store_true", help="plain text even at a terminal (or TRA_PLAIN=1)"
+    )
+    top = parser.add_subparsers(dest="group", required=False)
 
     data = top.add_parser("data", help="fetch and audit trade data").add_subparsers(
         dest="command", required=True
@@ -415,7 +418,9 @@ def main(argv: list[str] | None = None) -> int:
             stream.reconfigure(errors="backslashreplace")
     parser = build_parser()
     args = parser.parse_args(argv)
-    handler = HANDLERS[(args.group, args.command)]
+    global _PLAIN
+    _PLAIN = bool(args.plain)
+    handler = cockpit if args.group is None else HANDLERS[(args.group, args.command)]
     try:
         return handler(args)
     except BrokenPipeError:
@@ -459,11 +464,51 @@ def main(argv: list[str] | None = None) -> int:
         return REFUSED
 
 
-def emit(payload: dict[str, Any], as_json: bool, lines: list[str]) -> None:
+_PLAIN = False
+
+
+def _watching(as_json: bool = False) -> bool:
+    """A person at a terminal, who gets the console view instead of the lines."""
+    from trading_research_agent.cli import ui
+
+    return ui.enabled(_PLAIN, as_json)
+
+
+def emit(
+    payload: dict[str, Any],
+    as_json: bool,
+    lines: list[str],
+    render: Callable[[], Any] | None = None,
+) -> None:
     if as_json:
         print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+    elif render is not None and _watching():
+        from trading_research_agent.cli import ui
+
+        ui.show(render())
     else:
         print("\n".join(lines))
+
+
+def cockpit(args: argparse.Namespace) -> int:
+    """`tra` alone: the banner, what is ready, and the one command to type next."""
+    from trading_research_agent.cli import ui
+
+    defaults = argparse.Namespace(
+        config=Path("strategy.toml"),
+        envelope=Path("envelope.toml"),
+        ladder=Path("ladder.json"),
+        env_file=None,
+        json=False,
+    )
+    good, bad, next_command = _check(defaults)
+    if not _watching():
+        print(f"tra {__version__}")
+        print("\n".join([*(f"ok    {g}" for g in good), *(f"todo  {b}" for b in bad)]))
+        print(f"next: {next_command}")
+        return CLEARED
+    ui.cockpit(__version__, good, bad, next_command)
+    return CLEARED
 
 
 def data_fetch(args: argparse.Namespace) -> int:
@@ -645,7 +690,7 @@ def chain_observe(args: argparse.Namespace) -> int:
         write_report(report, args.out)
         lines.append(f"observation.json in {args.out.parent}")
     payload = {**report.record(), "recorded": recorded}
-    emit(payload, args.json, lines)
+    emit(payload, args.json, lines, lambda: _ui().observe_view(payload))
     return CLEARED if report.recurs else REFUSED
 
 
@@ -812,6 +857,7 @@ def _trading_config(
     *,
     venue: Venue | None = None,
     canary: CanaryGuard | None = None,
+    observer: Any = None,
 ) -> TradingConfig:
     cfg = load_strategy_config(args.config)
     strategy = cfg.strategy if cfg.agents is None else _agent_core(cfg, args.out)
@@ -841,6 +887,7 @@ def _trading_config(
         equity=cfg.run.equity,
         label=label,
         canary=canary,
+        observer=observer,
     )
 
 
@@ -870,8 +917,22 @@ def _report(args: argparse.Namespace, report: Any) -> int:
         "open_position": report.open_position,
         "out": str(args.out),
     }
-    emit(payload, args.json, lines)
+    emit(payload, args.json, lines, lambda: _ui().run_panel(report, str(args.out)))
     return CLEARED if report.stopped_by is None else REFUSED
+
+
+def _ui() -> Any:
+    from trading_research_agent.cli import ui
+
+    return ui
+
+
+def _run_watched(args: argparse.Namespace, build: Callable[[Any], TradingConfig]) -> Any:
+    """Run a trading config; when a person is watching, a live panel follows every bar."""
+    if not _watching(args.json):
+        return run_trading(build(None))
+    with _ui().RunView(str(args.out)) as view:
+        return run_trading(build(view.observe))
 
 
 def _observation_beside(config: Path, explicit: Path | None) -> Path | None:
@@ -913,7 +974,9 @@ def trade_replay(args: argparse.Namespace) -> int:
                 f"run `tra data get {cfg.run.instrument} YYYY-MM-DD` or pass --parquet"
             )
     feed = RecordedFeed.from_parquet(parquet, instrument=cfg.run.instrument)
-    return _report(args, run_trading(_trading_config(args, feed, "replay")))
+    return _report(
+        args, _run_watched(args, lambda o: _trading_config(args, feed, "replay", observer=o))
+    )
 
 
 def trade_shadow(args: argparse.Namespace) -> int:
@@ -921,7 +984,9 @@ def trade_shadow(args: argparse.Namespace) -> int:
     _run_dir(args, "paper")
     # The channel key is venue/channel; the venue half names the feed unless told otherwise.
     feed = _live_feed(args, cfg, args.feed or cfg.run.venue_key.partition("/")[0])
-    return _report(args, run_trading(_trading_config(args, feed, "shadow")))
+    return _report(
+        args, _run_watched(args, lambda o: _trading_config(args, feed, "shadow", observer=o))
+    )
 
 
 def _live_feed(args: argparse.Namespace, cfg: Any, name: str) -> Any:
@@ -984,14 +1049,17 @@ def trade_live(args: argparse.Namespace) -> int:
     venue = live_venue(cfg.live.venue)(settings, _environment(args.env_file))
     checks = venue.preflight()
     feed = _live_feed(args, cfg, args.feed or cfg.live.venue)
-    config = _trading_config(args, feed, "live-canary", venue=venue, canary=CanaryGuard(cfg.canary))
+    guard = CanaryGuard(cfg.canary)
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "preflight.json").write_text(
         json.dumps({"run_id": run_id, "venue": venue.label, **checks}, indent=2, sort_keys=True)
         + "\n",
         encoding="utf-8",
     )
-    report = run_trading(config)
+    report = _run_watched(
+        args,
+        lambda o: _trading_config(args, feed, "live-canary", venue=venue, canary=guard, observer=o),
+    )
     events = getattr(venue, "events", [])
     if events:
         (args.out / "venue_events.txt").write_text("\n".join(events) + "\n", encoding="utf-8")
@@ -1070,6 +1138,16 @@ def _agent_config(text: str, provider_name: str, model: str) -> str:
 
 def check_project(args: argparse.Namespace) -> int:
     """What a first run needs, checked in the order it would fail, said in plain words."""
+    good, bad, next_command = _check(args)
+    lines = [*(f"ok    {g}" for g in good), *(f"todo  {b}" for b in bad)]
+    lines.append(
+        f"ready to run `{next_command}`" if not bad else f"{len(bad)} thing(s) to fix first"
+    )
+    emit({"ok": good, "todo": bad}, args.json, lines, lambda: _ui().check_table(good, bad))
+    return CLEARED if not bad else REFUSED
+
+
+def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
     good: list[str] = []
     bad: list[str] = []
     env = _environment(args.env_file)
@@ -1135,10 +1213,14 @@ def check_project(args: argparse.Namespace) -> int:
             missing = [k for k in live_venue(cfg.live.venue).env_keys if not env.get(k)]
             if missing:
                 bad.append(f"missing {', '.join(missing)} for the live venue")
-    lines = [*(f"ok    {g}" for g in good), *(f"todo  {b}" for b in bad)]
-    lines.append("ready to run `tra backtest`" if not bad else f"{len(bad)} thing(s) to fix first")
-    emit({"ok": good, "todo": bad}, args.json, lines)
-    return CLEARED if not bad else REFUSED
+    next_command = "tra backtest"
+    if not args.config.is_file():
+        next_command = "tra init my-run"
+    elif cfg is not None and cfg.run.instrument not in _datasets(args.config):
+        next_command = f"tra data get {cfg.run.instrument} YYYY-MM-DD"
+    elif cfg is not None and cfg.agents is not None:
+        next_command = "tra agent session --env-file .env"
+    return good, bad, next_command
 
 
 def data_get(args: argparse.Namespace) -> int:
@@ -1293,25 +1375,33 @@ def agent_session(args: argparse.Namespace) -> int:
             )
         return metered[role]
 
-    result = run_session(
-        SessionConfig(
-            strategy=cfg,
-            envelope=load_envelope(args.envelope),
-            datasets=datasets,
-            out_dir=args.out,
-            completer_for=completer_for,
-            usage=usage,
-            magnitude_bps=magnitude,
-            ladder_path=args.ladder,
-            kill_file=cfg.kill_switch,
-            macro_series=args.macro,
-            onchain_series=args.onchain,
-            events=args.events,
-            screen=ScreenSettings(**a.screen) if a.screen else ScreenSettings(),
-            observation=_observation_beside(args.config, args.observation),
-            resume=bool(args.resume),
+    def session(on_step: Any) -> Any:
+        return run_session(
+            SessionConfig(
+                strategy=cfg,
+                envelope=load_envelope(args.envelope),
+                datasets=datasets,
+                out_dir=args.out,
+                completer_for=completer_for,
+                usage=usage,
+                magnitude_bps=magnitude,
+                ladder_path=args.ladder,
+                kill_file=cfg.kill_switch,
+                macro_series=args.macro,
+                onchain_series=args.onchain,
+                events=args.events,
+                screen=ScreenSettings(**a.screen) if a.screen else ScreenSettings(),
+                observation=_observation_beside(args.config, args.observation),
+                resume=bool(args.resume),
+                on_step=on_step,
+            )
         )
-    )
+
+    if _watching(args.json):
+        with _ui().SessionView(usage) as view:
+            result = session(view.on_step)
+    else:
+        result = session(None)
     lines = [
         f"session {result.session_id}: {len(result.kept)} kept, {len(result.excluded)} excluded, "
         f"{sum(r.round_trips for r in result.reports.values())} round trips, "
@@ -1342,7 +1432,7 @@ def agent_session(args: argparse.Namespace) -> int:
         "stopped_by": result.stopped_by,
         "out": str(args.out),
     }
-    emit(payload, args.json, lines)
+    emit(payload, args.json, lines, lambda: _ui().session_report(result, usage, str(args.out)))
     return CLEARED if result.stopped_by is None else REFUSED
 
 
@@ -1406,7 +1496,7 @@ def agent_eval(args: argparse.Namespace) -> int:
         "rows": [r.record() for r in rows],
         "out": str(args.out),
     }
-    emit(payload, args.json, lines)
+    emit(payload, args.json, lines, lambda: _ui().eval_table(rows, instrument, str(dataset)))
     return CLEARED
 
 
@@ -1415,7 +1505,7 @@ def agent_trace(args: argparse.Namespace) -> int:
     from trading_research_agent.agent.trace import trace
 
     t = trace(args.path)
-    emit(t.record(), args.json, trace_lines(t))
+    emit(t.record(), args.json, trace_lines(t), lambda: _ui().trace_view(t))
     return CLEARED
 
 
@@ -1445,7 +1535,12 @@ def ladder_show(args: argparse.Namespace) -> int:
     for h in ladder.history:
         detail = h.get("evidence") or h.get("reason")
         lines.append(f"  {h['at']} {h['kind']} {h['from']} -> {h['to']}: {detail}")
-    emit({"tier": ladder.tier.name, "history": list(ladder.history)}, args.json, lines)
+    emit(
+        {"tier": ladder.tier.name, "history": list(ladder.history)},
+        args.json,
+        lines,
+        lambda: _ui().ladder_table(f"{ladder.tier.value} {ladder.tier.name}", ladder.history),
+    )
     return CLEARED
 
 
@@ -1481,7 +1576,12 @@ def ledger_show(args: argparse.Namespace) -> int:
         "counts": {v.value: n for v, n in counts.items()},
         "rows": [ledger_to_record(e) for e in rows],
     }
-    emit(payload, args.json, lines)
+    emit(
+        payload,
+        args.json,
+        lines,
+        lambda: _ui().ledger_table(payload["rows"], payload["counts"]),
+    )
     return CLEARED
 
 

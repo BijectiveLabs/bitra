@@ -136,6 +136,8 @@ class SessionConfig:
     observation: Path | None = None
     resume: bool = False
     auditor_steps: int = 6
+    # Told at each step: (step, status, summary). It observes; it decides nothing.
+    on_step: Callable[[str, str, str], None] | None = None
     clock: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
 
     def __post_init__(self) -> None:
@@ -639,6 +641,12 @@ def _report_from_disk(out: Path, instrument: str) -> RunReport:
 def run_session(cfg: SessionConfig) -> SessionResult:
     s = _Session(cfg)
     venue = cfg.strategy.run.venue_key.partition("/")[0]
+
+    def tell(step: str, status: str, summary: str = "") -> None:
+        if cfg.on_step is not None:
+            cfg.on_step(step, status, summary)
+
+    tell("figures", "running", f"{len(cfg.datasets)} datasets")
     figures = [
         figures_for(
             name,
@@ -654,10 +662,19 @@ def run_session(cfg: SessionConfig) -> SessionResult:
     (s.out / "figures.json").write_text(
         json.dumps([f.record() for f in figures], indent=2, sort_keys=True) + "\n", "utf-8"
     )
+    tell("figures", "done", f"{len(figures)} measured")
+    tell("market_screener", "running")
     kept, excluded = s.screen(figures)
+    tell("market_screener", "done", f"{len(kept)} kept, {len(excluded)} excluded")
     reference = next(iter(cfg.datasets.values()))
+    tell("macro_analyst", "running" if cfg.macro_series else "skipped")
     macro = s.context(macro_analyst.ROLE, cfg.macro_series, reference)
+    if cfg.macro_series:
+        tell("macro_analyst", "done", "" if macro is None else str(macro.regime))
+    tell("onchain_analyst", "running" if cfg.onchain_series else "skipped")
     onchain = s.context(onchain_analyst.ROLE, cfg.onchain_series, reference)
+    if cfg.onchain_series:
+        tell("onchain_analyst", "done", "" if onchain is None else str(onchain.signal))
     limits = cfg.strategy.limits
     ladder = Ladder(cfg.ladder_path)
     reports: dict[str, RunReport] = {}
@@ -665,10 +682,20 @@ def run_session(cfg: SessionConfig) -> SessionResult:
         if s.stopped_by is not None:
             break
         name = str(k["instrument"])
+        tell(f"run:{name}", "running")
         reports[name] = s.analyse(name, Path(cfg.datasets[name]), limits)
+        r = reports[name]
+        tell(f"run:{name}", "done", f"{r.round_trips} round trips, net {r.net_bps_total} bps")
+    tell("risk_manager", "running" if reports else "skipped")
     risk, limits_after = s.risk(reports, limits, ladder) if reports else (None, limits)
+    if reports:
+        tell("risk_manager", "done", "refused" if risk is None else str(risk.decision))
+    tell("executor", "running")
     allocation = s.allocate(kept, limits_after)
+    tell("executor", "done", f"{len(allocation)} allocations")
+    tell("auditor", "running")
     audit = s.audit(reports, risk, allocation, ladder)
+    tell("auditor", "done", "refused" if audit is None else str(audit.get("verdict")))
     result = SessionResult(
         session_id=s.session_id,
         figures=figures,

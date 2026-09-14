@@ -55,6 +55,11 @@ All notable changes to this project are recorded here. The format follows
   (ten on the surface and the MCP server), and the example written by `tra init`.
 - `tra check` reads `observation.toml` when present; a session hands the screener layer 1
   per candidate (`--observation`, or the file beside the config).
+- The console face (`cli/ui.py`, on `rich`): `tra` alone is the cockpit (banner, what is
+  ready, the next command); runs show a live panel over every closed bar and sessions show
+  each role as it runs; check, session, eval, trace, ledger, ladder and observe render as
+  tables. Off for `--json`, `--plain`, `TRA_PLAIN=1` and pipes. Two observation hooks carry
+  it: `TradingConfig.observer` and `SessionConfig.on_step`; neither can decide anything.
 
 ### Changed
 
