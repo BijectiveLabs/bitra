@@ -466,3 +466,36 @@ def test_the_cli_runs_a_session_end_to_end(
     )
     assert payload["tokens"] > 0 and (tmp_path / "cli-out" / "usage.jsonl").exists()
     load_envelope(EXAMPLES / "envelope.toml")
+
+    # Without an audit verdict the session is not cleared, whatever the runs earned.
+    responses[:] = [screener, *([analyst("flat")] * 6)]
+    register(
+        Provider(
+            "scripted-short", None, None, True, lambda model, base_url: FakeCompleter(responses)
+        )
+    )
+    cfg.write_text(
+        cfg.read_text("utf-8").replace('provider = "scripted-test"', 'provider = "scripted-short"'),
+        "utf-8",
+    )
+    code = main(
+        [
+            "agent",
+            "session",
+            "--config",
+            str(cfg),
+            "--envelope",
+            str(EXAMPLES / "envelope.toml"),
+            "--dataset",
+            f"AAAUSDT={tmp_path / 'AAAUSDT.parquet'}",
+            "--magnitude",
+            "20",
+            "--out",
+            str(tmp_path / "cli-short"),
+            "--ladder",
+            str(tmp_path / "ladder.json"),
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 1 and payload["audit"] is None and payload["runs"] == {"AAAUSDT": 0}

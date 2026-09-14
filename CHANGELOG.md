@@ -66,6 +66,7 @@ All notable changes to this project are recorded here. The format follows
 - A canary cap that is already met ends the session when flat.
 - The console output escapes what the terminal's encoding cannot show instead of ending
   the command.
+- `tra agent session` exits refused when the session never reached its audit verdict.
 - The runtime reads a `halt` from its core and ends the session flat.
 
 ## [0.5.0] - 2026-09-13

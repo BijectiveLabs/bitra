@@ -1433,7 +1433,9 @@ def agent_session(args: argparse.Namespace) -> int:
         "out": str(args.out),
     }
     emit(payload, args.json, lines, lambda: _ui().session_report(result, usage, str(args.out)))
-    return CLEARED if result.stopped_by is None else REFUSED
+    # A session that never reached its audit verdict (a role refused, a vendor limit) is not
+    # cleared, whatever the runs earned.
+    return CLEARED if result.stopped_by is None and result.audit is not None else REFUSED
 
 
 def agent_eval(args: argparse.Namespace) -> int:
