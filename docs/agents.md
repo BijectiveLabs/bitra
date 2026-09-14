@@ -75,6 +75,35 @@ output_per_million = 0.28
 The same `[strategy].agent` core runs under `tra backtest`, `tra paper` and `tra live`, so an
 agent that survived a session can be taken up the ladder like any code core.
 
+## What each role holds before it is asked
+
+A role does not start from a blank prompt. Code computes the figures first and the model reads
+a brief with the basis of every number in it: measured on the operator's data with a sample
+size, or declared by the operator and labelled as such.
+
+| Role | Tools (`agent/<role>/tools.py`) | What the brief carries |
+|---|---|---|
+| `market_screener` | `screen_figures` | per instrument: rows, print rate, realised volatility, first-lag autocorrelation, the 1:10 variance ratio, largest gap, last-hour volume against the average, turnover, the cost floor for the claimed edge, and a regime the code proposes from a written rule (`[agents.screen]` sets the two thresholds: `min_prints_per_minute`, `volatile_above_bps`) |
+| `technical_analyst` | `features` | on each closed bar: returns over 1, 5 and 20 bars, the close as a z-score of the window, the gap to VWAP, the last bar's volume and range against the window's, the position between the window's high and low; then the bars themselves |
+| `macro_analyst` | `macro_brief` over `data/series.py` | per series in `series.toml`: the value known at the time and when it became known (publication lag honoured), the state against the operator's declared threshold, the correlation and strongest lead-lag with the instrument's returns measured on the operator's data with n, the calendar events inside the horizon |
+| `onchain_analyst` | `onchain_brief` | the same engine, plus the net over a window and the last value as a z-score of its own history |
+| `risk_manager` | `risk_brief` | per run: latency from intent to fill (median, max, n, ratio to the declared), net per round trip overall and over the last window against the claimed magnitude, maximum drawdown, which control refused and how often |
+| `executor` | `size_for`, `rate_budget`, `export_signals` | a size that never exceeds a cap, rounded down to the venue's step; what the minute still allows; the run's admitted intents as `signals.jsonl` or CSV for execution elsewhere (`tra signals export RUN`) |
+| `auditor` | `audit_brief` | usage per role with tokens per closed round trip, each promotion with whether its evidence names a gate, and a run against its replay trade by trade |
+
+### Series from anywhere
+
+`examples/series.toml` maps external series the way `mapping.toml` maps trades: the file, the
+time column and its unit, the value column, the unit, and `publish_lag`, the time between an
+observation and the moment it was actually available. A monthly print released two weeks after
+month end is unknown for those two weeks, and the brief says so. Thresholds in the map are the
+operator's declaration; a correlation is never written in the map, because it is measured on
+the operator's data every session and reported with its n and window.
+
+```
+tra agent session --macro series.toml --events events.json --onchain onchain.toml
+```
+
 ## Cost and latency as numbers
 
 Every model call is one line in `usage.jsonl`: role, provider, model, tokens in and out,

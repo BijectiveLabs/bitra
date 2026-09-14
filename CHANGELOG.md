@@ -32,6 +32,11 @@ All notable changes to this project are recorded here. The format follows
   core. `[data].max_gap` and `[agents].magnitude_bps` in `strategy.toml`.
 - The analyst's bars go to the model as compact rows: half the tokens per call, measured on
   a real day.
+- Tools per role: `screen_figures` with a written regime rule, `features` on every closed
+  bar, `macro_brief` and `onchain_brief` over external series (`data/series.py`,
+  `examples/series.toml`: any source, aligned as-of with the publication lag honoured,
+  correlations measured with n, thresholds declared), `risk_brief` from a run's own files,
+  `size_for` / `rate_budget` / `export_signals` (`tra signals export`), `audit_brief`.
 
 ### Changed
 
