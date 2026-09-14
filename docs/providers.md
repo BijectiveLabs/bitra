@@ -37,8 +37,10 @@ Reasoning models spend most of their tokens and their seconds thinking before th
 bar cadence that is the latency that matters: measured on one such model, 12 s median and 20 s
 at the 90th percentile per call. `[agents].max_output_tokens` caps the thinking; set it below
 what the model needs and it returns no JSON at all, which the vendor reports as a validation
-failure and the ledger records as a failed call. `decide_every_bars` is the other lever. A local server that
-needs no key gets a placeholder, because the client library insists on one.
+failure and the ledger records as a failed call. `decide_every_bars` is the other lever.
+
+A local server that needs no key gets a placeholder, because the client library insists on
+one.
 
 ## Adding a provider
 
