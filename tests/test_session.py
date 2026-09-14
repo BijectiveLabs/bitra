@@ -203,12 +203,23 @@ def test_a_resumed_session_reuses_recorded_answers_and_finished_runs(
     assert second.audit is not None and second.audit["verdict"] == "sound"
     assert [r.split(":")[0] for r in second.refusals] == [
         "market_screener",
+        "AAAUSDT",
         "risk_manager",
         "executor",
         "auditor",
     ]
-    assert all("reused the recorded answer" in r for r in second.refusals)
+    assert all("reused the recorded" in r for r in second.refusals)
     assert usage.by_role() == {}
+
+    # A recorded run that stopped early is not a checkpoint: it runs again.
+    run_json = tmp_path / "out" / "AAAUSDT" / "run.json"
+    summary = json.loads(run_json.read_text("utf-8"))
+    summary["stopped_by"] = "halt: 5 failed calls in a row"
+    run_json.write_text(json.dumps(summary), "utf-8")
+    third, _, again = scripted_session(tmp_path, envelope, [analyst("flat")] * 6, resume=True)
+    assert len(again.calls) == 6 and third.stopped_by is None
+    assert any("stopped by halt: 5 failed calls in a row; run again" in r for r in third.refusals)
+    assert json.loads(run_json.read_text("utf-8"))["stopped_by"] is None
 
 
 def test_the_screener_cannot_invent_and_unmentioned_candidates_are_excluded(

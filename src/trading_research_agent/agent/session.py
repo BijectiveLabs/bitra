@@ -336,8 +336,15 @@ class _Session:
             raise SessionError(f"venue_key {s.run.venue_key!r} is not a channel in the envelope")
         out = self.out / instrument
         if self.cfg.resume and (out / "run.json").is_file():
-            # A finished run is a checkpoint: its report is rebuilt, not re-run.
-            return _report_from_disk(out, instrument)
+            # A run that reached the end of its data is a checkpoint; one that stopped early
+            # (a spent budget, five failed calls, a kill switch) is run again, and said so.
+            recorded = _report_from_disk(out, instrument)
+            if recorded.stopped_by is None:
+                self.refusals.append(f"{instrument}: reused the recorded run")
+                return recorded
+            self.refusals.append(
+                f"{instrument}: recorded run stopped by {recorded.stopped_by}; run again"
+            )
         core = AgentStrategy(
             self.cfg.completer_for("technical_analyst"),
             mechanism=a.mechanism,

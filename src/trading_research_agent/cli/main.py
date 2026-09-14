@@ -400,6 +400,9 @@ def main(argv: list[str] | None = None) -> int:
     handler = HANDLERS[(args.group, args.command)]
     try:
         return handler(args)
+    except BrokenPipeError:
+        # `tra ... | head`: the reader closed; nothing was refused.
+        return CLEARED
     except (
         ArchiveError,
         ArchiveFormatError,

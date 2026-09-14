@@ -96,9 +96,11 @@ tra agent session --resume --out runs/session-1
 
 A session interrupted by a vendor rate limit, a spent budget or a lost connection does not
 start again from nothing. With `--resume`, an answer already recorded in `--out` for a step
-is reused instead of asked again, and a kept instrument whose `run.json` exists is reported
-from disk instead of replayed. The reuse is written down in the session's refusals, so a
-report never hides that a model was not called. `usage.jsonl` keeps the calls of the first
+is reused instead of asked again, and a kept instrument whose run reached the end of its
+data is reported from disk instead of replayed. A run that stopped early (a spent budget,
+five failed calls in a row, a kill switch) is not a checkpoint: it runs again. Either way the
+decision is written down in the session's refusals, so a report never hides that a model was
+not called. `usage.jsonl` keeps the calls of the first
 pass; the second adds only what it actually asked.
 
 ## What each role holds before it is asked
