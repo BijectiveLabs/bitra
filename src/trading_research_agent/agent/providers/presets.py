@@ -52,6 +52,13 @@ PRESETS: dict[str, Preset] = {
             "a key is required by the client library and ignored by the server",
         ),
         Preset(
+            "9router",
+            "http://localhost:20128/v1",
+            "9ROUTER_API_KEY",
+            "json_schema",
+            "a local router; the model is a combo or provider/model name from its dashboard",
+        ),
+        Preset(
             "local",
             None,
             None,

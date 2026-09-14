@@ -16,6 +16,7 @@ vendor that speaks the OpenAI chat API.
 | `openrouter` | `[openai]` | `OPENROUTER_API_KEY` | `https://openrouter.ai/api/v1` | JSON mode |
 | `qwen` | `[openai]` | `DASHSCOPE_API_KEY` | `--base-url` (depends on region and workspace) | JSON mode |
 | `ollama` | `[openai]` | none | `http://localhost:11434/v1` | JSON mode |
+| `9router` | `[openai]` | `9ROUTER_API_KEY` | `http://localhost:20128/v1` | JSON schema; the model is a combo or `provider/model` from the router's dashboard; a combo whose first upstream ignores JSON mode fails as any other model would |
 | `local` | `[openai]` | none | `--base-url` (https, or http on localhost) | JSON mode |
 
 Every endpoint and key variable was read from the vendor's own documentation on 2026-09-13.

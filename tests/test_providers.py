@@ -86,6 +86,14 @@ def test_openai_request_is_a_strict_json_schema_and_needs_a_model_name() -> None
     assert sent["response_format"]["json_schema"]["strict"] is True
     assert sent["response_format"]["json_schema"]["schema"] == BOUND_SCHEMA
     assert completion.input_tokens == 50 and completion.output_tokens == 10
+    # A router that answers without a usage block: the call is counted, the tokens are zero,
+    # and the usage line says so.
+    without = openai_response('{"accepted": true, "objection": ""}')
+    without.usage = None
+    bare = OpenAICompleter(
+        "gpt-x", client=SimpleNamespace(chat=SimpleNamespace(completions=FakeMessages(without)))
+    ).complete(system="s", user="u", schema=BOUND_SCHEMA)
+    assert bare.input_tokens == 0 and bare.output_tokens == 0 and bare.text
     with pytest.raises(ValueError, match="model name is required"):
         OpenAICompleter("  ", client=client)
     with pytest.raises(ProviderError, match="declined"):

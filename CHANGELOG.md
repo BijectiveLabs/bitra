@@ -71,6 +71,9 @@ All notable changes to this project are recorded here. The format follows
 - The container image builds its environment at the path it runs from; the previous image
   copied a venv whose scripts named an interpreter that no longer existed.
 - `tra agent session` exits refused when the session never reached its audit verdict.
+- A `9router` preset (a local router at `http://localhost:20128/v1`, `9ROUTER_API_KEY`);
+  an answer without a usage block no longer crashes the OpenAI-compatible adapter: the call
+  is counted with zero tokens and the usage line says `ok, no usage reported`.
 - `[agents].call_timeout_s` now reaches the vendor client as a per-request timeout, with
   `[agents].max_retries` (default 2) for the SDK's own backoff on 429s and 5xx; before, the
   declared timeout was recorded and not enforced. `CallOptions` carries all three to a

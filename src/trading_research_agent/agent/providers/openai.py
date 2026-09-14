@@ -109,10 +109,12 @@ class OpenAICompleter:
         text = choice.message.content
         if not text:
             raise ProviderError("no content in the response")
+        # A router or a local server may answer without a usage block; the call is then
+        # metered by count and time only, and the usage line says so through the zeros.
         usage = response.usage
         return Completion(
             text=str(text),
             model=str(response.model),
-            input_tokens=int(usage.prompt_tokens),
-            output_tokens=int(usage.completion_tokens),
+            input_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
+            output_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
         )

@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 from trading_research_agent.agent import (
+    Completion,
     FakeCompleter,
     RoleError,
     auditor,
@@ -76,6 +77,9 @@ def test_presets_carry_verified_endpoints_and_their_structured_mode() -> None:
         and preset("ollama").key_env is None
     )
     assert preset("qwen").base_url is None and "base-url" in preset("qwen").note
+    assert preset("9router").base_url == "http://localhost:20128/v1"
+    assert preset("9router").key_env == "9ROUTER_API_KEY"
+    assert preset("9router").structured == "json_schema"
     for p in PRESETS.values():
         assert p.base_url is None or p.base_url.startswith(("https://", "http://localhost"))
     with pytest.raises(KeyError, match="no preset"):
@@ -290,6 +294,26 @@ def test_every_call_is_written_down_and_the_budget_refuses_before_the_call(
     )
     with pytest.raises(BudgetSpentError, match="token budget spent"):
         exhausted.complete(system="s", user="u", schema={})
+
+
+def test_a_call_without_usage_is_counted_and_says_so(tmp_path: Path) -> None:
+    class Silent:
+        def complete(self, **kwargs: Any) -> Completion:
+            return Completion(text="{}", model="router", input_tokens=0, output_tokens=0)
+
+    ledger = UsageLedger(tmp_path / "usage.jsonl")
+    metered = MeteredCompleter(
+        Silent(),
+        role="auditor",
+        provider="router",
+        limits=BudgetLimits(token_budget=100, max_calls_per_hour=10, min_interval_s=0),
+        ledger=ledger,
+        clock=lambda: 0.0,
+    )
+    metered.complete(system="s", user="u", schema={})
+    row = UsageLedger.read(tmp_path / "usage.jsonl")[0]
+    assert row["outcome"] == "ok, no usage reported" and row["input_tokens"] == 0
+    assert ledger.by_role()["auditor"]["calls"] == 1
 
 
 def test_a_failing_call_is_written_down_too(tmp_path: Path) -> None:

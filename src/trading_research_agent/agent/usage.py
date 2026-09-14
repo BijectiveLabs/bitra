@@ -185,6 +185,7 @@ class MeteredCompleter:
             )
             raise
         price = self.pricing.get(completion.model)
+        counted = completion.input_tokens + completion.output_tokens > 0
         self.ledger.append(
             UsageRecord(
                 at=now,
@@ -199,7 +200,7 @@ class MeteredCompleter:
                     if price is None
                     else price.cost(completion.input_tokens, completion.output_tokens)
                 ),
-                outcome="ok",
+                outcome="ok" if counted else "ok, no usage reported",
             )
         )
         return completion
