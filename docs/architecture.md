@@ -91,7 +91,7 @@ sequenceDiagram
     loop every closed bar, per kept instrument
         C->>A: compact bars, features
         A-->>C: target, confidence, horizon
-        C->>C: controls admit or refuse; venue fills; exits run
+        C->>C: controls admit or refuse, the venue fills, exits run
     end
     C->>R: run reports, measured latency and costs
     R-->>C: continue / tighten / demote / halt
