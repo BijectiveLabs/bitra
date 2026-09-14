@@ -68,6 +68,8 @@ All notable changes to this project are recorded here. The format follows
   the command.
 - CI also installs the built wheel into an empty environment and runs the command, audits
   the lock against OSV (`uv audit`), and builds and runs the container image.
+- The container image builds its environment at the path it runs from; the previous image
+  copied a venv whose scripts named an interpreter that no longer existed.
 - `tra agent session` exits refused when the session never reached its audit verdict.
 - `[agents].call_timeout_s` now reaches the vendor client as a per-request timeout, with
   `[agents].max_retries` (default 2) for the SDK's own backoff on 429s and 5xx; before, the
