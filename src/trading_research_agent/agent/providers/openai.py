@@ -93,9 +93,13 @@ class OpenAICompleter:
         }
 
     def complete(self, *, system: str, user: str, schema: Mapping[str, Any]) -> Completion:
-        response = self._client.chat.completions.create(
-            **self.request(system=system, user=user, schema=schema)
-        )
+        try:
+            response = self._client.chat.completions.create(
+                **self.request(system=system, user=user, schema=schema)
+            )
+        except Exception as exc:
+            # A connection drop or a vendor-side error is a failed call, never a crash.
+            raise ProviderError(f"{exc.__class__.__name__}: {exc}") from exc
         choice = response.choices[0]
         if getattr(choice.message, "refusal", None):
             raise ProviderError("the model declined the request")

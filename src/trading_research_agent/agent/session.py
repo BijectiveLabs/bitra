@@ -36,7 +36,7 @@ from trading_research_agent.agent.market_screener.tools import ScreenFigures, sc
 from trading_research_agent.agent.onchain_analyst.tools import onchain_brief
 from trading_research_agent.agent.risk_manager.tools import risk_brief
 from trading_research_agent.agent.roles import RoleError, prompt
-from trading_research_agent.agent.strategy import AgentStrategy
+from trading_research_agent.agent.strategy import MAX_FAILURES_IN_A_ROW, AgentStrategy
 from trading_research_agent.agent.usage import BudgetSpentError, UsageLedger
 from trading_research_agent.chain import cost_floor
 from trading_research_agent.data.parquet import read_trades
@@ -199,6 +199,7 @@ class _Session:
         self.refusals: list[str] = []
         self.stopped_by: str | None = None
         self.calls = 0
+        self._failures_in_a_row = 0
 
     def ask(self, role: str, user: dict[str, Any], schema: dict[str, Any]) -> str | None:
         """One call, recorded. A refusal of form or budget is a None the caller handles."""
@@ -214,7 +215,11 @@ class _Session:
             return None
         except (RoleError, RuntimeError, OSError, ValueError) as exc:
             self.refusals.append(f"{role}: {exc.__class__.__name__}: {exc}")
+            self._failures_in_a_row += 1
+            if self._failures_in_a_row >= MAX_FAILURES_IN_A_ROW:
+                self.stopped_by = f"{self._failures_in_a_row} failed calls in a row"
             return None
+        self._failures_in_a_row = 0
         self.calls += 1
         (self.out / f"{self.calls:02d}-{role}.json").write_text(
             json.dumps(

@@ -57,9 +57,12 @@ class AnthropicCompleter:
         }
 
     def complete(self, *, system: str, user: str, schema: Mapping[str, Any]) -> Completion:
-        response = self._client.messages.create(
-            **self.request(system=system, user=user, schema=schema)
-        )
+        try:
+            response = self._client.messages.create(
+                **self.request(system=system, user=user, schema=schema)
+            )
+        except Exception as exc:
+            raise ProviderError(f"{exc.__class__.__name__}: {exc}") from exc
         if getattr(response, "stop_reason", None) == "refusal":
             raise ProviderError("the model declined the request")
         text = next((b.text for b in response.content if getattr(b, "type", "") == "text"), None)

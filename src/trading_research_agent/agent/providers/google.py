@@ -46,9 +46,12 @@ class GoogleCompleter:
         }
 
     def complete(self, *, system: str, user: str, schema: Mapping[str, Any]) -> Completion:
-        response = self._client.models.generate_content(
-            **self.request(system=system, user=user, schema=schema)
-        )
+        try:
+            response = self._client.models.generate_content(
+                **self.request(system=system, user=user, schema=schema)
+            )
+        except Exception as exc:
+            raise ProviderError(f"{exc.__class__.__name__}: {exc}") from exc
         text = getattr(response, "text", None)
         if not text:
             raise ProviderError("no text in the response")

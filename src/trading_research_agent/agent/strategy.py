@@ -23,6 +23,7 @@ from trading_research_agent.strategy.core import Bar, Signal, Target
 
 MIN_BAR_INTERVAL_S = 60
 MIN_BARS = 3
+MAX_FAILURES_IN_A_ROW = 5
 
 
 @dataclass(frozen=True)
@@ -46,6 +47,7 @@ class AgentStrategy:
         lookback_bars: int = 60,
         min_confidence: float = 0.5,
         decide_every_bars: int = 1,
+        max_failures_in_a_row: int = MAX_FAILURES_IN_A_ROW,
     ) -> None:
         if not mechanism.strip():
             raise ValueError("the registered mechanism is what the analyst reasons from")
@@ -57,6 +59,10 @@ class AgentStrategy:
             raise ValueError("decide_every_bars is at least 1")
         self.decide_every_bars = decide_every_bars
         self._seen = 0
+        if max_failures_in_a_row < 1:
+            raise ValueError("max_failures_in_a_row is at least 1")
+        self.max_failures_in_a_row = max_failures_in_a_row
+        self._failures_in_a_row = 0
         self.completer = completer
         self.mechanism = mechanism.strip()
         self.lookback_bars = lookback_bars
@@ -84,15 +90,16 @@ class AgentStrategy:
         except BudgetSpentError as exc:
             self.halt = str(exc)
             return None
-        except (RoleError, RuntimeError, OSError, TimeoutError, ValueError):
-            self.failures += 1
+        except (RoleError, RuntimeError, OSError, TimeoutError, ValueError) as exc:
+            self._failed(exc)
             return None
         self.calls += 1
         try:
             answer = parse(done.text)
-        except RoleError:
-            self.failures += 1
+        except RoleError as exc:
+            self._failed(exc)
             return None
+        self._failures_in_a_row = 0
         self.last_reason = answer.reason
         if answer.confidence < self.min_confidence:
             self.below_confidence += 1
@@ -105,6 +112,15 @@ class AgentStrategy:
         else:
             self._held = Held(wanted, bar.close, 0)
         return Signal(wanted, f"{answer.reason} (confidence {answer.confidence:.2f})")
+
+    def _failed(self, exc: Exception) -> None:
+        self.failures += 1
+        self._failures_in_a_row += 1
+        if self._failures_in_a_row >= self.max_failures_in_a_row:
+            self.halt = (
+                f"technical_analyst: {self._failures_in_a_row} failed calls in a row; "
+                f"last: {exc.__class__.__name__}"
+            )
 
     def observe_flat(self) -> None:
         self._held = Held(Target.FLAT, None, 0)

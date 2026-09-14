@@ -252,3 +252,30 @@ def test_the_analyst_is_asked_on_a_cadence_and_the_output_cap_reaches_the_provid
     built = p.build_with("m", None, 256)
     assert getattr(built, "max_tokens", None) == 256
     assert getattr(p.build("m", None), "max_tokens", None) == 4096
+
+
+def test_a_vendor_error_is_a_failed_call_and_repeated_failures_halt() -> None:
+    from trading_research_agent.agent.providers.anthropic import ProviderError
+    from trading_research_agent.agent.providers.openai import OpenAICompleter
+
+    class Broken:
+        class chat:  # noqa: N801 - the SDK's attribute shape
+            class completions:  # noqa: N801
+                @staticmethod
+                def create(**kwargs: Any) -> Any:
+                    raise ConnectionResetError("dropped")
+
+    adapter = OpenAICompleter("m", client=Broken())
+    with pytest.raises(ProviderError, match="ConnectionResetError"):
+        adapter.complete(system="s", user="u", schema={})
+
+    class Flaky:
+        def complete(self, **kwargs: Any) -> Any:
+            raise ProviderError("APIConnectionError: Connection error.")
+
+    core = AgentStrategy(Flaky(), mechanism="m", lookback_bars=4, max_failures_in_a_row=3)
+    for i in range(6):
+        core.on_bar(bar(i))
+    assert core.failures == 3 and core.halt is not None and "3 failed calls in a row" in core.halt
+    with pytest.raises(ValueError, match="max_failures_in_a_row"):
+        AgentStrategy(Flaky(), mechanism="m", max_failures_in_a_row=0)
