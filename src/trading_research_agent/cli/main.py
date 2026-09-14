@@ -259,9 +259,10 @@ def build_parser() -> argparse.ArgumentParser:
     session_cmd.add_argument("--out", type=Path, default=None, help="default: runs/session-<time>")
     session_cmd.add_argument("--ladder", type=Path, default=Path("ladder.json"))
     session_cmd.add_argument(
-        "--macro", type=Path, help="a JSON file of macro series for the macro analyst"
+        "--macro", type=Path, help="a series.toml of macro series for the macro analyst"
     )
-    session_cmd.add_argument("--onchain", type=Path, help="a JSON file of on-chain series")
+    session_cmd.add_argument("--onchain", type=Path, help="a series.toml of on-chain series")
+    session_cmd.add_argument("--events", type=Path, help="a calendar (JSON or CSV: when, what)")
     session_cmd.add_argument("--env-file", type=Path)
     session_cmd.add_argument("--json", action="store_true")
 
@@ -315,6 +316,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     init_cmd.add_argument("--model", help="the model for --agent")
     init_cmd.add_argument("--json", action="store_true")
+
+    signals = top.add_parser(
+        "signals", help="a run's admitted intents, for execution elsewhere"
+    ).add_subparsers(dest="command", required=True)
+    export_cmd = signals.add_parser("export", help="signals.jsonl or .csv from a run directory")
+    export_cmd.add_argument("run", type=Path, help="a run directory with intents.jsonl")
+    export_cmd.add_argument("--out", type=Path, default=None, help="default: <run>/signals.jsonl")
+    export_cmd.add_argument("--format", choices=("jsonl", "csv"), default="jsonl")
+    export_cmd.add_argument("--json", action="store_true")
 
     check_cmd = top.add_parser("check", help="what is ready and what is missing, in plain words")
     check_cmd.set_defaults(command="check")
@@ -1100,7 +1110,7 @@ def data_funding(args: argparse.Namespace) -> int:
 
 
 def agent_session(args: argparse.Namespace) -> int:
-    from trading_research_agent.agent.session import SessionConfig, run_session
+    from trading_research_agent.agent.session import ScreenSettings, SessionConfig, run_session
     from trading_research_agent.agent.usage import (
         BudgetLimits,
         MeteredCompleter,
@@ -1162,6 +1172,8 @@ def agent_session(args: argparse.Namespace) -> int:
             kill_file=cfg.kill_switch,
             macro_series=args.macro,
             onchain_series=args.onchain,
+            events=args.events,
+            screen=ScreenSettings(**a.screen) if a.screen else ScreenSettings(),
         )
     )
     lines = [
@@ -1196,6 +1208,19 @@ def agent_session(args: argparse.Namespace) -> int:
     }
     emit(payload, args.json, lines)
     return CLEARED if result.stopped_by is None else REFUSED
+
+
+def signals_export(args: argparse.Namespace) -> int:
+    from trading_research_agent.agent.executor.tools import export_signals
+
+    summary = args.run / "run.json"
+    if not summary.is_file():
+        raise ValueError(f"{args.run} is not a run directory (no run.json)")
+    instrument = str(json.loads(summary.read_text("utf-8")).get("instrument", ""))
+    out = args.out or (args.run / f"signals.{args.format}")
+    n = export_signals(args.run, instrument=instrument, out=out, fmt=args.format)
+    emit({"signals": n, "out": str(out)}, args.json, [f"{n} signals -> {out}"])
+    return CLEARED
 
 
 def mcp_serve(args: argparse.Namespace) -> int:
@@ -1351,6 +1376,7 @@ HANDLERS = {
     ("live", "live"): trade_live,
     ("init", "init"): init_project,
     ("mcp", "serve"): mcp_serve,
+    ("signals", "export"): signals_export,
     ("ladder", "show"): ladder_show,
     ("ladder", "promote"): ladder_promote,
     ("ladder", "demote"): ladder_demote,

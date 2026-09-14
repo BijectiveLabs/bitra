@@ -14,12 +14,10 @@ what every call cost.
 from __future__ import annotations
 
 import json
-import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
-from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -31,12 +29,18 @@ from trading_research_agent.agent import (
     onchain_analyst,
     risk_manager,
 )
+from trading_research_agent.agent.auditor.tools import audit_brief
 from trading_research_agent.agent.completer import Completer
+from trading_research_agent.agent.macro_analyst.tools import macro_brief, returns_from_closes
+from trading_research_agent.agent.market_screener.tools import ScreenFigures, screen_figures
+from trading_research_agent.agent.onchain_analyst.tools import onchain_brief
+from trading_research_agent.agent.risk_manager.tools import risk_brief
 from trading_research_agent.agent.roles import RoleError, prompt
 from trading_research_agent.agent.strategy import AgentStrategy
 from trading_research_agent.agent.usage import BudgetSpentError, UsageLedger
 from trading_research_agent.chain import cost_floor
 from trading_research_agent.data.parquet import read_trades
+from trading_research_agent.data.series import SeriesError, load_all, read_events
 from trading_research_agent.envelope.model import Envelope
 from trading_research_agent.execution.cost import FundingSchedule
 from trading_research_agent.surface.actions import (
@@ -78,19 +82,28 @@ class Figures:
     turnover: Decimal
     floor_outcome: str
     floor_margin_bps: str
+    screen: ScreenFigures | None = None
 
     def record(self) -> dict[str, Any]:
+        base = {} if self.screen is None else self.screen.record()
         return {
+            **base,
             "instrument": self.instrument,
             "rows": self.rows,
-            "first_ts_ns": self.first_ts_ns,
-            "last_ts_ns": self.last_ts_ns,
             "prints_per_minute": round(self.prints_per_minute, 3),
             "realised_vol_bps": round(self.realised_vol_bps, 3),
             "turnover": str(self.turnover),
             "cost_floor": self.floor_outcome,
             "floor_margin_bps": self.floor_margin_bps,
         }
+
+
+@dataclass(frozen=True)
+class ScreenSettings:
+    """The screener's two thresholds, the operator's; `[agents.screen]` or these defaults."""
+
+    min_prints_per_minute: float = 1.0
+    volatile_above_bps: float = 50.0
 
 
 @dataclass(frozen=True)
@@ -106,6 +119,8 @@ class SessionConfig:
     kill_file: Path | None = None
     macro_series: Path | None = None
     onchain_series: Path | None = None
+    events: Path | None = None
+    screen: ScreenSettings = field(default_factory=ScreenSettings)
     clock: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
 
     def __post_init__(self) -> None:
@@ -135,41 +150,43 @@ class SessionResult:
 
 
 def figures_for(
-    instrument: str, path: Path, envelope: Envelope, venue: str, magnitude_bps: Decimal
+    instrument: str,
+    path: Path,
+    envelope: Envelope,
+    venue: str,
+    magnitude_bps: Decimal,
+    *,
+    screen: ScreenSettings,
 ) -> Figures:
-    rows = 0
-    first = last = None
-    turnover = Decimal(0)
-    closes: dict[int, Decimal] = {}
-    for trade in read_trades(path):
-        rows += 1
-        first = trade.ts_ns if first is None else first
-        last = trade.ts_ns
-        turnover += trade.qty
-        closes[trade.ts_ns // NS_PER_MINUTE] = trade.price
-    if rows == 0 or first is None or last is None:
+    figures = screen_figures(
+        instrument,
+        read_trades(path),
+        min_prints_per_minute=screen.min_prints_per_minute,
+        volatile_above_bps=screen.volatile_above_bps,
+    )
+    if figures.rows == 0:
         raise SessionError(f"{instrument}: the dataset has no trades")
-    minutes = max((last - first) / NS_PER_MINUTE, 1.0)
-    series = [float(closes[k]) for k in sorted(closes)]
-    returns = [math.log(b / a) for a, b in pairwise(series) if a > 0 and b > 0]
-    if len(returns) >= 2:
-        mean = sum(returns) / len(returns)
-        var = sum((r - mean) ** 2 for r in returns) / (len(returns) - 1)
-        vol_bps = math.sqrt(var) * 1e4
-    else:
-        vol_bps = 0.0
     check = cost_floor(envelope, magnitude_bps, venue=venue)
     return Figures(
         instrument=instrument,
-        rows=rows,
-        first_ts_ns=first,
-        last_ts_ns=last,
-        prints_per_minute=rows / minutes,
-        realised_vol_bps=vol_bps,
-        turnover=turnover,
+        rows=figures.rows,
+        first_ts_ns=0,
+        last_ts_ns=0,
+        prints_per_minute=figures.prints_per_minute,
+        realised_vol_bps=figures.realised_vol_bps,
+        turnover=figures.turnover,
         floor_outcome=check.outcome.value,
         floor_margin_bps=str(check.margin_bps),
+        screen=figures,
     )
+
+
+def _minute_closes(path: Path) -> tuple[list[int], list[float]]:
+    closes: dict[int, float] = {}
+    for trade in read_trades(path):
+        closes[trade.ts_ns // NS_PER_MINUTE] = float(trade.price)
+    minutes = sorted(closes)
+    return [m * NS_PER_MINUTE for m in minutes], [closes[m] for m in minutes]
 
 
 class _Session:
@@ -243,16 +260,29 @@ class _Session:
                 )
         return kept, excluded
 
-    def context(
-        self, role: str, series_path: Path | None, schema: dict[str, Any], parse: Any
-    ) -> Any:
+    def context(self, role: str, series_path: Path | None, reference: Path | None) -> Any:
+        """A measured brief over the operator's series, aligned as-of to a reference dataset."""
         if series_path is None:
             return None
         try:
-            series = json.loads(series_path.read_text("utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            raise SessionError(f"{role}: cannot read {series_path}: {exc}") from exc
-        text = self.ask(role, {"series": series}, schema)
+            series = load_all(series_path)
+        except SeriesError as exc:
+            raise SessionError(f"{role}: {exc}") from exc
+        times, closes = _minute_closes(reference) if reference is not None else ([], [])
+        at_ns = times[-1] if times else int(self.started.timestamp() * 1_000_000_000)
+        returns = returns_from_closes(times, closes) if times else []
+        parse: Callable[[str], Any]
+        if role == macro_analyst.ROLE:
+            events = read_events(self.cfg.events) if self.cfg.events is not None else ()
+            brief = macro_brief(series, at_ns=at_ns, times_ns=times, returns=returns, events=events)
+            schema, parse = macro_analyst.SCHEMA, macro_analyst.parse
+        else:
+            brief = onchain_brief(series, at_ns=at_ns, times_ns=times, returns=returns)
+            schema, parse = onchain_analyst.SCHEMA, onchain_analyst.parse
+        (self.out / f"{role}-brief.json").write_text(
+            json.dumps(brief, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
+        )
+        text = self.ask(role, brief, schema)
         if text is None:
             return None
         try:
@@ -313,8 +343,12 @@ class _Session:
                 "daily_loss_limit_bps": str(limits.daily_loss_limit_bps),
             },
             "declared_latency_ms": str(s.run.latency_ms),
-            "measured_latency_ms": "not measured in replay",
             "registration_magnitude_bps": str(self.cfg.magnitude_bps),
+            "measured": risk_brief(
+                [(name, self.out / name) for name in reports],
+                declared_ms=s.run.latency_ms,
+                claimed_bps=self.cfg.magnitude_bps,
+            ),
             "runs": {
                 name: {
                     "prints": r.prints,
@@ -389,7 +423,15 @@ class _Session:
         usage = self.cfg.usage
         by_role = usage.by_role()
         round_trips = sum(r.round_trips for r in reports.values())
+        measured = audit_brief(
+            usage_path=usage.path,
+            round_trips=round_trips,
+            run_dir=None,
+            replay_dir=None,
+            ladder_path=self.cfg.ladder_path,
+        )
         user = {
+            "measured": measured,
             "runs": {
                 name: {
                     "round_trips": r.round_trips,
@@ -434,19 +476,16 @@ def run_session(cfg: SessionConfig) -> SessionResult:
     s = _Session(cfg)
     venue = cfg.strategy.run.venue_key.partition("/")[0]
     figures = [
-        figures_for(name, path, cfg.envelope, venue, cfg.magnitude_bps)
+        figures_for(name, path, cfg.envelope, venue, cfg.magnitude_bps, screen=cfg.screen)
         for name, path in cfg.datasets.items()
     ]
     (s.out / "figures.json").write_text(
         json.dumps([f.record() for f in figures], indent=2, sort_keys=True) + "\n", "utf-8"
     )
     kept, excluded = s.screen(figures)
-    macro = s.context(
-        macro_analyst.ROLE, cfg.macro_series, macro_analyst.SCHEMA, macro_analyst.parse
-    )
-    onchain = s.context(
-        onchain_analyst.ROLE, cfg.onchain_series, onchain_analyst.SCHEMA, onchain_analyst.parse
-    )
+    reference = next(iter(cfg.datasets.values()))
+    macro = s.context(macro_analyst.ROLE, cfg.macro_series, reference)
+    onchain = s.context(onchain_analyst.ROLE, cfg.onchain_series, reference)
     limits = cfg.strategy.limits
     ladder = Ladder(cfg.ladder_path)
     reports: dict[str, RunReport] = {}

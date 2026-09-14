@@ -7,7 +7,7 @@ import importlib.util
 import json
 import sys
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -56,6 +56,7 @@ class AgentSettings:
     min_confidence: float
     pricing: dict[str, tuple[Decimal, Decimal]]
     magnitude_bps: Decimal | None = None
+    screen: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -206,7 +207,24 @@ def _agents(raw: dict[str, Any], strategy_raw: dict[str, Any]) -> AgentSettings 
         min_confidence=float(confidence),
         pricing=pricing,
         magnitude_bps=_dec(table, "magnitude_bps") if "magnitude_bps" in table else None,
+        screen=_screen(table.get("screen")),
     )
+
+
+def _screen(raw: Any) -> dict[str, float]:
+    """[agents.screen]: the screener's two thresholds, both the operator's."""
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ConfigError("[agents.screen] is a table")
+    out: dict[str, float] = {}
+    for key in ("min_prints_per_minute", "volatile_above_bps"):
+        if key in raw:
+            out[key] = float(_dec(raw, key))
+    unknown = sorted(set(raw) - set(out))
+    if unknown:
+        raise ConfigError(f"[agents.screen]: unknown {unknown}")
+    return out
 
 
 def _live(raw: dict[str, Any], venue_key: str) -> LiveSettings | None:

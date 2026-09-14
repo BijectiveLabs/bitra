@@ -17,6 +17,7 @@ from decimal import Decimal
 from trading_research_agent.agent.completer import Completer
 from trading_research_agent.agent.roles import RoleError, prompt
 from trading_research_agent.agent.technical_analyst import ROLE, SCHEMA, parse
+from trading_research_agent.agent.technical_analyst.tools import features
 from trading_research_agent.agent.usage import BudgetSpentError
 from trading_research_agent.strategy.core import Bar, Signal, Target
 
@@ -101,13 +102,20 @@ class AgentStrategy:
 
     def _user(self) -> str:
         # Compact rows, not JSON: the bars are most of every call, and a call is paid per token.
+        computed = features(list(self._bars))
         lines = [
             f"mechanism: {self.mechanism}",
             f"position: target={self._held.target.value} "
             f"entry_px={'-' if self._held.entry_px is None else self._held.entry_px} "
             f"bars_held={self._held.bars}",
-            "bars (start_utc,open,high,low,close,volume,trades), oldest first:",
         ]
+        if computed is not None:
+            row = computed.record()
+            lines.append(
+                "features over the window (computed from closed bars): "
+                + ", ".join(f"{k}={v}" for k, v in row.items() if k not in ("bars", "close"))
+            )
+        lines.append("bars (start_utc,open,high,low,close,volume,trades), oldest first:")
         for b in self._bars:
             if b.empty:
                 continue

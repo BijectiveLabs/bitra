@@ -75,7 +75,8 @@ def test_the_analyst_signals_only_on_change_and_only_above_its_confidence() -> N
     sent = scripted.calls[-1].user.splitlines()
     assert sent[0] == "mechanism: funding settlement flow"
     assert sent[1].startswith("position: target=flat")
-    assert len(sent) == 3 + 5  # header lines, then the five bars of the lookback
+    assert sent[2].startswith("features over the window") and "zscore=" in sent[2]
+    assert len(sent) == 4 + 5  # header lines, then the five bars of the lookback
 
 
 def test_a_spent_budget_ends_the_session_flat(envelope: Envelope, tmp_path: Path) -> None:
