@@ -19,8 +19,8 @@ A host configuration names the command and nothing else:
 
 ## Tools
 
-Every tool is annotated read-only and closed-world; ten of them, the same ten the agent
-roles hold. Paths are resolved on the machine running the server; every number in basis
+Every tool is annotated read-only and closed-world; ten of them, the same functions the
+agent roles reach through their briefs and the auditor through its tool loop. Paths are resolved on the machine running the server; every number in basis
 points is a decimal string; every time is UTC.
 
 | Tool | Reads | Returns |
