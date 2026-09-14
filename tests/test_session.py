@@ -66,6 +66,11 @@ def analyst(target: str, confidence: float = 0.9) -> dict[str, Any]:
     }
 
 
+def final(answer: dict[str, Any]) -> dict[str, Any]:
+    """The auditor answers through the tool loop: a step that carries the answer."""
+    return {"action": "answer", "tool": "", "arguments": {}, "answer": answer, "thought": "done"}
+
+
 def scripted_session(
     tmp_path: Path, envelope: Envelope, responses: list[Any], **overrides: Any
 ) -> tuple[Any, UsageLedger, FakeCompleter]:
@@ -136,7 +141,7 @@ def test_a_session_runs_the_roles_in_order_and_records_everything(
         "summary": "One kept instrument, one round trip, budget respected.",
     }
     result, usage, fake = scripted_session(
-        tmp_path, envelope, [screener, *analyst_calls, risk, allocation, audit]
+        tmp_path, envelope, [screener, *analyst_calls, risk, allocation, final(audit)]
     )
     roles = [c.system[:40] for c in fake.calls]
     assert len(fake.calls) == 10
@@ -169,6 +174,43 @@ def test_a_session_runs_the_roles_in_order_and_records_everything(
     assert "tokens_per_round_trip" in fake.calls[-1].user and roles
 
 
+def test_a_resumed_session_reuses_recorded_answers_and_finished_runs(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    screener = {
+        "kept": [{"instrument": "AAAUSDT", "regime": "ranging", "reason": "flat prints"}],
+        "excluded": [{"instrument": "BBBUSDT", "reason": "too few prints"}],
+    }
+    risk = {"decision": "continue", "limits": {}, "reason": "nothing fired", "triggers": []}
+    allocation = {
+        "size": "0.01",
+        "reason": "declared",
+        "allocations": [{"instrument": "AAAUSDT", "fraction": 1.0, "reason": "kept"}],
+    }
+    audit = {"findings": [], "verdict": "sound", "summary": "Flat session."}
+    first, _, fake = scripted_session(
+        tmp_path, envelope, [screener, *[analyst("flat")] * 6, risk, allocation, final(audit)]
+    )
+    assert len(fake.calls) == 10 and first.refusals == []
+
+    # The second pass has nothing scripted: every answer must come from disk.
+    second, usage, again = scripted_session(tmp_path, envelope, [], resume=True)
+    assert again.calls == [] and second.stopped_by is None
+    assert [k["instrument"] for k in second.kept] == ["AAAUSDT"]
+    assert second.reports["AAAUSDT"].bars == first.reports["AAAUSDT"].bars
+    assert second.reports["AAAUSDT"].net_bps_total == first.reports["AAAUSDT"].net_bps_total
+    assert second.risk == first.risk and second.allocation == first.allocation
+    assert second.audit is not None and second.audit["verdict"] == "sound"
+    assert [r.split(":")[0] for r in second.refusals] == [
+        "market_screener",
+        "risk_manager",
+        "executor",
+        "auditor",
+    ]
+    assert all("reused the recorded answer" in r for r in second.refusals)
+    assert usage.by_role() == {}
+
+
 def test_the_screener_cannot_invent_and_unmentioned_candidates_are_excluded(
     tmp_path: Path, envelope: Envelope
 ) -> None:
@@ -177,7 +219,7 @@ def test_the_screener_cannot_invent_and_unmentioned_candidates_are_excluded(
         "excluded": [],
     }
     audit = {"findings": [], "verdict": "questioned", "summary": "nothing was kept"}
-    result, _, fake = scripted_session(tmp_path, envelope, [screener, audit])
+    result, _, fake = scripted_session(tmp_path, envelope, [screener, final(audit)])
     assert result.kept == [] and {e["instrument"] for e in result.excluded} == {
         "AAAUSDT",
         "BBBUSDT",
@@ -205,7 +247,7 @@ def test_a_loosening_risk_decision_is_refused_and_a_demotion_goes_down(
     allocation = {"size": "0.01", "reason": "r", "allocations": []}
     audit = {"findings": [], "verdict": "questioned", "summary": "the risk manager asked to loosen"}
     result, _, _ = scripted_session(
-        tmp_path, envelope, [screener, *analyst_calls, risk, allocation, audit]
+        tmp_path, envelope, [screener, *analyst_calls, risk, allocation, final(audit)]
     )
     assert result.limits_after.max_position == Decimal("0.05")
     assert any("only tighter is allowed" in r for r in result.refusals)
@@ -214,7 +256,7 @@ def test_a_loosening_risk_decision_is_refused_and_a_demotion_goes_down(
     result, _, _ = scripted_session(
         tmp_path,
         envelope,
-        [screener, *analyst_calls, demoting, allocation, audit],
+        [screener, *analyst_calls, demoting, allocation, final(audit)],
         out_dir=tmp_path / "out2",
     )
     assert Ladder(tmp_path / "ladder.json").tier == Tier.RESEARCH
@@ -337,7 +379,7 @@ def test_the_cli_runs_a_session_end_to_end(
             "reason": "r",
             "allocations": [{"instrument": "AAAUSDT", "fraction": 1.0, "reason": "all"}],
         },
-        {"findings": [], "verdict": "sound", "summary": "ok"},
+        final({"findings": [], "verdict": "sound", "summary": "ok"}),
     ]
     register(
         Provider(

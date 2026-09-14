@@ -77,6 +77,30 @@ output_per_million = 0.28
 The same `[strategy].agent` core runs under `tra backtest`, `tra paper` and `tra live`, so an
 agent that survived a session can be taken up the ladder like any code core.
 
+### The auditor reads before it answers
+
+The auditor is not handed one brief; it works a bounded tool loop over the read surface:
+`run_report`, `ledger_show`, `ledger_search`, `runs_index`, `ladder_show`. Each step is one
+model call that either names a tool with its arguments or carries the final answer. The loop
+is closed at its edges: a tool outside the catalog is refused by name, arguments are checked
+against the function before it runs, an observation is cut at 6000 characters, the budget
+applies to every step, and the loop ends without a verdict after six calls
+(`SessionConfig.auditor_steps`). Every step, with its thought, observation or error, is in
+`NN-auditor.json`.
+
+### Resuming a session
+
+```
+tra agent session --resume --out runs/session-1
+```
+
+A session interrupted by a vendor rate limit, a spent budget or a lost connection does not
+start again from nothing. With `--resume`, an answer already recorded in `--out` for a step
+is reused instead of asked again, and a kept instrument whose `run.json` exists is reported
+from disk instead of replayed. The reuse is written down in the session's refusals, so a
+report never hides that a model was not called. `usage.jsonl` keeps the calls of the first
+pass; the second adds only what it actually asked.
+
 ## What each role holds before it is asked
 
 A role does not start from a blank prompt. Code computes the figures first and the model reads

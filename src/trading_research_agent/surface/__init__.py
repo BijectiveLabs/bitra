@@ -20,8 +20,10 @@ from trading_research_agent.surface.tools import (
     check_registration,
     cost_floor_check,
     ladder_show,
+    ledger_search,
     ledger_show,
     run_report,
+    runs_index,
     validate_trades,
 )
 
@@ -36,9 +38,11 @@ __all__ = [
     "cost_floor_check",
     "demote",
     "ladder_show",
+    "ledger_search",
     "ledger_show",
     "refuse",
     "run_report",
+    "runs_index",
     "tighten_limits",
     "validate_trades",
 ]

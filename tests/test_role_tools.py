@@ -397,7 +397,13 @@ def test_a_session_hands_the_roles_measured_briefs(tmp_path: Path, envelope: Env
     analyst = {"target": "flat", "reason": "r", "confidence": 0.9, "horizon_bars": 2}
     risk = {"decision": "continue", "limits": {}, "reason": "fine", "triggers": []}
     alloc = {"size": "0.01", "reason": "r", "allocations": []}
-    audit = {"findings": [], "verdict": "sound", "summary": "ok"}
+    audit = {
+        "action": "answer",
+        "tool": "",
+        "arguments": {},
+        "answer": {"findings": [], "verdict": "sound", "summary": "ok"},
+        "thought": "done",
+    }
     fake = FakeCompleter([screener, macro, *([analyst] * 6), risk, alloc, audit])
     usage = UsageLedger(tmp_path / "out" / "usage.jsonl")
     limits = BudgetLimits(token_budget=500000, max_calls_per_hour=1000, min_interval_s=0)
@@ -439,5 +445,5 @@ def test_a_session_hands_the_roles_measured_briefs(tmp_path: Path, envelope: Env
     assert brief["events"] == [] or brief["events"][0]["what"] == "release"
     risk_user = json.loads(fake.calls[-3].user)
     assert "measured" in risk_user and "latency" in risk_user["measured"]["AAAUSDT"]
-    audit_user = json.loads(fake.calls[-1].user)
+    audit_user = json.loads(fake.calls[-1].user)["question"]
     assert "usage" in audit_user["measured"] and "promotions" in audit_user["measured"]

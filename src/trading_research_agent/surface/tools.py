@@ -186,6 +186,55 @@ def run_report(run_dir: str) -> dict[str, Any]:
     return dict(report)
 
 
+def ledger_search(ledger_path: str, query: str, limit: int = 10) -> dict[str, Any]:
+    """Rows that stand whose subject, note, evidence or axis mention the words in `query`.
+
+    The kill ledger is the research memory: what died, of what, and at which fee it reverses.
+    A role that is about to propose something asks here first.
+    """
+    words = [w.lower() for w in query.split() if w.strip()]
+    if not words:
+        raise ValueError("query needs at least one word")
+    ledger = Ledger(_path(ledger_path, kind="ledger"))
+    hits = []
+    for entry in ledger.effective():
+        record = ledger_to_record(entry)
+        haystack = json.dumps(record, default=str).lower()
+        score = sum(1 for w in words if w in haystack)
+        if score:
+            hits.append((score, record))
+    hits.sort(key=lambda h: -h[0])
+    return {"query": query, "matched": len(hits), "rows": [r for _, r in hits[: max(limit, 1)]]}
+
+
+def runs_index(runs_dir: str, instrument: str = "") -> dict[str, Any]:
+    """Every run under a directory, newest first, with its summary; filtered by instrument."""
+    root = Path(runs_dir).expanduser()
+    if not root.is_dir():
+        raise FileNotFoundError(f"runs directory {runs_dir!r} does not exist")
+    rows = []
+    for summary in sorted(root.rglob("run.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        try:
+            report = json.loads(summary.read_text("utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if instrument and report.get("instrument") != instrument:
+            continue
+        rows.append(
+            {
+                "run": str(summary.parent),
+                "label": report.get("label"),
+                "instrument": report.get("instrument"),
+                "strategy": report.get("strategy"),
+                "round_trips": report.get("round_trips"),
+                "net_bps_total": report.get("net_bps_total"),
+                "stopped_by": report.get("stopped_by"),
+                "finished_at": report.get("finished_at"),
+            }
+        )
+    return {"runs": rows[:50], "total": len(rows)}
+
+
 # Name, title, function. The order is the order a host lists them in.
 READ_TOOLS: tuple[tuple[str, str, Callable[..., dict[str, Any]]], ...] = (
     ("cost_floor_check", "Cost floor (layer 0)", cost_floor_check),
@@ -195,4 +244,6 @@ READ_TOOLS: tuple[tuple[str, str, Callable[..., dict[str, Any]]], ...] = (
     ("ledger_show", "Show the kill ledger", ledger_show),
     ("ladder_show", "Show the promotion ladder", ladder_show),
     ("run_report", "Read a run report", run_report),
+    ("ledger_search", "Search the kill ledger", ledger_search),
+    ("runs_index", "List past runs", runs_index),
 )

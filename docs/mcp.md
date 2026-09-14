@@ -19,8 +19,9 @@ A host configuration names the command and nothing else:
 
 ## Tools
 
-Every tool is annotated read-only and closed-world. Paths are resolved on the machine running
-the server; every number in basis points is a decimal string; every time is UTC.
+Every tool is annotated read-only and closed-world; nine of them, the same nine the agent
+roles hold. Paths are resolved on the machine running the server; every number in basis
+points is a decimal string; every time is UTC.
 
 | Tool | Reads | Returns |
 |---|---|---|
@@ -31,6 +32,8 @@ the server; every number in basis points is a decimal string; every time is UTC.
 | `ledger_show(ledger_path="ledger.jsonl")` | the kill ledger | counts per verdict and every row that stands |
 | `ladder_show(ladder_path="ladder.json")` | the ladder | tier and history |
 | `run_report(run_dir)` | `run.json`, `trades.jsonl` | the run summary with closed round trips counted |
+| `ledger_search(ledger_path, query, limit=10)` | the kill ledger | the rows that stand whose subject, note, evidence or axis mention the query's words, best match first |
+| `runs_index(runs_dir, instrument="")` | every `run.json` under a directory | past runs, newest first, with their summaries |
 
 A refusal from a gate (a registration that does not seal, a file that is not a trade archive,
 an instrument outside the declared universe) comes back as a tool error the model can read

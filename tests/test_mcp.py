@@ -42,8 +42,10 @@ def test_the_server_lists_exactly_the_read_tools() -> None:
         "check_registration",
         "cost_floor_check",
         "ladder_show",
+        "ledger_search",
         "ledger_show",
         "run_report",
+        "runs_index",
         "validate_trades",
     ]
     for name, note in annotations.items():

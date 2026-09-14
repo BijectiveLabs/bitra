@@ -34,6 +34,7 @@ from trading_research_agent.agent.completer import Completer
 from trading_research_agent.agent.macro_analyst.tools import macro_brief, returns_from_closes
 from trading_research_agent.agent.market_screener.tools import ScreenFigures, screen_figures
 from trading_research_agent.agent.onchain_analyst.tools import onchain_brief
+from trading_research_agent.agent.react import ToolLoopError, run_tool_loop
 from trading_research_agent.agent.risk_manager.tools import risk_brief
 from trading_research_agent.agent.roles import RoleError, prompt
 from trading_research_agent.agent.strategy import MAX_FAILURES_IN_A_ROW, AgentStrategy
@@ -43,6 +44,13 @@ from trading_research_agent.data.parquet import read_trades
 from trading_research_agent.data.series import SeriesError, load_all, read_events
 from trading_research_agent.envelope.model import Envelope
 from trading_research_agent.execution.cost import FundingSchedule
+from trading_research_agent.surface import (
+    ladder_show,
+    ledger_search,
+    ledger_show,
+    run_report,
+    runs_index,
+)
 from trading_research_agent.surface.actions import (
     ActionRefusedError,
     arm_kill_switch,
@@ -121,6 +129,8 @@ class SessionConfig:
     onchain_series: Path | None = None
     events: Path | None = None
     screen: ScreenSettings = field(default_factory=ScreenSettings)
+    resume: bool = False
+    auditor_steps: int = 6
     clock: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
 
     def __post_init__(self) -> None:
@@ -205,6 +215,10 @@ class _Session:
         """One call, recorded. A refusal of form or budget is a None the caller handles."""
         if self.stopped_by is not None:
             return None
+        recorded = self._recorded(role)
+        if recorded is not None:
+            self.calls += 1
+            return recorded
         completer = self.cfg.completer_for(role)
         text_user = json.dumps(user, sort_keys=True, default=str)
         try:
@@ -232,6 +246,22 @@ class _Session:
             encoding="utf-8",
         )
         return done.text
+
+    def _recorded(self, role: str) -> str | None:
+        """With --resume, an answer already on disk for this step is reused, not asked again."""
+        if not self.cfg.resume:
+            return None
+        path = self.out / f"{self.calls + 1:02d}-{role}.json"
+        if not path.is_file():
+            return None
+        try:
+            saved = json.loads(path.read_text("utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        if saved.get("role") != role or not isinstance(saved.get("response"), str):
+            return None
+        self.refusals.append(f"{role}: reused the recorded answer ({path.name})")
+        return str(saved["response"])
 
     def screen(self, figures: list[Figures]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         text = self.ask(
@@ -304,6 +334,10 @@ class _Session:
         channel = next((c for c in self.cfg.envelope.channels if c.key == s.run.venue_key), None)
         if channel is None:
             raise SessionError(f"venue_key {s.run.venue_key!r} is not a channel in the envelope")
+        out = self.out / instrument
+        if self.cfg.resume and (out / "run.json").is_file():
+            # A finished run is a checkpoint: its report is rebuilt, not re-run.
+            return _report_from_disk(out, instrument)
         core = AgentStrategy(
             self.cfg.completer_for("technical_analyst"),
             mechanism=a.mechanism,
@@ -311,7 +345,6 @@ class _Session:
             min_confidence=a.min_confidence,
             decide_every_bars=a.decide_every_bars,
         )
-        out = self.out / instrument
         config = TradingConfig(
             feed=RecordedFeed.from_parquet(path, instrument=instrument),
             venue=SimulatedVenue(
@@ -456,13 +489,8 @@ class _Session:
             "ladder_history": list(ladder.history),
             "refusals": self.refusals,
         }
-        text = self.ask(auditor.ROLE, user, auditor.SCHEMA)
-        if text is None:
-            return None
-        try:
-            out = auditor.parse(text)
-        except RoleError as exc:
-            self.refusals.append(f"auditor: {exc}")
+        out = self._audit_with_tools(user)
+        if out is None:
             return None
         record = {
             "verdict": out.verdict,
@@ -476,6 +504,83 @@ class _Session:
             json.dumps(record, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
         )
         return record
+
+    def _audit_with_tools(self, user: dict[str, Any]) -> Any:
+        """The auditor may read any run, the ledger and the ladder before it answers."""
+        if self.stopped_by is not None:
+            return None
+        recorded = self._recorded(auditor.ROLE)
+        if recorded is not None:
+            self.calls += 1
+            try:
+                return auditor.parse(recorded)
+            except RoleError:
+                return None
+        tools: dict[str, Callable[..., Any]] = {
+            "run_report": run_report,
+            "ledger_show": ledger_show,
+            "ledger_search": ledger_search,
+            "runs_index": runs_index,
+            "ladder_show": ladder_show,
+        }
+        try:
+            loop = run_tool_loop(
+                completer=self.cfg.completer_for(auditor.ROLE),
+                system=prompt(auditor.ROLE),
+                question={
+                    **user,
+                    "session_dir": str(self.out),
+                    "ladder_path": str(self.cfg.ladder_path),
+                },
+                tools=tools,
+                answer_schema=auditor.SCHEMA,
+                max_steps=self.cfg.auditor_steps,
+            )
+        except ToolLoopError as exc:
+            self.refusals.append(f"auditor: {exc}")
+            return None
+        except (RoleError, RuntimeError, OSError, ValueError) as exc:
+            self.refusals.append(f"auditor: {exc.__class__.__name__}: {exc}")
+            return None
+        self.calls += 1
+        response = json.dumps(loop.answer, sort_keys=True)
+        (self.out / f"{self.calls:02d}-{auditor.ROLE}.json").write_text(
+            json.dumps(
+                {
+                    "role": auditor.ROLE,
+                    "user": user,
+                    "response": response,
+                    "steps": [s.record() for s in loop.steps],
+                    "calls": loop.calls,
+                },
+                indent=2,
+                sort_keys=True,
+                default=str,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        try:
+            return auditor.parse(response)
+        except RoleError as exc:
+            self.refusals.append(f"auditor: {exc}")
+            return None
+
+
+def _report_from_disk(out: Path, instrument: str) -> RunReport:
+    summary = json.loads((out / "run.json").read_text("utf-8"))
+    report = RunReport(
+        label=str(summary.get("label", "session-replay")),
+        instrument=instrument,
+        started_at=datetime.fromisoformat(str(summary["started_at"])),
+    )
+    report.finished_at = datetime.fromisoformat(str(summary["finished_at"]))
+    for key in ("prints", "bars", "intents", "refused", "fills", "round_trips"):
+        setattr(report, key, int(summary.get(key, 0)))
+    report.net_bps_total = Decimal(str(summary.get("net_bps_total", "0")))
+    report.stopped_by = summary.get("stopped_by")
+    report.open_position = summary.get("open_position")
+    return report
 
 
 def run_session(cfg: SessionConfig) -> SessionResult:

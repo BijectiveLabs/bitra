@@ -264,6 +264,9 @@ def build_parser() -> argparse.ArgumentParser:
     session_cmd.add_argument("--onchain", type=Path, help="a series.toml of on-chain series")
     session_cmd.add_argument("--events", type=Path, help="a calendar (JSON or CSV: when, what)")
     session_cmd.add_argument("--env-file", type=Path)
+    session_cmd.add_argument(
+        "--resume", action="store_true", help="reuse the answers and runs already in --out"
+    )
     session_cmd.add_argument("--json", action="store_true")
 
     refusals_cmd = agent.add_parser("refusals", help="ideas the gates would not let through")
@@ -1182,6 +1185,7 @@ def agent_session(args: argparse.Namespace) -> int:
             onchain_series=args.onchain,
             events=args.events,
             screen=ScreenSettings(**a.screen) if a.screen else ScreenSettings(),
+            resume=bool(args.resume),
         )
     )
     lines = [

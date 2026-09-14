@@ -37,6 +37,12 @@ All notable changes to this project are recorded here. The format follows
   `examples/series.toml`: any source, aligned as-of with the publication lag honoured,
   correlations measured with n, thresholds declared), `risk_brief` from a run's own files,
   `size_for` / `rate_budget` / `export_signals` (`tra signals export`), `audit_brief`.
+- `agent/react.py`: a bounded tool loop with a closed catalog, checked arguments, cut
+  observations, a step cap and every step recorded. The auditor works it over the read
+  surface before it answers.
+- `ledger_search` and `runs_index` on the surface and the MCP server (nine tools).
+- `tra agent session --resume`: recorded answers and finished runs are reused, and the
+  reuse is written down.
 
 ### Changed
 
