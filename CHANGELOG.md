@@ -66,6 +66,8 @@ All notable changes to this project are recorded here. The format follows
 - A canary cap that is already met ends the session when flat.
 - The console output escapes what the terminal's encoding cannot show instead of ending
   the command.
+- CI also installs the built wheel into an empty environment and runs the command, audits
+  the lock against OSV (`uv audit`), and builds and runs the container image.
 - `tra agent session` exits refused when the session never reached its audit verdict.
 - `[agents].call_timeout_s` now reaches the vendor client as a per-request timeout, with
   `[agents].max_retries` (default 2) for the SDK's own backoff on 429s and 5xx; before, the
