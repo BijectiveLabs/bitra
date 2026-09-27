@@ -25,6 +25,8 @@ from uuid import uuid4
 
 from trading_research_agents import __version__
 from trading_research_agents.agents import Outcome, RunConfig, propose
+from trading_research_agents.agents.briefs import BriefError
+from trading_research_agents.agents.cycle import CycleError
 from trading_research_agents.agents.pipeline import read_refusals
 from trading_research_agents.agents.session import SessionError
 from trading_research_agents.chain import (
@@ -71,6 +73,7 @@ from trading_research_agents.data.sources import (
 from trading_research_agents.data.sources.registry import UnknownSourceError
 from trading_research_agents.envelope import EnvelopeError, load_envelope
 from trading_research_agents.execution import FundingSchedule
+from trading_research_agents.execution.pretrade import PreTradeError
 from trading_research_agents.ledger import Ledger, LedgerError, Verdict
 from trading_research_agents.ledger.store import to_record as ledger_to_record
 from trading_research_agents.llm import Completer
@@ -407,6 +410,30 @@ def build_parser() -> argparse.ArgumentParser:
     export_cmd.add_argument("--format", choices=("jsonl", "csv"), default="jsonl")
     export_cmd.add_argument("--json", action="store_true")
 
+    run_cmd = top.add_parser(
+        "run", help="one autonomous cycle: snapshot, agents, cost gate, sandbox intent"
+    )
+    run_cmd.set_defaults(command="run")
+    run_cmd.add_argument("--instrument", default=None, help="default: [run].instrument")
+    run_cmd.add_argument("--config", type=Path, default=Path("strategy.toml"))
+    run_cmd.add_argument("--envelope", type=Path, default=Path("envelope.toml"))
+    run_cmd.add_argument("--data-config", type=Path, default=Path("data.toml"))
+    run_cmd.add_argument(
+        "--mode",
+        choices=("sandbox", "signals"),
+        default="sandbox",
+        help="sandbox writes the intent to the cycle; signals writes it for your own executor",
+    )
+    run_cmd.add_argument(
+        "--margin", type=parse_decimal, default=None, help="bps the edge must clear beyond cost"
+    )
+    run_cmd.add_argument("--out", type=Path, default=None, help="default: runs/cycles")
+    run_cmd.add_argument(
+        "--resume", action="store_true", help="reuse answers already written for this cycle"
+    )
+    run_cmd.add_argument("--env-file", type=Path)
+    run_cmd.add_argument("--json", action="store_true")
+
     check_cmd = top.add_parser("check", help="what is ready and what is missing, in plain words")
     check_cmd.set_defaults(command="check")
     check_cmd.add_argument("--config", type=Path, default=Path("strategy.toml"))
@@ -476,6 +503,9 @@ def main(argv: list[str] | None = None) -> int:
         ChainExhaustedError,
         DataConfigError,
         SourceError,
+        BriefError,
+        CycleError,
+        PreTradeError,
         UnknownSourceError,
         UnknownVenueError,
         LedgerError,
@@ -1180,6 +1210,108 @@ def _agent_config(text: str, provider_name: str, model: str) -> str:
     return text
 
 
+def run_cycle_command(args: argparse.Namespace) -> int:
+    """One cycle, end to end, from the files in the project."""
+    from trading_research_agents.agents.cycle import CycleConfig, run_cycle
+    from trading_research_agents.data.sources import load_data_config
+    from trading_research_agents.llm.usage import (
+        BudgetLimits,
+        MeteredCompleter,
+        Pricing,
+        UsageLedger,
+    )
+
+    if args.env_file is not None:
+        for key, value in read_env_file(args.env_file).items():
+            os.environ.setdefault(key, value)
+    cfg = load_strategy_config(args.config)
+    if cfg.agents is None:
+        raise ConfigError("a cycle needs [strategy].agent and [agents] in strategy.toml")
+    a = cfg.agents
+    magnitude = a.magnitude_bps
+    if magnitude is None:
+        raise ConfigError("the claimed edge: [agents].magnitude_bps in strategy.toml")
+    data_cfg = load_data_config(args.data_config)
+    chains = {declared.kind: data_cfg.chain(declared.kind) for declared in data_cfg.kinds}
+    instrument = args.instrument or cfg.run.instrument
+    out = args.out or Path("runs") / "cycles"
+    usage = UsageLedger(out / "usage.jsonl")
+    limits = BudgetLimits(
+        token_budget=a.token_budget,
+        max_calls_per_hour=a.max_calls_per_hour,
+        min_interval_s=a.min_interval_s,
+        call_timeout_s=a.call_timeout_s,
+    )
+    pricing = {model: Pricing(i, o) for model, (i, o) in a.pricing.items()}
+    inner = _build_completer(a)
+    metered: dict[str, MeteredCompleter] = {}
+
+    def completer_for(role: str) -> MeteredCompleter:
+        # One budget for the whole cycle; the ledger is shared, the cadence is per role.
+        if role not in metered:
+            metered[role] = MeteredCompleter(
+                inner, role=role, provider=a.provider, limits=limits, ledger=usage, pricing=pricing
+            )
+        return metered[role]
+
+    result = run_cycle(
+        CycleConfig(
+            instrument=instrument,
+            envelope=load_envelope(args.envelope),
+            venue_key=cfg.run.venue_key,
+            chains=chains,
+            completer_for=completer_for,
+            usage=usage,
+            root=out,
+            mechanism=a.mechanism,
+            size=cfg.run.size,
+            magnitude_bps=magnitude,
+            bar_interval_s=cfg.run.bar_interval_s,
+            lookback_bars=a.lookback_bars,
+            interval_s=cfg.run.bar_interval_s,
+            settlement_interval_s=cfg.run.settlement_interval_s,
+            latency_slippage_bps=cfg.run.slippage_bps,
+            margin_bps=args.margin if args.margin is not None else Decimal(0),
+            min_confidence=a.min_confidence,
+            mode=args.mode,
+            resume=bool(args.resume),
+        )
+    )
+    payload = result.record()
+    payload["tokens"] = usage.tokens
+    payload["out"] = str(result.path)
+    lines = [f"cycle {result.cycle} {result.instrument}: {result.fan.seconds}s of agents"]
+    data = result.briefs.get("data") or {}
+    for kind, value in sorted((data.get("values") or {}).items()):
+        lines.append(f"  {kind:<14} {value['source']:<18} age {value['age_s']}s")
+    if result.analyst is not None:
+        lines.append(
+            f"technical: {result.analyst.target} at {result.analyst.confidence:.2f} "
+            f"over {result.analyst.horizon_bars} bars: {result.analyst.reason}"
+        )
+    if result.verdict is not None:
+        cost = result.verdict.cost
+        total = cost.round_trip_bps.quantize(Decimal("0.01"))
+        guessed = cost.estimated_bps.quantize(Decimal("0.01"))
+        lines.append(f"cost: {total} bps round trip, {guessed} of it estimated")
+        lines.append(f"gate: {result.verdict.reason}")
+        lines.append(
+            f"the edge is {result.verdict.edge_certainty.value}: {result.verdict.edge_source}"
+        )
+        for component in cost.components:
+            row = component.record()
+            lines.append(f"  {row['name']:<18} {row['bps']:>10} bps  {row['certainty']}")
+    if result.intent is not None:
+        lines.append(f"intent: {result.intent['target']} {result.intent['size']} ({args.mode})")
+    for refusal in result.refusals[:6]:
+        lines.append(f"  refused {refusal}")
+    if result.stopped_by:
+        lines.append(f"stopped by: {result.stopped_by}")
+    lines.append(f"snapshot.json, briefs, answers and cycle.json in {result.path}")
+    emit(payload, args.json, lines, lambda: _ui().cycle_view(payload))
+    return CLEARED if result.stopped_by is None else REFUSED
+
+
 def check_project(args: argparse.Namespace) -> int:
     """What a first run needs, checked in the order it would fail, said in plain words."""
     good, bad, next_command = _check(args)
@@ -1238,6 +1370,24 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
                 good.append(
                     f"observation.toml: {declared.subject!r}; `tra chain observe` before any memo"
                 )
+        data_config = args.config.resolve().parent / "data.toml"
+        if data_config.is_file():
+            from trading_research_agents.data.sources import DataConfigError, load_data_config
+
+            try:
+                declared_data = load_data_config(data_config)
+            except DataConfigError as exc:
+                bad.append(f"data.toml: {exc}")
+            else:
+                kinds = ", ".join(k.kind for k in declared_data.kinds)
+                good.append(f"data.toml: chains for {kinds}; `tra run` uses them")
+                if not any(k.kind == "orderbook" for k in declared_data.kinds):
+                    bad.append(
+                        "data.toml: no [data.orderbook] chain, so a cycle cannot price a trade "
+                        "and `tra run` will stop at the cost gate"
+                    )
+        elif cfg.agents is not None:
+            bad.append("data.toml: missing; `tra run` needs it (tra init writes one)")
         if cfg.agents is not None:
             try:
                 p = provider(cfg.agents.provider)
@@ -1263,7 +1413,7 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
     elif cfg is not None and cfg.run.instrument not in _datasets(args.config):
         next_command = f"tra data get {cfg.run.instrument} YYYY-MM-DD"
     elif cfg is not None and cfg.agents is not None:
-        next_command = "tra agent session --env-file .env"
+        next_command = "tra run --env-file .env"
     return good, bad, next_command
 
 
@@ -1761,6 +1911,7 @@ HANDLERS = {
     ("data", "get"): data_get,
     ("data", "pull"): data_pull,
     ("check", "check"): check_project,
+    ("run", "run"): run_cycle_command,
     ("chain", "floor"): chain_floor,
     ("chain", "observe"): chain_observe,
     ("chain", "check"): chain_check,

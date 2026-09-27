@@ -387,6 +387,78 @@ def ladder_table(tier: str, history: Sequence[Mapping[str, Any]]) -> Group:
     return Group(Text(f"tier {tier}", style="bold"), table)
 
 
+def cycle_view(record: Mapping[str, Any]) -> Group:
+    """One cycle: what the engine saw, what the analyst said, what the cost gate decided."""
+    parts: list[Any] = []
+    data = record.get("data") or {}
+    head: list[tuple[str, Any]] = [
+        ("cycle", record.get("cycle_id")),
+        ("instrument", record.get("instrument")),
+        ("mode", record.get("mode")),
+    ]
+    analyst = record.get("analyst") or {}
+    if analyst:
+        head.append(
+            (
+                "technical",
+                f"{analyst.get('target')} at {analyst.get('confidence')} over "
+                f"{analyst.get('horizon_bars')} bars: {analyst.get('reason')}",
+            )
+        )
+    intent = record.get("intent")
+    if intent:
+        head.append(("intent", Text(f"{intent['target']} {intent['size']}", style="bold")))
+    for refusal in (record.get("refusals") or [])[:6]:
+        head.append(("refused", Text(str(refusal), style="yellow")))
+    if record.get("stopped_by"):
+        head.append(("stopped by", Text(str(record["stopped_by"]), style="yellow")))
+    parts.append(Panel(_kv(head), title="cycle", box=box.ROUNDED, expand=False))
+
+    if data.get("values"):
+        table = Table(box=box.SIMPLE_HEAD, show_edge=False, pad_edge=False, title="data used")
+        for name in ("kind", "source", "tier", "age s"):
+            table.add_column(name)
+        for kind, value in sorted(data["values"].items()):
+            table.add_row(
+                kind, str(value.get("source")), str(value.get("tier")), str(value.get("age_s"))
+            )
+        parts.append(table)
+
+    cost = record.get("cost") or {}
+    if cost:
+        costs = Table(box=box.SIMPLE_HEAD, show_edge=False, pad_edge=False)
+        costs.title = f"cost before the order: {cost['cost']['round_trip_bps']} bps round trip"
+        for name, justify in (
+            ("component", "left"),
+            ("bps", "right"),
+            ("certainty", "left"),
+            ("from", "left"),
+        ):
+            costs.add_column(name, justify=justify)  # type: ignore[arg-type]
+        styles = {"declared": "green", "measured": "cyan", "computed": "", "estimated": "yellow"}
+        for component in cost["cost"]["components"]:
+            costs.add_row(
+                component["name"],
+                component["bps"],
+                Text(component["certainty"], style=styles.get(component["certainty"], "")),
+                component["source"],
+            )
+        costs.caption = f"{cost['reason']}; edge is {cost['edge_certainty']}: {cost['edge_source']}"
+        parts.append(costs)
+
+    agents = record.get("agents") or {}
+    if agents.get("agents"):
+        who = Table(box=box.SIMPLE_HEAD, show_edge=False, pad_edge=False, title="agents")
+        for name in ("agent", "state", "seconds"):
+            who.add_column(name)
+        for row in agents["agents"]:
+            state = "reused" if row.get("reused") else ("ok" if row.get("ok") else "failed")
+            style = {"ok": "green", "failed": "red", "reused": "dim"}[state]
+            who.add_row(str(row.get("agent")), Text(state, style=style), str(row.get("seconds")))
+        parts.append(who)
+    return Group(*parts)
+
+
 def snapshot_view(record: Mapping[str, Any]) -> Group:
     """One snapshot: what answered, how old it was, and what the chain tried on the way."""
     values = Table(box=box.SIMPLE_HEAD, show_edge=False, pad_edge=False, title="snapshot")
