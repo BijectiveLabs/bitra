@@ -15,6 +15,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from trading_research_agents.execution.excursion import summarise
+
 
 def _lines(path: Path) -> list[dict[str, Any]]:
     if not path.is_file():
@@ -122,6 +124,16 @@ def refusal_pattern(run_dir: Path) -> list[dict[str, Any]]:
     return [{"control": k, "refusals": v} for k, v in sorted(counts.items(), key=lambda kv: -kv[1])]
 
 
+def excursions(run_dir: Path) -> dict[str, Any]:
+    """How far the closed round trips went each way before they ended.
+
+    A position that closed at plus two after standing twenty in front says something about the
+    exit; one that closed at plus two after standing fourteen under water says something about how
+    near the stop came. Neither shows up in the net, so both are reported here.
+    """
+    return summarise(_lines(run_dir / "trades.jsonl"))
+
+
 def risk_brief(
     run_dirs: Sequence[tuple[str, Path]], *, declared_ms: Decimal, claimed_bps: Decimal
 ) -> dict[str, Any]:
@@ -130,6 +142,7 @@ def risk_brief(
             "latency": measured_latency(path, declared_ms=declared_ms).record(),
             "alpha_decay": alpha_decay(path, claimed_bps=claimed_bps).record(),
             "drawdown": drawdown(path),
+            "excursions": excursions(path),
             "refusals": refusal_pattern(path),
         }
         for name, path in run_dirs

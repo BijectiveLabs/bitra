@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from trading_research_agents.data.schema import Direction, Trade
+from trading_research_agents.execution.excursion import ExcursionTracker
 from trading_research_agents.strategy.core import Bar, Signal, Strategy, Target
 from trading_research_agents.strategy.exits import (
     ExitRule,
@@ -79,6 +80,7 @@ class Position:
     stop_px: Decimal
     tp_px: Decimal | None
     bars_held: int = 0
+    excursion: ExcursionTracker | None = None
 
 
 @dataclass
@@ -164,6 +166,7 @@ class _Loop:
             size=fill.size,
             stop_px=self.c.exit_rule.stop_for(fill.price, fill.direction),
             tp_px=self.c.exit_rule.take_profit_for(fill.price, fill.direction),
+            excursion=ExcursionTracker(entry_px=fill.price, direction=fill.direction),
         )
 
     # Bars
@@ -201,6 +204,8 @@ class _Loop:
 
     def evaluate_exits(self, position: Position, bar: Bar) -> None:
         position.bars_held += 1
+        if position.excursion is not None:
+            position.excursion.see(bar.high, bar.low)
         if bar.empty:
             return
         rule = self.c.exit_rule
@@ -332,6 +337,7 @@ class _Loop:
                 "entry_px": str(position.entry_px),
                 "exit_px": str(exit_px),
                 "bars_held": position.bars_held,
+                **({} if position.excursion is None else position.excursion.close().record()),
             }
         )
         self.report.round_trips += 1
