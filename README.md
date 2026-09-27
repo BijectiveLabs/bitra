@@ -1,26 +1,28 @@
 ![Bijective Labs](assets/bijective_banner.png)
 
-# trading-research-agent
+# trading-research-agents
 
-**The trading agent that shows its kill count.**
+**Autonomous trading agents for crypto that cannot lie about their own results.**
 
-Two agents for crypto markets that share one ledger. The research agent is not allowed to
-say a strategy works until the gates have measured it: the data it was tested on is sound,
-the idea survived the cheap tests before the expensive ones, and the result is net of what
-execution actually costs. The trading agent runs what the research agent registered, in
-real time, through the same gates, with controls that fail closed and no language model on
-the order path. Every outcome, including the ones that end in minutes, is written to the
-kill ledger.
+Agents that decide, and code that refuses. An engine pulls the data, normalises it, and hands
+each agent a brief of figures the agent did not compute itself. Models read those figures and
+decide. Then code takes over: it prices the round trip before the order exists, enforces the
+limits you declared, and writes every intent, refusal and fill to a ledger that is never
+rewritten. No model sits on the order path, no agent holds a key, and the default venue is a
+simulator. What survives that is worth looking at; what does not is recorded as dead, with the
+reason it died.
 
 Status: pre-release, under active development. The API is not stable and the package is not
-yet on PyPI.
+yet on PyPI. Running today: the gates, the ladder, the roles, the console. Landing next: the
+autonomous cycle, live data sources with free and paid chains, the validators, and the two
+auditors.
 
 ---
 
 ## Four commands
 
 ```bash
-pip install 'trading-research-agent[data]'     # numpy and pyarrow; nothing else
+pip install 'trading-research-agents[data]'     # numpy and pyarrow; nothing else
 tra init my-run && cd my-run                  # strategy.toml, envelope.toml, an example core
 tra data get BTCUSDT 2025-01-01               # fetch, audit, Parquet and funding, into data/
 tra backtest                                  # the example core on that day, net of costs
@@ -62,8 +64,9 @@ what each one died of. The agent inherits that discipline as code:
   claim and the exit design. The arithmetic and the statistics are code, and cannot be argued
   with.
 
-`numpy` is the one required dependency; everything that touches money is `Decimal`, and the
-statistics run in floating point from the collapsed series on.
+Two required dependencies, `numpy` and `rich`. No orchestration framework, no dataframe
+library, no vendor lock-in. Everything that touches money is `Decimal`; the statistics run in
+floating point from the collapsed series on.
 
 ## How it fits together
 
@@ -95,9 +98,10 @@ they read what the gates measured and can only tighten what code enforces.
 
 ```mermaid
 flowchart TB
-    cli["cli  (tra, the console face)"] --> agent["agent  (roles, session, tool loop, eval, trace)"]
+    cli["cli  (tra, the console face)"] --> agents["agents  (roles, session, tool loop, eval, trace)"]
     cli --> mcp["mcp  (read-only server)"]
-    agent --> surface["surface  (the gates as tools, tighten-only actions)"]
+    agents --> llm["llm  (completer, schema parser, budget, vendor adapters)"]
+    agents --> surface["surface  (the gates as tools, tighten-only actions)"]
     mcp --> surface
     surface --> trading["trading  (feeds, simulated venue, controls, ladder, runtime, live plugins)"]
     trading --> strategy["strategy  (core protocol, exits, walk-forward)"]
@@ -108,31 +112,33 @@ flowchart TB
     data --> ledger["ledger  (verdicts, axes, store)"]
 ```
 
-Imports go downward only, and a test enforces it (`tests/test_boundaries.py`). Only `agent`
-speaks to a language model; only the plugin directories (and the files `tra init` copies)
-name a venue.
+Imports go downward only, and a test enforces it (`tests/test_boundaries.py`). `llm` is the
+only package that speaks to a model vendor, and it knows nothing about markets; `agents` is
+the only package that speaks to `llm`. Only the plugin directories, and the files `tra init`
+copies, name a venue.
 
 ## What is here today
 
 | Package | Purpose |
 |---|---|
-| `trading_research_agent.ledger` | The kill ledger: a closed vocabulary of verdicts and axes, an append-only store, and the consistency rules between them |
-| `trading_research_agent.envelope` | The operating envelope: fees per channel, measured round trips, latency. Configuration, never constants |
-| `trading_research_agent.data` | The data gate: any trade data to canonical trades, through a venue plugin or a declared column map; a one-pass audit with findings, a manifest with checksums, and exact `DECIMAL` Parquet with the `[data]` extra |
-| `trading_research_agent.strategy` | The decision-core protocol, exits bound to the mechanism (layer 6, causal stops with adverse fills), the walk-forward harness that refuses precomputed parameters. No strategy of its own |
-| `trading_research_agent.trading` | The trading agent: recorded feeds and live feed plugins, a simulated venue on the execution rules, controls that fail closed, the promotion ladder, one runtime for replay and shadow |
-| `trading_research_agent.agent` | Agents with full access through the gates: an idea through layers 0, 2 and 3; seven roles (screener, technical analyst as a decision core, macro, on-chain, risk manager, executor, auditor) in a fixed session; every call metered in `usage.jsonl`. Providers as plugins with verified presets; `[anthropic]`, `[openai]`, `[google]` |
-| `trading_research_agent.surface` | The gates as callable tools for the MCP server and the roles: ten reads, and actions that only tighten, demote or halt |
-| `trading_research_agent.cli` | The `tra` command: data, chain, agent, trade, ladder, ledger, and the console face |
-| `trading_research_agent.chain` | The falsification chain: layer 0 (cost floor), layer 1 (market observation), layer 3 (sealed pre-registration), layer 4 (data requirements), layer 5 (validation: net returns, block bootstrap, matched null, subperiods, power, BH, anchor robustness), and the era seal |
-| `trading_research_agent.execution` | Execution realism: the cost identity with funding, walk-the-book, passive fills with trade-through, effective cost across unfilled orders, markout |
+| `trading_research_agents.ledger` | The kill ledger: a closed vocabulary of verdicts and axes, an append-only store, and the consistency rules between them |
+| `trading_research_agents.envelope` | The operating envelope: fees per channel, measured round trips, latency. Configuration, never constants |
+| `trading_research_agents.data` | The data gate: any trade data to canonical trades, through a venue plugin or a declared column map; a one-pass audit with findings, a manifest with checksums, and exact `DECIMAL` Parquet with the `[data]` extra |
+| `trading_research_agents.strategy` | The decision-core protocol, exits bound to the mechanism (layer 6, causal stops with adverse fills), the walk-forward harness that refuses precomputed parameters. No strategy of its own |
+| `trading_research_agents.trading` | The trading agent: recorded feeds and live feed plugins, a simulated venue on the execution rules, controls that fail closed, the promotion ladder, one runtime for replay and shadow |
+| `trading_research_agents.llm` | Everything that talks to a language model and nothing that decides: the completer protocol, the structured-output parser, the call budget with `usage.jsonl`, and the vendor adapters behind `[anthropic]`, `[openai]`, `[google]` plus verified OpenAI-compatible presets |
+| `trading_research_agents.agents` | The roles: what each agent is asked, what it may answer, and what it may never do. Seven today (screener, technical analyst as a decision core, macro, on-chain, risk manager, executor, auditor) in a fixed session, a bounded tool loop, model comparison, and traces |
+| `trading_research_agents.surface` | The gates as callable tools for the MCP server and the roles: ten reads, and actions that only tighten, demote or halt |
+| `trading_research_agents.cli` | The `tra` command: data, chain, agent, trade, ladder, ledger, and the console face |
+| `trading_research_agents.chain` | The falsification chain: layer 0 (cost floor), layer 1 (market observation), layer 3 (sealed pre-registration), layer 4 (data requirements), layer 5 (validation: net returns, block bootstrap, matched null, subperiods, power, BH, anchor robustness), and the era seal |
+| `trading_research_agents.execution` | Execution realism: the cost identity with funding, walk-the-book, passive fills with trade-through, effective cost across unfilled orders, markout |
 
 Layer 0 in six lines:
 
 ```python
 from decimal import Decimal
-from trading_research_agent.envelope import load_envelope
-from trading_research_agent.chain import cost_floor
+from trading_research_agents.envelope import load_envelope
+from trading_research_agents.chain import cost_floor
 
 envelope = load_envelope("examples/envelope.toml")
 check = cost_floor(envelope, Decimal("3.0"), venue="hyperliquid")
@@ -154,6 +160,7 @@ tra data fetch --venue binance --instrument BTCUSDT --month 2025-01 --out data/
 tra data audit data/BTCUSDT-trades-2025-01.zip --venue binance --instrument BTCUSDT \
     --max-gap 5m --manifest data/manifest.json
 tra data audit export.csv --mapping examples/mapping.toml --instrument BTCUSDT --max-gap 5m
+tra data pull BTCUSDT                            # one live snapshot through the chains in data.toml
 tra chain floor --envelope examples/envelope.toml --magnitude 3.0 --venue hyperliquid     --subject "informed-flow burst drift" --ledger ledger.jsonl --id H-001
 tra chain observe --dataset data/BTCUSDT-2025-01-01.parquet   # layer 1: does the event recur? observation.toml
 tra chain check preregistration.json
@@ -248,6 +255,6 @@ for the data gate, `docs/chain.md` for the chain, `docs/execution.md` for execut
 
 ## License
 
-Apache License 2.0. See `LICENSE` and `NOTICE`.
+MIT. See `LICENSE`; `NOTICE` lists the third-party software this package builds on.
 
 Built by [Bijective Labs](https://github.com/BijectiveLabs).
