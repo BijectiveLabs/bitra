@@ -7,6 +7,18 @@ from importlib import resources
 import pytest
 
 ROLES = ("bound", "memo", "critique", "registration")
+# The roles a cycle or a session asks. Every one of them ships a prompt, and the prompt is held to
+# the same rule as the doctrine: it names what to read and never promises an outcome.
+AGENTS = (
+    "market_screener",
+    "technical_analyst",
+    "macro_analyst",
+    "onchain_analyst",
+    "sentiment_analyst",
+    "risk_manager",
+    "executor",
+    "auditor",
+)
 FORBIDDEN = ("win rate", "profit", "guaranteed", "alpha")
 
 
@@ -49,3 +61,23 @@ def test_registration_prompt_lists_all_four_cost_terms() -> None:
     )
     for term in ("fee", "spread_cost", "slippage", "funding_accrual"):
         assert term in text
+
+
+@pytest.mark.parametrize("role", AGENTS)
+def test_every_agent_ships_an_ascii_prompt_that_forbids_outcome_talk(role: str) -> None:
+    raw = (
+        resources.files("trading_research_agents.agents.prompts")
+        .joinpath(f"{role}.md")
+        .read_bytes()
+    )
+    assert raw.isascii(), f"{role}.md contains non-ASCII bytes"
+    text = raw.decode("ascii")
+    assert len(text.split()) > 60, f"{role}.md is too thin to carry the role"
+    assert "one JSON object" in text, f"{role}.md does not say what shape to answer in"
+    for line in text.splitlines():
+        lowered = line.lower()
+        for word in FORBIDDEN:
+            if word in lowered:
+                assert "do not" in lowered or "never" in lowered, (
+                    f"{role}.md: {word!r} outside a prohibition: {line!r}"
+                )
