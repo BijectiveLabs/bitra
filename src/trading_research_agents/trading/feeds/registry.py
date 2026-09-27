@@ -5,10 +5,10 @@ from importlib import import_module
 from importlib.metadata import entry_points
 from typing import Protocol
 
-from trading_research_agent.trading.feed import Feed
+from trading_research_agents.trading.feed import Feed
 
-ENTRY_POINT_GROUP = "trading_research_agent.feeds"
-BUNDLED = ("trading_research_agent.trading.feeds.bybit",)
+ENTRY_POINT_GROUP = "trading_research_agents.feeds"
+BUNDLED = ("trading_research_agents.trading.feeds.bybit",)
 
 
 class UnknownFeedError(KeyError):

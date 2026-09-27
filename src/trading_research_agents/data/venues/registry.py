@@ -8,10 +8,13 @@ from importlib import import_module
 from importlib.metadata import entry_points
 from typing import Protocol
 
-from trading_research_agent.data.schema import Rejection, Trade
+from trading_research_agents.data.schema import Rejection, Trade
 
-ENTRY_POINT_GROUP = "trading_research_agent.venues"
-BUNDLED = ("trading_research_agent.data.venues.bybit", "trading_research_agent.data.venues.binance")
+ENTRY_POINT_GROUP = "trading_research_agents.venues"
+BUNDLED = (
+    "trading_research_agents.data.venues.bybit",
+    "trading_research_agents.data.venues.binance",
+)
 
 
 class UnknownVenueError(KeyError):

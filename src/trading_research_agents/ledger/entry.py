@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from trading_research_agent.ledger.vocabulary import (
+from trading_research_agents.ledger.vocabulary import (
     ENVELOPE_BOUND_AXES,
     UNIVERSAL_AXES,
     Axis,

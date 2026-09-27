@@ -18,8 +18,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
 
-from trading_research_agent.data.schema import Direction
-from trading_research_agent.envelope.model import Channel
+from trading_research_agents.data.schema import Direction
+from trading_research_agents.envelope.model import Channel
 
 BPS = Decimal(10_000)
 NS_PER_S = 1_000_000_000

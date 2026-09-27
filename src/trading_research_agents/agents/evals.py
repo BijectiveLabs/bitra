@@ -19,18 +19,18 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from trading_research_agent.agent.completer import Completer
-from trading_research_agent.agent.session import SessionError, replay_instrument
-from trading_research_agent.agent.strategy import AgentStrategy
-from trading_research_agent.agent.usage import (
+from trading_research_agents.agents.session import SessionError, replay_instrument
+from trading_research_agents.agents.strategy import AgentStrategy
+from trading_research_agents.envelope.model import Envelope
+from trading_research_agents.llm.completer import Completer
+from trading_research_agents.llm.usage import (
     BudgetLimits,
     MeteredCompleter,
     Pricing,
     UsageLedger,
     UsageRecord,
 )
-from trading_research_agent.envelope.model import Envelope
-from trading_research_agent.trading import RunReport, StrategyConfig
+from trading_research_agents.trading import RunReport, StrategyConfig
 
 ROLE = "technical_analyst"
 

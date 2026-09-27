@@ -17,10 +17,10 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from trading_research_agent import __version__
-from trading_research_agent.data.manifest import Source
+from trading_research_agents import __version__
+from trading_research_agents.data.manifest import Source
 
-USER_AGENT = f"trading-research-agent/{__version__}"
+USER_AGENT = f"trading-research-agents/{__version__}"
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
 
 

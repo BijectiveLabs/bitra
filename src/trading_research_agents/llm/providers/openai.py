@@ -1,4 +1,4 @@
-"""OpenAI adapter, on the official SDK (`pip install 'trading-research-agent[openai]'`).
+"""OpenAI adapter, on the official SDK (`pip install 'trading-research-agents[openai]'`).
 
 No default model: the operator names one. Structured output is requested as a strict JSON
 schema, and the result is still validated by the caller. Any server that speaks the same API
@@ -14,8 +14,7 @@ import os
 from collections.abc import Mapping
 from typing import Any
 
-from trading_research_agent.agent.completer import Completion
-from trading_research_agent.agent.providers.anthropic import ProviderError
+from trading_research_agents.llm.completer import Completion, ProviderError
 
 BASE_URL_ENV = "TRA_OPENAI_BASE_URL"
 
@@ -49,7 +48,7 @@ class OpenAICompleter:
                 ImportError
             ) as exc:  # pragma: no cover - exercised only where the extra is absent
                 raise ProviderError(
-                    "the openai SDK is not installed; pip install 'trading-research-agent[openai]'"
+                    "the openai SDK is not installed; pip install 'trading-research-agents[openai]'"
                 ) from exc
             # The declared timeout is per request; the SDK retries 429s and 5xx with backoff.
             options: dict[str, Any] = {"timeout": timeout_s, "max_retries": max_retries}

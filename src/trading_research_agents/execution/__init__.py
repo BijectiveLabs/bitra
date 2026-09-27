@@ -5,7 +5,7 @@ built on ran at a size where its own transacting moved the book, so an operator 
 treat every number as the cost of the first trade, not of the tenth.
 """
 
-from trading_research_agent.execution.book import (
+from trading_research_agents.execution.book import (
     BookError,
     Level,
     Snapshot,
@@ -15,7 +15,7 @@ from trading_research_agent.execution.book import (
     spread_bps,
     walk_the_book,
 )
-from trading_research_agent.execution.cost import (
+from trading_research_agents.execution.cost import (
     CostBreakdown,
     CostError,
     Direction,
@@ -24,7 +24,7 @@ from trading_research_agent.execution.cost import (
     pair_leg_fee_bps,
     realised_cost,
 )
-from trading_research_agent.execution.fill import (
+from trading_research_agents.execution.fill import (
     EffectiveCost,
     FillError,
     FillMode,
@@ -34,7 +34,7 @@ from trading_research_agent.execution.fill import (
     entry_after_latency,
     passive_fill,
 )
-from trading_research_agent.execution.markout import Fill, Markout, markout_bps, markout_table
+from trading_research_agents.execution.markout import Fill, Markout, markout_bps, markout_table
 
 __all__ = [
     "BookError",

@@ -7,10 +7,10 @@ plugins (`data.venues`); any other source arrives through a declared column map
 (`data.mapping`); both end in the same audit, manifest and Parquet contract.
 """
 
-from trading_research_agent.data.archive import ArchiveError, open_archive_lines, sha256_of
-from trading_research_agent.data.audit import AuditReport, Finding, audit
-from trading_research_agent.data.fetch import FetchError, fetch, fetch_checksum
-from trading_research_agent.data.manifest import (
+from trading_research_agents.data.archive import ArchiveError, open_archive_lines, sha256_of
+from trading_research_agents.data.audit import AuditReport, Finding, audit
+from trading_research_agents.data.fetch import FetchError, fetch, fetch_checksum
+from trading_research_agents.data.manifest import (
     Manifest,
     ManifestError,
     Source,
@@ -18,16 +18,16 @@ from trading_research_agent.data.manifest import (
     read_manifest,
     write_manifest,
 )
-from trading_research_agent.data.mapping import (
+from trading_research_agents.data.mapping import (
     ColumnMap,
     MappingError,
     load_mapping,
     mapped_trades,
     parse_mapping,
 )
-from trading_research_agent.data.normalise import NORMALISER_VERSION, ArchiveFormatError
-from trading_research_agent.data.schema import Direction, Rejection, Side, Trade, scale_of
-from trading_research_agent.data.venues import (
+from trading_research_agents.data.normalise import NORMALISER_VERSION, ArchiveFormatError
+from trading_research_agents.data.schema import Direction, Rejection, Side, Trade, scale_of
+from trading_research_agents.data.venues import (
     ArchiveVenue,
     UnknownVenueError,
     archive_venue,

@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
-from trading_research_agent.strategy.core import Bar
+from trading_research_agents.strategy.core import Bar
 
 HORIZONS = (1, 5, 20)
 

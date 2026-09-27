@@ -32,14 +32,16 @@ BANNER = r"""
   |_|  |_| \_\/_/   \_\
 """.strip("\n")
 
-TAGLINE = "trading-research-agent: a research agent that refuses to claim what it has not measured"
+TAGLINE = "trading-research-agents: a research agent that refuses to claim what it has not measured"
 _console: Console | None = None
 
 
 def banner(width: int) -> str:
     """The full wordmark when the terminal is wide enough for it, the short one otherwise."""
     try:
-        text = files("trading_research_agent.cli").joinpath("static/welcome.txt").read_text("utf-8")
+        text = (
+            files("trading_research_agents.cli").joinpath("static/welcome.txt").read_text("utf-8")
+        )
     except (OSError, TypeError):
         return BANNER
     lines = [line.rstrip() for line in text.splitlines()]
@@ -383,6 +385,41 @@ def ladder_table(tier: str, history: Sequence[Mapping[str, Any]]) -> Group:
             str(h.get("at")), str(h.get("kind")), str(h.get("from")), str(h.get("to")), detail
         )
     return Group(Text(f"tier {tier}", style="bold"), table)
+
+
+def snapshot_view(record: Mapping[str, Any]) -> Group:
+    """One snapshot: what answered, how old it was, and what the chain tried on the way."""
+    values = Table(box=box.SIMPLE_HEAD, show_edge=False, pad_edge=False, title="snapshot")
+    for name, justify in (
+        ("kind", "left"),
+        ("source", "left"),
+        ("tier", "left"),
+        ("age s", "right"),
+        ("detail", "left"),
+    ):
+        values.add_column(name, justify=justify)  # type: ignore[arg-type]
+    skip = {"kind", "instrument", "source", "tier", "age_s", "as_of"}
+    for kind, value in sorted(record.get("values", {}).items()):
+        age = value.get("age_s")
+        detail = ", ".join(f"{k} {v}" for k, v in value.items() if k not in skip)
+        values.add_row(kind, str(value.get("source")), str(value.get("tier")), str(age), detail)
+    rows: list[tuple[str, Any]] = [
+        ("cycle", record.get("cycle_id")),
+        ("instrument", record.get("instrument")),
+    ]
+    for attempt in record.get("attempts", []):
+        if attempt.get("outcome") != "ok":
+            rows.append(
+                (
+                    attempt.get("outcome"),
+                    f"{attempt.get('source')} for {attempt.get('kind')}: {attempt.get('detail')}",
+                )
+            )
+    for kind, reason in (record.get("refused") or {}).items():
+        rows.append(("refused", Text(f"{kind}: {reason}", style="yellow")))
+    if record.get("stale"):
+        rows.append(("stale", Text(", ".join(record["stale"]), style="yellow")))
+    return Group(Panel(_kv(rows), title="engine", box=box.ROUNDED, expand=False), values)
 
 
 def observe_view(record: Mapping[str, Any]) -> Group:

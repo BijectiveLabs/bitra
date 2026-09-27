@@ -4,8 +4,8 @@ Layers 0 (cost floor), 3 (pre-registration), 4 (data requirements) and 5 (valida
 with the era seal that layer 5 runs behind. See docs/chain.md.
 """
 
-from trading_research_agent.chain.floor import FloorCheck, FloorOutcome, cost_floor
-from trading_research_agent.chain.observation import (
+from trading_research_agents.chain.floor import FloorCheck, FloorOutcome, cost_floor
+from trading_research_agents.chain.observation import (
     Observation,
     ObservationError,
     ObservationReport,
@@ -13,7 +13,7 @@ from trading_research_agent.chain.observation import (
     load_observation,
     observe,
 )
-from trading_research_agent.chain.preregistration import (
+from trading_research_agents.chain.preregistration import (
     COST_TERMS,
     CostModel,
     CostTerm,
@@ -27,9 +27,9 @@ from trading_research_agent.chain.preregistration import (
     amend,
     validate_mechanism,
 )
-from trading_research_agent.chain.requirements import Requirements, check_requirements
-from trading_research_agent.chain.seal import EraLeakageError, Seal, SealError, research_only
-from trading_research_agent.chain.validation import (
+from trading_research_agents.chain.requirements import Requirements, check_requirements
+from trading_research_agents.chain.seal import EraLeakageError, Seal, SealError, research_only
+from trading_research_agents.chain.validation import (
     Decision,
     Interval,
     NullMode,

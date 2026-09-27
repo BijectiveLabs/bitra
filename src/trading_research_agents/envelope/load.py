@@ -12,7 +12,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from trading_research_agent.envelope.model import Channel, Envelope, EnvelopeError
+from trading_research_agents.envelope.model import Channel, Envelope, EnvelopeError
 
 
 def load_envelope(path: Path | str) -> Envelope:

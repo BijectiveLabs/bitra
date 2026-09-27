@@ -23,18 +23,11 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from trading_research_agent import __version__
-from trading_research_agent.agent import Completer, Outcome, RunConfig, propose
-from trading_research_agent.agent.pipeline import read_refusals
-from trading_research_agent.agent.providers import (
-    CallOptions,
-    UnknownProviderError,
-    provider,
-    providers,
-)
-from trading_research_agent.agent.providers.anthropic import DEFAULT_MODEL, ProviderError
-from trading_research_agent.agent.session import SessionError
-from trading_research_agent.chain import (
+from trading_research_agents import __version__
+from trading_research_agents.agents import Outcome, RunConfig, propose
+from trading_research_agents.agents.pipeline import read_refusals
+from trading_research_agents.agents.session import SessionError
+from trading_research_agents.chain import (
     EraLeakageError,
     NullMode,
     ValidationError,
@@ -43,12 +36,12 @@ from trading_research_agent.chain import (
     read_trades,
     validate,
 )
-from trading_research_agent.chain.preregistration import PreregistrationError
-from trading_research_agent.chain.preregistration import from_record as prereg_from_record
-from trading_research_agent.chain.requirements import to_entry as requirements_entry
-from trading_research_agent.chain.validation import to_entry as validation_entry
-from trading_research_agent.chain.validation import to_record as validation_record
-from trading_research_agent.data import (
+from trading_research_agents.chain.preregistration import PreregistrationError
+from trading_research_agents.chain.preregistration import from_record as prereg_from_record
+from trading_research_agents.chain.requirements import to_entry as requirements_entry
+from trading_research_agents.chain.validation import to_entry as validation_entry
+from trading_research_agents.chain.validation import to_record as validation_record
+from trading_research_agents.data import (
     NORMALISER_VERSION,
     ArchiveError,
     ArchiveFormatError,
@@ -68,14 +61,29 @@ from trading_research_agent.data import (
     sha256_of,
     write_manifest,
 )
-from trading_research_agent.data.fetch import FetchError, fetch, fetch_checksum
-from trading_research_agent.data.parquet import ParquetError, write_trades
-from trading_research_agent.envelope import EnvelopeError, load_envelope
-from trading_research_agent.execution import FundingSchedule
-from trading_research_agent.ledger import Ledger, LedgerError, Verdict
-from trading_research_agent.ledger.store import to_record as ledger_to_record
-from trading_research_agent.strategy import ExitError
-from trading_research_agent.trading import (
+from trading_research_agents.data.fetch import FetchError, fetch, fetch_checksum
+from trading_research_agents.data.parquet import ParquetError, write_trades
+from trading_research_agents.data.sources import (
+    ChainExhaustedError,
+    DataConfigError,
+    SourceError,
+)
+from trading_research_agents.data.sources.registry import UnknownSourceError
+from trading_research_agents.envelope import EnvelopeError, load_envelope
+from trading_research_agents.execution import FundingSchedule
+from trading_research_agents.ledger import Ledger, LedgerError, Verdict
+from trading_research_agents.ledger.store import to_record as ledger_to_record
+from trading_research_agents.llm import Completer
+from trading_research_agents.llm.completer import ProviderError
+from trading_research_agents.llm.providers import (
+    CallOptions,
+    UnknownProviderError,
+    provider,
+    providers,
+)
+from trading_research_agents.llm.providers.anthropic import DEFAULT_MODEL
+from trading_research_agents.strategy import ExitError
+from trading_research_agents.trading import (
     ConfigError,
     ControlError,
     Controls,
@@ -90,12 +98,12 @@ from trading_research_agent.trading import (
     VenueError,
     load_strategy_config,
 )
-from trading_research_agent.trading import run as run_trading
-from trading_research_agent.trading.canary import CanaryError, CanaryGuard
-from trading_research_agent.trading.config import load_funding
-from trading_research_agent.trading.feed import FeedError
-from trading_research_agent.trading.feeds import UnknownFeedError, live_feed
-from trading_research_agent.trading.venues import (
+from trading_research_agents.trading import run as run_trading
+from trading_research_agents.trading.canary import CanaryError, CanaryGuard
+from trading_research_agents.trading.config import load_funding
+from trading_research_agents.trading.feed import FeedError
+from trading_research_agents.trading.feeds import UnknownFeedError, live_feed
+from trading_research_agents.trading.venues import (
     LiveVenueSettings,
     UnknownLiveVenueError,
     live_venue,
@@ -162,6 +170,24 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-gap", type=parse_duration, default=None, help="default: [data].max_gap or 5m"
     )
     get_cmd.add_argument("--json", action="store_true")
+
+    pull_cmd = data.add_parser(
+        "pull", help="one snapshot of live data through the chains in data.toml"
+    )
+    pull_cmd.add_argument("instrument", nargs="?", default=None, help="default: [run].instrument")
+    pull_cmd.add_argument("--data-config", type=Path, default=Path("data.toml"))
+    pull_cmd.add_argument("--config", type=Path, default=Path("strategy.toml"))
+    pull_cmd.add_argument(
+        "--kind",
+        action="append",
+        default=None,
+        help="only this kind of data; repeat for several. Default: every kind declared",
+    )
+    pull_cmd.add_argument(
+        "--out", type=Path, default=None, help="default: runs/cycles/<cycle>/snapshot.json"
+    )
+    pull_cmd.add_argument("--env-file", type=Path)
+    pull_cmd.add_argument("--json", action="store_true")
 
     funding_cmd = data.add_parser("funding", help="settlement rates from a venue plugin")
     funding_cmd.add_argument("--venue", choices=venues, required=True)
@@ -447,6 +473,10 @@ def main(argv: list[str] | None = None) -> int:
         LadderError,
         FetchError,
         MappingError,
+        ChainExhaustedError,
+        DataConfigError,
+        SourceError,
+        UnknownSourceError,
         UnknownVenueError,
         LedgerError,
         ParquetError,
@@ -474,7 +504,7 @@ _PLAIN = False
 
 def _watching(as_json: bool = False) -> bool:
     """A person at a terminal, who gets the console view instead of the lines."""
-    from trading_research_agent.cli import ui
+    from trading_research_agents.cli import ui
 
     return ui.enabled(_PLAIN, as_json)
 
@@ -488,7 +518,7 @@ def emit(
     if as_json:
         print(json.dumps(payload, indent=2, sort_keys=True, default=str))
     elif render is not None and _watching():
-        from trading_research_agent.cli import ui
+        from trading_research_agents.cli import ui
 
         ui.show(render())
     else:
@@ -497,7 +527,7 @@ def emit(
 
 def cockpit(args: argparse.Namespace) -> int:
     """`tra` alone: the banner, what is ready, and the one command to type next."""
-    from trading_research_agent.cli import ui
+    from trading_research_agents.cli import ui
 
     defaults = argparse.Namespace(
         config=Path("strategy.toml"),
@@ -648,12 +678,12 @@ def chain_floor(args: argparse.Namespace) -> int:
 
 
 def chain_observe(args: argparse.Namespace) -> int:
-    from trading_research_agent.chain.observation import (
+    from trading_research_agents.chain.observation import (
         load_observation,
         observe,
         write_report,
     )
-    from trading_research_agent.data.parquet import read_trades as read_prints
+    from trading_research_agents.data.parquet import read_trades as read_prints
 
     observation = load_observation(args.observation)
     dataset = args.dataset
@@ -816,8 +846,8 @@ def _channel(args: argparse.Namespace, cfg: Any) -> Any:
 
 def _agent_core(cfg: Any, out_dir: Path) -> Any:
     """The technical analyst as the core: a metered completer over the declared provider."""
-    from trading_research_agent.agent.strategy import AgentStrategy
-    from trading_research_agent.agent.usage import (
+    from trading_research_agents.agents.strategy import AgentStrategy
+    from trading_research_agents.llm.usage import (
         BudgetLimits,
         MeteredCompleter,
         Pricing,
@@ -935,7 +965,7 @@ def _report(args: argparse.Namespace, report: Any) -> int:
 
 
 def _ui() -> Any:
-    from trading_research_agent.cli import ui
+    from trading_research_agents.cli import ui
 
     return ui
 
@@ -1083,6 +1113,7 @@ TEMPLATE_FILES = {
     "strategy.toml": "strategy.toml",
     "envelope.toml": "envelope.toml",
     "mapping.toml": "mapping.toml",
+    "data.toml": "data.toml",
     "observation.toml": "observation.toml",
     "strategies/trailing_zscore.py": "core.py.tmpl",
     ".env.example": "env.example",
@@ -1093,7 +1124,7 @@ TEMPLATE_FILES = {
 
 def init_project(args: argparse.Namespace) -> int:
     target: Path = args.directory
-    templates = files("trading_research_agent").joinpath("templates")
+    templates = files("trading_research_agents").joinpath("templates")
     existing = [name for name in TEMPLATE_FILES if (target / name).exists()]
     if existing:
         raise ValueError(f"{target}: already has {existing}; init never overwrites")
@@ -1197,7 +1228,7 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
             )
         observation = args.config.resolve().parent / "observation.toml"
         if observation.is_file():
-            from trading_research_agent.chain.observation import ObservationError, load_observation
+            from trading_research_agents.chain.observation import ObservationError, load_observation
 
             try:
                 declared = load_observation(observation)
@@ -1298,6 +1329,46 @@ def data_get(args: argparse.Namespace) -> int:
     return CLEARED
 
 
+def data_pull(args: argparse.Namespace) -> int:
+    """One snapshot: walk each declared chain once, write what answered and what did not."""
+    from trading_research_agents.data.sources import load_data_config
+    from trading_research_agents.store import CycleDir, cycle_id, take_snapshot
+
+    if args.env_file is not None:
+        for key, value in read_env_file(args.env_file).items():
+            os.environ.setdefault(key, value)
+    cfg = load_data_config(args.data_config)
+    instrument = args.instrument
+    if instrument is None:
+        if not args.config.is_file():
+            raise ValueError("name an instrument, or run inside a project with strategy.toml")
+        instrument = load_strategy_config(args.config).run.instrument
+    kinds = list(args.kind) if args.kind else [k.kind for k in cfg.kinds]
+    chains = {kind: cfg.chain(kind) for kind in kinds}
+    options = {k.kind: dict(k.options) for k in cfg.kinds}
+    cycle = cycle_id()
+    snapshot = take_snapshot(instrument, chains, cycle=cycle, kinds=kinds, options=options)
+    out = args.out
+    if out is None:
+        out = CycleDir(root=Path("runs") / "cycles", cycle=cycle).make().snapshot
+    snapshot.write(out)
+    payload = snapshot.record()
+    lines = [f"snapshot {cycle} {instrument}: {len(snapshot.values)} of {len(kinds)} kinds"]
+    for kind, fetched in sorted(snapshot.values.items()):
+        row = fetched.record()
+        lines.append(f"  {kind:<14} {row['source']:<18} {row['tier']:<5} age {row['age_s']}s")
+    for attempt in snapshot.attempts:
+        if attempt.outcome != "ok":
+            lines.append(f"  tried {attempt.source} for {attempt.kind}: {attempt.detail}")
+    for kind, reason in snapshot.refused.items():
+        lines.append(f"  refused {kind}: {reason}")
+    if snapshot.stale:
+        lines.append(f"stale, and used because the config allows it: {', '.join(snapshot.stale)}")
+    lines.append(f"snapshot.json in {out.parent}")
+    emit(payload, args.json, lines, lambda: _ui().snapshot_view(payload))
+    return CLEARED if snapshot.usable else REFUSED
+
+
 def data_funding(args: argparse.Namespace) -> int:
     venue = archive_venue(args.venue)
     fetch_rates = getattr(venue, "funding_rates", None)
@@ -1339,8 +1410,8 @@ def data_funding(args: argparse.Namespace) -> int:
 
 
 def agent_session(args: argparse.Namespace) -> int:
-    from trading_research_agent.agent.session import ScreenSettings, SessionConfig, run_session
-    from trading_research_agent.agent.usage import (
+    from trading_research_agents.agents.session import ScreenSettings, SessionConfig, run_session
+    from trading_research_agents.llm.usage import (
         BudgetLimits,
         MeteredCompleter,
         Pricing,
@@ -1452,7 +1523,7 @@ def agent_session(args: argparse.Namespace) -> int:
 
 
 def agent_eval(args: argparse.Namespace) -> int:
-    from trading_research_agent.agent.evals import EvalConfig, ModelSpec, evaluate, table
+    from trading_research_agents.agents.evals import EvalConfig, ModelSpec, evaluate, table
 
     if args.env_file is not None:
         for key, value in read_env_file(args.env_file).items():
@@ -1516,8 +1587,8 @@ def agent_eval(args: argparse.Namespace) -> int:
 
 
 def agent_trace(args: argparse.Namespace) -> int:
-    from trading_research_agent.agent.trace import lines as trace_lines
-    from trading_research_agent.agent.trace import trace
+    from trading_research_agents.agents.trace import lines as trace_lines
+    from trading_research_agents.agents.trace import trace
 
     t = trace(args.path)
     emit(t.record(), args.json, trace_lines(t), lambda: _ui().trace_view(t))
@@ -1525,7 +1596,7 @@ def agent_trace(args: argparse.Namespace) -> int:
 
 
 def signals_export(args: argparse.Namespace) -> int:
-    from trading_research_agent.agent.executor.tools import export_signals
+    from trading_research_agents.agents.executor.tools import export_signals
 
     summary = args.run / "run.json"
     if not summary.is_file():
@@ -1538,7 +1609,7 @@ def signals_export(args: argparse.Namespace) -> int:
 
 
 def mcp_serve(args: argparse.Namespace) -> int:
-    from trading_research_agent.mcp import serve
+    from trading_research_agents.mcp import serve
 
     serve()
     return CLEARED
@@ -1688,6 +1759,7 @@ HANDLERS = {
     ("data", "audit"): data_audit,
     ("data", "funding"): data_funding,
     ("data", "get"): data_get,
+    ("data", "pull"): data_pull,
     ("check", "check"): check_project,
     ("chain", "floor"): chain_floor,
     ("chain", "observe"): chain_observe,

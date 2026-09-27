@@ -14,12 +14,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from trading_research_agent.agent.completer import Completer
-from trading_research_agent.agent.roles import RoleError, prompt
-from trading_research_agent.agent.technical_analyst import ROLE, SCHEMA, parse
-from trading_research_agent.agent.technical_analyst.tools import features
-from trading_research_agent.agent.usage import BudgetSpentError
-from trading_research_agent.strategy.core import Bar, Signal, Target
+from trading_research_agents.agents.roles import RoleError, prompt
+from trading_research_agents.agents.technical_analyst import ROLE, SCHEMA, parse
+from trading_research_agents.agents.technical_analyst.tools import features
+from trading_research_agents.llm.completer import Completer
+from trading_research_agents.llm.usage import BudgetSpentError
+from trading_research_agents.strategy.core import Bar, Signal, Target
 
 MIN_BAR_INTERVAL_S = 60
 MIN_BARS = 3

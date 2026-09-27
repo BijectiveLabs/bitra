@@ -14,10 +14,10 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Protocol
 
-from trading_research_agent.data.schema import Direction, Side, Trade
-from trading_research_agent.envelope.model import Channel
-from trading_research_agent.execution.cost import CostBreakdown, FundingSchedule, realised_cost
-from trading_research_agent.execution.fill import BPS
+from trading_research_agents.data.schema import Direction, Side, Trade
+from trading_research_agents.envelope.model import Channel
+from trading_research_agents.execution.cost import CostBreakdown, FundingSchedule, realised_cost
+from trading_research_agents.execution.fill import BPS
 
 
 class VenueError(RuntimeError):

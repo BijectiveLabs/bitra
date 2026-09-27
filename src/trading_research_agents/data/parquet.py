@@ -4,7 +4,7 @@ Price and quantity are stored as `decimal128(38, s)` with the scale declared by 
 never as floats. A trade whose value cannot be represented exactly at the declared scale is
 refused rather than rounded, because a rounded price is a wrong number that looks right.
 
-`pyarrow` is an optional dependency (`pip install trading-research-agent[data]`); importing
+`pyarrow` is an optional dependency (`pip install trading-research-agents[data]`); importing
 this module without it raises at call time with that instruction.
 """
 
@@ -16,7 +16,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from trading_research_agent.data.schema import Side, Trade
+from trading_research_agents.data.schema import Side, Trade
 
 try:
     import pyarrow as pa
@@ -39,7 +39,7 @@ def _arrow() -> tuple[Any, Any]:
     if pa is None or pq is None:
         raise ParquetError(
             "pyarrow is not installed; install the data extra: "
-            "pip install 'trading-research-agent[data]'"
+            "pip install 'trading-research-agents[data]'"
         )
     return pa, pq
 
@@ -61,9 +61,9 @@ def schema_for(price_scale: int, qty_scale: int) -> Any:
             arrow.field("seq", arrow.int64(), nullable=True),
         ],
         metadata={
-            "trading_research_agent.schema": SCHEMA_VERSION,
-            "trading_research_agent.price_scale": str(price_scale),
-            "trading_research_agent.qty_scale": str(qty_scale),
+            "trading_research_agents.schema": SCHEMA_VERSION,
+            "trading_research_agents.price_scale": str(price_scale),
+            "trading_research_agents.qty_scale": str(qty_scale),
         },
     )
 
@@ -133,12 +133,22 @@ def write_trades(
 def read_scales(path: Path) -> tuple[int, int]:
     _, parquet = _arrow()
     metadata = parquet.read_schema(path).metadata or {}
+
+    def stamp(field: str) -> bytes:
+        # Datasets written before the package was renamed carry the old prefix. Reading them is
+        # free; a client should not have to refetch a day because we changed a name.
+        for prefix in (b"trading_research_agents.", b"trading_research_agent."):
+            key = prefix + field.encode()
+            if key in metadata:
+                return bytes(metadata[key])
+        raise KeyError(field)
+
     try:
-        version = metadata[b"trading_research_agent.schema"].decode()
-        price_scale = int(metadata[b"trading_research_agent.price_scale"])
-        qty_scale = int(metadata[b"trading_research_agent.qty_scale"])
+        version = stamp("schema").decode()
+        price_scale = int(stamp("price_scale"))
+        qty_scale = int(stamp("qty_scale"))
     except (KeyError, ValueError) as exc:
-        raise ParquetError(f"{path.name}: not a trading-research-agent dataset") from exc
+        raise ParquetError(f"{path.name}: not a trading-research-agents dataset") from exc
     if version != SCHEMA_VERSION:
         raise ParquetError(f"{path.name}: dataset schema {version!r} is not {SCHEMA_VERSION!r}")
     return price_scale, qty_scale

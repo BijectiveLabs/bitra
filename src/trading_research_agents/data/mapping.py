@@ -18,8 +18,8 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from trading_research_agent.data.normalise import ArchiveFormatError
-from trading_research_agent.data.schema import Rejection, Side, Trade
+from trading_research_agents.data.normalise import ArchiveFormatError
+from trading_research_agents.data.schema import Rejection, Side, Trade
 
 TIME_UNITS = {"s": 1_000_000_000, "ms": 1_000_000, "us": 1_000, "ns": 1}
 

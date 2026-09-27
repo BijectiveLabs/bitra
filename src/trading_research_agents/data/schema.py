@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import Any
 
 
 class Side(StrEnum):
@@ -62,6 +63,58 @@ class Trade:
     @property
     def ts(self) -> datetime:
         return datetime.fromtimestamp(self.ts_ns / 1_000_000_000, tz=UTC)
+
+
+@dataclass(frozen=True, slots=True)
+class Candle:
+    """One published interval: open, high, low, close, volume, and how many trades made it.
+
+    `start_ns` is the interval's own start in epoch nanoseconds, so the candle carries market
+    time rather than the time it was fetched. An interval with no trades is not a candle.
+    """
+
+    start_ns: int
+    open: Decimal
+    high: Decimal
+    low: Decimal
+    close: Decimal
+    volume: Decimal
+    trades: int = 0
+
+    def __post_init__(self) -> None:
+        # The start is the interval the trade fell into, so bucketing a trade at the first
+        # nanosecond of the epoch gives a start of zero. That is arithmetic, not a missing field.
+        if self.start_ns < 0:
+            raise ValueError("start_ns is an epoch nanosecond value, never negative")
+        for label, value in (
+            ("open", self.open),
+            ("high", self.high),
+            ("low", self.low),
+            ("close", self.close),
+        ):
+            if not isinstance(value, Decimal) or not value.is_finite() or value <= 0:
+                raise ValueError(f"{label} must be a positive finite Decimal")
+        if not isinstance(self.volume, Decimal) or self.volume < 0:
+            raise ValueError("volume must be a non-negative Decimal")
+        if not self.low <= min(self.open, self.close) <= max(self.open, self.close) <= self.high:
+            raise ValueError("candle prices are inconsistent: low <= open, close <= high must hold")
+        if self.trades < 0:
+            raise ValueError("a candle counts zero or more trades")
+
+    @property
+    def ts(self) -> datetime:
+        return datetime.fromtimestamp(self.start_ns / 1_000_000_000, tz=UTC)
+
+    def record(self) -> dict[str, Any]:
+        return {
+            "start_ns": self.start_ns,
+            "open": str(self.open),
+            "high": str(self.high),
+            "low": str(self.low),
+            "close": str(self.close),
+            "volume": str(self.volume),
+            "trades": self.trades,
+        }
 
 
 @dataclass(frozen=True, slots=True)

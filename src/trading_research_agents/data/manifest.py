@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from trading_research_agent.data.audit import AuditReport, Finding
+from trading_research_agents.data.audit import AuditReport, Finding
 
 SCHEMA = 1
 

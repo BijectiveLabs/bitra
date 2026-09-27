@@ -22,10 +22,10 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from urllib.parse import urlencode
 
-from trading_research_agent.data.fetch import FetchError, fetch_json
-from trading_research_agent.data.normalise import ArchiveFormatError
-from trading_research_agent.data.schema import Rejection, Side, Trade
-from trading_research_agent.data.venues.registry import FundingRate, register
+from trading_research_agents.data.fetch import FetchError, fetch_json
+from trading_research_agents.data.normalise import ArchiveFormatError
+from trading_research_agents.data.schema import Rejection, Side, Trade
+from trading_research_agents.data.venues.registry import FundingRate, register
 
 BASE = "https://public.bybit.com/trading"
 API = "https://api.bybit.com"

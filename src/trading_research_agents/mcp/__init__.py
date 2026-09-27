@@ -6,6 +6,6 @@ row. What a model may do through this server is ask the gates what they measured
 not do is anything that governs capital. The `mcp` extra installs the SDK.
 """
 
-from trading_research_agent.mcp.server import build_server, serve
+from trading_research_agents.mcp.server import build_server, serve
 
 __all__ = ["build_server", "serve"]

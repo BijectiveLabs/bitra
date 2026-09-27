@@ -20,8 +20,8 @@ from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
 
-from trading_research_agent.data.schema import Direction
-from trading_research_agent.strategy.core import Bar
+from trading_research_agents.data.schema import Direction
+from trading_research_agents.strategy.core import Bar
 
 BPS = Decimal(10_000)
 

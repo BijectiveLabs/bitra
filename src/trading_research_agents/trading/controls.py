@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 
-from trading_research_agent.strategy.core import Target
+from trading_research_agents.strategy.core import Target
 
 NS_PER_MINUTE = 60 * 1_000_000_000
 NS_PER_DAY = 86_400 * 1_000_000_000

@@ -8,6 +8,14 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 
+class ProviderError(RuntimeError):
+    """The vendor could not be reached, or answered with something unusable.
+
+    Every adapter translates its SDK's own exceptions into this one, so a failed call is a
+    recorded event rather than a traceback that ends a session.
+    """
+
+
 @dataclass(frozen=True)
 class Completion:
     text: str

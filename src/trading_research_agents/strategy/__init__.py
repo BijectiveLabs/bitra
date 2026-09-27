@@ -5,8 +5,8 @@ layer 6, and a walk-forward harness that refuses precomputed parameters; what is
 what signal comes out of it is the caller's, and `examples/strategies/` shows two.
 """
 
-from trading_research_agent.strategy.core import Bar, Signal, Strategy, Target
-from trading_research_agent.strategy.exits import (
+from trading_research_agents.strategy.core import Bar, Signal, Strategy, Target
+from trading_research_agents.strategy.exits import (
     BracketOutcome,
     BracketResult,
     ExitError,
@@ -16,7 +16,7 @@ from trading_research_agent.strategy.exits import (
     simulate_with_stop,
     stop_price,
 )
-from trading_research_agent.strategy.harness import (
+from trading_research_agents.strategy.harness import (
     FittedCore,
     HarnessResult,
     HarnessTrade,

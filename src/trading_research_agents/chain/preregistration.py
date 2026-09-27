@@ -19,7 +19,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from trading_research_agent.ledger.vocabulary import Verdict
+from trading_research_agents.ledger.vocabulary import Verdict
 
 LAYER = 3
 

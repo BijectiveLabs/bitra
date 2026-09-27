@@ -20,7 +20,7 @@ from decimal import Decimal
 from enum import StrEnum
 from itertools import pairwise
 
-from trading_research_agent.data.schema import Side
+from trading_research_agents.data.schema import Side
 
 BPS = Decimal(10_000)
 

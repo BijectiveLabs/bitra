@@ -2,7 +2,7 @@
 
 Three adapters ship: Anthropic (native SDK), Google (native SDK), and OpenAI (native SDK), the
 last of which also serves every vendor in `presets.py` that speaks the same API. A vendor
-that needs its own client registers under the `trading_research_agent.providers` entry point
+that needs its own client registers under the `trading_research_agents.providers` entry point
 or by calling `register`, and is then a name like any other.
 """
 
@@ -12,10 +12,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from importlib.metadata import entry_points
 
-from trading_research_agent.agent.completer import Completer
-from trading_research_agent.agent.providers.presets import PRESETS
+from trading_research_agents.llm.completer import Completer
+from trading_research_agents.llm.providers.presets import PRESETS
 
-ENTRY_POINT_GROUP = "trading_research_agent.providers"
+ENTRY_POINT_GROUP = "trading_research_agents.providers"
 
 
 class UnknownProviderError(KeyError):
@@ -65,7 +65,7 @@ def register(provider: Provider) -> None:
 def _anthropic(
     model: str | None, base_url: str | None, options: CallOptions = DEFAULT_OPTIONS
 ) -> Completer:
-    from trading_research_agent.agent.providers.anthropic import DEFAULT_MODEL, AnthropicCompleter
+    from trading_research_agents.llm.providers.anthropic import DEFAULT_MODEL, AnthropicCompleter
 
     if base_url:
         raise ValueError("--base-url does not apply to the anthropic provider")
@@ -80,7 +80,7 @@ def _anthropic(
 def _google(
     model: str | None, base_url: str | None, options: CallOptions = DEFAULT_OPTIONS
 ) -> Completer:
-    from trading_research_agent.agent.providers.google import GoogleCompleter
+    from trading_research_agents.llm.providers.google import GoogleCompleter
 
     if base_url:
         raise ValueError("--base-url does not apply to the google provider")
@@ -98,7 +98,7 @@ def _compatible(name: str) -> Callable[[str | None, str | None, CallOptions], Co
     def build(
         model: str | None, base_url: str | None, options: CallOptions = DEFAULT_OPTIONS
     ) -> Completer:
-        from trading_research_agent.agent.providers.openai import OpenAICompleter
+        from trading_research_agents.llm.providers.openai import OpenAICompleter
 
         p = PRESETS[name]
         if not model:
@@ -129,7 +129,7 @@ def _two_args(
 
 
 def _bundled() -> None:
-    from trading_research_agent.agent.providers.anthropic import DEFAULT_MODEL
+    from trading_research_agents.llm.providers.anthropic import DEFAULT_MODEL
 
     register(
         Provider("anthropic", "ANTHROPIC_API_KEY", DEFAULT_MODEL, False, _anthropic, "", _anthropic)

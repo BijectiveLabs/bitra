@@ -5,23 +5,23 @@ protocols; the runtime does not know which it was given. No language model is an
 order path. Every intent, every refusal and every fill is written down as it happens.
 """
 
-from trading_research_agent.trading.config import (
+from trading_research_agents.trading.config import (
     ConfigError,
     StrategyConfig,
     load_strategy_config,
     parse_strategy_config,
 )
-from trading_research_agent.trading.controls import (
+from trading_research_agents.trading.controls import (
     Admission,
     ControlError,
     Controls,
     KillSwitch,
     Limits,
 )
-from trading_research_agent.trading.feed import BarBuilder, Feed, RecordedFeed
-from trading_research_agent.trading.ladder import Ladder, LadderError, Tier
-from trading_research_agent.trading.runtime import RunReport, TradingConfig, run
-from trading_research_agent.trading.venue import (
+from trading_research_agents.trading.feed import BarBuilder, Feed, RecordedFeed
+from trading_research_agents.trading.ladder import Ladder, LadderError, Tier
+from trading_research_agents.trading.runtime import RunReport, TradingConfig, run
+from trading_research_agents.trading.venue import (
     Fill,
     Intent,
     SimulatedVenue,

@@ -30,11 +30,11 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 from urllib.parse import urlencode
 
-from trading_research_agent import __version__
-from trading_research_agent.data.schema import Direction, Trade
-from trading_research_agent.execution.cost import BPS, CostBreakdown, funding_accrual_bps
-from trading_research_agent.trading.venue import Fill, Intent, VenueError
-from trading_research_agent.trading.venues.registry import LiveVenueSettings, register
+from trading_research_agents import __version__
+from trading_research_agents.data.schema import Direction, Trade
+from trading_research_agents.execution.cost import BPS, CostBreakdown, funding_accrual_bps
+from trading_research_agents.trading.venue import Fill, Intent, VenueError
+from trading_research_agents.trading.venues.registry import LiveVenueSettings, register
 
 ENVIRONMENTS = {
     "demo": "https://api-demo.bybit.com",
@@ -112,7 +112,7 @@ class BybitRest:
             "X-BAPI-TIMESTAMP": timestamp,
             "X-BAPI-SIGN": sign,
             "X-BAPI-RECV-WINDOW": str(RECV_WINDOW_MS),
-            "User-Agent": f"trading-research-agent/{__version__}",
+            "User-Agent": f"trading-research-agents/{__version__}",
         }
 
     def _request(self, request: urllib.request.Request, path: str) -> dict[str, Any]:

@@ -1,4 +1,4 @@
-# A trading-research-agent project
+# A trading-research-agents project
 
     tra                                        # what is ready, and the next command
     tra check                                  # the same, as a list

@@ -1,4 +1,4 @@
-"""Google adapter, on the official SDK (`pip install 'trading-research-agent[google]'`).
+"""Google adapter, on the official SDK (`pip install 'trading-research-agents[google]'`).
 
 Read from the `google-genai` README and `types.py` on 2026-09-13: `genai.Client()` takes the
 key from `GEMINI_API_KEY` or `GOOGLE_API_KEY`; JSON output is requested with
@@ -12,8 +12,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from trading_research_agent.agent.completer import Completion
-from trading_research_agent.agent.providers.anthropic import ProviderError
+from trading_research_agents.llm.completer import Completion, ProviderError
 
 
 class GoogleCompleter:
@@ -34,7 +33,7 @@ class GoogleCompleter:
             except ImportError as exc:  # pragma: no cover - exercised only without the extra
                 raise ProviderError(
                     "the google-genai SDK is not installed; "
-                    "pip install 'trading-research-agent[google]'"
+                    "pip install 'trading-research-agents[google]'"
                 ) from exc
             # HttpOptions takes milliseconds; retries are attempts beyond the first.
             client = genai.Client(

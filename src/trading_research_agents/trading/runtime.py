@@ -21,17 +21,17 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from trading_research_agent.data.schema import Direction, Trade
-from trading_research_agent.strategy.core import Bar, Signal, Strategy, Target
-from trading_research_agent.strategy.exits import (
+from trading_research_agents.data.schema import Direction, Trade
+from trading_research_agents.strategy.core import Bar, Signal, Strategy, Target
+from trading_research_agents.strategy.exits import (
     ExitRule,
     simulate_with_bracket,
     simulate_with_stop,
 )
-from trading_research_agent.trading.canary import CanaryGuard
-from trading_research_agent.trading.controls import Admission, Controls
-from trading_research_agent.trading.feed import BarBuilder, Feed
-from trading_research_agent.trading.venue import Fill, Intent, Venue, VenueError
+from trading_research_agents.trading.canary import CanaryGuard
+from trading_research_agents.trading.controls import Admission, Controls
+from trading_research_agents.trading.feed import BarBuilder, Feed
+from trading_research_agents.trading.venue import Fill, Intent, Venue, VenueError
 
 BPS = Decimal(10_000)
 

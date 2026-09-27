@@ -26,10 +26,11 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from trading_research_agent.data.schema import Trade
-from trading_research_agent.data.series import read_events
-from trading_research_agent.ledger.entry import LedgerEntry
-from trading_research_agent.ledger.vocabulary import Axis, Transferability, Verdict
+from trading_research_agents.data.candles import CandleError, candles_of
+from trading_research_agents.data.schema import Candle, Trade
+from trading_research_agents.data.series import read_events
+from trading_research_agents.ledger.entry import LedgerEntry
+from trading_research_agents.ledger.vocabulary import Axis, Transferability, Verdict
 
 LAYER = 1
 NS_PER_S = 1_000_000_000
@@ -177,68 +178,30 @@ def load_observation(path: Path) -> Observation:
     )
 
 
-@dataclass(frozen=True)
-class _Bar:
-    start_ns: int
-    open: float
-    high: float
-    low: float
-    close: float
-    volume: float
-    trades: int
-
-
-def bars_of(trades: Iterable[Trade], interval_ns: int) -> list[_Bar]:
-    """OHLCV per interval aligned to the epoch; intervals with no trades are absent."""
-    if interval_ns <= 0:
-        raise ObservationError("interval must be positive")
-    bars: list[_Bar] = []
-    start: int | None = None
-    o = h = lo = c = 0.0
-    v = 0.0
-    n = 0
-    last_ts = -1
-    for t in trades:
-        if t.ts_ns < last_ts:
-            raise ObservationError("trades are out of order; audit the dataset first")
-        last_ts = t.ts_ns
-        s = t.ts_ns - (t.ts_ns % interval_ns)
-        p, q = float(t.price), float(t.qty)
-        if start is None or s != start:
-            if start is not None:
-                bars.append(_Bar(start, o, h, lo, c, v, n))
-            start, o, h, lo, c, v, n = s, p, p, p, p, 0.0, 0
-        h, lo, c = max(h, p), min(lo, p), p
-        v += q
-        n += 1
-    if start is not None:
-        bars.append(_Bar(start, o, h, lo, c, v, n))
-    return bars
-
-
-def feature_at(bars: Sequence[_Bar], i: int, name: str, window: int) -> float | None:
-    """The named feature at the close of `bars[i]`, from the `window` bars ending there."""
+def feature_at(bars: Sequence[Candle], i: int, name: str, window: int) -> float | None:
+    """The named feature at the close of `bars[i]`, from the `window` candles ending there."""
     if name == "hour_utc":
         return float(datetime.fromtimestamp(bars[i].start_ns / NS_PER_S, tz=UTC).hour)
     if name in ("return_bps", "abs_return_bps"):
         if i < 1 or bars[i - 1].close <= 0:
             return None
-        r = (bars[i].close / bars[i - 1].close - 1) * 1e4
+        r = (float(bars[i].close) / float(bars[i - 1].close) - 1) * 1e4
         return abs(r) if name == "abs_return_bps" else r
     lo = i - window + 1
     if lo < 0:
         return None
     w = bars[lo : i + 1]
     if name == "zscore":
-        closes = [b.close for b in w]
+        closes = [float(b.close) for b in w]
         mean = sum(closes) / len(closes)
         var = sum((x - mean) ** 2 for x in closes) / (len(closes) - 1)
         return None if var <= 0 else (closes[-1] - mean) / math.sqrt(var)
     if name == "volume_ratio":
-        avg = sum(b.volume for b in w) / len(w)
-        return None if avg <= 0 else w[-1].volume / avg
+        volumes = [float(b.volume) for b in w]
+        avg = sum(volumes) / len(volumes)
+        return None if avg <= 0 else volumes[-1] / avg
     if name == "range_ratio":
-        ranges = [b.high - b.low for b in w]
+        ranges = [float(b.high) - float(b.low) for b in w]
         avg = sum(ranges) / len(ranges)
         return None if avg <= 0 else ranges[-1] / avg
     raise ObservationError(f"unknown feature {name!r}")
@@ -356,7 +319,10 @@ def observe(
                 seen.append(t.instrument)
             yield t
 
-    bars = bars_of(named(trades), obs.interval_s * NS_PER_S)
+    try:
+        bars = candles_of(named(trades), obs.interval_s * NS_PER_S)
+    except CandleError as exc:
+        raise ObservationError(str(exc)) from exc
     if len(bars) < 2:
         raise ObservationError("fewer than two bars with trades; nothing to observe")
     instrument = seen[0] if seen else ""
@@ -391,7 +357,7 @@ def observe(
             j = by_start.get(t0.start_ns + k * interval_ns)
             if j is None:
                 continue
-            r = (bars[j].close / t0.close - 1) * 1e4
+            r = (float(bars[j].close) / float(t0.close) - 1) * 1e4
             curve[k - 1].append(r)
             if k == obs.horizon_bars:
                 responses.append(r)

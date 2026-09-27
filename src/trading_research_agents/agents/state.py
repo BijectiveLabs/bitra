@@ -8,8 +8,8 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from trading_research_agent.chain.floor import FloorCheck
-    from trading_research_agent.chain.preregistration import Preregistration
+    from trading_research_agents.chain.floor import FloorCheck
+    from trading_research_agents.chain.preregistration import Preregistration
 
 IDEA_EXCERPT = 200
 

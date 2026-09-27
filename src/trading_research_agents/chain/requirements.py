@@ -13,11 +13,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from trading_research_agent.chain.preregistration import Preregistration
-from trading_research_agent.chain.seal import day_end_ns, day_start_ns
-from trading_research_agent.data.manifest import Manifest
-from trading_research_agent.ledger.entry import LedgerEntry
-from trading_research_agent.ledger.vocabulary import Axis, Verdict
+from trading_research_agents.chain.preregistration import Preregistration
+from trading_research_agents.chain.seal import day_end_ns, day_start_ns
+from trading_research_agents.data.manifest import Manifest
+from trading_research_agents.ledger.entry import LedgerEntry
+from trading_research_agents.ledger.vocabulary import Axis, Verdict
 
 NS_PER_S = 1_000_000_000
 LAYER = 4

@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
-from trading_research_agent.chain.preregistration import Era
+from trading_research_agents.chain.preregistration import Era
 
 NS_PER_S = 1_000_000_000
 

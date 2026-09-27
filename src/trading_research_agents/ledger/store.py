@@ -15,8 +15,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from trading_research_agent.ledger.entry import LedgerEntry, LedgerError, ReversalPoint
-from trading_research_agent.ledger.vocabulary import Axis, Transferability, Verdict
+from trading_research_agents.ledger.entry import LedgerEntry, LedgerError, ReversalPoint
+from trading_research_agents.ledger.vocabulary import Axis, Transferability, Verdict
 
 SCHEMA = 1
 

@@ -15,7 +15,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Literal
 
-from trading_research_agent.data.schema import Rejection, Trade, scale_of
+from trading_research_agents.data.schema import Rejection, Trade, scale_of
 
 Severity = Literal["fail", "warn"]
 

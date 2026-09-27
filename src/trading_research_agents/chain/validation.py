@@ -28,11 +28,11 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
-from trading_research_agent.chain.preregistration import KillCriterion, Preregistration
-from trading_research_agent.chain.seal import research_only
-from trading_research_agent.data.schema import Direction
-from trading_research_agent.ledger.entry import LedgerEntry
-from trading_research_agent.ledger.vocabulary import Axis, Transferability, Verdict
+from trading_research_agents.chain.preregistration import KillCriterion, Preregistration
+from trading_research_agents.chain.seal import research_only
+from trading_research_agents.data.schema import Direction
+from trading_research_agents.ledger.entry import LedgerEntry
+from trading_research_agents.ledger.vocabulary import Axis, Transferability, Verdict
 
 LAYER = 5
 MIN_RESAMPLES = 1000

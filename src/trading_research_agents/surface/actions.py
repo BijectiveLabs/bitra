@@ -13,8 +13,8 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from trading_research_agent.trading.controls import KillSwitch, Limits
-from trading_research_agent.trading.ladder import Demotion, Ladder, Tier
+from trading_research_agents.trading.controls import KillSwitch, Limits
+from trading_research_agents.trading.ladder import Demotion, Ladder, Tier
 
 
 class ActionRefusedError(ValueError):

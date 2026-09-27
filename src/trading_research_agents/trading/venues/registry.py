@@ -6,12 +6,12 @@ from importlib import import_module
 from importlib.metadata import entry_points
 from typing import Any, Protocol
 
-from trading_research_agent.envelope.model import Channel
-from trading_research_agent.execution.cost import FundingSchedule
-from trading_research_agent.trading.venue import Venue
+from trading_research_agents.envelope.model import Channel
+from trading_research_agents.execution.cost import FundingSchedule
+from trading_research_agents.trading.venue import Venue
 
-ENTRY_POINT_GROUP = "trading_research_agent.live_venues"
-BUNDLED = ("trading_research_agent.trading.venues.bybit",)
+ENTRY_POINT_GROUP = "trading_research_agents.live_venues"
+BUNDLED = ("trading_research_agents.trading.venues.bybit",)
 
 
 class UnknownLiveVenueError(KeyError):

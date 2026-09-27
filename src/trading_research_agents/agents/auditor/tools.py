@@ -9,7 +9,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from trading_research_agent.agent.usage import UsageLedger
+from trading_research_agents.llm.usage import UsageLedger
 
 
 def usage_summary(usage_path: Path, *, round_trips: int) -> dict[str, Any]:

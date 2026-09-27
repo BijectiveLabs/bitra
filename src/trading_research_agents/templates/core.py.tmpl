@@ -17,7 +17,7 @@ from __future__ import annotations
 from collections import deque
 from decimal import Decimal
 
-from trading_research_agent.strategy.core import Bar, Signal, Target
+from trading_research_agents.strategy.core import Bar, Signal, Target
 
 
 class TrailingZScore:

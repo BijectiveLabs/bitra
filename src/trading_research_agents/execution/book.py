@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from itertools import pairwise
 
-from trading_research_agent.data.schema import Side
+from trading_research_agents.data.schema import Side
 
 BPS = Decimal(10_000)
 

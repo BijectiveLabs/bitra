@@ -15,8 +15,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 
-from trading_research_agent.data.schema import Side
-from trading_research_agent.execution.fill import FillError, Print, _last_at_or_before
+from trading_research_agents.data.schema import Side
+from trading_research_agents.execution.fill import FillError, Print, _last_at_or_before
 
 BPS = Decimal(10_000)
 

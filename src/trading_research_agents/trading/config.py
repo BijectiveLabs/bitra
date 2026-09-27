@@ -12,11 +12,11 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from trading_research_agent.execution.cost import CostError, FundingSchedule
-from trading_research_agent.strategy.core import Strategy
-from trading_research_agent.strategy.exits import ExitRule
-from trading_research_agent.trading.canary import CanaryError, CanaryLimits
-from trading_research_agent.trading.controls import Limits
+from trading_research_agents.execution.cost import CostError, FundingSchedule
+from trading_research_agents.strategy.core import Strategy
+from trading_research_agents.strategy.exits import ExitRule
+from trading_research_agents.trading.canary import CanaryError, CanaryLimits
+from trading_research_agents.trading.controls import Limits
 
 # Keys never live in a config file. Any of these under [live] is refused by name.
 SECRET_LIKE = ("api_key", "api_secret", "secret", "key", "token", "password", "passphrase")

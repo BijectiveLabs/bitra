@@ -18,8 +18,8 @@ from collections.abc import Iterable, Iterator
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
-from trading_research_agent.data.schema import Rejection, Side, Trade
-from trading_research_agent.data.venues.registry import register
+from trading_research_agents.data.schema import Rejection, Side, Trade
+from trading_research_agents.data.venues.registry import register
 
 BASE = "https://data.binance.vision/data/spot/monthly/trades"
 COLUMNS = 7

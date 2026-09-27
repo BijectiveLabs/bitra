@@ -21,9 +21,9 @@ from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from trading_research_agent.data.schema import Side, Trade
-from trading_research_agent.trading.feed import Feed, FeedError
-from trading_research_agent.trading.feeds.registry import register
+from trading_research_agents.data.schema import Side, Trade
+from trading_research_agents.trading.feed import Feed, FeedError
+from trading_research_agents.trading.feeds.registry import register
 
 PUBLIC_LINEAR = "wss://stream.bybit.com/v5/public/linear"
 PING_INTERVAL_S = 20.0
@@ -116,7 +116,7 @@ class BybitPublicFeed:
             from websockets.sync.client import connect
         except ImportError as exc:  # pragma: no cover - exercised only where the extra is absent
             raise FeedError(
-                "websockets is not installed; pip install 'trading-research-agent[shadow]'"
+                "websockets is not installed; pip install 'trading-research-agents[shadow]'"
             ) from exc
 
         attempts = 0

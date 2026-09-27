@@ -4,6 +4,6 @@ Writes: nothing.
 One call, one schema, one typed object out; the pipeline records it. See `role.py`.
 """
 
-from trading_research_agent.agent.market_screener.role import ROLE, SCHEMA, MarketScreener, parse
+from trading_research_agents.agents.market_screener.role import ROLE, SCHEMA, MarketScreener, parse
 
 __all__ = ["ROLE", "SCHEMA", "MarketScreener", "parse"]

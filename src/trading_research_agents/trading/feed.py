@@ -14,8 +14,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Protocol
 
-from trading_research_agent.data.schema import Trade
-from trading_research_agent.strategy.core import Bar
+from trading_research_agents.data.schema import Trade
+from trading_research_agents.strategy.core import Bar
 
 
 class FeedError(ValueError):
@@ -48,7 +48,7 @@ class RecordedFeed:
 
     @classmethod
     def from_parquet(cls, path: Path, *, instrument: str) -> RecordedFeed:
-        from trading_research_agent.data.parquet import read_trades
+        from trading_research_agents.data.parquet import read_trades
 
         return cls(instrument=instrument, trades=read_trades(path))
 

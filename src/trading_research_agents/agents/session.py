@@ -21,7 +21,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from trading_research_agent.agent import (
+from trading_research_agents.agents import (
     auditor,
     executor,
     macro_analyst,
@@ -29,35 +29,35 @@ from trading_research_agent.agent import (
     onchain_analyst,
     risk_manager,
 )
-from trading_research_agent.agent.auditor.tools import audit_brief
-from trading_research_agent.agent.completer import Completer
-from trading_research_agent.agent.macro_analyst.tools import macro_brief, returns_from_closes
-from trading_research_agent.agent.market_screener.tools import ScreenFigures, screen_figures
-from trading_research_agent.agent.onchain_analyst.tools import onchain_brief
-from trading_research_agent.agent.react import ToolLoopError, run_tool_loop
-from trading_research_agent.agent.risk_manager.tools import risk_brief
-from trading_research_agent.agent.roles import RoleError, prompt
-from trading_research_agent.agent.strategy import MAX_FAILURES_IN_A_ROW, AgentStrategy
-from trading_research_agent.agent.usage import BudgetSpentError, UsageLedger
-from trading_research_agent.chain import cost_floor, load_observation, observe
-from trading_research_agent.data.parquet import read_trades
-from trading_research_agent.data.series import SeriesError, load_all, read_events
-from trading_research_agent.envelope.model import Envelope
-from trading_research_agent.execution.cost import FundingSchedule
-from trading_research_agent.surface import (
+from trading_research_agents.agents.auditor.tools import audit_brief
+from trading_research_agents.agents.macro_analyst.tools import macro_brief, returns_from_closes
+from trading_research_agents.agents.market_screener.tools import ScreenFigures, screen_figures
+from trading_research_agents.agents.onchain_analyst.tools import onchain_brief
+from trading_research_agents.agents.react import ToolLoopError, run_tool_loop
+from trading_research_agents.agents.risk_manager.tools import risk_brief
+from trading_research_agents.agents.roles import RoleError, prompt
+from trading_research_agents.agents.strategy import MAX_FAILURES_IN_A_ROW, AgentStrategy
+from trading_research_agents.chain import cost_floor, load_observation, observe
+from trading_research_agents.data.parquet import read_trades
+from trading_research_agents.data.series import SeriesError, load_all, read_events
+from trading_research_agents.envelope.model import Envelope
+from trading_research_agents.execution.cost import FundingSchedule
+from trading_research_agents.llm.completer import Completer
+from trading_research_agents.llm.usage import BudgetSpentError, UsageLedger
+from trading_research_agents.surface import (
     ladder_show,
     ledger_search,
     ledger_show,
     run_report,
     runs_index,
 )
-from trading_research_agent.surface.actions import (
+from trading_research_agents.surface.actions import (
     ActionRefusedError,
     arm_kill_switch,
     demote,
     tighten_limits,
 )
-from trading_research_agent.trading import (
+from trading_research_agents.trading import (
     Controls,
     KillSwitch,
     Ladder,
@@ -68,7 +68,7 @@ from trading_research_agent.trading import (
     TradingConfig,
     run,
 )
-from trading_research_agent.trading.controls import Limits
+from trading_research_agents.trading.controls import Limits
 
 NS_PER_MINUTE = 60 * 1_000_000_000
 

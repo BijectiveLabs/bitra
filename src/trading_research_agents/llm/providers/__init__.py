@@ -5,11 +5,12 @@ touch the network. Keys come from the environment through the SDKs' own defaults
 never written anywhere by this package.
 """
 
-from trading_research_agent.agent.providers.anthropic import AnthropicCompleter
-from trading_research_agent.agent.providers.google import GoogleCompleter
-from trading_research_agent.agent.providers.openai import OpenAICompleter
-from trading_research_agent.agent.providers.presets import PRESETS, Preset, preset
-from trading_research_agent.agent.providers.registry import (
+from trading_research_agents.llm.completer import ProviderError
+from trading_research_agents.llm.providers.anthropic import AnthropicCompleter
+from trading_research_agents.llm.providers.google import GoogleCompleter
+from trading_research_agents.llm.providers.openai import OpenAICompleter
+from trading_research_agents.llm.providers.presets import PRESETS, Preset, preset
+from trading_research_agents.llm.providers.registry import (
     CallOptions,
     Provider,
     UnknownProviderError,
@@ -26,6 +27,7 @@ __all__ = [
     "OpenAICompleter",
     "Preset",
     "Provider",
+    "ProviderError",
     "UnknownProviderError",
     "preset",
     "provider",

@@ -16,7 +16,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from trading_research_agent.agent.usage import UsageLedger
+from trading_research_agents.llm.usage import UsageLedger
 
 
 class TraceError(ValueError):

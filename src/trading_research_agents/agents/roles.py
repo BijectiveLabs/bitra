@@ -16,7 +16,7 @@ from enum import StrEnum
 from importlib import resources
 from typing import Any
 
-from trading_research_agent.chain.preregistration import (
+from trading_research_agents.chain.preregistration import (
     COST_TERMS,
     CostModel,
     CostTerm,
@@ -27,16 +27,17 @@ from trading_research_agent.chain.preregistration import (
     SealedEra,
     Universe,
 )
-from trading_research_agent.ledger.vocabulary import Verdict
+from trading_research_agents.ledger.vocabulary import Verdict
+from trading_research_agents.llm.form import FormError
 
-
-class RoleError(ValueError):
-    """The response cannot be used as it stands. The message is what the model is told."""
+# One class for both halves of the same failure: a response that does not fit the schema and
+# a response that fits it but says something a role may not say.
+RoleError = FormError
 
 
 def prompt(name: str) -> str:
     return (
-        resources.files("trading_research_agent.agent.prompts")
+        resources.files("trading_research_agents.agents.prompts")
         .joinpath(f"{name}.md")
         .read_text(encoding="ascii")
     )

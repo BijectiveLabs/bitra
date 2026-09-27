@@ -12,11 +12,11 @@ import functools
 from collections.abc import Callable
 from typing import Any, ParamSpec, TypeVar
 
-from trading_research_agent.surface import READ_TOOLS
+from trading_research_agents.surface import READ_TOOLS
 
 P = ParamSpec("P")
 R = TypeVar("R")
-SERVER_NAME = "trading-research-agent"
+SERVER_NAME = "trading-research-agents"
 INSTRUCTIONS = (
     "These tools read the gates of a trading research record: the cost floor, a sealed "
     "pre-registration, a dataset audit, a layer-5 validation, the kill ledger, the promotion "
@@ -32,7 +32,7 @@ def _sdk() -> tuple[Any, Any, Any]:
         from mcp.types import ToolAnnotations
     except ImportError as exc:  # pragma: no cover - exercised only without the extra
         raise ImportError(
-            "the MCP server needs the `mcp` extra: pip install 'trading-research-agent[mcp]'"
+            "the MCP server needs the `mcp` extra: pip install 'trading-research-agents[mcp]'"
         ) from exc
     return MCPServer, ToolAnnotations, ToolError
 

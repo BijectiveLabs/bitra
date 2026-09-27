@@ -6,7 +6,7 @@ becomes an order.
 One call, one schema, one typed object out; the pipeline records it. See `role.py`.
 """
 
-from trading_research_agent.agent.technical_analyst.role import (
+from trading_research_agents.agents.technical_analyst.role import (
     ROLE,
     SCHEMA,
     TechnicalAnalyst,

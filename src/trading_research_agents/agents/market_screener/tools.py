@@ -16,7 +16,7 @@ from decimal import Decimal
 from itertools import pairwise
 from typing import Any
 
-from trading_research_agent.data.schema import Trade
+from trading_research_agents.data.schema import Trade
 
 NS_PER_MINUTE = 60 * 1_000_000_000
 

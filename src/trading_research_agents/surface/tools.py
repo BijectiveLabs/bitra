@@ -14,27 +14,27 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from trading_research_agent.chain import (
+from trading_research_agents.chain import (
     cost_floor,
     load_observation,
     observe,
     read_trades,
     validate,
 )
-from trading_research_agent.chain.preregistration import from_record as prereg_from_record
-from trading_research_agent.chain.validation import NullMode
-from trading_research_agent.chain.validation import to_record as validation_record
-from trading_research_agent.data import (
+from trading_research_agents.chain.preregistration import from_record as prereg_from_record
+from trading_research_agents.chain.validation import NullMode
+from trading_research_agents.chain.validation import to_record as validation_record
+from trading_research_agents.data import (
     archive_venue,
     audit,
     load_mapping,
     mapped_trades,
     open_archive_lines,
 )
-from trading_research_agent.envelope import load_envelope
-from trading_research_agent.ledger import Ledger
-from trading_research_agent.ledger.store import to_record as ledger_to_record
-from trading_research_agent.trading import Ladder
+from trading_research_agents.envelope import load_envelope
+from trading_research_agents.ledger import Ledger
+from trading_research_agents.ledger.store import to_record as ledger_to_record
+from trading_research_agents.trading import Ladder
 
 
 def _path(text: str, *, kind: str) -> Path:
@@ -97,7 +97,7 @@ def check_registration(registration_path: str) -> dict[str, Any]:
 
 def observe_events(dataset_path: str, observation_path: str) -> dict[str, Any]:
     """Layer 1: does the event declared in observation.toml recur in a Parquet dataset?"""
-    from trading_research_agent.data.parquet import read_trades as read_prints
+    from trading_research_agents.data.parquet import read_trades as read_prints
 
     dataset = _path(dataset_path, kind="dataset")
     observation = load_observation(_path(observation_path, kind="observation"))

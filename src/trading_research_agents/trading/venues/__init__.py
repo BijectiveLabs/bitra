@@ -5,10 +5,10 @@ environment, it returns an object satisfying `trading.venue.Venue` whose `prefli
 not yet been called. The runtime calls it before the first print, and a venue that cannot
 pass its own checks (key permissions, clock, an open position it was not told about) refuses
 to start. One ships with the package; others register under the
-`trading_research_agent.live_venues` entry point or by calling `register`.
+`trading_research_agents.live_venues` entry point or by calling `register`.
 """
 
-from trading_research_agent.trading.venues.registry import (
+from trading_research_agents.trading.venues.registry import (
     LiveVenue,
     LiveVenueFactory,
     LiveVenueSettings,

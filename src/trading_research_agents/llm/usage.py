@@ -17,7 +17,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from trading_research_agent.agent.completer import Completer, Completion
+from trading_research_agents.llm.completer import Completer, Completion
 
 
 class BudgetError(ValueError):

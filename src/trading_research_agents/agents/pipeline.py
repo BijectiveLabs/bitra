@@ -17,8 +17,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from trading_research_agent.agent.completer import Completer
-from trading_research_agent.agent.roles import (
+from trading_research_agents.agents.roles import (
     BOUND_SCHEMA,
     CRITIQUE_SCHEMA,
     MEMO_SCHEMA,
@@ -34,17 +33,18 @@ from trading_research_agent.agent.roles import (
     parse_registration,
     prompt,
 )
-from trading_research_agent.agent.state import Exchange, Outcome, Refusal, RunResult
-from trading_research_agent.chain.floor import cost_floor
-from trading_research_agent.chain.preregistration import (
+from trading_research_agents.agents.state import Exchange, Outcome, Refusal, RunResult
+from trading_research_agents.chain.floor import cost_floor
+from trading_research_agents.chain.preregistration import (
     Preregistration,
     to_record,
     validate_mechanism,
 )
-from trading_research_agent.envelope.model import Envelope
-from trading_research_agent.ledger.entry import LedgerEntry
-from trading_research_agent.ledger.store import Ledger
-from trading_research_agent.ledger.vocabulary import Axis, Verdict
+from trading_research_agents.envelope.model import Envelope
+from trading_research_agents.ledger.entry import LedgerEntry
+from trading_research_agents.ledger.store import Ledger
+from trading_research_agents.ledger.vocabulary import Axis, Verdict
+from trading_research_agents.llm.completer import Completer
 
 SUBJECT_LENGTH = 120
 

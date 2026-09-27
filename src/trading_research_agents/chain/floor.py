@@ -15,9 +15,9 @@ from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 
-from trading_research_agent.envelope.model import Channel, Envelope
-from trading_research_agent.ledger.entry import LedgerEntry, ReversalPoint
-from trading_research_agent.ledger.vocabulary import Axis, Transferability, Verdict
+from trading_research_agents.envelope.model import Channel, Envelope
+from trading_research_agents.ledger.entry import LedgerEntry, ReversalPoint
+from trading_research_agents.ledger.vocabulary import Axis, Transferability, Verdict
 
 LAYER = 0
 

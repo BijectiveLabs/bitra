@@ -16,10 +16,10 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from trading_research_agent.agent.completer import Completer
-from trading_research_agent.agent.form import parse_object
-from trading_research_agent.agent.roles import RoleError
-from trading_research_agent.agent.usage import BudgetSpentError
+from trading_research_agents.agents.roles import RoleError
+from trading_research_agents.llm.completer import Completer
+from trading_research_agents.llm.form import parse_object
+from trading_research_agents.llm.usage import BudgetSpentError
 
 OBSERVATION_LIMIT = 6000
 STEP_SCHEMA: dict[str, Any] = {

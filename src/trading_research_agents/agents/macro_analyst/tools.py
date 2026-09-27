@@ -14,7 +14,7 @@ from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 from typing import Any
 
-from trading_research_agent.data.series import (
+from trading_research_agents.data.series import (
     Event,
     Series,
     correlation,

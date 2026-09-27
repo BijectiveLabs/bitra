@@ -4,6 +4,6 @@ Writes: audit.json; a WITHDRAWN or NOT PROVEN row in the ledger when a claim is 
 One call, one schema, one typed object out; the pipeline records it. See `role.py`.
 """
 
-from trading_research_agent.agent.auditor.role import ROLE, SCHEMA, Auditor, parse
+from trading_research_agents.agents.auditor.role import ROLE, SCHEMA, Auditor, parse
 
 __all__ = ["ROLE", "SCHEMA", "Auditor", "parse"]

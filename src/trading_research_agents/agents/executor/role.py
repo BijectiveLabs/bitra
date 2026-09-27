@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
-from trading_research_agent.agent.form import (
+from trading_research_agents.llm.form import (
     _decimal,
     _list,
     _text,

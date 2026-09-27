@@ -5,7 +5,7 @@ They are configuration, never constants in logic, so that a reader with a differ
 re-derive every cost-bound verdict without touching anything else.
 """
 
-from trading_research_agent.envelope.load import load_envelope, parse_envelope
-from trading_research_agent.envelope.model import Channel, Envelope, EnvelopeError
+from trading_research_agents.envelope.load import load_envelope, parse_envelope
+from trading_research_agents.envelope.model import Channel, Envelope, EnvelopeError
 
 __all__ = ["Channel", "Envelope", "EnvelopeError", "load_envelope", "parse_envelope"]

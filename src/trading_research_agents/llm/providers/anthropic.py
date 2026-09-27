@@ -1,4 +1,4 @@
-"""Anthropic adapter, on the official SDK (`pip install 'trading-research-agent[anthropic]'`).
+"""Anthropic adapter, on the official SDK (`pip install 'trading-research-agents[anthropic]'`).
 
 The system prompt is the frozen doctrine, so it is marked for prompt caching; the user turn
 carries the idea and the feedback and is never cached. Structured output is requested with
@@ -10,13 +10,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from trading_research_agent.agent.completer import Completion
+from trading_research_agents.llm.completer import Completion, ProviderError
 
 DEFAULT_MODEL = "claude-opus-5"
-
-
-class ProviderError(RuntimeError):
-    """The provider did not return a usable completion."""
 
 
 class AnthropicCompleter:
@@ -38,7 +34,7 @@ class AnthropicCompleter:
             ) as exc:  # pragma: no cover - exercised only where the extra is absent
                 raise ProviderError(
                     "the anthropic SDK is not installed; "
-                    "pip install 'trading-research-agent[anthropic]'"
+                    "pip install 'trading-research-agents[anthropic]'"
                 ) from exc
             client = anthropic.Anthropic(timeout=timeout_s, max_retries=max_retries)
         self.model = model
