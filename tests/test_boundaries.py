@@ -13,39 +13,38 @@ from pathlib import Path
 
 import pytest
 
-SRC = Path(__file__).resolve().parent.parent / "src" / "trading_research_agent"
-PACKAGE = "trading_research_agent"
+SRC = Path(__file__).resolve().parent.parent / "src" / "trading_research_agents"
+PACKAGE = "trading_research_agents"
+
+GATES = {"ledger", "envelope", "data", "chain", "execution", "strategy", "trading"}
 
 ALLOWED: dict[str, set[str]] = {
     "ledger": set(),
     "envelope": set(),
+    # The model layer sits beside the gates, not above them: it knows nothing about markets.
+    "llm": set(),
     "data": {"ledger", "envelope"},
     "chain": {"ledger", "envelope", "data"},
     "execution": {"ledger", "envelope", "data", "chain"},
     "strategy": {"ledger", "envelope", "data", "chain", "execution"},
     "trading": {"ledger", "envelope", "data", "chain", "execution", "strategy"},
-    "surface": {"ledger", "envelope", "data", "chain", "execution", "strategy", "trading"},
-    "agent": {"ledger", "envelope", "data", "chain", "execution", "strategy", "trading", "surface"},
-    "mcp": {"ledger", "envelope", "data", "chain", "execution", "strategy", "trading", "surface"},
-    "cli": {
-        "ledger",
-        "envelope",
-        "data",
-        "chain",
-        "execution",
-        "strategy",
-        "trading",
-        "surface",
-        "agent",
-        "mcp",
-    },
+    "store": GATES | {"llm"},
+    "surface": GATES,
+    "agents": GATES | {"llm", "store", "surface"},
+    "mcp": GATES | {"surface"},
+    "cli": GATES | {"llm", "store", "surface", "agents", "mcp"},
 }
 
 LLM_CLIENTS = {"anthropic", "openai", "langchain", "langgraph", "litellm", "ollama"}
 
 # Plugin directories are the only places a venue may be named in the package. Templates are
 # copies of examples/ that `tra init` writes into a project; they are never imported.
-PLUGIN_DIRS = {SRC / "data" / "venues", SRC / "trading" / "feeds", SRC / "trading" / "venues"}
+PLUGIN_DIRS = {
+    SRC / "data" / "venues",
+    SRC / "data" / "sources",
+    SRC / "trading" / "feeds",
+    SRC / "trading" / "venues",
+}
 TEMPLATES = SRC / "templates"
 EXAMPLES = SRC.parent.parent / "examples"
 VENUE_NAMES = ("bybit", "binance", "hyperliquid", "okx", "coinbase", "deribit", "kraken")
@@ -54,7 +53,7 @@ VENUE_NAMES = ("bybit", "binance", "hyperliquid", "okx", "coinbase", "deribit", 
 # methods without carrying a rule about the market: the agent core, where a model decides
 # from the operator's mechanism, and the config placeholder that stands in for it.
 STRATEGY_METHODS = {"on_bar"}
-MECHANISMS = {"agent/strategy.py:AgentStrategy", "trading/config.py:_Pending"}
+MECHANISMS = {"agents/strategy.py:AgentStrategy", "trading/config.py:_Pending"}
 FITTED_CORE_METHODS = {"fit", "entry", "exit", "mark"}
 
 
@@ -88,12 +87,12 @@ def test_subpackage_only_reaches_downward(subpackage: str) -> None:
 
 
 @pytest.mark.parametrize("subpackage", _subpackages())
-def test_only_agent_talks_to_a_language_model(subpackage: str) -> None:
+def test_only_the_llm_layer_talks_to_a_language_model(subpackage: str) -> None:
     for path in (SRC / subpackage).rglob("*.py"):
-        if subpackage == "agent" and path.parent.name == "providers":
+        if subpackage == "llm" and path.parent.name == "providers":
             continue
         roots = {n.split(".")[0] for n in _imports(path)}
-        assert roots.isdisjoint(LLM_CLIENTS), f"{path}: vendor SDKs live only in agent/providers"
+        assert roots.isdisjoint(LLM_CLIENTS), f"{path}: vendor SDKs live only in llm/providers"
 
 
 def test_nothing_reaches_into_a_private_platform() -> None:
@@ -182,6 +181,7 @@ def test_templates_are_the_examples_with_the_core_beside_the_config() -> None:
         "envelope.toml": "envelope.toml",
         "mapping.toml": "mapping.toml",
         "observation.toml": "observation.toml",
+        "data.toml": "data.toml",
     }
     for template, example in same.items():
         assert (TEMPLATES / template).read_text(encoding="utf-8") == (EXAMPLES / example).read_text(

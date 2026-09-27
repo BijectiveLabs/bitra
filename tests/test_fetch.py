@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from trading_research_agent.data import FetchError, fetch, fetch_checksum
+from trading_research_agents.data import FetchError, fetch, fetch_checksum
 
 
 class Quiet(SimpleHTTPRequestHandler):

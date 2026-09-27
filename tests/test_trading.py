@@ -7,11 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from trading_research_agent.data import Direction, Side, Trade
-from trading_research_agent.envelope import Envelope
-from trading_research_agent.execution import FundingSchedule
-from trading_research_agent.strategy import Bar, ExitRule, Signal, Target
-from trading_research_agent.trading import (
+from trading_research_agents.data import Direction, Side, Trade
+from trading_research_agents.envelope import Envelope
+from trading_research_agents.execution import FundingSchedule
+from trading_research_agents.strategy import Bar, ExitRule, Signal, Target
+from trading_research_agents.trading import (
     BarBuilder,
     ControlError,
     Controls,
@@ -25,7 +25,7 @@ from trading_research_agent.trading import (
     TradingConfig,
     run,
 )
-from trading_research_agent.trading.feed import FeedError
+from trading_research_agents.trading.feed import FeedError
 
 S = 1_000_000_000
 MINUTE = 60 * S

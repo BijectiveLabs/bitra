@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from trading_research_agent.data.series import (
+from trading_research_agents.data.series import (
     Point,
     Series,
     SeriesError,

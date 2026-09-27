@@ -13,9 +13,9 @@ from typing import Any
 import pytest
 from rich.console import Console
 
-from trading_research_agent.cli import ui
-from trading_research_agent.cli.main import main
-from trading_research_agent.trading import RunReport
+from trading_research_agents.cli import ui
+from trading_research_agents.cli.main import main
+from trading_research_agents.trading import RunReport
 
 
 @pytest.fixture
@@ -53,7 +53,7 @@ def test_tra_alone_is_the_cockpit_in_both_faces(
     monkeypatch.chdir(tmp_path)
     assert main([]) == 0
     text = recorded.export_text()
-    assert "trading-research-agent" in text and "by Bijective" in text
+    assert "trading-research-agents" in text and "by Bijective" in text
     assert "todo" in text and "next: tra init my-run" in text
     assert main(["--plain"]) == 0
     out = capsys.readouterr().out
@@ -127,7 +127,7 @@ def test_views_render_the_figures(recorded: Console, tmp_path: Path) -> None:
         live.observe(report, None)
         assert live.bars == 8
 
-    from trading_research_agent.agent.evals import EvalRow
+    from trading_research_agents.agents.evals import EvalRow
 
     row = EvalRow(
         provider="p",
@@ -154,7 +154,7 @@ def test_views_render_the_figures(recorded: Console, tmp_path: Path) -> None:
     text = recorded.export_text()
     assert "p:m" in text and "120" in text and "same bars, same controls" in text
 
-    from trading_research_agent.agent.trace import Event, Trace
+    from trading_research_agents.agents.trace import Event, Trace
 
     t = Trace(
         path=tmp_path,
@@ -216,7 +216,7 @@ def test_observe_and_check_render_through_the_cli(
 ) -> None:
     pytest.importorskip("pyarrow")
     from test_observation import BURST, declaration, prints
-    from trading_research_agent.data.parquet import write_trades
+    from trading_research_agents.data.parquet import write_trades
 
     dataset = tmp_path / "d.parquet"
     write_trades(prints(["100"] * 12), dataset, price_scale=2, qty_scale=3)

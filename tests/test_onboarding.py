@@ -14,10 +14,10 @@ from pathlib import Path
 
 import pytest
 
-from trading_research_agent.cli.main import main
-from trading_research_agent.data import Rejection, Trade
-from trading_research_agent.data.venues import register
-from trading_research_agent.data.venues.bybit import Bybit
+from trading_research_agents.cli.main import main
+from trading_research_agents.data import Rejection, Trade
+from trading_research_agents.data.venues import register
+from trading_research_agents.data.venues.bybit import Bybit
 
 HEADER = (
     "timestamp,symbol,side,size,price,tickDirection,trdMatchID,"
@@ -157,7 +157,7 @@ def test_init_with_an_agent_makes_the_analyst_the_core(
     text = (project / "strategy.toml").read_text("utf-8")
     assert 'agent = "technical_analyst"' in text and 'provider = "deepseek"' in text
     assert "[agents.pricing.deepseek-flash]" in text and "magnitude_bps = 20" in text
-    from trading_research_agent.trading import load_strategy_config
+    from trading_research_agents.trading import load_strategy_config
 
     cfg = load_strategy_config(project / "strategy.toml")
     assert cfg.agents is not None and cfg.agents.magnitude_bps == 20

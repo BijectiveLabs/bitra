@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from trading_research_agent.chain import (
+from trading_research_agents.chain import (
     CostModel,
     CostTerm,
     Era,
@@ -19,8 +19,8 @@ from trading_research_agent.chain import (
     Universe,
     amend,
 )
-from trading_research_agent.chain.preregistration import from_record, to_record
-from trading_research_agent.ledger import Verdict
+from trading_research_agents.chain.preregistration import from_record, to_record
+from trading_research_agents.ledger import Verdict
 
 # The kill table and the era partition are the ones the pre-registration standard itself uses.
 CRITERIA = (

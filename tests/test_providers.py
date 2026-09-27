@@ -7,9 +7,9 @@ from typing import Any
 
 import pytest
 
-from trading_research_agent.agent.providers import AnthropicCompleter, OpenAICompleter
-from trading_research_agent.agent.providers.anthropic import ProviderError
-from trading_research_agent.agent.roles import BOUND_SCHEMA
+from trading_research_agents.agents.roles import BOUND_SCHEMA
+from trading_research_agents.llm.completer import ProviderError
+from trading_research_agents.llm.providers import AnthropicCompleter, OpenAICompleter
 
 
 class FakeMessages:
@@ -106,7 +106,7 @@ def test_openai_request_is_a_strict_json_schema_and_needs_a_model_name() -> None
 
 
 def test_openai_base_url_reaches_a_compatible_server(monkeypatch: pytest.MonkeyPatch) -> None:
-    from trading_research_agent.agent.providers.openai import BASE_URL_ENV, OpenAICompleter
+    from trading_research_agents.llm.providers.openai import BASE_URL_ENV, OpenAICompleter
 
     class Client:
         pass

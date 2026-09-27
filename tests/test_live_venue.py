@@ -20,11 +20,11 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
-from trading_research_agent.data import Direction, Side, Trade
-from trading_research_agent.envelope import Envelope
-from trading_research_agent.execution import FundingSchedule
-from trading_research_agent.strategy import Bar, ExitRule, Signal, Target
-from trading_research_agent.trading import (
+from trading_research_agents.data import Direction, Side, Trade
+from trading_research_agents.envelope import Envelope
+from trading_research_agents.execution import FundingSchedule
+from trading_research_agents.strategy import Bar, ExitRule, Signal, Target
+from trading_research_agents.trading import (
     Controls,
     KillSwitch,
     Limits,
@@ -33,15 +33,15 @@ from trading_research_agent.trading import (
     VenueError,
     run,
 )
-from trading_research_agent.trading.canary import CanaryGuard, CanaryLimits
-from trading_research_agent.trading.venue import Intent
-from trading_research_agent.trading.venues import (
+from trading_research_agents.trading.canary import CanaryGuard, CanaryLimits
+from trading_research_agents.trading.venue import Intent
+from trading_research_agents.trading.venues import (
     LiveVenueSettings,
     UnknownLiveVenueError,
     live_venue,
     live_venues,
 )
-from trading_research_agent.trading.venues.bybit import BybitApiError, BybitLiveVenue, BybitRest
+from trading_research_agents.trading.venues.bybit import BybitApiError, BybitLiveVenue, BybitRest
 
 KEY = "key-0123456789abcdef"
 SECRET = "secret-that-must-never-appear-anywhere"  # noqa: S105 - a test double's credential
@@ -274,7 +274,7 @@ def test_the_secret_never_appears_in_repr_or_errors(double: tuple[VenueState, st
 
 
 def ENVELOPE() -> Envelope:  # noqa: N802 - a fixture-free accessor for the examples envelope
-    from trading_research_agent.envelope import load_envelope
+    from trading_research_agents.envelope import load_envelope
 
     return load_envelope(Path(__file__).resolve().parent.parent / "examples" / "envelope.toml")
 

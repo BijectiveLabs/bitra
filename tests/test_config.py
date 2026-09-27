@@ -8,12 +8,12 @@ from typing import Any
 
 import pytest
 
-from trading_research_agent.trading import ConfigError, load_strategy_config, parse_strategy_config
+from trading_research_agents.trading import ConfigError, load_strategy_config, parse_strategy_config
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
 
 CORE = """
-from trading_research_agent.strategy import Bar, Signal, Target
+from trading_research_agents.strategy import Bar, Signal, Target
 
 class Quiet:
     name = "quiet"
@@ -72,7 +72,7 @@ def test_a_core_file_is_found_next_to_the_config_first(tmp_path: Path) -> None:
 
 
 def test_a_core_can_be_imported_from_an_installed_package() -> None:
-    strategy = {"import": "trading_research_agent.trading.controls:KillSwitch"}
+    strategy = {"import": "trading_research_agents.trading.controls:KillSwitch"}
     with pytest.raises(ConfigError, match="not a Strategy"):
         parse_strategy_config(raw(strategy))
     with pytest.raises(ConfigError, match="cannot import"):

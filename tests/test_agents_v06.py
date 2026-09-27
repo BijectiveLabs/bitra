@@ -10,9 +10,7 @@ from typing import Any
 
 import pytest
 
-from trading_research_agent.agent import (
-    Completion,
-    FakeCompleter,
+from trading_research_agents.agents import (
     RoleError,
     auditor,
     executor,
@@ -22,7 +20,10 @@ from trading_research_agent.agent import (
     risk_manager,
     technical_analyst,
 )
-from trading_research_agent.agent.providers import (
+from trading_research_agents.agents.roles import prompt
+from trading_research_agents.llm import Completion, FakeCompleter
+from trading_research_agents.llm.completer import ProviderError
+from trading_research_agents.llm.providers import (
     PRESETS,
     GoogleCompleter,
     OpenAICompleter,
@@ -31,9 +32,7 @@ from trading_research_agent.agent.providers import (
     provider,
     providers,
 )
-from trading_research_agent.agent.providers.anthropic import ProviderError
-from trading_research_agent.agent.roles import prompt
-from trading_research_agent.agent.usage import (
+from trading_research_agents.llm.usage import (
     BudgetLimits,
     BudgetSpentError,
     MeteredCompleter,

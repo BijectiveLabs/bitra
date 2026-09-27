@@ -10,17 +10,17 @@ from typing import Any
 import pytest
 
 from test_session import EXAMPLES, analyst, config, dataset, final, scripted_session
-from trading_research_agent.agent import FakeCompleter
-from trading_research_agent.agent.evals import (
+from trading_research_agents.agents.evals import (
     EvalConfig,
     ModelSpec,
     evaluate,
     percentile,
     table,
 )
-from trading_research_agent.agent.trace import TraceError, lines, trace
-from trading_research_agent.envelope import Envelope, load_envelope
-from trading_research_agent.trading import load_strategy_config
+from trading_research_agents.agents.trace import TraceError, lines, trace
+from trading_research_agents.envelope import Envelope, load_envelope
+from trading_research_agents.llm import FakeCompleter
+from trading_research_agents.trading import load_strategy_config
 
 
 def test_model_specs_parse_and_slug() -> None:
@@ -111,8 +111,8 @@ def test_an_eval_refuses_what_it_cannot_compare(tmp_path: Path, envelope: Envelo
 def test_the_cli_evaluates_registered_providers(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from trading_research_agent.agent.providers import Provider, register
-    from trading_research_agent.cli.main import main
+    from trading_research_agents.cli.main import main
+    from trading_research_agents.llm.providers import Provider, register
 
     register(
         Provider(
@@ -152,7 +152,7 @@ def test_the_cli_evaluates_registered_providers(
 def test_a_trace_reads_a_session_and_a_run_back_in_order(
     tmp_path: Path, envelope: Envelope, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from trading_research_agent.cli.main import main
+    from trading_research_agents.cli.main import main
 
     screener = {
         "kept": [{"instrument": "AAAUSDT", "regime": "ranging", "reason": "flat prints"}],

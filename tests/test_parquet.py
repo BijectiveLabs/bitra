@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from trading_research_agent.data import Side, Trade
-from trading_research_agent.data.parquet import (
+from trading_research_agents.data import Side, Trade
+from trading_research_agents.data.parquet import (
     ParquetError,
     read_scales,
     read_trades,
@@ -69,7 +69,7 @@ def test_foreign_parquet_files_are_refused(tmp_path: Path) -> None:
 
     foreign = tmp_path / "foreign.parquet"
     pq.write_table(pa.table({"x": [1, 2]}), foreign)
-    with pytest.raises(ParquetError, match="not a trading-research-agent dataset"):
+    with pytest.raises(ParquetError, match="not a trading-research-agents dataset"):
         read_scales(foreign)
     with pytest.raises(ParquetError, match="price_scale must be between"):
         write_trades([trade(0)], tmp_path / "bad.parquet", price_scale=40, qty_scale=3)

@@ -4,9 +4,9 @@ from decimal import Decimal
 
 import pytest
 
-from trading_research_agent.data import Side
-from trading_research_agent.envelope import Channel, Envelope
-from trading_research_agent.execution import (
+from trading_research_agents.data import Side
+from trading_research_agents.envelope import Channel, Envelope
+from trading_research_agents.execution import (
     BookError,
     CostError,
     Direction,

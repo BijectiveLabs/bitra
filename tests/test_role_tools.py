@@ -9,33 +9,33 @@ from pathlib import Path
 
 import pytest
 
-from trading_research_agent.agent import FakeCompleter
-from trading_research_agent.agent.auditor.tools import (
+from trading_research_agents.agents.auditor.tools import (
     audit_brief,
     evidence_check,
     run_vs_replay,
     usage_summary,
 )
-from trading_research_agent.agent.executor.tools import export_signals, rate_budget, size_for
-from trading_research_agent.agent.macro_analyst.tools import macro_brief, returns_from_closes
-from trading_research_agent.agent.market_screener.tools import screen_figures
-from trading_research_agent.agent.onchain_analyst.tools import onchain_brief
-from trading_research_agent.agent.risk_manager.tools import (
+from trading_research_agents.agents.executor.tools import export_signals, rate_budget, size_for
+from trading_research_agents.agents.macro_analyst.tools import macro_brief, returns_from_closes
+from trading_research_agents.agents.market_screener.tools import screen_figures
+from trading_research_agents.agents.onchain_analyst.tools import onchain_brief
+from trading_research_agents.agents.risk_manager.tools import (
     alpha_decay,
     drawdown,
     measured_latency,
     refusal_pattern,
     risk_brief,
 )
-from trading_research_agent.agent.session import ScreenSettings, SessionConfig, run_session
-from trading_research_agent.agent.technical_analyst.tools import features
-from trading_research_agent.agent.usage import BudgetLimits, MeteredCompleter, UsageLedger
-from trading_research_agent.cli.main import main
-from trading_research_agent.data import Side, Trade
-from trading_research_agent.data.series import Point, Series, SeriesSpec, Threshold
-from trading_research_agent.envelope import Envelope
-from trading_research_agent.strategy import Bar
-from trading_research_agent.trading import Ladder, load_strategy_config
+from trading_research_agents.agents.session import ScreenSettings, SessionConfig, run_session
+from trading_research_agents.agents.technical_analyst.tools import features
+from trading_research_agents.cli.main import main
+from trading_research_agents.data import Side, Trade
+from trading_research_agents.data.series import Point, Series, SeriesSpec, Threshold
+from trading_research_agents.envelope import Envelope
+from trading_research_agents.llm import FakeCompleter
+from trading_research_agents.llm.usage import BudgetLimits, MeteredCompleter, UsageLedger
+from trading_research_agents.strategy import Bar
+from trading_research_agents.trading import Ladder, load_strategy_config
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
 MINUTE = 60 * 1_000_000_000
@@ -341,7 +341,7 @@ def test_auditor_tools_total_usage_compare_runs_and_check_evidence(tmp_path: Pat
 
 def test_a_session_hands_the_roles_measured_briefs(tmp_path: Path, envelope: Envelope) -> None:
     pytest.importorskip("pyarrow")
-    from trading_research_agent.data.parquet import write_trades
+    from trading_research_agents.data.parquet import write_trades
 
     rows = [
         Trade(

@@ -9,16 +9,16 @@ from pathlib import Path
 
 import pytest
 
-from trading_research_agent.chain.observation import (
+from trading_research_agents.chain.observation import (
     ObservationError,
     Recurrence,
-    bars_of,
     feature_at,
     load_observation,
     observe,
 )
-from trading_research_agent.data import Side, Trade
-from trading_research_agent.ledger import Axis, Verdict
+from trading_research_agents.data import Side, Trade
+from trading_research_agents.data.candles import CandleError, candles_of
+from trading_research_agents.ledger import Axis, Verdict
 
 MINUTE = 60 * 1_000_000_000
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
@@ -67,16 +67,16 @@ def test_bars_fold_trades_by_interval_and_skip_empty_minutes() -> None:
         Trade(2 * MINUTE + 30, "v", "AAAUSDT", Decimal("103"), Decimal("2"), Side.SELL, "x"),
     ]
     rows.sort(key=lambda t: t.ts_ns)
-    bars = bars_of(rows, MINUTE)
+    bars = candles_of(rows, MINUTE)
     assert [b.start_ns // MINUTE for b in bars] == [1, 2, 4]
     assert bars[1].open == 101 and bars[1].high == 103 and bars[1].close == 103
     assert bars[1].volume == 3 and bars[1].trades == 2
-    with pytest.raises(ObservationError, match="out of order"):
-        bars_of(list(reversed(rows)), MINUTE)
+    with pytest.raises(CandleError, match="out of order"):
+        candles_of(list(reversed(rows)), MINUTE)
 
 
 def test_features_are_computed_from_the_window_ending_at_the_bar() -> None:
-    bars = bars_of(prints(["100", "100", "100", "104"], qty="1"), MINUTE)
+    bars = candles_of(prints(["100", "100", "100", "104"], qty="1"), MINUTE)
     assert feature_at(bars, 3, "return_bps", 1) == pytest.approx(400.0)
     assert feature_at(bars, 3, "abs_return_bps", 1) == pytest.approx(400.0)
     assert feature_at(bars, 0, "return_bps", 1) is None
@@ -231,8 +231,8 @@ def test_the_cli_observes_and_records_a_death(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     pytest.importorskip("pyarrow")
-    from trading_research_agent.cli.main import main
-    from trading_research_agent.data.parquet import write_trades
+    from trading_research_agents.cli.main import main
+    from trading_research_agents.data.parquet import write_trades
 
     rows = prints(["100"] * 12)
     dataset = tmp_path / "data" / "AAAUSDT-1970-01-01.parquet"
@@ -267,8 +267,8 @@ def test_the_cli_observes_and_records_a_death(
 
 def test_the_surface_tool_returns_the_report(tmp_path: Path) -> None:
     pytest.importorskip("pyarrow")
-    from trading_research_agent.data.parquet import write_trades
-    from trading_research_agent.surface import observe_events
+    from trading_research_agents.data.parquet import write_trades
+    from trading_research_agents.surface import observe_events
 
     dataset = tmp_path / "d.parquet"
     write_trades(prints(["100"] * 6), dataset, price_scale=2, qty_scale=3)

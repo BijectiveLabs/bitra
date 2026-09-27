@@ -9,14 +9,14 @@ from typing import Any
 
 import pytest
 
-from trading_research_agent.agent import FakeCompleter
-from trading_research_agent.agent.session import SessionConfig, SessionError, run_session
-from trading_research_agent.agent.usage import BudgetLimits, MeteredCompleter, UsageLedger
-from trading_research_agent.data import Side, Trade
-from trading_research_agent.envelope import Envelope, load_envelope
-from trading_research_agent.surface import ActionRefusedError, demote, tighten_limits
-from trading_research_agent.trading import Ladder, Tier, load_strategy_config
-from trading_research_agent.trading.controls import KillSwitch, Limits
+from trading_research_agents.agents.session import SessionConfig, SessionError, run_session
+from trading_research_agents.data import Side, Trade
+from trading_research_agents.envelope import Envelope, load_envelope
+from trading_research_agents.llm import FakeCompleter
+from trading_research_agents.llm.usage import BudgetLimits, MeteredCompleter, UsageLedger
+from trading_research_agents.surface import ActionRefusedError, demote, tighten_limits
+from trading_research_agents.trading import Ladder, Tier, load_strategy_config
+from trading_research_agents.trading.controls import KillSwitch, Limits
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
 MINUTE = 60 * 1_000_000_000
@@ -36,7 +36,7 @@ lookback_bars = 4
 
 def dataset(tmp_path: Path, name: str, prices: list[str]) -> Path:
     pytest.importorskip("pyarrow")
-    from trading_research_agent.data.parquet import write_trades
+    from trading_research_agents.data.parquet import write_trades
 
     rows = [
         Trade(i * MINUTE + 1, "bybit", name, Decimal(p), Decimal("0.01"), Side.BUY, f"{name}-{i}")
@@ -404,7 +404,7 @@ def test_actions_only_tighten_and_only_go_down(tmp_path: Path) -> None:
     with pytest.raises(ActionRefusedError, match="states its reason"):
         demote(ladder, reason=" ")
     switch = KillSwitch()
-    from trading_research_agent.surface import arm_kill_switch, refuse
+    from trading_research_agents.surface import arm_kill_switch, refuse
 
     assert arm_kill_switch(switch, reason="stop", touch=tmp_path / "K") == "stop" and switch.armed
     with pytest.raises(ActionRefusedError, match="needs an operator"):
@@ -414,8 +414,8 @@ def test_actions_only_tighten_and_only_go_down(tmp_path: Path) -> None:
 def test_the_cli_runs_a_session_end_to_end(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from trading_research_agent.agent.providers import Provider, register
-    from trading_research_agent.cli.main import main
+    from trading_research_agents.cli.main import main
+    from trading_research_agents.llm.providers import Provider, register
 
     screener = {
         "kept": [{"instrument": "AAAUSDT", "regime": "ranging", "reason": "r"}],

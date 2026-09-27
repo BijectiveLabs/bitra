@@ -8,10 +8,10 @@ from typing import Any
 
 import pytest
 
-from trading_research_agent.agent import FakeCompleter
-from trading_research_agent.agent.react import ToolLoopError, catalog_text, run_tool_loop
-from trading_research_agent.agent.usage import BudgetLimits, MeteredCompleter, UsageLedger
-from trading_research_agent.surface import ledger_search, runs_index
+from trading_research_agents.agents.react import ToolLoopError, catalog_text, run_tool_loop
+from trading_research_agents.llm import FakeCompleter
+from trading_research_agents.llm.usage import BudgetLimits, MeteredCompleter, UsageLedger
+from trading_research_agents.surface import ledger_search, runs_index
 
 ANSWER_SCHEMA = {"type": "object", "properties": {"ok": {"type": "boolean"}}, "required": ["ok"]}
 
@@ -142,7 +142,7 @@ def test_recall_tools_search_the_ledger_and_index_runs(tmp_path: Path) -> None:
     from datetime import UTC, datetime
     from decimal import Decimal
 
-    from trading_research_agent.ledger import (
+    from trading_research_agents.ledger import (
         Axis,
         Ledger,
         LedgerEntry,

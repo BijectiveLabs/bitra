@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from trading_research_agent.data import (
+from trading_research_agents.data import (
     ArchiveFormatError,
     ColumnMap,
     MappingError,

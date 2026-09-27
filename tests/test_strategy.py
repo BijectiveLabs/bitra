@@ -9,9 +9,9 @@ from typing import Any
 import numpy as np
 import pytest
 
-from trading_research_agent.data import Direction
-from trading_research_agent.envelope import Envelope
-from trading_research_agent.strategy import (
+from trading_research_agents.data import Direction
+from trading_research_agents.envelope import Envelope
+from trading_research_agents.strategy import (
     Bar,
     BracketOutcome,
     ExitError,

@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import pytest
 
-from trading_research_agent.envelope import Channel, Envelope, EnvelopeError, parse_envelope
+from trading_research_agents.envelope import Channel, Envelope, EnvelopeError, parse_envelope
 
 
 def test_example_envelope_reproduces_the_published_schedule(envelope: Envelope) -> None:

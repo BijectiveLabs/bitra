@@ -10,12 +10,12 @@ from typing import Any, TypeVar
 
 import pytest
 
-from trading_research_agent.trading import Ladder
+from trading_research_agents.trading import Ladder
 
 mcp_sdk = pytest.importorskip("mcp")
 from mcp import Client  # noqa: E402 - after the skip
 
-from trading_research_agent.mcp import build_server  # noqa: E402
+from trading_research_agents.mcp import build_server  # noqa: E402
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
 T = TypeVar("T")

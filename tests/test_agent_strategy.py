@@ -8,15 +8,15 @@ from typing import Any
 
 import pytest
 
-from trading_research_agent.agent import FakeCompleter
-from trading_research_agent.agent.strategy import AgentStrategy
-from trading_research_agent.agent.usage import BudgetLimits, MeteredCompleter, UsageLedger
-from trading_research_agent.cli.main import main
-from trading_research_agent.data import Side, Trade
-from trading_research_agent.envelope import Envelope
-from trading_research_agent.execution import FundingSchedule
-from trading_research_agent.strategy import Bar, ExitRule, Target
-from trading_research_agent.trading import (
+from trading_research_agents.agents.strategy import AgentStrategy
+from trading_research_agents.cli.main import main
+from trading_research_agents.data import Side, Trade
+from trading_research_agents.envelope import Envelope
+from trading_research_agents.execution import FundingSchedule
+from trading_research_agents.llm import FakeCompleter
+from trading_research_agents.llm.usage import BudgetLimits, MeteredCompleter, UsageLedger
+from trading_research_agents.strategy import Bar, ExitRule, Target
+from trading_research_agents.trading import (
     ConfigError,
     Controls,
     KillSwitch,
@@ -202,7 +202,7 @@ def test_backtest_with_an_agent_core_refuses_before_any_call_when_the_key_is_mis
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     pytest.importorskip("pyarrow")
-    from trading_research_agent.data.parquet import write_trades
+    from trading_research_agents.data.parquet import write_trades
 
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
     rows = [
@@ -245,7 +245,7 @@ def test_the_analyst_is_asked_on_a_cadence_and_the_output_cap_reaches_the_provid
     with pytest.raises(ValueError, match="decide_every_bars"):
         AgentStrategy(scripted, mechanism="m", decide_every_bars=0)
 
-    from trading_research_agent.agent.providers import CallOptions, provider
+    from trading_research_agents.llm.providers import CallOptions, provider
 
     p = provider("ollama")  # keyless, so the client builds without the network
     assert p.build_with is not None
@@ -260,8 +260,8 @@ def test_the_analyst_is_asked_on_a_cadence_and_the_output_cap_reaches_the_provid
 
 
 def test_a_vendor_error_is_a_failed_call_and_repeated_failures_halt() -> None:
-    from trading_research_agent.agent.providers.anthropic import ProviderError
-    from trading_research_agent.agent.providers.openai import OpenAICompleter
+    from trading_research_agents.llm.completer import ProviderError
+    from trading_research_agents.llm.providers.openai import OpenAICompleter
 
     class Broken:
         class chat:  # noqa: N801 - the SDK's attribute shape

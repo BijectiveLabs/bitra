@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from trading_research_agent.envelope import Envelope, load_envelope
+from trading_research_agents.envelope import Envelope, load_envelope
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
 

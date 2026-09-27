@@ -13,12 +13,12 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
-from trading_research_agent.cli.main import main, read_env_file
-from trading_research_agent.data import Side, Trade
-from trading_research_agent.data.venues import archive_venue, register
-from trading_research_agent.data.venues.bybit import Bybit
-from trading_research_agent.trading import Ladder, LadderError, Tier
-from trading_research_agent.trading.config import load_funding, load_strategy_config
+from trading_research_agents.cli.main import main, read_env_file
+from trading_research_agents.data import Side, Trade
+from trading_research_agents.data.venues import archive_venue, register
+from trading_research_agents.data.venues.bybit import Bybit
+from trading_research_agents.trading import Ladder, LadderError, Tier
+from trading_research_agents.trading.config import load_funding, load_strategy_config
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
 MINUTE = 60 * 1_000_000_000
@@ -46,6 +46,7 @@ def test_init_writes_a_project_and_never_overwrites(
         "strategy.toml",
         "envelope.toml",
         "mapping.toml",
+        "data.toml",
         "observation.toml",
         "strategies/trailing_zscore.py",
         ".env.example",
@@ -63,7 +64,7 @@ def test_backtest_is_trade_replay_by_another_name(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     pytest.importorskip("pyarrow")
-    from trading_research_agent.data.parquet import write_trades
+    from trading_research_agents.data.parquet import write_trades
 
     rows = [
         Trade(
