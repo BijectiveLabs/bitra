@@ -19,6 +19,45 @@ auditors.
 
 ---
 
+## One cycle
+
+```bash
+pip install 'trading-research-agents[ccxt,openai,data]'
+tra init my-desk && cd my-desk      # strategy.toml, data.toml, envelope.toml, all commented
+cp .env.example .env                # your model key; no venue key is needed for a cycle
+tra run --env-file .env             # one autonomous cycle, in the sandbox
+```
+
+```
+snapshot (engine)  ->  briefs (code)  ->  agents (parallel)  ->  cost gate (code)  ->  intent or refusal
+```
+
+What that prints, from a real cycle on live data with a real model:
+
+```
+cycle 2026-09-27T14-51-23Z BTCUSDT: 8.46s of agents
+  funding        ccxt:bybit         age 0.764s
+  ohlcv          ccxt:bybit         age 35.705s
+  orderbook      ccxt:bybit         age 5.303s
+technical: long at 0.68 over 3 bars: short-horizon reversion of the close against its window
+           triggered by a zscore of -2.197, vwap_gap_bps of -24.21 and volume_ratio 2.392
+cost: 13.48 bps round trip, 2.00 of it estimated
+gate: 25.0000 bps claimed clears 13.4800 bps cost plus 0.0000 bps margin
+the edge is declared: [agents].magnitude_bps, declared by the operator and not measured here
+  fee_round_trip        11.0000 bps  declared
+  spread_cost            0.0118 bps  measured
+  impact                 0.0000 bps  computed
+  funding_accrual        0.4682 bps  declared
+  latency_slippage       2.0000 bps  estimated
+intent: long 0.01 (sandbox)
+```
+
+Three things in that output are the whole argument of this project. The model never computed a
+number: every figure it read was built by code from a snapshot that says how old it is. Eleven of
+the thirteen basis points of cost are the venue's own fee schedule, printed before any order
+exists. And the claimed edge is labelled a declaration, because it has not been measured yet.
+`docs/cycle.md` is the rest of it.
+
 ## Four commands
 
 ```bash
@@ -124,14 +163,16 @@ copies, name a venue.
 | `trading_research_agents.ledger` | The kill ledger: a closed vocabulary of verdicts and axes, an append-only store, and the consistency rules between them |
 | `trading_research_agents.envelope` | The operating envelope: fees per channel, measured round trips, latency. Configuration, never constants |
 | `trading_research_agents.data` | The data gate: any trade data to canonical trades, through a venue plugin or a declared column map; a one-pass audit with findings, a manifest with checksums, and exact `DECIMAL` Parquet with the `[data]` extra |
+| `trading_research_agents.data.sources` | Live sources behind a chain: free before paid, failover recorded, a time to live per kind, and provenance on every value. `ccxt:<venue>` reads public endpoints of more than a hundred venues and is never given a key |
 | `trading_research_agents.strategy` | The decision-core protocol, exits bound to the mechanism (layer 6, causal stops with adverse fills), the walk-forward harness that refuses precomputed parameters. No strategy of its own |
 | `trading_research_agents.trading` | The trading agent: recorded feeds and live feed plugins, a simulated venue on the execution rules, controls that fail closed, the promotion ladder, one runtime for replay and shadow |
+| `trading_research_agents.store` | What a run remembers: the snapshot a cycle is decided from with provenance and age on every value, the cycle directory an auditor replays, and a cache that only returns what is still fresh |
 | `trading_research_agents.llm` | Everything that talks to a language model and nothing that decides: the completer protocol, the structured-output parser, the call budget with `usage.jsonl`, and the vendor adapters behind `[anthropic]`, `[openai]`, `[google]` plus verified OpenAI-compatible presets |
 | `trading_research_agents.agents` | The roles: what each agent is asked, what it may answer, and what it may never do. Seven today (screener, technical analyst as a decision core, macro, on-chain, risk manager, executor, auditor) in a fixed session, a bounded tool loop, model comparison, and traces |
 | `trading_research_agents.surface` | The gates as callable tools for the MCP server and the roles: ten reads, and actions that only tighten, demote or halt |
-| `trading_research_agents.cli` | The `tra` command: data, chain, agent, trade, ladder, ledger, and the console face |
+| `trading_research_agents.cli` | The `tra` command: run, data, chain, agent, trade, ladder, ledger, and the console face |
 | `trading_research_agents.chain` | The falsification chain: layer 0 (cost floor), layer 1 (market observation), layer 3 (sealed pre-registration), layer 4 (data requirements), layer 5 (validation: net returns, block bootstrap, matched null, subperiods, power, BH, anchor robustness), and the era seal |
-| `trading_research_agents.execution` | Execution realism: the cost identity with funding, walk-the-book, passive fills with trade-through, effective cost across unfilled orders, markout |
+| `trading_research_agents.execution` | Execution realism: the cost identity with funding, walk-the-book, passive fills with trade-through, effective cost across unfilled orders, markout, and the pre-trade cost a cycle is gated on |
 
 Layer 0 in six lines:
 
@@ -161,6 +202,7 @@ tra data audit data/BTCUSDT-trades-2025-01.zip --venue binance --instrument BTCU
     --max-gap 5m --manifest data/manifest.json
 tra data audit export.csv --mapping examples/mapping.toml --instrument BTCUSDT --max-gap 5m
 tra data pull BTCUSDT                            # one live snapshot through the chains in data.toml
+tra run --env-file .env                          # one autonomous cycle; docs/cycle.md
 tra chain floor --envelope examples/envelope.toml --magnitude 3.0 --venue hyperliquid     --subject "informed-flow burst drift" --ledger ledger.jsonl --id H-001
 tra chain observe --dataset data/BTCUSDT-2025-01-01.parquet   # layer 1: does the event recur? observation.toml
 tra chain check preregistration.json
@@ -249,7 +291,7 @@ uv run pytest
 
 See `CONTRIBUTING.md` for the branch flow and the standards the code is held to,
 `docs/architecture.md` for the package boundaries and the file formats at them, `docs/data.md`
-for the data gate, `docs/chain.md` for the chain, `docs/execution.md` for execution realism,
+for the data gate, `docs/cycle.md` for the cycle, `docs/chain.md` for the chain, `docs/execution.md` for execution realism,
 `docs/agent.md` for the research agent, `docs/trading.md` for the trading agent, and
 `docs/ledger.md` for the verdict vocabulary.
 

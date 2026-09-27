@@ -6,7 +6,59 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The project is now one thing, not two: autonomous trading agents, with the falsification
+  chain as the safety rail rather than the product. The README says so.
+- The package is `trading_research_agents` and the distribution is `trading-research-agents`;
+  the command stays `tra`. There is no compatibility alias, because nothing was published
+  under the old name.
+- The licence is MIT. `NOTICE` is kept as a record of third-party software, not as an
+  obligation of the licence.
+- New layer `llm`: the completer protocol, the structured-output parser, the call budget with
+  `usage.jsonl`, and the vendor adapters. It sits beside the gates rather than inside the
+  agents, because the auditors and any host may call a model without an agent. `agent` is now
+  `agents` and holds only roles, the session, the tool loop, evals and traces. The import
+  boundary test carries the new map.
+- `ProviderError` lives with the completer protocol instead of inside the Anthropic adapter,
+  and the schema-parse error and the role error are one class (`llm.form.FormError`, exported
+  as `agents.RoleError`).
+- `requirements.txt` carries the runtime pins generated from `uv.lock`, with the extras
+  spelled out in comments.
+
 ### Added
+
+- The cycle: `tra run` takes one snapshot, builds each agent's brief in code, asks the agents in
+  parallel, prices the round trip on the book it is holding, and writes an intent or a refusal
+  with its reason. Everything it touched stays in `runs/cycles/<cycle>/`: the snapshot, the
+  briefs, the answers, the cost, the verdict. `agents/cycle.py`, `agents/briefs.py`,
+  `agents/parallel.py`, `docs/cycle.md`.
+- `execution/pretrade.py`: what a trade costs before it exists, component by component, each one
+  labelled `declared`, `measured`, `computed` or `estimated`. The gate admits a claim only when it
+  clears the total plus the operator's margin, and it records where the claimed edge came from so
+  a declaration is never read as a measurement.
+- Agents run on a small thread pool with their answers written as they arrive, so a cycle stopped
+  by a rate limit keeps what it paid for and `--resume` reuses it. A failed agent is a line in the
+  record, not the end of the cycle.
+- `tra check` reads `data.toml` and says when a cycle could not price a trade for want of a book
+  chain.
+
+- `data/sources/`: live sources behind a chain. The operator declares an order per kind of data
+  in `data.toml`, the first source that answers inside the declared freshness wins, and every
+  attempt, every stale value and every refusal is recorded. `ccxt:<venue>` reads public
+  endpoints of more than a hundred venues through the `[ccxt]` extra and is never given a key;
+  `file:data` answers from the days already in `data/`, so a Client with no keys still runs. A
+  Client's own vendor registers under the `trading_research_agents.sources` entry point.
+- `store/`: the snapshot a cycle is decided from, with provenance and age on every value; the
+  cycle directory that holds a cycle's papers for replay; and a file cache that only returns
+  what is still inside its time to live.
+- `data.schema.Candle` and `data.candles.candles_of`: the published interval, and one way to
+  fold a tape into it. Layer 1 now uses them instead of its own private aggregate.
+- `tra data pull [INSTRUMENT]`: one snapshot through the declared chains, written to
+  `runs/cycles/<cycle>/snapshot.json`, with a console view of what answered and what did not.
+  It exits refused when any kind was refused or came back stale.
+- Datasets written before the package was renamed still read: the Parquet marker is accepted
+  under both prefixes.
 
 - Agents with full access through the gates. Seven role packages under `agent/`
   (market screener, technical analyst, macro analyst, on-chain analyst, risk manager,
@@ -37,7 +89,7 @@ All notable changes to this project are recorded here. The format follows
   `examples/series.toml`: any source, aligned as-of with the publication lag honoured,
   correlations measured with n, thresholds declared), `risk_brief` from a run's own files,
   `size_for` / `rate_budget` / `export_signals` (`tra signals export`), `audit_brief`.
-- `agent/react.py`: a bounded tool loop with a closed catalog, checked arguments, cut
+- `agents/react.py`: a bounded tool loop with a closed catalog, checked arguments, cut
   observations, a step cap and every step recorded. The auditor works it over the read
   surface before it answers.
 - `ledger_search` and `runs_index` on the surface and the MCP server (nine tools).
@@ -90,7 +142,7 @@ All notable changes to this project are recorded here. The format follows
   ladder as the gate: the run refuses unless `ladder.json` stands at canary. Production
   stays refused.
 - Live venues are plugins: `trading/venues/` with `LiveVenueFactory`, `LiveVenueSettings`,
-  the `trading_research_agent.live_venues` entry point, and one bundled adapter (v5 REST,
+  the `trading_research_agents.live_venues` entry point, and one bundled adapter (v5 REST,
   market IOC, idempotent `orderLinkId`, fills confirmed from order state, position
   reconciled after every fill, fees as charged). Its security review is
   `tests/test_live_venue.py`, run against a local double that verifies every signature.
@@ -128,8 +180,8 @@ All notable changes to this project are recorded here. The format follows
 - The walk-forward harness is generic: `walk_forward(panel, core, lookback=...)` takes a
   `FittedCore` and knows nothing about pairs or z-scores. The pair core is now the example.
 - Venues are plugins. Archive layouts live in `data/venues/` behind `ArchiveVenue` and the
-  `trading_research_agent.venues` entry point; live feeds in `trading/feeds/` behind
-  `LiveFeedFactory` and `trading_research_agent.feeds`. `tra data fetch|audit --venue` and
+  `trading_research_agents.venues` entry point; live feeds in `trading/feeds/` behind
+  `LiveFeedFactory` and `trading_research_agents.feeds`. `tra data fetch|audit --venue` and
   `tra trade shadow --feed` take any registered name; shadow defaults to the venue in
   `[run].venue_key`.
 - `data.normalise` keeps only what every layout shares; the venue URL builders and

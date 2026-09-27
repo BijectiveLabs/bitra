@@ -20,6 +20,13 @@ vendor that speaks the OpenAI chat API.
 | `local` | `[openai]` | none | `--base-url` (https, or http on localhost) | JSON mode |
 
 Every endpoint and key variable was read from the vendor's own documentation on 2026-09-13.
+
+Model names belong to your account, not to this package, and that is deliberate: a catalogue of
+model names goes stale every month and a warning about an unknown name is noise. If a vendor
+answers `404` for a model that used to work, ask the vendor which names your key may use. Seen on
+2026-09-27 with a Gemini key: `gemini-2.5-flash` replied "no longer available to new users" while
+`gemini-flash-latest` worked on the same key. A failed call is recorded in `usage.jsonl` with the
+vendor's own error, so this is visible rather than mysterious.
 "JSON mode" means the vendor documents JSON output but not a strict schema: the schema is put
 in the system prompt, and the result is validated by the role's parser exactly as it is for
 every other provider. A malformed answer is a refusal of form, never a decision.
