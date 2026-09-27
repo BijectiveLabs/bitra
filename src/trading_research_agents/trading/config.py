@@ -40,6 +40,19 @@ class RunSettings:
 
 
 @dataclass(frozen=True)
+class RoleModel:
+    """One role's model, after the defaults in [agents] and its own overrides are settled."""
+
+    role: str
+    provider: str
+    model: str | None
+    base_url: str | None
+    max_output_tokens: int
+    call_timeout_s: int
+    max_retries: int
+
+
+@dataclass(frozen=True)
 class AgentSettings:
     """[agents]: which model decides, how often it may be asked, and what that may cost."""
 
@@ -60,6 +73,25 @@ class AgentSettings:
     max_retries: int = 2
     magnitude_bps: Decimal | None = None
     screen: dict[str, float] = field(default_factory=dict)
+    # [agents.roles.<role>]: a cheaper model for the roles that only read and label, a stronger
+    # one where the reasoning is on numbers. Anything a role does not override it inherits.
+    roles: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # [agents].analysts: the roster, when the operator wants to say it outright. Empty means the
+    # cycle asks the technical analyst plus whichever reading analysts have a declared source.
+    analysts: tuple[str, ...] = ()
+
+    def for_role(self, role: str) -> RoleModel:
+        """What this role is asked with: its own model where declared, otherwise the default."""
+        table = self.roles.get(role, {})
+        return RoleModel(
+            role=role,
+            provider=str(table.get("provider", self.provider)),
+            model=(str(table["model"]) if table.get("model") else self.model),
+            base_url=(str(table["base_url"]) if table.get("base_url") else self.base_url),
+            max_output_tokens=int(table.get("max_output_tokens", self.max_output_tokens)),
+            call_timeout_s=int(table.get("call_timeout_s", self.call_timeout_s)),
+            max_retries=int(table.get("max_retries", self.max_retries)),
+        )
 
 
 @dataclass(frozen=True)
@@ -171,6 +203,67 @@ def _placeholder(settings: AgentSettings) -> Strategy:
     return _Pending(settings)
 
 
+KNOWN_ROLES = (
+    "market_screener",
+    "technical_analyst",
+    "macro_analyst",
+    "onchain_analyst",
+    "sentiment_analyst",
+    "risk_manager",
+    "executor",
+    "auditor",
+)
+ROLE_KEYS = ("provider", "model", "base_url", "max_output_tokens", "call_timeout_s", "max_retries")
+
+
+ASKABLE = (
+    "technical_analyst",
+    "macro_analyst",
+    "onchain_analyst",
+    "sentiment_analyst",
+)
+
+
+def _analysts(raw: Any) -> tuple[str, ...]:
+    """`[agents].analysts`, when the operator names the roster instead of letting sources decide."""
+    if raw is None:
+        return ()
+    if not isinstance(raw, list) or not all(isinstance(name, str) for name in raw):
+        raise ConfigError("[agents].analysts is a list of role names")
+    names = [str(name) for name in raw]
+    unknown = sorted(set(names) - set(ASKABLE))
+    if unknown:
+        raise ConfigError(f"[agents].analysts: {unknown} cannot be asked; have {list(ASKABLE)}")
+    if "technical_analyst" not in names:
+        raise ConfigError(
+            "[agents].analysts includes technical_analyst; it is the role that decides"
+        )
+    if len(set(names)) != len(names):
+        raise ConfigError("[agents].analysts names a role twice")
+    return tuple(names)
+
+
+def _roles(raw: Any) -> dict[str, dict[str, Any]]:
+    """`[agents.roles.<role>]` tables, checked against the roles this package actually asks."""
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ConfigError("[agents.roles] holds one table per role")
+    out: dict[str, dict[str, Any]] = {}
+    for role, table in raw.items():
+        if role not in KNOWN_ROLES:
+            raise ConfigError(f"[agents.roles.{role}] is not a role; have {list(KNOWN_ROLES)}")
+        if not isinstance(table, dict):
+            raise ConfigError(f"[agents.roles.{role}] is a table")
+        unknown = sorted(set(table) - set(ROLE_KEYS))
+        if unknown:
+            raise ConfigError(
+                f"[agents.roles.{role}]: {unknown} is not settable; {list(ROLE_KEYS)}"
+            )
+        out[role] = dict(table)
+    return out
+
+
 def _agents(raw: dict[str, Any], strategy_raw: dict[str, Any]) -> AgentSettings | None:
     role = strategy_raw.get("agent")
     if role is None:
@@ -214,6 +307,8 @@ def _agents(raw: dict[str, Any], strategy_raw: dict[str, Any]) -> AgentSettings 
         max_retries=int(table.get("max_retries", 2)),
         magnitude_bps=_dec(table, "magnitude_bps") if "magnitude_bps" in table else None,
         screen=_screen(table.get("screen")),
+        roles=_roles(table.get("roles")),
+        analysts=_analysts(table.get("analysts")),
     )
 
 

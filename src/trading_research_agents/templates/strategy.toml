@@ -67,6 +67,19 @@ kill_switch = "KILL"               # touch this file to flatten and stop
 # max_output_tokens = 512         # caps a reasoning model's thinking, most of its latency
 # call_timeout_s = 60             # per request; the SDK retries 429s and 5xx with backoff
 # max_retries = 2
+#
+# The roster, when you want to say it outright. Left out, a cycle asks the technical analyst and
+# whichever reading analysts have a source beside this file: series.toml, onchain.toml,
+# sentiment.toml.
+# analysts = ["technical_analyst", "macro_analyst", "sentiment_analyst"]
+#
+# A role that only reads and labels does not need the model that reasons over sixty bars, and the
+# difference is most of a token bill. Anything a role does not override it inherits from [agents].
+# [agents.roles.sentiment_analyst]
+# provider = "groq"
+# model = "a-cheaper-model"
+# max_output_tokens = 2048        # a reasoning model spends most of its output thinking, and the
+#                                 # thinking is what varies: give it about twice what it needs
 # [agents.pricing.deepseek-flash]  # what the operator was quoted; never a constant
 # input_per_million = 0.14
 # output_per_million = 0.28
