@@ -89,6 +89,33 @@ a favourable guess manufactures an edge that does not exist.
 - One code path. The runtime sees the feed and the venue as protocols; replay and shadow
   differ only in what they are given.
 
+## What a round trip went through, not only what it earned
+
+Every closed round trip in `trades.jsonl` carries two more figures beside its net: the furthest
+the position ever stood in front, and the furthest it ever stood under water, both in basis
+points against the entry and both with the bar they happened on.
+
+| Field | Meaning |
+|---|---|
+| `mfe_bps` | maximum favourable excursion: the best the position ever stood, positive |
+| `mae_bps` | maximum adverse excursion: the worst it ever stood, negative |
+| `bars_to_mfe`, `bars_to_mae` | which bar each happened on, counting from the entry |
+| `bars` | how many bars the position was held through |
+
+The runtime already walks every bar while a position is open, so this costs one comparison per
+bar. The figures are signed the way a trader reads them, whichever way the position was facing: a
+short is helped by the bar's low and hurt by its high.
+
+Why they are worth keeping. A trade that closed at plus two after standing twenty in front is an
+exit problem, and no amount of work on entries will fix it. A trade that closed at plus two after
+standing fourteen under water is a stop that nearly fired, and it will fire on the next one like
+it. Neither fact is visible in the net, and both change what an operator should do next.
+
+The risk manager's brief carries the summary over a run: the median and the best favourable
+excursion, the median and the worst adverse one, and the median of what the winners gave back
+before they closed. `execution/excursion.py` computes it; nothing about it enters the cost
+identity, and nothing about it changes what a trade earned.
+
 ## Controls
 
 The per-strategy tier of the circuit-breaker hierarchy, independent of the strategy:

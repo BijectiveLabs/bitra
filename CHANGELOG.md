@@ -28,6 +28,10 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- Every closed round trip records what it went through, not only what it earned: `mfe_bps`,
+  `mae_bps` and the bar each happened on, in `trades.jsonl`. The risk manager's brief summarises
+  them over a run, including the median of what the winners gave back before they closed.
+  `execution/excursion.py`.
 - The cycle: `tra run` takes one snapshot, builds each agent's brief in code, asks the agents in
   parallel, prices the round trip on the book it is holding, and writes an intent or a refusal
   with its reason. Everything it touched stays in `runs/cycles/<cycle>/`: the snapshot, the
