@@ -160,13 +160,43 @@ def analyst_answer(target: str = "long", confidence: float = 0.9, horizon: int =
     )
 
 
+class Scripted:
+    """A scripted model per role, because the analysts are asked at the same time.
+
+    One shared queue cannot say which answer belongs to which role once the calls go out in
+    parallel, and that is exactly what the cycle does. So each role gets its own script, the way
+    each role can get its own model in a real configuration.
+    """
+
+    def __init__(self, answers: list[Any] | dict[str, Any]) -> None:
+        self.shared = FakeCompleter(answers) if isinstance(answers, list) else None
+        self.per_role = (
+            {role: FakeCompleter([answer]) for role, answer in answers.items()}
+            if isinstance(answers, dict)
+            else {}
+        )
+
+    def for_role(self, role: str) -> FakeCompleter:
+        if self.shared is not None:
+            return self.shared
+        if role not in self.per_role:
+            raise AssertionError(f"the test scripted no answer for {role}")
+        return self.per_role[role]
+
+    @property
+    def calls(self) -> list[Any]:
+        if self.shared is not None:
+            return list(self.shared.calls)
+        return [call for fake in self.per_role.values() for call in fake.calls]
+
+
 def cycle_config(
     tmp_path: Path,
     envelope: Envelope,
-    answers: list[Any],
+    answers: list[Any] | dict[str, Any],
     **overrides: Any,
-) -> tuple[CycleConfig, FakeCompleter, UsageLedger]:
-    fake = FakeCompleter(answers)
+) -> tuple[CycleConfig, Scripted, UsageLedger]:
+    fake = Scripted(answers)
     usage = UsageLedger(tmp_path / "usage.jsonl")
     limits = BudgetLimits(token_budget=500_000, max_calls_per_hour=1000, min_interval_s=0)
     metered: dict[str, MeteredCompleter] = {}
@@ -174,7 +204,12 @@ def cycle_config(
     def completer_for(role: str) -> MeteredCompleter:
         if role not in metered:
             metered[role] = MeteredCompleter(
-                fake, role=role, provider="fake", limits=limits, ledger=usage, clock=lambda: 0.0
+                fake.for_role(role),
+                role=role,
+                provider="fake",
+                limits=limits,
+                ledger=usage,
+                clock=lambda: 0.0,
             )
         return metered[role]
 
@@ -447,3 +482,131 @@ def test_the_cli_runs_one_cycle(
     (project / "data.toml").write_text(book_chain, "utf-8")
     assert main(["run"]) == 1
     assert "does not serve orderbook" in capsys.readouterr().err
+
+
+def reading_answer(role: str) -> str:
+    """What each reading analyst answers, in its own schema."""
+    if role == "macro_analyst":
+        return json.dumps(
+            {
+                "regime": "risk-off",
+                "events": [],
+                "reason": "us10y at 4.4 is above the operator's declared 4.25",
+                "data_as_of": "2026-09-27T10:00:00+00:00",
+            }
+        )
+    if role == "onchain_analyst":
+        return json.dumps(
+            {
+                "signal": "distribution",
+                "reason": "net flow to venues over the window is positive",
+                "data_as_of": "2026-09-27T10:00:00+00:00",
+            }
+        )
+    return json.dumps(
+        {
+            "state": "not declared",
+            "reason": "the brief carried no series and no notes",
+            "figures_used": [],
+            "data_as_of": "2026-09-27T10:00:00+00:00",
+        }
+    )
+
+
+def series_for(tmp_path: Path, name: str, value: str, threshold: str = "") -> Path:
+    csv = tmp_path / f"{name}.csv"
+    csv.write_text(f"date,value\n2026-09-20,{value}\n2026-09-25,{value}\n", encoding="utf-8")
+    body = [
+        "[[series]]",
+        f'name = "{name}"',
+        f'file = "{name}.csv"',
+        'ts = "date"',
+        'ts_unit = "iso8601"',
+        'value = "value"',
+        'unit = "percent"',
+        'publish_lag = "0s"',
+        'source = "operator export"',
+    ]
+    if threshold:
+        body.append(f"threshold = {threshold}")
+    path = tmp_path / f"{name}.toml"
+    path.write_text("\n".join(body) + "\n", encoding="utf-8")
+    return path
+
+
+def test_four_analysts_run_together_and_every_answer_is_recorded(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    macro = series_for(tmp_path, "us10y", "4.4", "{ bearish_above = 4.25 }")
+    onchain = series_for(tmp_path, "venue_net_flow", "120")
+    answers = {
+        "technical_analyst": analyst_answer(),
+        "macro_analyst": reading_answer("macro_analyst"),
+        "onchain_analyst": reading_answer("onchain_analyst"),
+        "sentiment_analyst": reading_answer("sentiment_analyst"),
+    }
+    cfg, fake, usage = cycle_config(
+        tmp_path,
+        envelope,
+        answers,
+        series={"macro_analyst": macro, "onchain_analyst": onchain},
+        analysts=(
+            "technical_analyst",
+            "macro_analyst",
+            "onchain_analyst",
+            "sentiment_analyst",
+        ),
+    )
+    result = run_cycle(cfg)
+    assert result.stopped_by is None and result.acted
+    # Four agents asked, in a fixed order in the record whoever answered first.
+    assert [o.name for o in result.fan.outcomes] == [
+        "macro_analyst",
+        "onchain_analyst",
+        "sentiment_analyst",
+        "technical",
+    ]
+    assert len(fake.calls) == 4 and usage.tokens > 0
+    assert result.context["macro_analyst"]["regime"] == "risk-off"
+    assert result.context["onchain_analyst"]["signal"] == "distribution"
+    # A sentiment analyst with no declared source says so, and is never recorded as neutral.
+    assert result.context["sentiment_analyst"]["state"] == "not declared"
+
+    where = Path(str(result.path))
+    for role in ("macro_analyst", "onchain_analyst", "sentiment_analyst"):
+        assert (where / "briefs" / f"{role}.json").is_file()
+        assert (where / "answers" / f"{role}.json").is_file()
+    summary = json.loads((where / "cycle.json").read_text("utf-8"))
+    assert set(summary["context"]) == {"macro_analyst", "onchain_analyst", "sentiment_analyst"}
+    macro_brief_read = json.loads((where / "briefs" / "macro_analyst.json").read_text("utf-8"))
+    assert macro_brief_read["declared_series"] == ["us10y"]
+    assert macro_brief_read["series"][0]["state"] == "bearish"
+
+
+def test_a_reading_analyst_whose_series_cannot_be_read_is_refused_not_guessed(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    missing = tmp_path / "nowhere.toml"
+    missing.write_text(
+        '[[series]]\nname = "x"\nfile = "absent.csv"\nts = "date"\nvalue = "value"\n', "utf-8"
+    )
+    cfg, fake, _ = cycle_config(
+        tmp_path,
+        envelope,
+        [analyst_answer()],
+        series={"onchain_analyst": missing},
+        analysts=("technical_analyst", "onchain_analyst"),
+    )
+    result = run_cycle(cfg)
+    assert result.acted and result.context == {}
+    assert any("onchain_analyst" in r and "does not exist" in r for r in result.refusals)
+    assert len(fake.calls) == 1
+
+
+def test_a_cycle_refuses_a_roster_it_cannot_run(tmp_path: Path, envelope: Envelope) -> None:
+    with pytest.raises(CycleError, match="it is the role that decides"):
+        cycle_config(tmp_path, envelope, [], analysts=("macro_analyst",))
+    with pytest.raises(CycleError, match="is not an analyst"):
+        cycle_config(tmp_path, envelope, [], analysts=("technical_analyst", "astrologer"))
+    with pytest.raises(CycleError, match="read nothing"):
+        cycle_config(tmp_path, envelope, [], series={"executor": tmp_path / "x.toml"})

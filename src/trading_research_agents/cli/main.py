@@ -427,6 +427,18 @@ def build_parser() -> argparse.ArgumentParser:
     run_cmd.add_argument(
         "--margin", type=parse_decimal, default=None, help="bps the edge must clear beyond cost"
     )
+    run_cmd.add_argument(
+        "--macro", type=Path, default=None, help="a series.toml for the macro and news analyst"
+    )
+    run_cmd.add_argument(
+        "--onchain", type=Path, default=None, help="a series.toml for the on-chain analyst"
+    )
+    run_cmd.add_argument(
+        "--sentiment", type=Path, default=None, help="a series.toml for the sentiment analyst"
+    )
+    run_cmd.add_argument(
+        "--events", type=Path, default=None, help="a calendar of dated events and notes"
+    )
     run_cmd.add_argument("--out", type=Path, default=None, help="default: runs/cycles")
     run_cmd.add_argument(
         "--resume", action="store_true", help="reuse answers already written for this cycle"
@@ -915,6 +927,25 @@ def _build_completer(a: Any) -> Completer:
     return p.build(a.model, a.base_url)
 
 
+def _completer_for_role(a: Any, role: str) -> Completer:
+    """The model this role is asked with: its own where declared, the default otherwise.
+
+    A screener that labels a regime and an analyst that reasons over sixty bars do not need the
+    same model, and the difference is most of a token bill. `[agents.roles.<role>]` is where an
+    operator says so.
+    """
+    settings = a.for_role(role)
+    p = provider(settings.provider)
+    options = CallOptions(
+        max_output_tokens=settings.max_output_tokens,
+        timeout_s=float(settings.call_timeout_s),
+        max_retries=settings.max_retries,
+    )
+    if p.build_with is not None:
+        return p.build_with(settings.model, settings.base_url, options)
+    return p.build(settings.model, settings.base_url)
+
+
 def _call_options(a: Any) -> CallOptions:
     return CallOptions(
         max_output_tokens=a.max_output_tokens,
@@ -1235,6 +1266,20 @@ def run_cycle_command(args: argparse.Namespace) -> int:
     chains = {declared.kind: data_cfg.chain(declared.kind) for declared in data_cfg.kinds}
     instrument = args.instrument or cfg.run.instrument
     out = args.out or Path("runs") / "cycles"
+    beside = args.config.resolve().parent
+    series: dict[str, Path] = {}
+    for role, flag, default in (
+        ("macro_analyst", args.macro, "series.toml"),
+        ("onchain_analyst", args.onchain, "onchain.toml"),
+        ("sentiment_analyst", args.sentiment, "sentiment.toml"),
+    ):
+        declared = flag if flag is not None else beside / default
+        if declared.is_file():
+            series[role] = declared
+    events = args.events if args.events is not None else beside / "events.csv"
+    args.events = events if events.is_file() else None
+    # Declared roster wins; otherwise the roles with a source are the ones worth paying for.
+    analysts = a.analysts or ("technical_analyst", *sorted(series))
     usage = UsageLedger(out / "usage.jsonl")
     limits = BudgetLimits(
         token_budget=a.token_budget,
@@ -1243,14 +1288,20 @@ def run_cycle_command(args: argparse.Namespace) -> int:
         call_timeout_s=a.call_timeout_s,
     )
     pricing = {model: Pricing(i, o) for model, (i, o) in a.pricing.items()}
-    inner = _build_completer(a)
     metered: dict[str, MeteredCompleter] = {}
 
     def completer_for(role: str) -> MeteredCompleter:
-        # One budget for the whole cycle; the ledger is shared, the cadence is per role.
+        # One budget for the whole cycle, one client per role: a role may run on a cheaper model
+        # without the others paying for it.
         if role not in metered:
+            settings = a.for_role(role)
             metered[role] = MeteredCompleter(
-                inner, role=role, provider=a.provider, limits=limits, ledger=usage, pricing=pricing
+                _completer_for_role(a, role),
+                role=role,
+                provider=settings.provider,
+                limits=limits,
+                ledger=usage,
+                pricing=pricing,
             )
         return metered[role]
 
@@ -1274,6 +1325,9 @@ def run_cycle_command(args: argparse.Namespace) -> int:
             margin_bps=args.margin if args.margin is not None else Decimal(0),
             min_confidence=a.min_confidence,
             mode=args.mode,
+            series=series,
+            events=args.events,
+            analysts=analysts,
             resume=bool(args.resume),
         )
     )
@@ -1284,6 +1338,9 @@ def run_cycle_command(args: argparse.Namespace) -> int:
     data = result.briefs.get("data") or {}
     for kind, value in sorted((data.get("values") or {}).items()):
         lines.append(f"  {kind:<14} {value['source']:<18} age {value['age_s']}s")
+    for role, said in sorted(result.context.items()):
+        state = said.get("regime") or said.get("signal") or said.get("state") or said.get("error")
+        lines.append(f"{role.replace('_analyst', ''):<10} {state}: {said.get('reason', '')}")
     if result.analyst is not None:
         lines.append(
             f"technical: {result.analyst.target} at {result.analyst.confidence:.2f} "

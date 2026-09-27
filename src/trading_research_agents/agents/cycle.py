@@ -19,16 +19,24 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from trading_research_agents.agents import technical_analyst
+from trading_research_agents.agents import (
+    macro_analyst,
+    onchain_analyst,
+    sentiment_analyst,
+    technical_analyst,
+)
 from trading_research_agents.agents.briefs import (
     BriefError,
+    context_brief,
     cost_brief,
     data_brief,
+    declared_state,
     technical_brief,
 )
 from trading_research_agents.agents.parallel import FanOut, Task, run_tasks
 from trading_research_agents.agents.roles import RoleError, prompt
 from trading_research_agents.data.schema import Direction
+from trading_research_agents.data.series import Event, Series, SeriesError, load_all, read_events
 from trading_research_agents.data.sources.chain import SourceChain
 from trading_research_agents.envelope.model import Channel, Envelope
 from trading_research_agents.execution.pretrade import PreTradeVerdict, admit
@@ -39,6 +47,13 @@ from trading_research_agents.store.snapshot import Snapshot, cycle_id, take_snap
 
 MODES = ("sandbox", "signals")
 TARGETS = {"long": Direction.LONG, "short": Direction.SHORT}
+# The analysts that only read and label. They run beside the technical analyst, they never place
+# anything, and each one's answer is recorded whether or not the operator gave it a source.
+READING: dict[str, Any] = {
+    macro_analyst.ROLE: macro_analyst,
+    onchain_analyst.ROLE: onchain_analyst,
+    sentiment_analyst.ROLE: sentiment_analyst,
+}
 
 
 class CycleError(ValueError):
@@ -67,6 +82,12 @@ class CycleConfig:
     margin_bps: Decimal = Decimal(0)
     min_confidence: float = 0.6
     mode: str = "sandbox"
+    # A reading analyst is asked only when the roster names it. `tra run` names the ones with a
+    # declared source, because paying a model to say it was given nothing is waste; an operator who
+    # wants a role asked anyway, on notes alone, names it in [agents].analysts.
+    series: Mapping[str, Path] = field(default_factory=dict)
+    events: Path | None = None
+    analysts: tuple[str, ...] = (technical_analyst.ROLE,)
     resume: bool = False
     max_workers: int = 4
     clock: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
@@ -74,6 +95,14 @@ class CycleConfig:
     def __post_init__(self) -> None:
         if not self.instrument.strip():
             raise CycleError("a cycle names its instrument")
+        if technical_analyst.ROLE not in self.analysts:
+            raise CycleError(f"a cycle asks {technical_analyst.ROLE}; it is the role that decides")
+        unknown = sorted(set(self.analysts) - set(READING) - {technical_analyst.ROLE})
+        if unknown:
+            raise CycleError(f"{unknown} is not an analyst; have {sorted(READING)}")
+        stray = sorted(set(self.series) - set(READING))
+        if stray:
+            raise CycleError(f"series declared for {stray}, which read nothing")
         if self.mode not in MODES:
             raise CycleError(f"mode is one of {list(MODES)}; venue execution is not in this build")
         if not isinstance(self.size, Decimal) or self.size <= 0:
@@ -97,6 +126,7 @@ class CycleResult:
     snapshot: Snapshot
     briefs: dict[str, Any] = field(default_factory=dict)
     fan: FanOut = field(default_factory=FanOut)
+    context: dict[str, Any] = field(default_factory=dict)
     analyst: Any = None
     verdict: PreTradeVerdict | None = None
     intent: dict[str, Any] | None = None
@@ -115,6 +145,7 @@ class CycleResult:
             "data": self.briefs.get("data"),
             "agents": self.fan.record(),
             "analyst": None if self.analyst is None else vars(self.analyst),
+            "context": self.context,
             "cost": None if self.verdict is None else self.verdict.record(),
             "intent": self.intent,
             "refusals": self.refusals,
@@ -169,20 +200,39 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         encoding="utf-8",
     )
 
-    fan = run_tasks(
-        [
+    tasks = [
+        Task(
+            name="technical",
+            work=lambda: _ask(
+                cfg, technical_analyst.ROLE, technical.record(), technical_analyst.SCHEMA
+            ),
+            path=where.answer("technical"),
+        )
+    ]
+    calendar = _calendar(cfg, result)
+    reading_briefs: dict[str, dict[str, Any]] = {}
+    for role in cfg.analysts:
+        if role not in READING:
+            continue
+        brief = _reading_brief(cfg, role, snapshot, calendar, result)
+        if brief is None:
+            continue
+        reading_briefs[role] = brief
+        where.brief(role).write_text(
+            json.dumps(brief, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
+        )
+        module = READING[role]
+        tasks.append(
             Task(
-                name="technical",
-                work=lambda: _ask(
-                    cfg, technical_analyst.ROLE, technical.record(), technical_analyst.SCHEMA
-                ),
-                path=where.answer("technical"),
+                name=role,
+                work=_reading_task(cfg, module, brief),
+                path=where.answer(role),
             )
-        ],
-        max_workers=cfg.max_workers,
-        resume=cfg.resume,
-    )
+        )
+
+    fan = run_tasks(tasks, max_workers=cfg.max_workers, resume=cfg.resume)
     result.fan = fan
+    result.context = _context_of(fan, reading_briefs, result)
     for name, error in fan.failed.items():
         result.refusals.append(f"{name}: {error}")
         if "BudgetSpentError" in error:
@@ -264,6 +314,78 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         fh.write(json.dumps(result.intent, sort_keys=True) + "\n")
     _finish(cfg, where, result)
     return result
+
+
+def _calendar(cfg: CycleConfig, result: CycleResult) -> tuple[Event, ...]:
+    """The dated events and notes, when the operator declared a calendar."""
+    if cfg.events is None:
+        return ()
+    try:
+        return read_events(cfg.events)
+    except SeriesError as exc:
+        result.refusals.append(f"events: {exc}")
+        return ()
+
+
+def _reading_brief(
+    cfg: CycleConfig,
+    role: str,
+    snapshot: Snapshot,
+    calendar: tuple[Event, ...],
+    result: CycleResult,
+) -> dict[str, Any] | None:
+    """One reading analyst's brief, or nothing when its series cannot be read at all."""
+    series: tuple[Series, ...] = ()
+    declared = cfg.series.get(role)
+    if declared is not None:
+        try:
+            series = load_all(declared)
+        except SeriesError as exc:
+            result.refusals.append(f"{role}: {exc}")
+            return None
+    try:
+        return context_brief(role, snapshot, series=series, events=calendar)
+    except BriefError as exc:
+        result.refusals.append(f"{role}: {exc}")
+        return None
+
+
+def _reading_task(cfg: CycleConfig, module: Any, brief: dict[str, Any]) -> Callable[[], str]:
+    def ask() -> str:
+        return _ask(cfg, module.ROLE, brief, module.SCHEMA)
+
+    return ask
+
+
+def _context_of(
+    fan: FanOut, briefs: Mapping[str, dict[str, Any]], result: CycleResult
+) -> dict[str, Any]:
+    """What each reading analyst said, beside what the operator's own thresholds say.
+
+    The model's label explains; the declared state decides. Keeping both in the record is what makes
+    a disagreement visible instead of a matter of whose sentence was read last.
+    """
+    out: dict[str, Any] = {}
+    for role, module in READING.items():
+        if role not in fan.answers:
+            continue
+        try:
+            said = vars(module.parse(str(fan.answers[role])))
+        except RoleError as exc:
+            out[role] = {"error": str(exc)}
+            continue
+        declared = declared_state(role, briefs.get(role, {}))
+        label = said.get("regime") or said.get("signal") or said.get("state")
+        said["declared_state"] = declared
+        expected = declared.get("as_role_says_it")
+        said["agrees_with_declared"] = None if expected is None else label == expected
+        if expected is not None and label != expected:
+            result.refusals.append(
+                f"{role}: said {label!r} while the operator's threshold says {expected!r}; "
+                "the declaration is what the next gate reads"
+            )
+        out[role] = said
+    return out
 
 
 def _channel(cfg: CycleConfig) -> Channel:

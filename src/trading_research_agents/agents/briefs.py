@@ -10,12 +10,18 @@ see the age of a price cannot be careful with it.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
+from trading_research_agents.agents import macro_analyst, onchain_analyst, sentiment_analyst
+from trading_research_agents.agents.macro_analyst.tools import macro_brief, returns_from_closes
+from trading_research_agents.agents.onchain_analyst.tools import onchain_brief
+from trading_research_agents.agents.sentiment_analyst.tools import sentiment_brief
 from trading_research_agents.agents.technical_analyst.tools import Features, features
 from trading_research_agents.data.schema import Candle, Direction
+from trading_research_agents.data.series import Event, Series
 from trading_research_agents.data.sources.base import OrderBook
 from trading_research_agents.envelope.model import Channel
 from trading_research_agents.execution.pretrade import (
@@ -154,6 +160,88 @@ def technical_brief(
         age_s=fetched.age_s(now),
         mechanism=mechanism,
     )
+
+
+def reference_returns(snapshot: Snapshot) -> tuple[list[int], list[float]]:
+    """The instrument's own closes from this snapshot, for correlations measured on the operator's
+    data rather than on a vendor's claim about it."""
+    if "ohlcv" not in snapshot.values:
+        return [], []
+    candles = list(snapshot.get("ohlcv").value)
+    times = [c.start_ns for c in candles]
+    closes = [float(c.close) for c in candles]
+    return times, returns_from_closes(times, closes)
+
+
+def context_brief(
+    role: str,
+    snapshot: Snapshot,
+    *,
+    series: Sequence[Series] = (),
+    events: Sequence[Event] = (),
+    at_ns: int | None = None,
+) -> dict[str, Any]:
+    """The brief for one of the reading analysts: macro and news, on-chain, or sentiment.
+
+    All three read series the operator mapped in, through the same engine and the same as-of rule,
+    so a value is never used before the moment it was published. A role with nothing declared still
+    gets a brief, and the brief says there was nothing: that is a state an operator must be able to
+    see, not a gap to fill with a comfortable number.
+    """
+    moment = at_ns if at_ns is not None else _snapshot_time(snapshot)
+    times, returns = reference_returns(snapshot)
+    if role == macro_analyst.ROLE:
+        brief = macro_brief(series, at_ns=moment, times_ns=times, returns=returns, events=events)
+    elif role == onchain_analyst.ROLE:
+        brief = onchain_brief(series, at_ns=moment, times_ns=times, returns=returns)
+    elif role == sentiment_analyst.ROLE:
+        brief = sentiment_brief(series, at_ns=moment, times_ns=times, returns=returns, notes=events)
+    else:
+        raise BriefError(f"{role} is not a reading analyst")
+    brief["instrument"] = snapshot.instrument
+    brief["declared_series"] = [s.name for s in series]
+    return brief
+
+
+# What a declared threshold means for each reading role's own vocabulary. The operator declares
+# bullish and bearish; the role answers in its own words, and these are the same statement.
+DECLARED_AS = {
+    macro_analyst.ROLE: {"bullish": "risk-on", "bearish": "risk-off"},
+    onchain_analyst.ROLE: {"bullish": "accumulation", "bearish": "distribution"},
+    sentiment_analyst.ROLE: {"bullish": "positive", "bearish": "negative"},
+}
+
+
+def declared_state(role: str, brief: Mapping[str, Any]) -> dict[str, Any]:
+    """What the operator's own thresholds say, before any model reads the same figures.
+
+    This is the half of the answer that does not depend on a model: each series in the brief carries
+    the state of the operator's declared threshold, and when they all point the same way that is the
+    declared state. It is recorded beside what the model said, so an operator can see the two agree
+    or not, and so the gate that comes next can rest on the declaration rather than on a sentence.
+    """
+    states = [
+        str(row.get("state"))
+        for row in brief.get("series", [])
+        if row.get("basis") == "operator-declared threshold"
+    ]
+    named = sorted({s for s in states if s in ("bullish", "bearish")})
+    if not named:
+        return {"declared": "undeclared", "series_declared": len(states)}
+    if len(named) > 1:
+        return {"declared": "mixed", "states": named, "series_declared": len(states)}
+    return {
+        "declared": named[0],
+        "as_role_says_it": DECLARED_AS.get(role, {}).get(named[0]),
+        "series_declared": len(states),
+    }
+
+
+def _snapshot_time(snapshot: Snapshot) -> int:
+    """The moment a cycle is deciding at: the newest market time any value in it carries."""
+    if not snapshot.values:
+        raise BriefError(f"{snapshot.instrument}: the snapshot is empty")
+    return max(f.as_of_ns for f in snapshot.values.values())
 
 
 @dataclass(frozen=True)
