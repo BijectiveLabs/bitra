@@ -1,0 +1,16 @@
+# What `pip install .` needs. Generated from uv.lock, which is the source of truth:
+#     uv export --no-dev --no-emit-project --no-hashes
+#
+# Optional features live in extras, not here. Install the ones you use:
+#     pip install 'trading-research-agents[data,openai]'       # Parquet, OpenAI-compatible models
+#     pip install 'trading-research-agents[anthropic,google]'   # other model vendors
+#     pip install 'trading-research-agents[mcp,shadow]'         # MCP server, live public feed
+#
+# To reproduce a run exactly, use `uv sync --locked --all-extras` rather than this file.
+
+markdown-it-py==4.2.0
+mdurl==0.1.2
+numpy==2.4.6 ; python_full_version < '3.12'
+numpy==2.5.3 ; python_full_version >= '3.12'
+pygments==2.21.0
+rich==15.0.0
