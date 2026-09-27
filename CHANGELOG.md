@@ -28,6 +28,17 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- Four analysts in one cycle, asked at the same time: the technical analyst that decides, and the
+  macro and news, on-chain and sentiment analysts that read. Each one gets a brief built by code
+  from the snapshot and the series the operator mapped in, each answer is recorded with its tokens
+  and latency, and a role with no declared source says so instead of answering neutral.
+  `agents/sentiment_analyst/`, `agents/briefs.context_brief`.
+- `[agents.roles.<role>]`: a role may run on its own provider, model, output cap, timeout and
+  retry count, and inherits everything it does not override. A role that only labels does not need
+  the model that reasons over sixty bars.
+- A series file may date its rows with a bare `YYYY-MM-DD`, read as UTC midnight, which is how most
+  public series publish. A time of day without a timezone is still refused, because that one is
+  genuinely ambiguous.
 - Every closed round trip records what it went through, not only what it earned: `mfe_bps`,
   `mae_bps` and the bar each happened on, in `trades.jsonl`. The risk manager's brief summarises
   them over a run, including the median of what the winners gave back before they closed.

@@ -27,6 +27,22 @@ answers `404` for a model that used to work, ask the vendor which names your key
 2026-09-27 with a Gemini key: `gemini-2.5-flash` replied "no longer available to new users" while
 `gemini-flash-latest` worked on the same key. A failed call is recorded in `usage.jsonl` with the
 vendor's own error, so this is visible rather than mysterious.
+
+Output caps are the other account-shaped trap. A reasoning model spends most of its output budget
+thinking before it writes the answer, so a cap that looks generous for a short JSON object is not.
+Measured on 2026-09-27 against one small reasoning model, asked for a three-field object from an
+800-character brief:
+
+| Cap | Outcome |
+|---|---|
+| 512 | `json_validate_failed`: "max completion tokens reached before generating a valid document" |
+| 1024 | answered, using 704 output tokens; one cycle out of two still failed the same way |
+| 2048 | answered, using 681 output tokens |
+
+Two things follow. Give a reasoning model at least twice the output it actually needs, because the
+thinking is the part that varies. And treat a schema failure as a role that did not answer: it
+arrives as a 400, which no SDK retries, and it is recorded in `usage.jsonl` as a failed call while
+the cycle carries on without that role.
 "JSON mode" means the vendor documents JSON output but not a strict schema: the schema is put
 in the system prompt, and the result is validated by the role's parser exactly as it is for
 every other provider. A malformed answer is a refusal of form, never a decision.

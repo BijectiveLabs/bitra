@@ -41,6 +41,34 @@ The model receives those numbers and answers with a target, a confidence, a hori
 reason. It never adds anything up, so a wrong sum is a bug in code with a test, not a sentence in
 a prompt.
 
+## Who is asked, and what each one reads
+
+| Agent | Reads | Answers | Asked when |
+|---|---|---|---|
+| `technical_analyst` | the closed candles of the snapshot, the spread, the funding rate | a target, a confidence, a horizon, a reason | every cycle; it is the role that decides |
+| `macro_analyst` | the macro series and the dated calendar the operator mapped in | a regime, the events it saw, a reason | when `series.toml` sits beside the config, or `--macro` names one |
+| `onchain_analyst` | on-chain series: flows, supply, whatever was mapped in | accumulation, distribution or neutral, and why | when `onchain.toml` is there, or `--onchain` |
+| `sentiment_analyst` | dated scores and dated notes the operator curates | negative, neutral, positive, or not declared | when `sentiment.toml` is there, or `--sentiment` |
+
+The three reading analysts go out together with the technical analyst, so the cycle waits for the
+slowest of them and not for the sum of all four. Each one reads through the same series engine as
+`tra agent session`, with the same as-of rule: a value is never used before the moment it was
+published, and the operator's `publish_lag` is what decides that moment.
+
+Two habits are enforced rather than encouraged. Nothing is scraped: an analyst reads the files its
+operator mapped in, and there is no code path from an agent to the internet. And a role with no
+source says so; the sentiment analyst answers `not declared` rather than `neutral`, because those
+are different facts and an operator has to be able to tell them apart.
+
+A role can run on its own model. `[agents.roles.<role>]` overrides the provider, the model, the
+output cap, the timeout and the retries for that role alone, and anything it does not override it
+inherits. That is how a cheap model labels a regime while a stronger one reasons over the bars.
+
+In this build the context is recorded and reported; it does not yet gate anything, so a reading
+analyst that fails leaves a line in `cycle.json` and the cycle carries on. The confluence matrix
+that makes the context binding is the next unit, and when it lands a missing state will refuse
+rather than be treated as neutral: a state nobody produced is not a neutral state.
+
 ## The cost gate, and what each number is worth
 
 Before there is an intent, code prices the round trip on the book the snapshot is holding. Every
