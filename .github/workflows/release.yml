@@ -34,7 +34,7 @@ jobs:
 
       - name: Tag matches the package version
         run: |
-          expected="v$(uv run python -c 'import trading_research_agent as t; print(t.__version__)')"
+          expected="v$(uv run python -c 'import trading_research_agents as t; print(t.__version__)')"
           test "${GITHUB_REF_NAME}" = "${expected}" || { echo "tag ${GITHUB_REF_NAME} is not ${expected}"; exit 1; }
 
       - name: Release

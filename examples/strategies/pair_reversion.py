@@ -20,9 +20,9 @@ from decimal import Decimal
 import numpy as np
 from numpy.typing import NDArray
 
-from trading_research_agent.envelope.model import Channel
-from trading_research_agent.execution.cost import pair_leg_fee_bps
-from trading_research_agent.strategy.harness import ols
+from trading_research_agents.envelope.model import Channel
+from trading_research_agents.execution.cost import pair_leg_fee_bps
+from trading_research_agents.strategy.harness import ols
 
 
 @dataclass(frozen=True)

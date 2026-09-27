@@ -3,15 +3,15 @@ requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
-name = "trading-research-agent"
+name = "trading-research-agents"
 version = "0.5.0"
-description = "A trading research agent that refuses to claim what its gates have not measured. Crypto-first."
+description = "Autonomous trading agents for crypto that refuse to claim what their gates have not measured."
 readme = "README.md"
 requires-python = ">=3.11"
-license = "Apache-2.0"
+license = "MIT"
 license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "Bijective Labs" }]
-keywords = ["quant", "research", "backtest", "crypto", "falsification", "trading-agent"]
+keywords = ["quant", "crypto", "trading", "agents", "autonomous", "backtest", "falsification"]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Intended Audience :: Financial and Insurance Industry",
@@ -29,15 +29,18 @@ dependencies = [
 ]
 
 [project.scripts]
-tra = "trading_research_agent.cli:main"
+tra = "trading_research_agents.cli:main"
 
 [project.urls]
-Repository = "https://github.com/BijectiveLabs/trading-research-agent"
-Changelog = "https://github.com/BijectiveLabs/trading-research-agent/blob/master/CHANGELOG.md"
+Repository = "https://github.com/BijectiveLabs/trading-research-agents"
+Changelog = "https://github.com/BijectiveLabs/trading-research-agents/blob/master/CHANGELOG.md"
 
 [project.optional-dependencies]
 anthropic = [
     "anthropic>=1",
+]
+ccxt = [
+    "ccxt>=4.5",
 ]
 data = [
     "pyarrow>=18",
@@ -63,7 +66,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/trading_research_agent"]
+packages = ["src/trading_research_agents"]
 
 [tool.hatch.build.targets.sdist]
 include = ["src", "tests", "docs", "examples", "README.md", "CHANGELOG.md", "LICENSE", "NOTICE"]
@@ -81,7 +84,7 @@ ignore = ["RUF012"]
 "tests/**" = ["S101"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["trading_research_agent"]
+known-first-party = ["trading_research_agents"]
 
 [tool.mypy]
 strict = true
@@ -90,6 +93,8 @@ warn_unreachable = true
 
 [[tool.mypy.overrides]]
 module = [
+    "ccxt",
+    "ccxt.*",
     "pyarrow",
     "pyarrow.*",
     "anthropic",

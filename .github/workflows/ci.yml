@@ -57,7 +57,7 @@ jobs:
       - name: Build
         run: uv build
 
-      # No extras, no dev tools: what `pip install trading-research-agent` gives a client.
+      # No extras, no dev tools: what `pip install trading-research-agents` gives a client.
       # Catches a runtime import that only works because a dev extra happened to be present.
       - name: Install into an empty environment and run the command
         run: |
@@ -67,7 +67,7 @@ jobs:
           /tmp/bare/bin/tra --plain
           /tmp/bare/bin/tra init /tmp/proj
           cd /tmp/proj && /tmp/bare/bin/tra check || test $? -eq 1
-          /tmp/bare/bin/python -c "import trading_research_agent, trading_research_agent.cli.main"
+          /tmp/bare/bin/python -c "import trading_research_agents, trading_research_agents.cli.main"
 
   audit:
     name: known vulnerabilities
