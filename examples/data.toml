@@ -1,0 +1,35 @@
+# Where the engine gets each kind of data, in what order, and how fresh it has to be.
+# Agents never read this file and never fetch anything: the engine fetches, writes a snapshot,
+# and the agents read the snapshot. `tra data pull` runs one round of this file.
+#
+# A source name is scheme:target.
+#   ccxt:<venue>   public endpoints of that venue through ccxt (pip install '...[ccxt]')
+#   file:data      whatever `tra data get` already wrote into data/, no network, no keys
+#   <your own>      register under the `trading_research_agents.sources` entry point
+#
+# Order matters: the first source that answers inside `ttl` wins, and every attempt is written
+# into the snapshot, so a rate limit is visible instead of silent.
+
+[data]
+# Venue instrument names to the symbol a source knows it by. Only needed when the lookup fails.
+symbols = { BTCUSDT = "BTC/USDT:USDT" }
+
+[data.ohlcv]
+chain = ["ccxt:bybit", "ccxt:binance", "file:data"]
+ttl = "90s"                    # a minute bar plus the time it takes to publish
+interval_s = 60
+limit = 240                    # four hours of minutes, enough for the features
+on_exhausted = "refuse"        # refuse | use_stale_with_flag
+
+[data.orderbook]
+chain = ["ccxt:bybit"]
+ttl = "10s"                    # the book is the fastest thing here; nothing older is a book
+levels = 25                    # deep enough to walk for the size a decision is about
+
+[data.funding]
+chain = ["ccxt:bybit", "file:data"]
+ttl = "8h"                     # one settlement interval: the rate does not change between them
+
+[data.open_interest]
+chain = ["ccxt:bybit"]
+ttl = "30m"                    # measured: one venue stamps open interest about 15 minutes back
