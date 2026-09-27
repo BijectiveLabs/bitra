@@ -1,7 +1,7 @@
 # Where the responsibility sits
 
-This is software you run. It is published under the Apache License 2.0, which provides it
-without warranty of any kind, and nothing here changes that. The lines below say, in plain
+This is software you run. It is published under the MIT License, which provides it without
+warranty of any kind, and nothing here changes that. The lines below say, in plain
 words, where the decisions are made and by whom, so that nobody is surprised later.
 
 - **The sandbox is the default.** Replay, paper and shadow run against a simulated venue. No

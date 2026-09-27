@@ -121,7 +121,7 @@ tra check                          # what is ready, what is missing, in plain wo
 tra backtest                       # newest dataset in data/, funding beside it, out under runs/
 tra chain validate --registration runs/<id>/preregistration.json \
     --trades runs/backtest-<time>/trades.jsonl --cost-bps 15 --block-length 7
-pip install 'trading-research-agent[shadow]'
+pip install 'trading-research-agents[shadow]'
 tra paper                          # live public trades; touch KILL to flatten and stop
 ```
 

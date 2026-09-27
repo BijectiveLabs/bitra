@@ -6,15 +6,15 @@ It does not trade, promote a tier, or write a ledger row, and it never will: cap
 governed by code that is tested and fails closed, not by a tool a model can call.
 
 ```
-pip install 'trading-research-agent[mcp]'
+pip install 'trading-research-agents[mcp]'
 tra mcp serve                      # stdio; what desktop hosts launch
-uv run mcp dev -m trading_research_agent.mcp.server   # or point the Inspector at a file
+uv run mcp dev -m trading_research_agents.mcp.server   # or point the Inspector at a file
 ```
 
 A host configuration names the command and nothing else:
 
 ```json
-{ "mcpServers": { "trading-research-agent": { "command": "tra", "args": ["mcp", "serve"] } } }
+{ "mcpServers": { "trading-research-agents": { "command": "tra", "args": ["mcp", "serve"] } } }
 ```
 
 ## Tools

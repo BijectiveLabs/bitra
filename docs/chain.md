@@ -24,8 +24,8 @@ the cheapest channel in the operating envelope. If the first is smaller than the
 
 ```python
 from decimal import Decimal
-from trading_research_agent.chain import cost_floor
-from trading_research_agent.envelope import load_envelope
+from trading_research_agents.chain import cost_floor
+from trading_research_agents.envelope import load_envelope
 
 envelope = load_envelope("examples/envelope.toml")
 check = cost_floor(envelope, Decimal("3.0"), venue="hyperliquid")
@@ -144,7 +144,7 @@ memory.
 ## Layer 4: data requirements
 
 ```python
-from trading_research_agent.chain import check_requirements
+from trading_research_agents.chain import check_requirements
 
 requirements = check_requirements(registration, manifest)
 requirements.passed, requirements.blocking_axis
@@ -161,7 +161,7 @@ and the hypothesis stays open behind it.
 ## The era seal
 
 ```python
-from trading_research_agent.chain import Seal, research_only
+from trading_research_agents.chain import Seal, research_only
 
 research_only(timestamps, registration.era, who="my instrument")
 seal = Seal("held-out B", specification_hash=registration.seal(), gates=("net > 0",), path=...)
@@ -180,7 +180,7 @@ could only catch it once.
 ## Layer 5: validation
 
 ```python
-from trading_research_agent.chain import TradeRecord, validate
+from trading_research_agents.chain import TradeRecord, validate
 
 result = validate(registration, trades, cost_of, block_length=..., n_resamples=5000, n_perm=1000)
 result.decision.verdict, result.decision.axis, result.metrics

@@ -2,7 +2,7 @@
 
 Backtests do not survive contact with the market, and that sentence is useless as guidance
 because it names no mechanism. The gap is a stack of specific, individually measurable
-assumption failures. `trading_research_agent.execution` carries the ones the research this
+assumption failures. `trading_research_agents.execution` carries the ones the research this
 package descends from actually paid for, each as a function with the envelope as an argument.
 
 Every figure here is a floor that omits market impact. Nothing this was measured on ran at a
@@ -15,7 +15,7 @@ c_rt = 2 * fee + spread_cost + slippage + funding_accrual
 ```
 
 ```python
-from trading_research_agent.execution import Direction, FundingSchedule, realised_cost
+from trading_research_agents.execution import Direction, FundingSchedule, realised_cost
 
 breakdown = realised_cost(
     channel=envelope.cheapest("bybit"),
@@ -44,7 +44,7 @@ breakdown.round_trip_bps  # the sum, and the four terms beside it
 ## Walk the book
 
 ```python
-from trading_research_agent.execution import Level, Side, Snapshot, walk_the_book
+from trading_research_agents.execution import Level, Side, Snapshot, walk_the_book
 
 result = walk_the_book(asks, size=Decimal("2"), side=Side.BUY, mid=mid)
 result.vwap, result.slippage_bps, result.levels_consumed
@@ -63,7 +63,7 @@ refused.
 ## Passive fills
 
 ```python
-from trading_research_agent.execution import FillMode, Print, passive_fill, entry_after_latency
+from trading_research_agents.execution import FillMode, Print, passive_fill, entry_after_latency
 
 fill_ts = passive_fill(
     prints, limit=..., side=Side.BUY, t0_ns=..., budget_ns=..., mode=FillMode.THROUGH

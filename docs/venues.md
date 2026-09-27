@@ -9,9 +9,9 @@ There are three plugin kinds: archived data in, live data in, orders out.
 
 | Kind | Protocol | Registry | Entry point group | Used by |
 |---|---|---|---|---|
-| Archive venue | `data.venues.ArchiveVenue` (+ optional `FundingSource`) | `data.venues.register` | `trading_research_agent.venues` | `tra data fetch`, `tra data audit --venue`, `tra data funding` |
-| Live feed | `trading.feeds.LiveFeedFactory` | `trading.feeds.register` | `trading_research_agent.feeds` | `tra paper`, `tra live` |
-| Live venue | `trading.venues.LiveVenueFactory` | `trading.venues.register` | `trading_research_agent.live_venues` | `tra live` |
+| Archive venue | `data.venues.ArchiveVenue` (+ optional `FundingSource`) | `data.venues.register` | `trading_research_agents.venues` | `tra data fetch`, `tra data audit --venue`, `tra data funding` |
+| Live feed | `trading.feeds.LiveFeedFactory` | `trading.feeds.register` | `trading_research_agents.feeds` | `tra paper`, `tra live` |
+| Live venue | `trading.venues.LiveVenueFactory` | `trading.venues.register` | `trading_research_agents.live_venues` | `tra live` |
 
 Data that comes from somewhere other than a venue's public archive (a vendor export, a
 Client's own recorder) does not need a plugin at all: a column map takes it through the same
@@ -23,7 +23,7 @@ gate. See `docs/data.md`, section "Any other source".
 import csv
 from collections.abc import Iterable, Iterator
 from datetime import date
-from trading_research_agent.data import Rejection, Trade
+from trading_research_agents.data import Rejection, Trade
 
 
 class MyVenue:
@@ -54,17 +54,17 @@ number and reason. The audit counts them; it does not forgive them.
 Register it one of two ways.
 
 In your own package, as an entry point in `pyproject.toml`; installed next to
-`trading-research-agent`, it is found on first use:
+`trading-research-agents`, it is found on first use:
 
 ```toml
-[project.entry-points."trading_research_agent.venues"]
+[project.entry-points."trading_research_agents.venues"]
 my-venue = "my_package.venue:MyVenue"
 ```
 
 Or in a script, before the CLI or the gate is used:
 
 ```python
-from trading_research_agent.data.venues import register
+from trading_research_agents.data.venues import register
 
 register(MyVenue())
 ```
@@ -78,7 +78,7 @@ returns a `Feed`: an iterator of `Trade` that the runtime pulls prints from.
 
 ```python
 import threading
-from trading_research_agent.trading.feed import Feed
+from trading_research_agents.trading.feed import Feed
 
 
 class MyFeedFactory:
@@ -91,7 +91,7 @@ class MyFeedFactory:
 ```
 
 ```toml
-[project.entry-points."trading_research_agent.feeds"]
+[project.entry-points."trading_research_agents.feeds"]
 my-venue = "my_package.feed:MyFeedFactory"
 ```
 
@@ -124,7 +124,7 @@ class MyLiveFactory:
 ```
 
 ```toml
-[project.entry-points."trading_research_agent.live_venues"]
+[project.entry-points."trading_research_agents.live_venues"]
 my-venue = "my_package.live:MyLiveFactory"
 ```
 

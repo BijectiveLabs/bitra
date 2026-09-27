@@ -9,7 +9,7 @@ contract.
 ## Packages
 
 ```
-trading_research_agent/
+trading_research_agents/
   ledger/      verdict vocabulary, axes, transferability, kill-ledger rows      depends on nothing
   envelope/    operator parameters: fees per channel, latency, venue access     depends on nothing
   data/        any trade data to Parquet, dataset audit, manifest; venue

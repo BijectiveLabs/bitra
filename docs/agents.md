@@ -20,7 +20,7 @@ access and an agent that can empty an account.
 | `executor` | the venue, the rate limits, the allocation across instruments | an allocation, fractions summing to at most one | after the risk decision |
 | `auditor` | the ledger, every run, `usage.jsonl`, the ladder | `audit.json` | last |
 
-Each role is a package under `trading_research_agent.agent`: a JSON schema the model must
+Each role is a package under `trading_research_agents.agents`: a JSON schema the model must
 fill, a parser that refuses anything outside it, and a prompt that names venues nowhere. No
 role talks to another. The session hands each one what code computed plus what earlier roles
 wrote, and records every answer as a numbered file in the session directory.

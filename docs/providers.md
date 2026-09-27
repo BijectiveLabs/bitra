@@ -45,11 +45,11 @@ one.
 
 ## Adding a provider
 
-A vendor that needs its own client registers under the `trading_research_agent.providers`
+A vendor that needs its own client registers under the `trading_research_agents.providers`
 entry point, or by calling `register`:
 
 ```python
-from trading_research_agent.agent.providers import Provider, register
+from trading_research_agents.llm.providers import Provider, register
 
 register(Provider("my-vendor", "MY_VENDOR_API_KEY", None, False, build_my_completer))
 ```
