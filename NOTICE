@@ -1,5 +1,20 @@
-trading-research-agent
-Copyright 2026 Bijective Labs
+trading-research-agents
+Copyright (c) 2026 Bijective Labs
 
-This product includes software developed by Bijective Labs
-(https://github.com/BijectiveLabs).
+Released under the MIT License; see LICENSE. This file is kept as a courtesy, not as an
+obligation of that licence: it records the third-party software this package builds on.
+
+Required at runtime:
+  numpy            BSD 3-Clause
+  rich             MIT
+
+Optional, installed only with the matching extra:
+  pyarrow          Apache-2.0        [data]
+  anthropic        MIT               [anthropic]
+  openai           Apache-2.0        [openai]
+  google-genai     Apache-2.0        [google]
+  mcp              MIT               [mcp]
+  websockets       BSD 3-Clause      [shadow]
+
+Each entry names the licence the project publishes for the version pinned in uv.lock. No
+vendor endorses this software, and no vendor name here implies a partnership.
