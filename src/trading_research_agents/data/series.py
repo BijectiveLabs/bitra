@@ -198,7 +198,13 @@ def _ts_ns(text: str, unit: str) -> int:
     if unit == "iso8601":
         parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
         if parsed.tzinfo is None:
-            raise ValueError(f"time {text!r} has no timezone")
+            # A bare date is how most public series publish: one value for the day. It is read as
+            # UTC midnight, and the publication lag the operator declared is what moves it to when
+            # the figure was actually knowable. A date with a time but no zone is a different
+            # thing: that one is genuinely ambiguous and stays refused.
+            if len(text.strip()) == 10:
+                return int(parsed.replace(tzinfo=UTC).timestamp() * NS_PER_S)
+            raise ValueError(f"time {text!r} has a time of day but no timezone")
         return int(parsed.astimezone(UTC).timestamp() * NS_PER_S)
     return int(Decimal(text) * TIME_UNITS[unit])
 

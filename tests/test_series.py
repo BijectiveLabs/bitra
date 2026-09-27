@@ -142,7 +142,11 @@ def test_zscore_and_net_flow_use_only_what_was_known(tmp_path: Path) -> None:
 
 
 def test_bad_files_stop_with_the_row(tmp_path: Path) -> None:
-    (tmp_path / "bad.csv").write_text("date,value\n2025-01-01,3\n", encoding="utf-8")
+    # A bare date is read as UTC midnight, and the operator's publication lag is what makes it
+    # knowable. A time of day with no zone is the ambiguous case, and that one stops the file.
+    (tmp_path / "plain.csv").write_text("date,value\n2025-01-01,3\n", encoding="utf-8")
+    assert read_series(spec("plain", "0d"), tmp_path).points[0].value == Decimal("3")
+    (tmp_path / "bad.csv").write_text("date,value\n2025-01-01 09:30:00,3\n", encoding="utf-8")
     with pytest.raises(SeriesError, match="row 2"):
         read_series(spec("bad", "0d"), tmp_path)
     (tmp_path / "nan.csv").write_text("date,value\n2025-01-01T00:00:00Z,NaN\n", encoding="utf-8")
