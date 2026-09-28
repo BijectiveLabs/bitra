@@ -26,6 +26,12 @@ from uuid import uuid4
 from trading_research_agents import __version__
 from trading_research_agents.agents import Outcome, RunConfig, propose
 from trading_research_agents.agents.briefs import BriefError
+from trading_research_agents.agents.context import (
+    ContextError,
+    declared_in,
+    inspect_shelf,
+    roster_for,
+)
 from trading_research_agents.agents.cycle import CycleError
 from trading_research_agents.agents.pipeline import read_refusals
 from trading_research_agents.agents.session import SessionError
@@ -427,18 +433,21 @@ def build_parser() -> argparse.ArgumentParser:
     run_cmd.add_argument(
         "--margin", type=parse_decimal, default=None, help="bps the edge must clear beyond cost"
     )
-    run_cmd.add_argument(
-        "--macro", type=Path, default=None, help="a series.toml for the macro and news analyst"
-    )
-    run_cmd.add_argument(
-        "--onchain", type=Path, default=None, help="a series.toml for the on-chain analyst"
-    )
-    run_cmd.add_argument(
-        "--sentiment", type=Path, default=None, help="a series.toml for the sentiment analyst"
-    )
-    run_cmd.add_argument(
-        "--events", type=Path, default=None, help="a calendar of dated events and notes"
-    )
+    # One flag per class of data, each pointing at one declaration file. Left alone, a cycle reads
+    # the shelf in sources/ beside the config.
+    for flag, what in (
+        ("macro", "dated levels and rates"),
+        ("onchain", "dated chain figures"),
+        ("derivatives", "dated funding, open interest and basis"),
+        ("sentiment", "dated sentiment scores"),
+        ("news", "dated text: releases, statements, your own notes"),
+    ):
+        run_cmd.add_argument(
+            f"--{flag}",
+            type=Path,
+            default=None,
+            help=f"a declaration for {what}; default sources/{flag}.toml",
+        )
     run_cmd.add_argument("--out", type=Path, default=None, help="default: runs/cycles")
     run_cmd.add_argument(
         "--resume", action="store_true", help="reuse answers already written for this cycle"
@@ -516,6 +525,7 @@ def main(argv: list[str] | None = None) -> int:
         DataConfigError,
         SourceError,
         BriefError,
+        ContextError,
         CycleError,
         PreTradeError,
         UnknownSourceError,
@@ -1176,6 +1186,13 @@ TEMPLATE_FILES = {
     "mapping.toml": "mapping.toml",
     "data.toml": "data.toml",
     "observation.toml": "observation.toml",
+    # One declaration per class of data, so a vendor is a line in a file rather than a file of
+    # its own. The analysts that read them are asked only when their class is declared.
+    "sources/macro.toml": "sources/macro.toml",
+    "sources/onchain.toml": "sources/onchain.toml",
+    "sources/derivatives.toml": "sources/derivatives.toml",
+    "sources/sentiment.toml": "sources/sentiment.toml",
+    "sources/news.toml": "sources/news.toml",
     "strategies/trailing_zscore.py": "core.py.tmpl",
     ".env.example": "env.example",
     ".gitignore": "gitignore",
@@ -1196,7 +1213,7 @@ def init_project(args: argparse.Namespace) -> int:
     for name, source in TEMPLATE_FILES.items():
         out = target / name
         out.parent.mkdir(parents=True, exist_ok=True)
-        text = templates.joinpath(source).read_text(encoding="utf-8")
+        text = templates.joinpath(*source.split("/")).read_text(encoding="utf-8")
         if name == "strategy.toml" and args.agent:
             text = _agent_config(text, args.agent, args.model)
         out.write_text(text, encoding="utf-8")
@@ -1267,19 +1284,24 @@ def run_cycle_command(args: argparse.Namespace) -> int:
     instrument = args.instrument or cfg.run.instrument
     out = args.out or Path("runs") / "cycles"
     beside = args.config.resolve().parent
-    series: dict[str, Path] = {}
-    for role, flag, default in (
-        ("macro_analyst", args.macro, "series.toml"),
-        ("onchain_analyst", args.onchain, "onchain.toml"),
-        ("sentiment_analyst", args.sentiment, "sentiment.toml"),
-    ):
-        declared = flag if flag is not None else beside / default
-        if declared.is_file():
-            series[role] = declared
-    events = args.events if args.events is not None else beside / "events.csv"
-    args.events = events if events.is_file() else None
-    # Declared roster wins; otherwise the roles with a source are the ones worth paying for.
-    analysts = a.analysts or ("technical_analyst", *sorted(series))
+    overrides = {
+        name: path
+        for name, path in (
+            ("macro", args.macro),
+            ("onchain", args.onchain),
+            ("sentiment", args.sentiment),
+            ("derivatives", args.derivatives),
+            ("news", args.news),
+        )
+        if path is not None
+    }
+    declared = declared_in(beside, overrides=overrides)
+    series = {role: tuple(paths) for role, paths in declared.series.items()}
+    news = tuple(declared.text)
+    if not news and (beside / "events.csv").is_file():
+        news = (beside / "events.csv",)
+    # A declared roster wins; otherwise the roles with something to read are the ones to pay for.
+    analysts = a.analysts or roster_for(declared, "technical_analyst")
     usage = UsageLedger(out / "usage.jsonl")
     limits = BudgetLimits(
         token_budget=a.token_budget,
@@ -1325,8 +1347,9 @@ def run_cycle_command(args: argparse.Namespace) -> int:
             margin_bps=args.margin if args.margin is not None else Decimal(0),
             min_confidence=a.min_confidence,
             mode=args.mode,
+            data_options={declared.kind: dict(declared.options) for declared in data_cfg.kinds},
             series=series,
-            events=args.events,
+            news=news,
             analysts=analysts,
             resume=bool(args.resume),
         )
@@ -1427,6 +1450,23 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
                 good.append(
                     f"observation.toml: {declared.subject!r}; `tra chain observe` before any memo"
                 )
+        shelf = declared_in(args.config.resolve().parent)
+        for reading in inspect_shelf(shelf):
+            where = f"sources/{reading.name}.toml"
+            if reading.error:
+                bad.append(f"{where}: {reading.error}")
+            elif reading.missing:
+                bad.append(f"{where}: declared but not on disk: {', '.join(reading.missing)}")
+            else:
+                listed = ", ".join(reading.entries)
+                good.append(f"{where}: {len(reading.entries)} declared ({listed})")
+        if shelf.empty:
+            good.append(
+                f"sources: {', '.join(shelf.empty)} on the shelf, nothing declared yet; "
+                "fill one in and its analyst joins the roster"
+            )
+        roster = roster_for(shelf, "technical_analyst")
+        good.append(f"roster: {', '.join(roster)}; `tra run` asks these")
         data_config = args.config.resolve().parent / "data.toml"
         if data_config.is_file():
             from trading_research_agents.data.sources import DataConfigError, load_data_config

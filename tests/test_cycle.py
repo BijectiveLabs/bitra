@@ -110,6 +110,7 @@ class Stub:
         self.kind = kind
         self.value = value
         self.fail = fail
+        self.seen: list[dict[str, Any]] = []
 
     @property
     def name(self) -> str:
@@ -123,6 +124,7 @@ class Stub:
         return (self.kind,)
 
     def fetch(self, kind: str, instrument: str, **options: Any) -> Fetched:
+        self.seen.append(dict(options))
         if self.fail:
             raise SourceError(self.fail)
         prepared = snapshot_with().get(kind)
@@ -334,6 +336,31 @@ def test_a_cycle_writes_everything_it_touched_and_admits_a_claim_that_clears(
     assert summary["cost"]["admitted"] is True and summary["mode"] == "sandbox"
     assert summary["agents"]["agents"][0]["agent"] == "technical"
     assert summary["tokens"] == usage.tokens
+
+
+def test_the_cycle_hands_each_source_what_the_operator_declared(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    built = chains()
+    cfg, _, _ = cycle_config(
+        tmp_path,
+        envelope,
+        [analyst_answer()],
+        chains=built,
+        data_options={
+            "orderbook": {"levels": 5},
+            "ohlcv": {"limit": 2, "params": {"price": "mark"}},
+        },
+    )
+    run_cycle(cfg)
+
+    book = built["orderbook"].sources[0]
+    assert isinstance(book, Stub) and book.seen == [{"levels": 5}]
+    bars = built["ohlcv"].sources[0]
+    assert isinstance(bars, Stub)
+    # The window the analyst reads is the cycle's to decide; everything else the operator declared
+    # for that kind survives, venue quirks included.
+    assert bars.seen == [{"limit": 5, "interval_s": 60, "params": {"price": "mark"}}]
 
 
 def test_a_cycle_refuses_when_the_claim_does_not_clear_the_cost(
@@ -549,7 +576,7 @@ def test_four_analysts_run_together_and_every_answer_is_recorded(
         tmp_path,
         envelope,
         answers,
-        series={"macro_analyst": macro, "onchain_analyst": onchain},
+        series={"macro_analyst": (macro,), "onchain_analyst": (onchain,)},
         analysts=(
             "technical_analyst",
             "macro_analyst",
@@ -594,7 +621,7 @@ def test_a_reading_analyst_whose_series_cannot_be_read_is_refused_not_guessed(
         tmp_path,
         envelope,
         [analyst_answer()],
-        series={"onchain_analyst": missing},
+        series={"onchain_analyst": (missing,)},
         analysts=("technical_analyst", "onchain_analyst"),
     )
     result = run_cycle(cfg)
@@ -609,4 +636,4 @@ def test_a_cycle_refuses_a_roster_it_cannot_run(tmp_path: Path, envelope: Envelo
     with pytest.raises(CycleError, match="is not an analyst"):
         cycle_config(tmp_path, envelope, [], analysts=("technical_analyst", "astrologer"))
     with pytest.raises(CycleError, match="read nothing"):
-        cycle_config(tmp_path, envelope, [], series={"executor": tmp_path / "x.toml"})
+        cycle_config(tmp_path, envelope, [], series={"executor": (tmp_path / "x.toml",)})

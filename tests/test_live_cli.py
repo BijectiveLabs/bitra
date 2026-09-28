@@ -48,6 +48,11 @@ def test_init_writes_a_project_and_never_overwrites(
         "mapping.toml",
         "data.toml",
         "observation.toml",
+        "sources/macro.toml",
+        "sources/onchain.toml",
+        "sources/derivatives.toml",
+        "sources/sentiment.toml",
+        "sources/news.toml",
         "strategies/trailing_zscore.py",
         ".env.example",
         ".gitignore",
@@ -58,6 +63,40 @@ def test_init_writes_a_project_and_never_overwrites(
     assert "BYBIT_API_KEY=" in (target / ".env.example").read_text(encoding="utf-8")
     assert main(["init", str(target)]) == 1
     assert "never overwrites" in capsys.readouterr().err
+
+
+def test_the_shelf_starts_empty_and_check_says_what_filling_it_in_does(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "proj"
+    assert main(["init", str(target)]) == 0
+    monkeypatch.chdir(target)
+    capsys.readouterr()
+
+    main(["check"])
+    out = capsys.readouterr().out
+    assert "nothing declared yet" in out
+    assert "ok    roster: technical_analyst; `tra run` asks these" in out
+
+    (target / "sources" / "macro.toml").write_text(
+        '[[series]]\nname = "us10y"\nfile = "macro/us10y.csv"\nts = "date"\n'
+        'ts_unit = "iso8601"\nvalue = "value"\n',
+        encoding="utf-8",
+    )
+    main(["check"])
+    # The export is declared but not on disk yet, so it is a todo rather than a silent skip.
+    assert "todo  sources/macro.toml: declared but not on disk: macro/us10y.csv" in (
+        capsys.readouterr().out
+    )
+
+    (target / "sources" / "macro").mkdir()
+    (target / "sources" / "macro" / "us10y.csv").write_text(
+        "date,value\n2026-09-20,4.10\n", encoding="utf-8"
+    )
+    main(["check"])
+    out = capsys.readouterr().out
+    assert "ok    sources/macro.toml: 1 declared (us10y)" in out
+    assert "ok    roster: technical_analyst, macro_analyst; `tra run` asks these" in out
 
 
 def test_backtest_is_trade_replay_by_another_name(

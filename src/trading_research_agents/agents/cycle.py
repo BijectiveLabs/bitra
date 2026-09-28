@@ -36,7 +36,14 @@ from trading_research_agents.agents.briefs import (
 from trading_research_agents.agents.parallel import FanOut, Task, run_tasks
 from trading_research_agents.agents.roles import RoleError, prompt
 from trading_research_agents.data.schema import Direction
-from trading_research_agents.data.series import Event, Series, SeriesError, load_all, read_events
+from trading_research_agents.data.series import (
+    Event,
+    Series,
+    SeriesError,
+    load_all,
+    load_news,
+    read_events,
+)
 from trading_research_agents.data.sources.chain import SourceChain
 from trading_research_agents.envelope.model import Channel, Envelope
 from trading_research_agents.execution.pretrade import PreTradeVerdict, admit
@@ -85,8 +92,9 @@ class CycleConfig:
     # A reading analyst is asked only when the roster names it. `tra run` names the ones with a
     # declared source, because paying a model to say it was given nothing is waste; an operator who
     # wants a role asked anyway, on notes alone, names it in [agents].analysts.
-    series: Mapping[str, Path] = field(default_factory=dict)
-    events: Path | None = None
+    data_options: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+    series: Mapping[str, tuple[Path, ...]] = field(default_factory=dict)
+    news: tuple[Path, ...] = ()
     analysts: tuple[str, ...] = (technical_analyst.ROLE,)
     resume: bool = False
     max_workers: int = 4
@@ -171,9 +179,12 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
     cycle = cycle_id(cfg.clock())
     where = CycleDir(root=cfg.root, cycle=cycle).make()
     kinds = list(cfg.chains)
-    options = {
-        "ohlcv": {"interval_s": cfg.interval_s, "limit": max(cfg.lookback_bars, 2)},
-    }
+    # What the operator declared per kind in data.toml, then the window this cycle needs. A venue
+    # quirk lives in that file, so dropping it here would be dropping the operator's own decision.
+    options = {kind: dict(cfg.data_options.get(kind, {})) for kind in kinds}
+    options.setdefault("ohlcv", {}).update(
+        {"interval_s": cfg.interval_s, "limit": max(cfg.lookback_bars, 2)}
+    )
     snapshot = take_snapshot(cfg.instrument, cfg.chains, cycle=cycle, kinds=kinds, options=options)
     snapshot.write(where.snapshot)
     result = CycleResult(cycle=cycle, instrument=cfg.instrument, snapshot=snapshot, path=where.path)
@@ -317,14 +328,14 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
 
 
 def _calendar(cfg: CycleConfig, result: CycleResult) -> tuple[Event, ...]:
-    """The dated events and notes, when the operator declared a calendar."""
-    if cfg.events is None:
-        return ()
-    try:
-        return read_events(cfg.events)
-    except SeriesError as exc:
-        result.refusals.append(f"events: {exc}")
-        return ()
+    """Every dated text file the project declares, as one list. A bad file is named, not guessed."""
+    out: list[Event] = []
+    for path in cfg.news:
+        try:
+            out.extend(load_news(path) if path.suffix == ".toml" else read_events(path))
+        except SeriesError as exc:
+            result.refusals.append(f"news {path.name}: {exc}")
+    return tuple(sorted(out, key=lambda e: e.when_ns))
 
 
 def _reading_brief(
@@ -336,13 +347,18 @@ def _reading_brief(
 ) -> dict[str, Any] | None:
     """One reading analyst's brief, or nothing when its series cannot be read at all."""
     series: tuple[Series, ...] = ()
-    declared = cfg.series.get(role)
-    if declared is not None:
+    files = cfg.series.get(role, ())
+    for declared in files:
         try:
-            series = load_all(declared)
+            series = (*series, *load_all(declared))
         except SeriesError as exc:
-            result.refusals.append(f"{role}: {exc}")
-            return None
+            # One unreadable file does not silence a role that has other shelves to read from.
+            result.refusals.append(f"{role} {declared.name}: {exc}")
+    if files and not series:
+        # Everything this role was given is unreadable. Asking anyway would pay a model to say it
+        # saw nothing, and would hide a broken file behind a shrug.
+        result.refusals.append(f"{role}: nothing readable in {[p.name for p in files]}; not asked")
+        return None
     try:
         return context_brief(role, snapshot, series=series, events=calendar)
     except BriefError as exc:
