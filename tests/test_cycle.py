@@ -192,6 +192,47 @@ class Scripted:
         return [call for fake in self.per_role.values() for call in fake.calls]
 
 
+class ByStance:
+    """One role asked three times: the answer depends on the stance in the brief, not on the order.
+
+    A queue cannot do this. The three validators go out on threads, and which one reaches the
+    completer first is not ours to decide, so the fake reads the question like a model would.
+    """
+
+    model = "fake"
+
+    def __init__(self, answers: dict[str, Any]) -> None:
+        self.answers = answers
+        self.calls: list[Any] = []
+
+    def complete(self, *, system: str, user: str, schema: Any) -> Any:
+        from trading_research_agents.llm.completer import Call, Completion
+
+        self.calls.append(Call(system=system, user=user, schema=schema))
+        stance = str(json.loads(user).get("stance", ""))
+        text = self.answers[stance]
+        return Completion(
+            text=text, model=self.model, input_tokens=len(user), output_tokens=len(text)
+        )
+
+
+def validator_answer(stance: str, verdict: str, *, figure: str = "zscore", value: str = "") -> str:
+    return json.dumps(
+        {
+            "stance": stance,
+            "claims": [
+                {
+                    "figure": figure,
+                    "value": value or "1.403",
+                    "says": "the close sits at the top of its window",
+                }
+            ],
+            "verdict": verdict,
+            "reason": f"the {stance} case rests on one figure",
+        }
+    )
+
+
 def cycle_config(
     tmp_path: Path,
     envelope: Envelope,
@@ -637,3 +678,217 @@ def test_a_cycle_refuses_a_roster_it_cannot_run(tmp_path: Path, envelope: Envelo
         cycle_config(tmp_path, envelope, [], analysts=("technical_analyst", "astrologer"))
     with pytest.raises(CycleError, match="read nothing"):
         cycle_config(tmp_path, envelope, [], series={"executor": (tmp_path / "x.toml",)})
+
+
+def test_the_matrix_refuses_a_direction_the_declarations_do_not_support(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    from trading_research_agents.execution.confluence import Matrix
+
+    cfg, _, _ = cycle_config(
+        tmp_path,
+        envelope,
+        {
+            "technical_analyst": analyst_answer(),
+            "macro_analyst": json.dumps(
+                {
+                    "regime": "risk-off",
+                    "events": [],
+                    "reason": "the declared threshold points the other way",
+                    "data_as_of": "2026-09-27T00:00:00+00:00",
+                }
+            ),
+        },
+        analysts=("technical_analyst", "macro_analyst"),
+        matrix=Matrix(required=("macro_analyst",)),
+    )
+    result = run_cycle(cfg)
+
+    # Nothing was declared for the macro analyst in this fixture, so it produced no state at all.
+    assert not result.acted and result.confluence is not None
+    assert not result.confluence.admitted
+    assert any("confluence: macro_analyst declares undeclared" in r for r in result.refusals)
+    # The cost was priced before the matrix read, so the record still shows what the trade cost.
+    assert result.briefs.get("cost") is not None
+    summary = json.loads((Path(str(result.path)) / "cycle.json").read_text("utf-8"))
+    assert summary["confluence"]["states"] == {"macro_analyst": "undeclared"}
+    assert summary["intent"] is None
+
+
+def test_the_targets_refuse_before_there_is_an_intent(tmp_path: Path, envelope: Envelope) -> None:
+    from trading_research_agents.execution.targets import Targets
+
+    cfg, _, _ = cycle_config(
+        tmp_path,
+        envelope,
+        [analyst_answer()],
+        targets=Targets(min_net_bps=Decimal("1000")),
+    )
+    result = run_cycle(cfg)
+
+    assert not result.acted and result.targets is not None
+    assert not result.targets.admitted
+    assert any("targets: net " in r for r in result.refusals)
+    # The cost gate admitted it; the desk's own target is what refused.
+    assert result.verdict is not None and result.verdict.admitted
+
+
+def test_the_round_trip_count_comes_from_the_intents_already_written(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    from trading_research_agents.execution.targets import Targets
+
+    first, _, _ = cycle_config(tmp_path, envelope, [analyst_answer()])
+    assert run_cycle(first).acted
+
+    again, _, _ = cycle_config(
+        tmp_path,
+        envelope,
+        [analyst_answer()],
+        targets=Targets(max_round_trips_per_day=1),
+        clock=lambda: datetime(2026, 9, 27, 11, 0, tzinfo=UTC),
+    )
+    result = run_cycle(again)
+
+    assert not result.acted
+    assert any("1 intent(s) already written today" in r for r in result.refusals)
+
+
+def test_the_validators_argue_and_only_cited_claims_reach_the_matrix(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    from trading_research_agents.execution.confluence import Matrix
+
+    stances = ByStance(
+        {
+            "pro": validator_answer("pro", "support"),
+            "contra": validator_answer("contra", "oppose", figure="made_up", value="1"),
+        }
+    )
+    fake = Scripted({"technical_analyst": analyst_answer()})
+    usage = UsageLedger(tmp_path / "usage.jsonl")
+    limits = BudgetLimits(token_budget=500_000, max_calls_per_hour=1000, min_interval_s=0)
+    metered: dict[str, MeteredCompleter] = {}
+
+    def completer_for(role: str) -> MeteredCompleter:
+        if role not in metered:
+            inner = stances if role == "validator" else fake.for_role(role)
+            metered[role] = MeteredCompleter(
+                inner,
+                role=role,
+                provider="fake",
+                limits=limits,
+                ledger=usage,
+                clock=lambda: 0.0,
+            )
+        return metered[role]
+
+    cfg = CycleConfig(
+        instrument="BTCUSDT",
+        envelope=envelope,
+        venue_key=envelope.cheapest(None).key,
+        chains=chains(),
+        completer_for=completer_for,
+        usage=usage,
+        root=tmp_path / "cycles",
+        mechanism="short-horizon reversion after a burst of prints",
+        size=Decimal("5"),
+        magnitude_bps=Decimal("40"),
+        clock=lambda: datetime(2026, 9, 27, 10, 0, tzinfo=UTC),
+        lookback_bars=5,
+        validators=("pro", "contra"),
+        matrix=Matrix(min_support=1, max_opposition=0),
+    )
+    result = run_cycle(cfg)
+
+    # The contra stance cited a figure that was not in the brief, so its claim and its vote went.
+    assert result.context["validator_pro"]["verdict"] == "support"
+    assert result.context["validator_contra"]["verdict"] == "abstain"
+    assert any("discarded a claim, 'made_up' is not a figure" in r for r in result.refusals)
+    assert result.confluence is not None and result.confluence.admitted
+    assert result.confluence.support == 1 and result.confluence.opposition == 0
+    assert result.acted
+
+    where = Path(str(result.path))
+    assert (where / "briefs" / "validator_pro.json").is_file()
+    assert (where / "answers" / "validator_contra.json").is_file()
+    summary = json.loads((where / "cycle.json").read_text("utf-8"))
+    assert summary["validators"]["agents"][0]["agent"].startswith("validator_")
+
+
+def test_a_validator_that_opposes_can_stop_a_cycle_the_cost_gate_would_have_passed(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    from trading_research_agents.execution.confluence import Matrix
+
+    stances = ByStance({"contra": validator_answer("contra", "oppose")})
+    fake = Scripted({"technical_analyst": analyst_answer()})
+    usage = UsageLedger(tmp_path / "usage.jsonl")
+    limits = BudgetLimits(token_budget=500_000, max_calls_per_hour=1000, min_interval_s=0)
+    metered: dict[str, MeteredCompleter] = {}
+
+    def completer_for(role: str) -> MeteredCompleter:
+        if role not in metered:
+            inner = stances if role == "validator" else fake.for_role(role)
+            metered[role] = MeteredCompleter(
+                inner, role=role, provider="fake", limits=limits, ledger=usage, clock=lambda: 0.0
+            )
+        return metered[role]
+
+    cfg = CycleConfig(
+        instrument="BTCUSDT",
+        envelope=envelope,
+        venue_key=envelope.cheapest(None).key,
+        chains=chains(),
+        completer_for=completer_for,
+        usage=usage,
+        root=tmp_path / "cycles",
+        mechanism="short-horizon reversion after a burst of prints",
+        size=Decimal("5"),
+        magnitude_bps=Decimal("40"),
+        clock=lambda: datetime(2026, 9, 27, 10, 0, tzinfo=UTC),
+        lookback_bars=5,
+        validators=("contra",),
+        matrix=Matrix(max_opposition=0),
+    )
+    result = run_cycle(cfg)
+
+    assert not result.acted
+    assert any("1 validator(s) oppose it" in r for r in result.refusals)
+
+
+def test_a_stance_asked_twice_is_refused_when_the_cycle_is_configured(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    with pytest.raises(CycleError, match="each stance is asked once"):
+        cycle_config(tmp_path, envelope, [analyst_answer()], validators=("pro", "pro"))
+    with pytest.raises(CycleError, match="is not a stance"):
+        cycle_config(tmp_path, envelope, [analyst_answer()], validators=("bullish",))
+
+
+def test_a_reading_analyst_reaching_into_a_later_step_is_recorded_and_ignored(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    cfg, _, _ = cycle_config(
+        tmp_path,
+        envelope,
+        {
+            "technical_analyst": analyst_answer(),
+            "macro_analyst": json.dumps(
+                {
+                    "regime": "neutral",
+                    "events": [],
+                    "reason": "nothing declared, but I would go long with a tight stop loss",
+                    "data_as_of": "2026-09-27T00:00:00+00:00",
+                }
+            ),
+        },
+        analysts=("technical_analyst", "macro_analyst"),
+    )
+    result = run_cycle(cfg)
+
+    said = result.context["macro_analyst"]
+    assert said["out_of_scope"] and any("an order" in f for f in said["out_of_scope"])
+    assert any("belongs to a later step" in r for r in result.refusals)
+    # It changed nothing: the cycle still priced the trade and wrote the intent.
+    assert result.acted

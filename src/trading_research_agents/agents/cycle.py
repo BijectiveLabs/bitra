@@ -24,6 +24,7 @@ from trading_research_agents.agents import (
     onchain_analyst,
     sentiment_analyst,
     technical_analyst,
+    validator,
 )
 from trading_research_agents.agents.briefs import (
     BriefError,
@@ -35,6 +36,8 @@ from trading_research_agents.agents.briefs import (
 )
 from trading_research_agents.agents.parallel import FanOut, Task, run_tasks
 from trading_research_agents.agents.roles import RoleError, prompt
+from trading_research_agents.agents.scope import brief_for, crossings, dropped
+from trading_research_agents.agents.validator.tools import checked, figures_of, validator_brief
 from trading_research_agents.data.schema import Direction
 from trading_research_agents.data.series import (
     Event,
@@ -46,7 +49,14 @@ from trading_research_agents.data.series import (
 )
 from trading_research_agents.data.sources.chain import SourceChain
 from trading_research_agents.envelope.model import Channel, Envelope
+from trading_research_agents.execution.confluence import STANCES, Confluence, Matrix, confluent
 from trading_research_agents.execution.pretrade import PreTradeVerdict, admit
+from trading_research_agents.execution.targets import (
+    Targets,
+    TargetVerdict,
+    intents_today,
+    within_targets,
+)
 from trading_research_agents.llm.completer import Completer
 from trading_research_agents.llm.usage import BudgetSpentError, UsageLedger
 from trading_research_agents.store.cycles import CycleDir
@@ -89,6 +99,14 @@ class CycleConfig:
     margin_bps: Decimal = Decimal(0)
     min_confidence: float = 0.6
     mode: str = "sandbox"
+    # Two gates the operator declares: whether the context agrees with the direction, and whether
+    # the trade is the shape this desk said it wanted. Both are applied by code, never by a model.
+    matrix: Matrix = field(default_factory=Matrix)
+    targets: Targets = field(default_factory=Targets)
+    reward_to_risk: Decimal | None = None
+    # [agents].validators: the stances to ask once there is a proposal worth arguing about. Each
+    # stance is one more call, so an operator turns them on deliberately.
+    validators: tuple[str, ...] = ()
     # A reading analyst is asked only when the roster names it. `tra run` names the ones with a
     # declared source, because paying a model to say it was given nothing is waste; an operator who
     # wants a role asked anyway, on notes alone, names it in [agents].analysts.
@@ -111,6 +129,11 @@ class CycleConfig:
         stray = sorted(set(self.series) - set(READING))
         if stray:
             raise CycleError(f"series declared for {stray}, which read nothing")
+        bad_stance = sorted(set(self.validators) - set(STANCES))
+        if bad_stance:
+            raise CycleError(f"{bad_stance} is not a stance; have {list(STANCES)}")
+        if len(set(self.validators)) != len(self.validators):
+            raise CycleError("each stance is asked once")
         if self.mode not in MODES:
             raise CycleError(f"mode is one of {list(MODES)}; venue execution is not in this build")
         if not isinstance(self.size, Decimal) or self.size <= 0:
@@ -134,9 +157,14 @@ class CycleResult:
     snapshot: Snapshot
     briefs: dict[str, Any] = field(default_factory=dict)
     fan: FanOut = field(default_factory=FanOut)
+    # The validators are a second round: they argue about a proposal that has to exist first. Kept
+    # apart from the first round so each round's wall clock still means what it says.
+    debate: FanOut | None = None
     context: dict[str, Any] = field(default_factory=dict)
     analyst: Any = None
+    confluence: Confluence | None = None
     verdict: PreTradeVerdict | None = None
+    targets: TargetVerdict | None = None
     intent: dict[str, Any] | None = None
     refusals: list[str] = field(default_factory=list)
     stopped_by: str | None = None
@@ -152,9 +180,12 @@ class CycleResult:
             "instrument": self.instrument,
             "data": self.briefs.get("data"),
             "agents": self.fan.record(),
+            "validators": None if self.debate is None else self.debate.record(),
             "analyst": None if self.analyst is None else vars(self.analyst),
             "context": self.context,
+            "confluence": None if self.confluence is None else self.confluence.record(),
             "cost": None if self.verdict is None else self.verdict.record(),
+            "targets": None if self.targets is None else self.targets.record(),
             "intent": self.intent,
             "refusals": self.refusals,
             "stopped_by": self.stopped_by,
@@ -206,17 +237,16 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         result.stopped_by = f"no technical brief: {exc}"
         _finish(cfg, where, result)
         return result
+    asked = _within_scope(technical_analyst.ROLE, technical.record(), result)
     where.brief("technical").write_text(
-        json.dumps(technical.record(), indent=2, sort_keys=True, default=str) + "\n",
+        json.dumps(asked, indent=2, sort_keys=True, default=str) + "\n",
         encoding="utf-8",
     )
 
     tasks = [
         Task(
             name="technical",
-            work=lambda: _ask(
-                cfg, technical_analyst.ROLE, technical.record(), technical_analyst.SCHEMA
-            ),
+            work=lambda: _ask(cfg, technical_analyst.ROLE, asked, technical_analyst.SCHEMA),
             path=where.answer("technical"),
         )
     ]
@@ -225,9 +255,10 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
     for role in cfg.analysts:
         if role not in READING:
             continue
-        brief = _reading_brief(cfg, role, snapshot, calendar, result)
-        if brief is None:
+        built = _reading_brief(cfg, role, snapshot, calendar, result)
+        if built is None:
             continue
+        brief = _within_scope(role, built, result)
         reading_briefs[role] = brief
         where.brief(role).write_text(
             json.dumps(brief, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
@@ -295,6 +326,27 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         json.dumps(costs.record(), indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
     )
 
+    if cfg.validators:
+        _run_validators(cfg, where, result, asked=asked, analyst=analyst, costs=costs)
+
+    if not cfg.matrix.idle:
+        agreement = confluent(
+            cfg.matrix,
+            target=analyst.target,
+            states={
+                role: said["declared_state"]
+                for role, said in result.context.items()
+                if isinstance(said.get("declared_state"), Mapping)
+            },
+            votes=_votes(result),
+        )
+        result.confluence = agreement
+        for reason in agreement.reasons:
+            result.refusals.append(f"confluence: {reason}")
+        if not agreement.admitted:
+            _finish(cfg, where, result)
+            return result
+
     verdict = admit(
         edge_bps=cfg.magnitude_bps,
         cost=costs.cost,
@@ -306,6 +358,20 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         result.refusals.append(f"cost gate: {verdict.reason}")
         _finish(cfg, where, result)
         return result
+
+    if not cfg.targets.idle:
+        met = within_targets(
+            cfg.targets,
+            net_bps=verdict.net_bps,
+            reward_to_risk=cfg.reward_to_risk,
+            round_trips_today=intents_today(cfg.root, at=cfg.clock(), instrument=cfg.instrument),
+        )
+        result.targets = met
+        for reason in met.reasons:
+            result.refusals.append(f"targets: {reason}")
+        if not met.admitted:
+            _finish(cfg, where, result)
+            return result
 
     result.intent = {
         "instrument": cfg.instrument,
@@ -393,6 +459,13 @@ def _context_of(
         declared = declared_state(role, briefs.get(role, {}))
         label = said.get("regime") or said.get("signal") or said.get("state")
         said["declared_state"] = declared
+        reached = crossings(role, said)
+        if reached:
+            said["out_of_scope"] = list(reached)
+            for finding in reached:
+                result.refusals.append(
+                    f"{role}: {finding}; that belongs to a later step and changes nothing here"
+                )
         expected = declared.get("as_role_says_it")
         said["agrees_with_declared"] = None if expected is None else label == expected
         if expected is not None and label != expected:
@@ -402,6 +475,100 @@ def _context_of(
             )
         out[role] = said
     return out
+
+
+def _within_scope(role: str, brief: Mapping[str, Any], result: CycleResult) -> dict[str, Any]:
+    """The brief a role is handed: its own sections, with anything else named and removed."""
+    extra = dropped(role, brief)
+    if extra:
+        result.refusals.append(f"{role}: not this role's to read, removed: {list(extra)}")
+    return brief_for(role, brief)
+
+
+def _run_validators(
+    cfg: CycleConfig,
+    where: CycleDir,
+    result: CycleResult,
+    *,
+    asked: Mapping[str, Any],
+    analyst: Any,
+    costs: Any,
+) -> None:
+    """Ask each declared stance about the proposal, then keep only the claims that cite a figure."""
+    figures = figures_of(asked)
+    proposal = {
+        "target": analyst.target,
+        "confidence": analyst.confidence,
+        "horizon_bars": analyst.horizon_bars,
+        "reason": analyst.reason,
+        "mechanism": cfg.mechanism,
+        "edge_bps": str(cfg.magnitude_bps),
+    }
+    states = {
+        role: said.get("declared_state", {})
+        for role, said in result.context.items()
+        if isinstance(said.get("declared_state"), Mapping)
+    }
+    tasks = []
+    for stance in cfg.validators:
+        name = f"validator_{stance}"
+        brief = _within_scope(
+            validator.ROLE,
+            validator_brief(
+                instrument=cfg.instrument,
+                stance=stance,
+                proposal=proposal,
+                figures=figures,
+                declared_states=states,
+                cost_bps=str(costs.cost.round_trip_bps),
+            ),
+            result,
+        )
+        where.brief(name).write_text(
+            json.dumps(brief, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
+        )
+        tasks.append(Task(name=name, work=_validator_task(cfg, brief), path=where.answer(name)))
+
+    fan = run_tasks(tasks, max_workers=cfg.max_workers, resume=cfg.resume)
+    result.debate = fan
+    for name, error in fan.failed.items():
+        result.refusals.append(f"{name}: {error}")
+        if budget_spent(error):
+            result.stopped_by = f"{name}: {error}"
+    for name, answer in fan.answers.items():
+        stance = name.partition("_")[2]
+        try:
+            said = validator.parse(str(answer))
+        except (RoleError, ValueError) as exc:
+            result.context[name] = {"stance": stance, "error": str(exc)}
+            result.refusals.append(f"{name}: {exc}")
+            continue
+        verdict = checked(said, figures)
+        record = verdict.record()
+        reached = crossings(validator.ROLE, {"reason": verdict.reason})
+        if reached:
+            record["out_of_scope"] = list(reached)
+            for finding in reached:
+                result.refusals.append(f"{name}: {finding}; it changes nothing here")
+        for dropped_claim in verdict.discarded:
+            result.refusals.append(f"{name}: discarded a claim, {dropped_claim}")
+        result.context[name] = record
+
+
+def _validator_task(cfg: CycleConfig, brief: Mapping[str, Any]) -> Callable[[], str]:
+    def ask() -> str:
+        return _ask(cfg, validator.ROLE, brief, validator.SCHEMA)
+
+    return ask
+
+
+def _votes(result: CycleResult) -> tuple[str, ...]:
+    """The validators' verdicts, after code checked the claims they rest on."""
+    out = []
+    for role, said in sorted(result.context.items()):
+        if role.startswith("validator") and isinstance(said.get("verdict"), str):
+            out.append(str(said["verdict"]))
+    return tuple(out)
 
 
 def _channel(cfg: CycleConfig) -> Channel:

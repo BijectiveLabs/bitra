@@ -9,7 +9,15 @@ tra run --instrument ETHUSDT --margin 5 --mode signals
 ```
 
 ```
-snapshot (engine)  ->  briefs (code)  ->  agents (parallel)  ->  cost gate (code)  ->  intent or refusal
+snapshot (engine)
+  -> briefs (code, each role's own sections only)
+  -> technical analyst + reading analysts   (parallel)
+  -> the round trip priced (code)
+  -> validators                             (parallel, when configured)
+  -> confluence matrix   (code: declared states and votes)
+  -> cost gate           (code: the claim against the cost)
+  -> targets             (code: net bps, reward-to-risk, round trips today)
+  -> intent, or a refusal that names the figure that refused it
 ```
 
 Nothing in that line is optional and nothing in it is reordered. The engine fetches; code
@@ -24,6 +32,7 @@ runs/cycles/2026-09-27T14-51-23Z/
   snapshot.json          every value the engine fetched, with source, tier and age
   briefs/technical.json  the figures the analyst was given, computed here, not by the model
   briefs/cost.json       what a round trip would cost, per component
+  briefs/validator_pro.json   the proposal and the figures a validator was given
   answers/technical.json what the model answered, as it answered it
   intents.jsonl          the intent, if the gate admitted one
   cycle.json             the whole cycle in one file: data, agents, cost, verdict, refusals
@@ -105,6 +114,90 @@ In this build the context is recorded and reported; it does not yet gate anythin
 analyst that fails leaves a line in `cycle.json` and the cycle carries on. The confluence matrix
 that makes the context binding is the next unit, and when it lands a missing state will refuse
 rather than be treated as neutral: a state nobody produced is not a neutral state.
+
+## Every role inside its own job
+
+A desk works because a job has edges. The analyst that labels a regime does not size the order, the
+role that prices the round trip does not decide whether the idea is any good, and none of them
+places anything. Four things keep a role inside its job, and only the last is words:
+
+| Enforced by | What it prevents |
+|---|---|
+| the brief | A role cannot reason about what it was never given. No reading analyst receives equity, size, the controls, the cost of the round trip or the exit distances. `agents/scope.py` filters every brief to that role's declared reads, and what it removed is written in the record. |
+| the schema | A closed schema with only that role's own fields. A macro analyst has nowhere to put a size, and a field outside the schema is a parse error rather than a surprise. |
+| the wiring | Nothing downstream reads a sentence. The confluence matrix reads the declared state code derived from the operator's thresholds; the cost gate reads the snapshot's own book; the size is the operator's. |
+| the prompt | One line naming what is not this role's job, plus a small vocabulary code looks for in case it appears anyway. |
+
+The last line needs care and gets the least authority. Pattern-matching prose is blunt, and "buy"
+and "sell" belong in a proper sentence about what a central bank did, so the vocabulary is only the
+phrases no reading analyst has reason to write - "go long", "stop loss", "position size",
+"leverage". A hit is recorded as a crossing beside the answer and changes nothing, because the
+answer was never what decides. We cannot stop a model from writing a sentence; we can make the
+sentence carry no authority and leave a mark when it tries to.
+
+## The confluence matrix
+
+Deterministic, in the configuration, reading the declared state rather than the model's label:
+
+```toml
+[confluence]
+required = ["macro_analyst", "onchain_analyst"]
+long_states = ["bullish"]
+short_states = ["bearish"]
+on_missing = "refuse"          # refuse | ignore
+min_support = 1                # validators that must support it
+max_opposition = 0             # validators that may oppose it; 0 is the strictest there is
+```
+
+It fails closed. A required role whose declaration is `undeclared` or `mixed` has produced no state,
+and a state nobody produced is not a neutral state: the cycle refuses and names the role. An
+operator who means to run on one leg writes `on_missing = "ignore"`, and the record says they did.
+`tra check` refuses a matrix that can never pass - a required role the roster does not ask, or more
+support required than there are validators to give it.
+
+## The validators
+
+Three stances of one role, pro, contra and neutral, asked after the deciding analyst answers and
+after the round trip is priced, in parallel with each other:
+
+```toml
+[agents]
+validators = ["pro", "contra", "neutral"]
+```
+
+Each one receives the proposal, the figures it was built from, the declared states and what the
+round trip costs. Each must answer with claims that cite a figure by the brief's own name, with that
+figure's value:
+
+```json
+{"stance": "contra",
+ "claims": [{"figure": "volume_ratio", "value": "7.971", "says": "the burst is not finished"}],
+ "verdict": "oppose",
+ "reason": "..."}
+```
+
+Code checks every claim against the brief. A figure that is not there is discarded, a value that
+does not match is discarded, both are recorded, and a verdict with no surviving claim becomes
+`abstain` - a verdict resting on nothing is nothing. A claim may round the figure it cites: "-1.63"
+against a brief's "-1.631" is the same citation said with fewer digits, and it is kept. Then the
+matrix counts the votes.
+
+Each stance is one more call, which is why they are off until an operator asks for them.
+
+## The targets
+
+What the desk is trying to do, in numbers, checked before there is an intent:
+
+```toml
+[targets]
+min_net_bps = 5                  # what must be left of the edge after every cost the gate priced
+min_reward_risk = 1.5            # take profit against stop, both from [exit]
+max_round_trips_per_day = 6      # intents already written today for this instrument
+```
+
+The round trips are counted from the intents the cycles actually wrote today, not from a counter in
+memory: a process that restarts must not forget what it has already done. Every refusal names its
+figure, so "targets: net 4 bps is below the declared minimum 10 bps" is the whole explanation.
 
 ## The cost gate, and what each number is worth
 

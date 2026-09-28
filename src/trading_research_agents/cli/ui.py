@@ -446,12 +446,67 @@ def cycle_view(record: Mapping[str, Any]) -> Group:
         costs.caption = f"{cost['reason']}; edge is {cost['edge_certainty']}: {cost['edge_source']}"
         parts.append(costs)
 
+    votes = {
+        role: said
+        for role, said in (record.get("context") or {}).items()
+        if role.startswith("validator")
+    }
+    if votes:
+        panel = Table(box=box.SIMPLE_HEAD, show_edge=False, pad_edge=False, title="validators")
+        for name in ("stance", "verdict", "cited", "discarded", "reason"):
+            panel.add_column(name)
+        colours = {"support": "green", "oppose": "red", "abstain": "yellow"}
+        for role, said in sorted(votes.items()):
+            verdict = str(said.get("verdict") or "failed")
+            panel.add_row(
+                str(said.get("stance") or role.partition("_")[2]),
+                Text(verdict, style=colours.get(verdict, "yellow")),
+                str(len(said.get("claims") or ())),
+                str(len(said.get("discarded") or ())),
+                str(said.get("reason") or said.get("error") or ""),
+            )
+        parts.append(panel)
+
+    agreement = record.get("confluence") or {}
+    if agreement:
+        rows = [(role, state) for role, state in sorted((agreement.get("states") or {}).items())]
+        rows.append(("support", agreement.get("support")))
+        rows.append(("opposition", agreement.get("opposition")))
+        style = "green" if agreement.get("admitted") else "yellow"
+        parts.append(
+            Panel(
+                _kv(rows),
+                title=Text("confluence", style=style),
+                box=box.ROUNDED,
+                expand=False,
+            )
+        )
+
+    met = record.get("targets") or {}
+    if met:
+        style = "green" if met.get("admitted") else "yellow"
+        parts.append(
+            Panel(
+                _kv(
+                    [
+                        ("net bps", met.get("net_bps")),
+                        ("reward to risk", met.get("reward_risk")),
+                        ("round trips today", met.get("round_trips_today")),
+                    ]
+                ),
+                title=Text("targets", style=style),
+                box=box.ROUNDED,
+                expand=False,
+            )
+        )
+
     agents = record.get("agents") or {}
     if agents.get("agents"):
         who = Table(box=box.SIMPLE_HEAD, show_edge=False, pad_edge=False, title="agents")
         for name in ("agent", "state", "seconds"):
             who.add_column(name)
-        for row in agents["agents"]:
+        rounds = [*agents["agents"], *((record.get("validators") or {}).get("agents") or [])]
+        for row in rounds:
             state = "reused" if row.get("reused") else ("ok" if row.get("ok") else "failed")
             style = {"ok": "green", "failed": "red", "reused": "dim"}[state]
             who.add_row(str(row.get("agent")), Text(state, style=style), str(row.get("seconds")))

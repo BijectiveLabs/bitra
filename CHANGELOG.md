@@ -35,6 +35,25 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- Every role inside its own job, enforced in four places rather than asked for in a prompt:
+  `agents/scope.py` declares what each role reads, answers and decides; the cycle filters every
+  brief through it, so no reading analyst receives equity, size, the controls, the cost of the round
+  trip or the exit distances; the schemas stay closed; and nothing downstream reads a model's
+  sentence. A reason that uses the language of an order, a size or an exit is recorded as a crossing
+  beside the answer and changes nothing.
+- The confluence matrix (`[confluence]`, `execution/confluence.py`): which roles must agree with the
+  direction, what agreement means, and how validator votes are counted. It reads the declared state
+  code derives from the operator's thresholds, never the label a model wrote, and it fails closed - a
+  required role that produced no state has agreed to nothing. `tra check` refuses a matrix that can
+  never pass.
+- Targets (`[targets]`, `execution/targets.py`): `min_net_bps`, `min_reward_risk` and
+  `max_round_trips_per_day`, applied by code before an intent exists. The round trips are counted
+  from the intents already on disk, so a restarted process cannot forget what it has traded today.
+- Validators (`agents/validator/`, `[agents].validators`): three stances of one role - pro, contra,
+  neutral - asked once there is a proposal, in parallel. Every claim must cite a figure from the
+  brief with its value; code discards a figure that is not there and a value that does not match,
+  records both, and turns a verdict with no surviving claim into `abstain`. A claim may round the
+  figure it cites.
 - The source shelf: `sources/macro.toml`, `sources/news.toml`, `sources/sentiment.toml`,
   `sources/onchain.toml`, `sources/derivatives.toml`. One declaration per class of data rather
   than one per vendor, so replacing a provider is an edit on one line and nothing else in the

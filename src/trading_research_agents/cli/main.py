@@ -1262,6 +1262,7 @@ def run_cycle_command(args: argparse.Namespace) -> int:
     """One cycle, end to end, from the files in the project."""
     from trading_research_agents.agents.cycle import CycleConfig, run_cycle
     from trading_research_agents.data.sources import load_data_config
+    from trading_research_agents.execution.targets import reward_risk
     from trading_research_agents.llm.usage import (
         BudgetLimits,
         MeteredCompleter,
@@ -1347,6 +1348,13 @@ def run_cycle_command(args: argparse.Namespace) -> int:
             margin_bps=args.margin if args.margin is not None else Decimal(0),
             min_confidence=a.min_confidence,
             mode=args.mode,
+            matrix=cfg.confluence,
+            validators=a.validators,
+            targets=cfg.targets,
+            reward_to_risk=reward_risk(
+                stop_frac=cfg.exit_rule.stop_sigma_frac,
+                take_frac=cfg.exit_rule.take_profit_sigma_frac,
+            ),
             data_options={declared.kind: dict(declared.options) for declared in data_cfg.kinds},
             series=series,
             news=news,
@@ -1357,17 +1365,46 @@ def run_cycle_command(args: argparse.Namespace) -> int:
     payload = result.record()
     payload["tokens"] = usage.tokens
     payload["out"] = str(result.path)
-    lines = [f"cycle {result.cycle} {result.instrument}: {result.fan.seconds}s of agents"]
+    spent = f"{result.fan.seconds}s of agents"
+    if result.debate is not None:
+        spent += f", {result.debate.seconds}s of validators"
+    lines = [f"cycle {result.cycle} {result.instrument}: {spent}"]
     data = result.briefs.get("data") or {}
     for kind, value in sorted((data.get("values") or {}).items()):
         lines.append(f"  {kind:<14} {value['source']:<18} age {value['age_s']}s")
     for role, said in sorted(result.context.items()):
+        if role.startswith("validator"):
+            continue
         state = said.get("regime") or said.get("signal") or said.get("state") or said.get("error")
         lines.append(f"{role.replace('_analyst', ''):<10} {state}: {said.get('reason', '')}")
     if result.analyst is not None:
         lines.append(
             f"technical: {result.analyst.target} at {result.analyst.confidence:.2f} "
             f"over {result.analyst.horizon_bars} bars: {result.analyst.reason}"
+        )
+    for role, said in sorted(result.context.items()):
+        if not role.startswith("validator"):
+            continue
+        verdict = said.get("verdict") or f"failed: {said.get('error', '')}"
+        cited = len(said.get("claims") or ())
+        dropped_claims = len(said.get("discarded") or ())
+        counted = f"{cited} cited figure(s)"
+        if dropped_claims:
+            counted += f", {dropped_claims} discarded"
+        lines.append(f"{role.replace('_', ' '):<18} {verdict} on {counted}")
+    if result.confluence is not None:
+        agreement = result.confluence
+        states = ", ".join(
+            f"{role.replace('_analyst', '')} {state}"
+            for role, state in sorted(agreement.states.items())
+        )
+        counted = f"support {agreement.support}, opposition {agreement.opposition}"
+        lines.append(f"confluence: {states or 'no role required'}; {counted}")
+    if result.targets is not None:
+        met = result.targets
+        lines.append(
+            f"targets: net {met.net_bps.quantize(Decimal('0.01'))} bps, "
+            f"reward-to-risk {met.reward_risk}, {met.round_trips_today} round trip(s) today"
         )
     if result.verdict is not None:
         cost = result.verdict.cost
@@ -1467,6 +1504,9 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
             )
         roster = roster_for(shelf, "technical_analyst")
         good.append(f"roster: {', '.join(roster)}; `tra run` asks these")
+        ready, missing = _gate_lines(cfg, roster)
+        good.extend(ready)
+        bad.extend(missing)
         data_config = args.config.resolve().parent / "data.toml"
         if data_config.is_file():
             from trading_research_agents.data.sources import DataConfigError, load_data_config
@@ -1512,6 +1552,54 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
     elif cfg is not None and cfg.agents is not None:
         next_command = "tra run --env-file .env"
     return good, bad, next_command
+
+
+def _gate_lines(cfg: Any, roster: tuple[str, ...]) -> tuple[list[str], list[str]]:
+    """What the two declared gates will do, and where they contradict the rest of the project.
+
+    A gate that can never pass is worth saying out loud here, before a cycle spends a token finding
+    out: a required role nobody asks, or a vote count nobody can cast.
+    """
+    good: list[str] = []
+    bad: list[str] = []
+    matrix = cfg.confluence
+    stances = () if cfg.agents is None else cfg.agents.validators
+    if stances:
+        good.append(f"validators: {', '.join(stances)}; asked once there is a proposal")
+    if matrix.idle:
+        good.append("confluence: not declared; the context is recorded but gates nothing")
+    else:
+        good.append(
+            f"confluence: needs {', '.join(matrix.required) or 'no role'}; "
+            f"long {list(matrix.long_states)}, short {list(matrix.short_states)}; "
+            f"a missing state means {matrix.on_missing}"
+        )
+        absent = sorted(set(matrix.required) - set(roster))
+        if absent:
+            bad.append(
+                f"[confluence].required names {absent}, which the roster does not ask; "
+                "declare their sources or the cycle refuses every time"
+            )
+        if matrix.min_support > len(stances):
+            bad.append(
+                f"[confluence].min_support is {matrix.min_support} but "
+                f"{len(stances)} validator(s) are asked; no cycle can clear it"
+            )
+    targets = cfg.targets
+    if targets.idle:
+        good.append(
+            "targets: not declared; only the cost gate stands between a claim and an intent"
+        )
+    else:
+        said = []
+        if targets.min_net_bps is not None:
+            said.append(f"at least {targets.min_net_bps} bps net")
+        if targets.min_reward_risk is not None:
+            said.append(f"reward-to-risk {targets.min_reward_risk}")
+        if targets.max_round_trips_per_day is not None:
+            said.append(f"at most {targets.max_round_trips_per_day} round trips a day")
+        good.append("targets: " + "; ".join(said))
+    return good, bad
 
 
 def data_get(args: argparse.Namespace) -> int:
