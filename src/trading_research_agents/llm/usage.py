@@ -68,6 +68,8 @@ class UsageRecord:
     latency_ms: int
     cost: Decimal | None
     outcome: str
+    cached_tokens: int = 0
+    cache_write_tokens: int = 0
 
     def record(self) -> dict[str, Any]:
         return {
@@ -77,6 +79,8 @@ class UsageRecord:
             "model": self.model,
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
+            "cached_tokens": self.cached_tokens,
+            "cache_write_tokens": self.cache_write_tokens,
             "latency_ms": self.latency_ms,
             "cost": None if self.cost is None else str(self.cost),
             "outcome": self.outcome,
@@ -194,6 +198,8 @@ class MeteredCompleter:
                 model=completion.model,
                 input_tokens=completion.input_tokens,
                 output_tokens=completion.output_tokens,
+                cached_tokens=completion.cached_tokens,
+                cache_write_tokens=completion.cache_write_tokens,
                 latency_ms=int((time.perf_counter() - started) * 1000),
                 cost=(
                     None

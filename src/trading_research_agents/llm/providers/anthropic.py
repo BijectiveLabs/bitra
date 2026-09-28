@@ -74,4 +74,6 @@ class AnthropicCompleter:
             model=str(response.model),
             input_tokens=int(usage.input_tokens) + cached + written,
             output_tokens=int(usage.output_tokens),
+            cached_tokens=cached,
+            cache_write_tokens=written,
         )

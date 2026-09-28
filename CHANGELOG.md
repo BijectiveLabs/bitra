@@ -35,6 +35,18 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- `[agents].fallback` and `[agents.roles.<role>].fallback`: `provider:model` entries tried in order
+  when a provider cannot be reached, with the same brief, since a role call carries no conversation.
+  Every attempt is recorded with the vendor's own error class; a link is built the first time it is
+  needed; and a spent budget stops the chain rather than falling through to another provider.
+  `llm/chain.py`, checked by `tra check` against the registered providers.
+- `usage.jsonl` records `cached_tokens` and `cache_write_tokens` per call, so prompt caching can be
+  measured rather than assumed - on short role prompts it often will not engage at all, and now
+  that is visible.
+- `docs/llm.md`: how models are used here - no orchestration framework and the criteria that would
+  change that, what memory means in a project whose roles are stateless, provider fallback, prompt
+  caching with the minimum prefix that makes it pay, why batching belongs in the eval path and not
+  in a cycle, and why fine-tuning is a position rather than a gap.
 - The stop and the take profit are sent to the venue attached to the entry, computed by code from
   `[exit]` against the price the gate priced on. A venue that cannot take them with the entry is
   refused rather than trusted, and `[execution].exits = "none"` is the only way to leave a fill

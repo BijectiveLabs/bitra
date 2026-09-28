@@ -87,6 +87,7 @@ from trading_research_agents.execution.pretrade import PreTradeError
 from trading_research_agents.ledger import Ledger, LedgerError, Verdict
 from trading_research_agents.ledger.store import to_record as ledger_to_record
 from trading_research_agents.llm import Completer
+from trading_research_agents.llm.chain import CompleterChain, Link, parse_link
 from trading_research_agents.llm.completer import ProviderError
 from trading_research_agents.llm.providers import (
     CallOptions,
@@ -992,23 +993,55 @@ def _build_completer(a: Any) -> Completer:
 REPORT_HEADROOM = 2048
 
 
-def _completer_for_role(a: Any, role: str, *, floor: int = 0) -> Completer:
-    """The model this role is asked with: its own where declared, the default otherwise.
+def _completer_for_role(
+    a: Any,
+    role: str,
+    *,
+    floor: int = 0,
+    on_attempt: Callable[[str, Any], None] | None = None,
+) -> Completer:
+    """The models this role is asked with, in the order the operator declared them.
 
     A screener that labels a regime and an analyst that reasons over sixty bars do not need the
     same model, and the difference is most of a token bill. `[agents.roles.<role>]` is where an
-    operator says so.
+    operator says so, and `fallback` is where they say what to do when that provider is rate
+    limited or down: the next one is tried with the same brief, because the brief is built by code
+    and there is no conversation to carry over.
     """
     settings = a.for_role(role)
-    p = provider(settings.provider)
-    options = CallOptions(
-        max_output_tokens=max(settings.max_output_tokens, floor),
-        timeout_s=float(settings.call_timeout_s),
-        max_retries=settings.max_retries,
-    )
-    if p.build_with is not None:
-        return p.build_with(settings.model, settings.base_url, options)
-    return p.build(settings.model, settings.base_url)
+    links = [Link(f"{settings.provider}:{settings.model or 'default'}", _link(a, settings, floor))]
+    for name in settings.fallback:
+        named, model = parse_link(name)
+        links.append(Link(name, _link(a, settings, floor, provider_name=named, model=model)))
+    if len(links) == 1:
+        return links[0].build()
+    return CompleterChain(role=role, links=links, on_attempt=on_attempt)
+
+
+def _link(
+    a: Any,
+    settings: Any,
+    floor: int,
+    *,
+    provider_name: str | None = None,
+    model: str | None = None,
+) -> Callable[[], Completer]:
+    """How one link is built, when it is first needed rather than when it is declared."""
+
+    def build() -> Completer:
+        p = provider(provider_name or settings.provider)
+        options = CallOptions(
+            max_output_tokens=max(settings.max_output_tokens, floor),
+            timeout_s=float(settings.call_timeout_s),
+            max_retries=settings.max_retries,
+        )
+        wanted = model if provider_name else settings.model
+        base = None if provider_name else settings.base_url
+        if p.build_with is not None:
+            return p.build_with(wanted, base, options)
+        return p.build(wanted, base)
+
+    return build
 
 
 def _call_options(a: Any) -> CallOptions:
@@ -2122,6 +2155,19 @@ def _gate_lines(
                     f"channel {cfg.run.venue_key!r} does not say whether entry is maker or taker; "
                     "the fee you priced depends on it"
                 )
+    if cfg.agents is not None and cfg.agents.fallback:
+        unknown = []
+        for name in cfg.agents.fallback:
+            named, _ = parse_link(name)
+            if named not in providers():
+                unknown.append(name)
+        if unknown:
+            bad.append(f"[agents].fallback names {unknown}, which no provider is registered for")
+        else:
+            good.append(
+                f"models: fallback {', '.join(cfg.agents.fallback)}; "
+                "tried in order when a provider cannot be reached"
+            )
     rule = cfg.conviction
     if rule.idle:
         good.append("conviction: not declared; every admitted cycle trades the base size")

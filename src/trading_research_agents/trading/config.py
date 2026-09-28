@@ -56,6 +56,7 @@ class RoleModel:
     max_output_tokens: int
     call_timeout_s: int
     max_retries: int
+    fallback: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -88,6 +89,9 @@ class AgentSettings:
     # [agents].validators: the stances asked about a proposal once there is one. Each stance is one
     # more call, so this is empty until an operator asks for it.
     validators: tuple[str, ...] = ()
+    # [agents].fallback: `provider:model` entries every role inherits, tried in order when the
+    # provider above cannot be reached. A rate limit is a dependency failing, not a reason to stop.
+    fallback: tuple[str, ...] = ()
 
     def for_role(self, role: str) -> RoleModel:
         """What this role is asked with: its own model where declared, otherwise the default."""
@@ -100,6 +104,7 @@ class AgentSettings:
             max_output_tokens=int(table.get("max_output_tokens", self.max_output_tokens)),
             call_timeout_s=int(table.get("call_timeout_s", self.call_timeout_s)),
             max_retries=int(table.get("max_retries", self.max_retries)),
+            fallback=tuple(str(name) for name in (table.get("fallback") or self.fallback)),
         )
 
 
@@ -237,7 +242,16 @@ KNOWN_ROLES = (
     # One stance is one call, so a validator may run on its own model like any other role.
     "validator",
 )
-ROLE_KEYS = ("provider", "model", "base_url", "max_output_tokens", "call_timeout_s", "max_retries")
+ROLE_KEYS = (
+    "provider",
+    "model",
+    "base_url",
+    "max_output_tokens",
+    "call_timeout_s",
+    "max_retries",
+    # `provider:model` entries tried in order when the one above cannot be reached.
+    "fallback",
+)
 
 
 ASKABLE = (
@@ -334,6 +348,7 @@ def _agents(raw: dict[str, Any], strategy_raw: dict[str, Any]) -> AgentSettings 
         roles=_roles(table.get("roles")),
         analysts=_analysts(table.get("analysts")),
         validators=_validators(table.get("validators")),
+        fallback=_fallback(table.get("fallback")),
     )
 
 
@@ -439,6 +454,24 @@ def _conviction(raw: dict[str, Any]) -> Conviction:
         )
     except ConvictionError as exc:
         raise ConfigError(str(exc)) from exc
+
+
+def _fallback(raw: Any) -> tuple[str, ...]:
+    """`fallback = ["groq:openai/gpt-oss-20b", ...]`: other models, in the order to try them."""
+    if raw is None:
+        return ()
+    if not isinstance(raw, list) or not all(isinstance(name, str) for name in raw):
+        raise ConfigError("fallback is a list of provider:model strings")
+    names = [str(name) for name in raw]
+    for name in names:
+        # The shape only: this layer knows nothing about which providers exist, and the CLI checks
+        # the names against the registry where both are in reach.
+        provider_name, _, model = name.partition(":")
+        if not provider_name.strip() or not model.strip():
+            raise ConfigError(f"{name!r} is not a fallback; write it as provider:model")
+    if len(set(names)) != len(names):
+        raise ConfigError("a fallback names each model once")
+    return tuple(names)
 
 
 def _validators(raw: Any) -> tuple[str, ...]:

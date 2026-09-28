@@ -388,8 +388,9 @@ uv run pytest
 ```
 
 See `CONTRIBUTING.md` for the branch flow and the standards the code is held to,
-`docs/boundaries.md` for where this software stops and why, `docs/architecture.md` for the package
-boundaries and the file formats at them, `docs/data.md`
+`docs/boundaries.md` for where this software stops and why, `docs/llm.md` for how models are used
+(no framework, stateless roles, provider fallback, caching, batching, why no fine-tuning),
+`docs/architecture.md` for the package boundaries and the file formats at them, `docs/data.md`
 for the data gate, `docs/cycle.md` for the cycle, `docs/chain.md` for the chain, `docs/execution.md` for execution realism,
 `docs/agent.md` for the research agent, `docs/trading.md` for the trading agent, and
 `docs/ledger.md` for the verdict vocabulary.

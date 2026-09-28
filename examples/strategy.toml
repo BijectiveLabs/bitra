@@ -69,6 +69,11 @@ kill_switch = "KILL"               # touch this file to flatten and stop
 # call_timeout_s = 60             # per request; the SDK retries 429s and 5xx with backoff
 # max_retries = 2
 #
+# When a provider is rate limited or down, these are tried in order, with the same brief. A link is
+# built the first time it is needed, so naming a spare you have no key for costs nothing until the
+# day you need it. A spent budget is not a reason to fall through - it stops the chain.
+# fallback = ["google:gemini-flash-latest", "anthropic:claude-opus-5"]
+#
 # The roster, when you want to say it outright. Left out, a cycle asks the technical analyst and
 # whichever reading analysts have something declared on the shelf: sources/macro.toml,
 # sources/onchain.toml, sources/derivatives.toml, sources/sentiment.toml, sources/news.toml.

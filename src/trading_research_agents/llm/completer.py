@@ -22,6 +22,11 @@ class Completion:
     model: str
     input_tokens: int
     output_tokens: int
+    # What the provider said it read from, and wrote to, its prompt cache. Recorded rather than
+    # assumed: a cache that never engages is a cache that is not paying for itself, and the only
+    # way to know is the figure the provider returns.
+    cached_tokens: int = 0
+    cache_write_tokens: int = 0
 
 
 class Completer(Protocol):
