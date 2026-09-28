@@ -892,3 +892,86 @@ def test_a_reading_analyst_reaching_into_a_later_step_is_recorded_and_ignored(
     assert any("belongs to a later step" in r for r in result.refusals)
     # It changed nothing: the cycle still priced the trade and wrote the intent.
     assert result.acted
+
+
+def conviction_rule(**overrides: Any) -> Any:
+    from trading_research_agents.execution.conviction import Conviction, Tier
+
+    settings: dict[str, Any] = {
+        "weights": {"technical_analyst": Decimal(1), "macro_analyst": Decimal(1)},
+        "min_score": Decimal("0.4"),
+        "ladder": (
+            Tier(Decimal("0.8"), Decimal(1)),
+            Tier(Decimal("0.5"), Decimal("0.5")),
+            Tier(Decimal("0.4"), Decimal("0.25")),
+        ),
+    }
+    settings.update(overrides)
+    return Conviction(**settings)
+
+
+def test_conviction_sizes_the_trade_and_the_cost_is_priced_at_that_size(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    cfg, _, _ = cycle_config(
+        tmp_path,
+        envelope,
+        [analyst_answer(confidence=0.8)],
+        conviction=conviction_rule(),
+        size_step=Decimal("0.1"),
+    )
+    result = run_cycle(cfg)
+
+    # The macro analyst was not asked, so it is silence: half of what could have agreed did.
+    assert result.stake is not None and result.stake.score.score == Decimal("0.400")
+    assert result.stake.multiple == Decimal("0.25") and result.stake.size == Decimal("1.2")
+    assert result.acted and result.intent is not None
+    assert result.intent["size"] == "1.2" and result.intent["base_size"] == "5"
+    # The gate priced the trade it admitted, not the base the operator declared.
+    assert result.briefs["cost"]["size"] == "1.2"
+    summary = json.loads((Path(str(result.path)) / "cycle.json").read_text("utf-8"))
+    assert summary["conviction"]["score"]["contributions"]["macro_analyst"] == "0"
+
+
+def test_conviction_below_the_floor_refuses_after_everything_else_passed(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    cfg, _, _ = cycle_config(
+        tmp_path,
+        envelope,
+        [analyst_answer(confidence=0.7)],
+        conviction=conviction_rule(min_score=Decimal("0.6")),
+    )
+    result = run_cycle(cfg)
+
+    assert not result.acted and result.stake is not None and not result.stake.admitted
+    assert any("below the declared floor" in r for r in result.refusals)
+    # Everything before it was fine; the desk simply does not trade this one.
+    assert result.confluence is None and result.stopped_by is None
+
+
+def test_a_context_that_disagrees_costs_size_rather_than_being_averaged_away(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    agreeing, _, _ = cycle_config(
+        tmp_path / "agrees",
+        envelope,
+        {
+            "technical_analyst": analyst_answer(confidence=1.0),
+            "macro_analyst": json.dumps(
+                {
+                    "regime": "risk-on",
+                    "events": [],
+                    "reason": "the declared threshold is bullish",
+                    "data_as_of": "2026-09-27T00:00:00+00:00",
+                }
+            ),
+        },
+        analysts=("technical_analyst", "macro_analyst"),
+        conviction=conviction_rule(),
+    )
+    # Nothing is declared for the macro analyst in this fixture, so it stays silent either way; what
+    # this pins is that the deciding analyst alone cannot reach the top of the ladder.
+    result = run_cycle(agreeing)
+    assert result.stake is not None and result.stake.multiple == Decimal("0.5")
+    assert result.stake.score.score == Decimal("0.500")

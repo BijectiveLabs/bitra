@@ -482,6 +482,22 @@ def cycle_view(record: Mapping[str, Any]) -> Group:
             )
         )
 
+    stake = record.get("conviction") or {}
+    if stake:
+        score = stake.get("score") or {}
+        voices: list[tuple[str, Any]] = [("score", f"{score.get('score')} of 1.0")]
+        for role, value in (score.get("contributions") or {}).items():
+            voices.append((role.replace("_analyst", ""), value))
+        voices.append(("size", f"{stake.get('size')} at {stake.get('multiple')}x base"))
+        if stake.get("leverage") is not None:
+            voices.append(("leverage", f"{stake.get('leverage')}x equity"))
+        if stake.get("capped_by"):
+            voices.append(("capped by", stake.get("capped_by")))
+        style = "green" if stake.get("admitted") else "yellow"
+        parts.append(
+            Panel(_kv(voices), title=Text("conviction", style=style), box=box.ROUNDED, expand=False)
+        )
+
     met = record.get("targets") or {}
     if met:
         style = "green" if met.get("admitted") else "yellow"

@@ -35,6 +35,17 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- Conviction (`[conviction]`, `execution/conviction.py`): what the analysts say now decides how much
+  capital goes behind an idea, not only whether it happens. Each role's declared state contributes
+  its weight for or against the direction, silence contributes nothing, the deciding analyst's
+  weight is scaled by its own confidence, and each validator vote is worth `validator_weight`. The
+  score picks a rung off the operator's ladder, and every cap still applies afterwards:
+  `max_position`, the notional ceiling implied by `max_leverage` against `[run].equity`, and the
+  venue's `size_step`. When the size is not the base size, the round trip is priced again at the
+  size that is going out.
+- `execution/sizing.py` holds the arithmetic of how large an order may be, in one place. The
+  executor role calls it instead of keeping its own copy, and `[run].size_step` declares the venue's
+  increment.
 - Every role inside its own job, enforced in four places rather than asked for in a prompt:
   `agents/scope.py` declares what each role reads, answers and decides; the cycle filters every
   brief through it, so no reading analyst receives equity, size, the controls, the cost of the round

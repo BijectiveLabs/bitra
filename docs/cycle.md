@@ -14,7 +14,8 @@ snapshot (engine)
   -> technical analyst + reading analysts   (parallel)
   -> the round trip priced (code)
   -> validators                             (parallel, when configured)
-  -> confluence matrix   (code: declared states and votes)
+  -> confluence matrix   (code: declared states and votes)   -> whether to trade at all
+  -> conviction          (code: the same voices, weighted)    -> how much to trade
   -> cost gate           (code: the claim against the cost)
   -> targets             (code: net bps, reward-to-risk, round trips today)
   -> intent, or a refusal that names the figure that refused it
@@ -125,7 +126,7 @@ places anything. Four things keep a role inside its job, and only the last is wo
 |---|---|
 | the brief | A role cannot reason about what it was never given. No reading analyst receives equity, size, the controls, the cost of the round trip or the exit distances. `agents/scope.py` filters every brief to that role's declared reads, and what it removed is written in the record. |
 | the schema | A closed schema with only that role's own fields. A macro analyst has nowhere to put a size, and a field outside the schema is a parse error rather than a surprise. |
-| the wiring | Nothing downstream reads a sentence. The confluence matrix reads the declared state code derived from the operator's thresholds; the cost gate reads the snapshot's own book; the size is the operator's. |
+| the wiring | Nothing downstream reads a sentence. The confluence matrix and the conviction score read the declared state code derived from the operator's thresholds; the cost gate reads the snapshot's own book; the size comes from the operator's ladder and caps. |
 | the prompt | One line naming what is not this role's job, plus a small vocabulary code looks for in case it appears anyway. |
 
 The last line needs care and gets the least authority. Pattern-matching prose is blunt, and "buy"
@@ -183,6 +184,63 @@ against a brief's "-1.631" is the same citation said with fewer digits, and it i
 matrix counts the votes.
 
 Each stance is one more call, which is why they are off until an operator asks for them.
+
+## Conviction: who weighs the analysts, and how much goes behind the idea
+
+The matrix answers whether the context agrees with the direction. `[conviction]` answers the
+question a desk actually has next: how much. It is the same declarations, weighted.
+
+```toml
+[conviction]
+weights = { technical_analyst = 2.0, onchain_analyst = 1.5, macro_analyst = 1.0, sentiment_analyst = 0.5 }
+validator_weight = 1.0
+min_score = 0.4                  # below this the desk does not trade, whatever the matrix said
+max_leverage = 3.0               # notional against [run].equity; a ceiling, never a target
+
+[[conviction.ladder]]
+at_least = 0.75                  # everything agrees: the whole base size
+size_multiple = 1.0
+[[conviction.ladder]]
+at_least = 0.55
+size_multiple = 0.5
+[[conviction.ladder]]
+at_least = 0.4
+size_multiple = 0.25
+```
+
+The score is arithmetic anyone can check by hand:
+
+| Voice | Contributes |
+|---|---|
+| a reading analyst whose declared state agrees with the direction | `+weight` |
+| a reading analyst whose declared state points the other way | `-weight` |
+| a reading analyst that declared nothing | `0`, and it is listed as silent |
+| the deciding analyst | `weight * its own confidence` |
+| each validator that supports after its claims were checked | `+validator_weight` |
+| each validator that opposes | `-validator_weight` |
+
+`score = max(0, the sum) / everything that could have agreed`, so it sits between 0 and 1. The first
+rung of the ladder the score reaches gives the size multiple, and then every cap that already
+existed still applies: `[controls].max_position`, the notional ceiling implied by `max_leverage`
+against `[run].equity`, and the venue's `size_step`, rounding down and never up.
+
+The desk's own example, with the weights above: good macro news and a bullish press, while the
+chain figures say whales are sending coins to the venues, and the technical analyst wants a long at
+0.7 confidence. That is `+1 (macro) +0.5 (sentiment) -1.5 (on-chain) +1.4 (technical)` over a
+possible 8, which is 0.175 - below the floor, so the desk does not trade it. Change the on-chain
+declaration to agreement and it becomes 0.85, which is the top rung and the whole base size. The
+analysts are worth their token bill because that number moved, not because they all said yes.
+
+Two rules behind the design. Silence is never agreement: a role that declared nothing contributes
+nothing, because counting silence as assent is how a desk talks itself into a trade. And the size
+is a rule rather than a judgement: a model asked "how big should this be" answers differently on
+Tuesday than on Monday from the same figures, and a size that depends on which sentence was written
+last cannot be backtested, reproduced or audited. Leverage is not a lever any role pulls either - it
+is what the notional works out to against the equity, and `max_leverage` is the ceiling on that.
+
+When the size the ladder chooses is not the base size, the round trip is priced again at the size
+that is actually going out, because impact is a function of size. The cost in the record is the cost
+of the trade that was admitted.
 
 ## The targets
 

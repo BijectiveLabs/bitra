@@ -50,6 +50,12 @@ from trading_research_agents.data.series import (
 from trading_research_agents.data.sources.chain import SourceChain
 from trading_research_agents.envelope.model import Channel, Envelope
 from trading_research_agents.execution.confluence import STANCES, Confluence, Matrix, confluent
+from trading_research_agents.execution.conviction import (
+    Conviction,
+    Stake,
+    score_of,
+    stake_for,
+)
 from trading_research_agents.execution.pretrade import PreTradeVerdict, admit
 from trading_research_agents.execution.targets import (
     Targets,
@@ -103,6 +109,12 @@ class CycleConfig:
     # the trade is the shape this desk said it wanted. Both are applied by code, never by a model.
     matrix: Matrix = field(default_factory=Matrix)
     targets: Targets = field(default_factory=Targets)
+    # How much goes behind the idea, from the same declarations the matrix reads. Left undeclared,
+    # every admitted cycle trades the operator's base size, which is what it did before.
+    conviction: Conviction = field(default_factory=Conviction)
+    max_position: Decimal | None = None
+    equity: Decimal | None = None
+    size_step: Decimal = Decimal("0.000001")
     reward_to_risk: Decimal | None = None
     # [agents].validators: the stances to ask once there is a proposal worth arguing about. Each
     # stance is one more call, so an operator turns them on deliberately.
@@ -163,6 +175,7 @@ class CycleResult:
     context: dict[str, Any] = field(default_factory=dict)
     analyst: Any = None
     confluence: Confluence | None = None
+    stake: Stake | None = None
     verdict: PreTradeVerdict | None = None
     targets: TargetVerdict | None = None
     intent: dict[str, Any] | None = None
@@ -184,6 +197,7 @@ class CycleResult:
             "analyst": None if self.analyst is None else vars(self.analyst),
             "context": self.context,
             "confluence": None if self.confluence is None else self.confluence.record(),
+            "conviction": None if self.stake is None else self.stake.record(),
             "cost": None if self.verdict is None else self.verdict.record(),
             "targets": None if self.targets is None else self.targets.record(),
             "intent": self.intent,
@@ -347,6 +361,59 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
             _finish(cfg, where, result)
             return result
 
+    size = cfg.size
+    if not cfg.conviction.idle:
+        stake = stake_for(
+            cfg.conviction,
+            score_of(
+                cfg.conviction,
+                target=analyst.target,
+                states={
+                    role: said["declared_state"]
+                    for role, said in result.context.items()
+                    if isinstance(said.get("declared_state"), Mapping)
+                },
+                confidence=analyst.confidence,
+                votes=_votes(result),
+            ),
+            base_size=cfg.size,
+            price=costs.cost.mid,
+            max_position=cfg.max_position if cfg.max_position is not None else cfg.size,
+            equity=cfg.equity,
+            step=cfg.size_step,
+        )
+        result.stake = stake
+        for reason in stake.reasons:
+            result.refusals.append(f"conviction: {reason}")
+        if not stake.admitted:
+            _finish(cfg, where, result)
+            return result
+        size = stake.size
+        if size != cfg.size:
+            # Impact is a function of the size that actually goes out, so the gate prices the trade
+            # it is admitting rather than the one the operator declared as a base.
+            try:
+                costs = cost_brief(
+                    snapshot,
+                    channel=_channel(cfg),
+                    size=size,
+                    direction=direction,
+                    horizon_bars=analyst.horizon_bars,
+                    bar_interval_s=cfg.bar_interval_s,
+                    settlement_interval_s=cfg.settlement_interval_s,
+                    latency_slippage_bps=cfg.latency_slippage_bps,
+                )
+            except BriefError as exc:
+                result.refusals.append(f"cost at {size}: {exc}")
+                result.stopped_by = f"cost at {size}: {exc}"
+                _finish(cfg, where, result)
+                return result
+            result.briefs["cost"] = costs.record()
+            where.brief("cost").write_text(
+                json.dumps(costs.record(), indent=2, sort_keys=True, default=str) + "\n",
+                encoding="utf-8",
+            )
+
     verdict = admit(
         edge_bps=cfg.magnitude_bps,
         cost=costs.cost,
@@ -376,7 +443,9 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
     result.intent = {
         "instrument": cfg.instrument,
         "target": analyst.target,
-        "size": str(cfg.size),
+        "size": str(size),
+        "base_size": str(cfg.size),
+        "conviction": None if result.stake is None else str(result.stake.score.score),
         "horizon_bars": analyst.horizon_bars,
         "confidence": analyst.confidence,
         "reason": analyst.reason,

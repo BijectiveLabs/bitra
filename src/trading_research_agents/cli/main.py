@@ -1349,6 +1349,10 @@ def run_cycle_command(args: argparse.Namespace) -> int:
             min_confidence=a.min_confidence,
             mode=args.mode,
             matrix=cfg.confluence,
+            conviction=cfg.conviction,
+            max_position=cfg.limits.max_position,
+            equity=cfg.run.equity,
+            size_step=cfg.run.size_step,
             validators=a.validators,
             targets=cfg.targets,
             reward_to_risk=reward_risk(
@@ -1400,6 +1404,16 @@ def run_cycle_command(args: argparse.Namespace) -> int:
         )
         counted = f"support {agreement.support}, opposition {agreement.opposition}"
         lines.append(f"confluence: {states or 'no role required'}; {counted}")
+    if result.stake is not None:
+        stake = result.stake
+        score = stake.score
+        voices = ", ".join(
+            f"{role.replace('_analyst', '')} {value}" for role, value in score.contributions
+        )
+        lines.append(f"conviction: {score.score} of 1.0 ({voices})")
+        if stake.admitted:
+            leverage = "" if stake.leverage is None else f", {stake.leverage}x equity"
+            lines.append(f"stake: {stake.size} at {stake.multiple} of the base size{leverage}")
     if result.targets is not None:
         met = result.targets
         lines.append(
@@ -1584,6 +1598,26 @@ def _gate_lines(cfg: Any, roster: tuple[str, ...]) -> tuple[list[str], list[str]
             bad.append(
                 f"[confluence].min_support is {matrix.min_support} but "
                 f"{len(stances)} validator(s) are asked; no cycle can clear it"
+            )
+    rule = cfg.conviction
+    if rule.idle:
+        good.append("conviction: not declared; every admitted cycle trades the base size")
+    else:
+        rungs = ", ".join(f"{t.at_least}+ -> {t.size_multiple}x" for t in rule.ladder)
+        good.append(
+            f"conviction: floor {rule.min_score}; ladder {rungs or 'none'}"
+            + (f"; up to {rule.max_leverage}x equity" if rule.max_leverage else "")
+        )
+        if not rule.ladder:
+            bad.append(
+                "[conviction] has no ladder, so no score can size a trade; "
+                "declare [[conviction.ladder]] rungs or drop the table"
+            )
+        unweighted = sorted(set(roster) - set(rule.weights))
+        if unweighted:
+            good.append(
+                f"conviction: {unweighted} is asked but carries no weight; "
+                "it explains without moving the size"
             )
     targets = cfg.targets
     if targets.idle:

@@ -125,6 +125,25 @@ size, or declared by the operator and labelled as such.
 | `executor` | `size_for`, `rate_budget`, `export_signals` | a size that never exceeds a cap, rounded down to the venue's step; what the minute still allows; the run's admitted intents as `signals.jsonl` or CSV for execution elsewhere (`tra signals export RUN`) |
 | `auditor` | `audit_brief`, then a tool loop over `run_report`, `ledger_show`, `ledger_search`, `runs_index`, `ladder_show` | usage per role with tokens per closed round trip, each promotion with whether its evidence names a gate, and a run against its replay trade by trade; then whatever it chooses to read, up to six calls |
 
+### Who weighs whom
+
+A question worth answering plainly, because it decides where the token bill goes:
+
+| Step | Who does it | What it may do |
+|---|---|---|
+| read one class of data and label it | a reading analyst | say what it sees, in its own vocabulary; it decides nothing |
+| propose a direction and a horizon | the technical analyst | one target, one confidence, one reason |
+| argue for or against that proposal | the validators | claims that cite figures from the brief; code discards the rest |
+| decide whether the context agrees | the confluence matrix, in code | admit or refuse, from declared states and vote counts |
+| decide how much goes behind it | the conviction rule, in code | pick a size multiple off the operator's ladder; it may only shrink the base size |
+| price the round trip | the cost gate, in code | refuse a claim that does not clear its own cost |
+| hold the desk's shape | the targets, in code | refuse a trade that is not worth what the operator said it must be worth |
+| watch what actually happened | the risk manager | continue, tighten, demote or halt from measured behaviour; it never enlarges anything |
+| turn a decision into an order | the executor | caps, the venue's step, the rate budget, the signal file; no discretion |
+
+No model sizes a trade and no model is asked whether the analysts agree. Both are rules over the
+operator's own declarations, which is what makes a result reproducible tomorrow.
+
 ### Series from anywhere
 
 `examples/series.toml` maps external series the way `mapping.toml` maps trades: the file, the
