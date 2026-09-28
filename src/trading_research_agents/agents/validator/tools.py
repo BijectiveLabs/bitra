@@ -14,28 +14,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from trading_research_agents.agents.cited import cites, figures_of
 from trading_research_agents.agents.validator.role import Claim, Validator
 
-# Figures come from the brief the deciding analyst was given, so a validator argues over the same
-# numbers rather than over a summary of them.
-SKIP = ("mechanism", "basis")
-
-
-def figures_of(brief: Mapping[str, Any]) -> dict[str, str]:
-    """Every scalar figure in a brief, by the brief's own name, as a string.
-
-    Containers are left out: a claim cites one figure, and a list is not a figure. Nothing is
-    renamed here, because a citation that has to be translated is not a citation.
-    """
-    out: dict[str, str] = {}
-    for key, value in brief.items():
-        if key in SKIP or value is None or isinstance(value, dict | list | tuple):
-            continue
-        out[str(key)] = str(value)
-    return out
+__all__ = ["Checked", "checked", "figures_of", "validator_brief"]
 
 
 @dataclass(frozen=True)
@@ -63,12 +47,9 @@ def checked(said: Validator, figures: Mapping[str, str]) -> Checked:
     kept: list[Claim] = []
     discarded: list[str] = []
     for claim in said.claims:
-        if claim.figure not in figures:
-            discarded.append(f"{claim.figure!r} is not a figure in the brief")
-            continue
-        actual = figures[claim.figure]
-        if not _same(claim.value, actual):
-            discarded.append(f"{claim.figure} was {actual}, not {claim.value}")
+        wrong = cites(claim.figure, claim.value, figures)
+        if wrong:
+            discarded.append(wrong)
             continue
         kept.append(claim)
     verdict = said.verdict if kept else "abstain"
@@ -102,22 +83,3 @@ def validator_brief(
         "declared_states": dict(declared_states),
         "cost_bps": cost_bps,
     }
-
-
-def _same(claimed: str, actual: str) -> bool:
-    """Whether two values are the same figure, allowing a claim to carry fewer digits."""
-    left, right = claimed.strip(), actual.strip()
-    if left.lower() == right.lower():
-        return True
-    try:
-        a, b = Decimal(left), Decimal(right)
-    except InvalidOperation:
-        return False
-    if not a.is_finite() or not b.is_finite():
-        # A claim of NaN or Infinity is not a citation of anything.
-        return False
-    exponent = a.as_tuple().exponent
-    if not isinstance(exponent, int):
-        return False
-    quantum = Decimal(1).scaleb(min(exponent, 0))
-    return a == b.quantize(quantum)

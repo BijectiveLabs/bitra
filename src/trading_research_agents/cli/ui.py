@@ -530,6 +530,55 @@ def cycle_view(record: Mapping[str, Any]) -> Group:
     return Group(*parts)
 
 
+def audit_view(record: Mapping[str, Any]) -> Group:
+    """What the auditors found, and what they propose. Nothing here has been applied."""
+    parts: list[Any] = [
+        Panel(
+            _kv(
+                [
+                    ("at", record.get("at")),
+                    ("cycles read", record.get("cycles")),
+                    ("tokens", record.get("tokens")),
+                ]
+            ),
+            title="audit",
+            box=box.ROUNDED,
+            expand=False,
+        )
+    ]
+    for role, report in sorted((record.get("reports") or {}).items()):
+        table = Table(
+            box=box.SIMPLE_HEAD,
+            show_edge=False,
+            pad_edge=False,
+            title=role.replace("_", " "),
+            caption=str(report.get("summary") or ""),
+        )
+        for name in ("finding", "confidence", "proposal", "change"):
+            table.add_column(name, overflow="fold")
+        for finding in report.get("findings") or ():
+            change = finding.get("change") or {}
+            table.add_row(
+                str(finding.get("what")),
+                str(finding.get("confidence")),
+                str(finding.get("proposal")),
+                (
+                    ""
+                    if not change
+                    else f"{change.get('key')}: {change.get('from')} -> {change.get('to')}"
+                ),
+            )
+        if not (report.get("findings") or ()):
+            table.add_row(Text("nothing to report", style="dim"), "", "", "")
+        parts.append(table)
+        for reason in report.get("discarded") or ():
+            parts.append(Text(f"discarded: {reason}", style="yellow"))
+    for role, error in sorted((record.get("failed") or {}).items()):
+        parts.append(Text(f"{role}: {error}", style="red"))
+    parts.append(Text("nothing here has been applied", style="dim"))
+    return Group(*parts)
+
+
 def snapshot_view(record: Mapping[str, Any]) -> Group:
     """One snapshot: what answered, how old it was, and what the chain tried on the way."""
     values = Table(box=box.SIMPLE_HEAD, show_edge=False, pad_edge=False, title="snapshot")

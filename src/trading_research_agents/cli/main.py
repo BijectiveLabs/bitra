@@ -460,6 +460,25 @@ def build_parser() -> argparse.ArgumentParser:
     run_cmd.add_argument("--json", action="store_true")
 
     check_cmd = top.add_parser("check", help="what is ready and what is missing, in plain words")
+    audit_cmd = top.add_parser(
+        "audit", help="two auditors over what this project recorded; they propose, you apply"
+    )
+    audit_cmd.set_defaults(command="audit")
+    audit_cmd.add_argument("--config", type=Path, default=Path("strategy.toml"))
+    audit_cmd.add_argument("--runs", type=Path, default=Path("runs") / "cycles")
+    audit_cmd.add_argument(
+        "--sessions",
+        type=Path,
+        default=Path("runs"),
+        help="where closed round trips live, for the quant auditor",
+    )
+    audit_cmd.add_argument("--out", type=Path, default=None, help="default: audits/")
+    audit_cmd.add_argument(
+        "--who", choices=("both", "tech_auditor", "quant_auditor"), default="both"
+    )
+    audit_cmd.add_argument("--env-file", type=Path, default=None)
+    audit_cmd.add_argument("--json", action="store_true")
+
     mandate_cmd = top.add_parser(
         "mandate",
         help="print the execution mandate; venue mode needs it in the project, word for word",
@@ -948,7 +967,13 @@ def _build_completer(a: Any) -> Completer:
     return p.build(a.model, a.base_url)
 
 
-def _completer_for_role(a: Any, role: str) -> Completer:
+# Measured twice, on two different models: a schema with several cited claims in it needs about
+# twice the output cap a one-line answer does, and below this a model returns an invalid object
+# rather than a short one. The floor is announced when it is applied, never applied silently.
+REPORT_HEADROOM = 2048
+
+
+def _completer_for_role(a: Any, role: str, *, floor: int = 0) -> Completer:
     """The model this role is asked with: its own where declared, the default otherwise.
 
     A screener that labels a regime and an analyst that reasons over sixty bars do not need the
@@ -958,7 +983,7 @@ def _completer_for_role(a: Any, role: str) -> Completer:
     settings = a.for_role(role)
     p = provider(settings.provider)
     options = CallOptions(
-        max_output_tokens=settings.max_output_tokens,
+        max_output_tokens=max(settings.max_output_tokens, floor),
         timeout_s=float(settings.call_timeout_s),
         max_retries=settings.max_retries,
     )
@@ -1209,6 +1234,87 @@ TEMPLATE_FILES = {
     ".gitignore": "gitignore",
     "README.md": "README.md",
 }
+
+
+def run_audit_command(args: argparse.Namespace) -> int:
+    """Two auditors over the records this project already wrote. Nothing is applied."""
+    from trading_research_agents.agents.audit import AuditConfig, run_audit
+    from trading_research_agents.llm.usage import (
+        BudgetLimits,
+        MeteredCompleter,
+        Pricing,
+        UsageLedger,
+    )
+
+    if args.env_file is not None:
+        for key, value in read_env_file(args.env_file).items():
+            os.environ.setdefault(key, value)
+    cfg = load_strategy_config(args.config)
+    if cfg.agents is None:
+        raise ConfigError("an audit needs [agents] in strategy.toml; it asks a model")
+    a = cfg.agents
+    out = args.out or Path("audits")
+    usage = UsageLedger(out / "usage.jsonl")
+    limits = BudgetLimits(
+        token_budget=a.token_budget,
+        max_calls_per_hour=a.max_calls_per_hour,
+        min_interval_s=a.min_interval_s,
+        call_timeout_s=a.call_timeout_s,
+    )
+    pricing = {model: Pricing(i, o) for model, (i, o) in a.pricing.items()}
+    metered: dict[str, MeteredCompleter] = {}
+
+    def completer_for(role: str) -> MeteredCompleter:
+        if role not in metered:
+            settings = a.for_role(role)
+            metered[role] = MeteredCompleter(
+                _completer_for_role(a, role, floor=REPORT_HEADROOM),
+                role=role,
+                provider=settings.provider,
+                limits=limits,
+                ledger=usage,
+                pricing=pricing,
+            )
+        return metered[role]
+
+    who = ("tech_auditor", "quant_auditor") if args.who == "both" else (args.who,)
+    raised = [r for r in who if a.for_role(r).max_output_tokens < REPORT_HEADROOM]
+    result = run_audit(
+        AuditConfig(
+            runs=args.runs,
+            completer_for=completer_for,
+            usage=usage,
+            root=out,
+            config=args.config,
+            sessions=args.sessions,
+            auditors=who,
+        )
+    )
+    payload = result.record()
+    payload["out"] = str(result.path)
+    lines = [f"audit {result.at}: {result.cycles} cycle(s) read, {result.findings} finding(s)"]
+    if raised:
+        lines.append(
+            f"output cap raised to {REPORT_HEADROOM} for {', '.join(raised)}: a report with "
+            "findings in it does not fit in less"
+        )
+    for role, report in sorted(result.reports.items()):
+        lines.append(f"{role.replace('_', ' ')}: {report.summary}")
+        for finding in report.findings:
+            lines.append(f"  - {finding.what} ({finding.confidence})")
+            lines.append(f"    proposal: {finding.proposal}")
+            if finding.change is not None:
+                lines.append(
+                    f"    change: {finding.change.key} "
+                    f"{finding.change.from_value} -> {finding.change.to_value}"
+                )
+        for reason in report.discarded:
+            lines.append(f"  discarded: {reason}")
+    for role, error in sorted(result.failed.items()):
+        lines.append(f"{role}: {error}")
+    lines.append(f"proposals.md and audit.json in {result.path}; nothing has been applied")
+    emit(payload, args.json, lines, lambda: _ui().audit_view(payload))
+    return CLEARED
 
 
 def show_mandate(args: argparse.Namespace) -> int:
@@ -2272,6 +2378,7 @@ HANDLERS = {
     ("data", "pull"): data_pull,
     ("check", "check"): check_project,
     ("mandate", "mandate"): show_mandate,
+    ("audit", "audit"): run_audit_command,
     ("run", "run"): run_cycle_command,
     ("chain", "floor"): chain_floor,
     ("chain", "observe"): chain_observe,

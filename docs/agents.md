@@ -125,6 +125,27 @@ size, or declared by the operator and labelled as such.
 | `executor` | `size_for`, `rate_budget`, `export_signals` | a size that never exceeds a cap, rounded down to the venue's step; what the minute still allows; the run's admitted intents as `signals.jsonl` or CSV for execution elsewhere (`tra signals export RUN`) |
 | `auditor` | `audit_brief`, then a tool loop over `run_report`, `ledger_show`, `ledger_search`, `runs_index`, `ladder_show` | usage per role with tokens per closed round trip, each promotion with whether its evidence names a gate, and a run against its replay trade by trade; then whatever it chooses to read, up to six calls |
 
+### The two auditors
+
+`tra audit` asks both, in parallel, over records this project wrote itself: `runs/cycles/*/cycle.json`
+and the usage ledger. Neither one can reach a venue, a key or a live figure, and neither one is part
+of a cycle.
+
+| Auditor | Reads | Looks for |
+|---|---|---|
+| `tech_auditor` | calls answered and failed per role, median seconds, where each kind of data came from and how old it was, what was refused or stale, tokens and latency per role, tokens per decision, installed versions | what is wearing out, what is wasteful, what is fragile |
+| `quant_auditor` | what the deciding analyst said, intents and their size, the conviction behind them, the claimed edge, the cost it was priced at, what was left after cost, which gate refused the rest, and the round trips a session actually closed with their excursions | whether the desk's own declarations are earning what they cost |
+
+Both answer in the same shape: findings, each tied to figures from the brief with their values, each
+carrying a proposal, and at most one proposed configuration change with the value it has now and the
+value proposed. Code checks every citation against the brief and every proposed key against the
+project's own tables, and discards what fails, keeping the reason. A report with nothing left says
+so rather than implying a finding.
+
+**Nothing is applied.** The audit writes `audits/<time>/`: the briefs as they were given, the answers
+as they came back, `audit.json` with what was discarded and why, and `proposals.md` for a person to
+read. Applying a proposal is that person editing their own configuration.
+
 ### Who weighs whom
 
 A question worth answering plainly, because it decides where the token bill goes:
@@ -139,6 +160,8 @@ A question worth answering plainly, because it decides where the token bill goes
 | price the round trip | the cost gate, in code | refuse a claim that does not clear its own cost |
 | hold the desk's shape | the targets, in code | refuse a trade that is not worth what the operator said it must be worth |
 | watch what actually happened | the risk manager | continue, tighten, demote or halt from measured behaviour; it never enlarges anything |
+| read the machinery afterwards | the technology auditor | write findings tied to figures, and propose changes a person applies |
+| read the desk's own results afterwards | the quant auditor | the same, over decisions and round trips |
 | turn a decision into an order | the executor | caps, the venue's step, the rate budget, the signal file; no discretion |
 
 No model sizes a trade and no model is asked whether the analysts agree. Both are rules over the

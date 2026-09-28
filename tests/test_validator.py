@@ -53,10 +53,12 @@ def test_only_scalar_figures_are_citable_and_nothing_is_renamed() -> None:
         "zscore": "-1.631",
         "volume_ratio": "7.971",
         "vwap_gap_bps": "-20.13",
+        "spread_bps": "null",
         "bars": "60",
     }
-    # A list is not a figure, a missing value is not a figure, and the mechanism is prose.
-    assert "candles" not in figures and "spread_bps" not in figures and "mechanism" not in figures
+    # A list is not a figure and the mechanism is prose; a figure the snapshot did not have is a
+    # fact about the snapshot, and a reader may point at it.
+    assert "candles" not in figures and "mechanism" not in figures
 
 
 def test_a_claim_that_cites_a_figure_with_its_value_survives() -> None:

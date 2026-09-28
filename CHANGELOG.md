@@ -35,6 +35,16 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- Two auditors (`tra audit`, `agents/tech_auditor/`, `agents/quant_auditor/`): one over the
+  machinery, one over the desk's own results, both reading only records this project wrote and
+  neither able to reach a venue or a key. Each finding must cite figures from its brief with their
+  values, and may carry one proposed configuration change; code checks every citation and every
+  proposed key against the project's own tables, discards what fails and keeps the reason. The
+  report goes to `audits/<time>/` as `audit.json` and a readable `proposals.md`, and nothing in it
+  is ever applied by this package.
+- `agents/cited.py` holds the citation rule both the validators and the auditors are held to: the
+  figure must exist with that value, a leaf name is resolved when it can only mean one figure, and a
+  figure the record does not have is citable as `null`, because absence is a fact about the record.
 - The order follows the channel. A channel's name is `<entry>-<exit>`, each `maker` or `taker`, and
   `Channel.entry_role` is now read by the venue hand: a maker entry rests on the book as a post-only
   limit at the snapshot's own touch and is cancelled after `[execution].limit_timeout_s`, a taker

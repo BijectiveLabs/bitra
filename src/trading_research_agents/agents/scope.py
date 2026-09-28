@@ -32,6 +32,8 @@ from trading_research_agents.agents import (
 )
 
 VALIDATOR = "validator"
+TECH_AUDITOR = "tech_auditor"
+QUANT_AUDITOR = "quant_auditor"
 
 # Phrases that belong to a later step. Deliberately small and unambiguous: "buy" and "sell" are not
 # here, because a headline about a central bank buying bonds is a proper thing for an analyst to
@@ -122,6 +124,20 @@ SCOPES: dict[str, Scope] = {
         decides="the direction and the horizon; the size, the cost and the limits are not its own",
         prose=("reason",),
         families=("ret_",),
+    ),
+    TECH_AUDITOR: Scope(
+        role=TECH_AUDITOR,
+        reads=("cycles", "unreadable_records", "agents", "data", "spend", "refusals", "installed"),
+        answers=("summary", "nothing_to_report", "findings"),
+        decides="nothing; it writes proposals an operator applies or does not",
+        prose=("summary",),
+    ),
+    QUANT_AUDITOR: Scope(
+        role=QUANT_AUDITOR,
+        reads=("cycles", "decisions", "refusals", "round_trips"),
+        answers=("summary", "nothing_to_report", "findings"),
+        decides="nothing; it writes proposals an operator applies or does not",
+        prose=("summary",),
     ),
     VALIDATOR: Scope(
         role=VALIDATOR,
