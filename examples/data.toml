@@ -32,4 +32,9 @@ ttl = "8h"                     # one settlement interval: the rate does not chan
 
 [data.open_interest]
 chain = ["ccxt:bybit"]
-ttl = "30m"                    # measured: one venue stamps open interest about 15 minutes back
+ttl = "10m"
+# Measured on 2026-09-28: asked plainly, this venue answers with the last hourly bucket, so the
+# figure arrives up to an hour old and a tight ttl refuses by construction. Asked for a finer
+# bucket it answers about two minutes back. `params` is handed to the venue verbatim, which is
+# where a vendor's own spelling belongs.
+params = { intervalTime = "5min" }

@@ -4,7 +4,10 @@ Verified against ccxt 4.5.84 on 2026-09-27: `fetch_ohlcv` returns rows of
 `[timestamp_ms, open, high, low, close, volume]`; `fetch_order_book` returns `bids` and `asks`
 as `[price, amount]` pairs with a millisecond `timestamp`; `fetch_funding_rate` returns
 `fundingRate` with `timestamp` and `fundingTimestamp`; `fetch_open_interest` returns
-`openInterestAmount` and `openInterestValue`. Errors arrive as `RateLimitExceeded`,
+`openInterestAmount` and `openInterestValue`. One measured caveat: Bybit answers
+`fetch_open_interest` with the last hourly bucket, up to an hour old, unless it is asked for a
+finer one (`params = { intervalTime = "5min" }` in `data.toml`), so a tight freshness window on
+that kind refuses by construction otherwise. Errors arrive as `RateLimitExceeded`,
 `NetworkError`, `BadSymbol` and other subclasses of `BaseError`, and all of them become a
 `SourceError` so that a chain moves on instead of a session ending.
 
@@ -17,6 +20,7 @@ finished happening.
 from __future__ import annotations
 
 import time
+from collections.abc import Mapping
 from decimal import Decimal
 from typing import Any
 
@@ -45,6 +49,12 @@ TIMEFRAMES = {
 DEFAULT_INTERVAL_S = 60
 DEFAULT_LIMIT = 240
 DEFAULT_BOOK_LEVELS = 25
+
+
+def _params(options: Mapping[str, Any]) -> dict[str, Any]:
+    """The venue-specific table the operator declared, or nothing at all."""
+    declared = options.get("params")
+    return dict(declared) if isinstance(declared, Mapping) else {}
 
 
 def _decimal(value: Any, label: str) -> Decimal:
@@ -112,9 +122,9 @@ class CcxtSource:
             if kind == "orderbook":
                 return self._orderbook(instrument, symbol, **options)
             if kind == "funding":
-                return self._funding(instrument, symbol)
+                return self._funding(instrument, symbol, **options)
             if kind == "open_interest":
-                return self._open_interest(instrument, symbol)
+                return self._open_interest(instrument, symbol, **options)
         except SourceError:
             raise
         except Exception as exc:
@@ -165,7 +175,7 @@ class CcxtSource:
             raise SourceError("limit is positive")
         timeframe = self._timeframe(interval_s)
         # One extra row: the last one is usually still forming and is dropped below.
-        rows = self._client.fetch_ohlcv(symbol, timeframe, None, limit + 1)
+        rows = self._client.fetch_ohlcv(symbol, timeframe, None, limit + 1, _params(options))
         if not rows:
             raise SourceError(f"{self.name}: no candles for {symbol}")
         now = self.clock()
@@ -208,7 +218,7 @@ class CcxtSource:
         levels = int(options.get("levels", DEFAULT_BOOK_LEVELS))
         if levels <= 0:
             raise SourceError("levels is positive")
-        raw = self._client.fetch_order_book(symbol, levels)
+        raw = self._client.fetch_order_book(symbol, levels, _params(options))
         bids = tuple(
             BookLevel(_decimal(p, "bid price"), _decimal(q, "bid size"))
             for p, q in list(raw.get("bids") or [])[:levels]
@@ -234,8 +244,8 @@ class CcxtSource:
             detail={"symbol": symbol, **book.record()},
         )
 
-    def _funding(self, instrument: str, symbol: str) -> Fetched:
-        raw = self._client.fetch_funding_rate(symbol)
+    def _funding(self, instrument: str, symbol: str, **options: Any) -> Fetched:
+        raw = self._client.fetch_funding_rate(symbol, _params(options))
         rate = _decimal(raw.get("fundingRate"), "fundingRate")
         now = self.clock()
         stamp = raw.get("timestamp") or raw.get("fundingTimestamp")
@@ -255,8 +265,8 @@ class CcxtSource:
             detail=detail,
         )
 
-    def _open_interest(self, instrument: str, symbol: str) -> Fetched:
-        raw = self._client.fetch_open_interest(symbol)
+    def _open_interest(self, instrument: str, symbol: str, **options: Any) -> Fetched:
+        raw = self._client.fetch_open_interest(symbol, _params(options))
         amount = raw.get("openInterestAmount")
         value = raw.get("openInterestValue")
         if amount is None and value is None:
@@ -277,5 +287,8 @@ class CcxtSource:
                 "symbol": symbol,
                 "amount": None if amount is None else str(amount),
                 "value": None if value is None else str(value),
+                # Some venues answer with the last bucket rather than the moment; the age this
+                # carries is what the chain's ttl judges, so the bucket is worth recording.
+                "params": {str(k): str(v) for k, v in _params(options).items()},
             },
         )

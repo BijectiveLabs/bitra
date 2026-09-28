@@ -128,6 +128,11 @@ def load_data_config(path: Path) -> DataConfig:
             for k, v in table.items()
             if k not in ("chain", "ttl", "on_exhausted") and not isinstance(v, dict)
         }
+        if isinstance(table.get("params"), dict):
+            # A venue's own spelling, handed to it verbatim. Quirks belong in the operator's file,
+            # not in this package: Bybit publishes open interest in buckets and wants an
+            # intervalTime, and no other venue should have to know that.
+            options["params"] = dict(table["params"])
         kinds.append(
             KindSettings(
                 kind=kind,
