@@ -3,18 +3,22 @@
 The runtime already writes every admitted intent. `export_signals` turns a run's admitted
 intents into a file with a fixed, documented shape (`signals.jsonl` or CSV) so that whoever
 runs execution elsewhere, a broker bridge, a spreadsheet, a different venue adapter, gets the
-decisions without the package sending anything itself. `size_for` and `rate_budget` are the
-arithmetic of an order that never exceeds a limit.
+decisions without the package sending anything itself. `size_for` comes from the execution gates,
+and `rate_budget` is what the minute still allows.
 """
 
 from __future__ import annotations
 
 import csv
 import json
-from dataclasses import dataclass
-from decimal import ROUND_DOWN, Decimal
 from pathlib import Path
 from typing import Any
+
+# The arithmetic of how large an order may be belongs with the other capital gates, and this role
+# calls it rather than keeping a second copy of it.
+from trading_research_agents.execution.sizing import Sizing, size_for
+
+__all__ = ["Sizing", "export_signals", "rate_budget", "size_for"]
 
 SIGNAL_FIELDS = ("ts_ns", "instrument", "target", "size", "reason", "risk_bps", "run")
 
@@ -55,34 +59,6 @@ def export_signals(run_dir: Path, *, instrument: str, out: Path, fmt: str = "jso
     else:
         raise ValueError("fmt is jsonl or csv")
     return len(rows)
-
-
-@dataclass(frozen=True)
-class Sizing:
-    size: Decimal
-    capped_by: str
-
-
-def size_for(
-    *,
-    wanted: Decimal,
-    price: Decimal,
-    max_position: Decimal,
-    max_notional: Decimal | None,
-    step: Decimal,
-) -> Sizing:
-    """The largest size at or below every cap, rounded down to the venue's step. Never up."""
-    if wanted <= 0 or price <= 0 or step <= 0:
-        raise ValueError("wanted, price and step are positive")
-    size, why = wanted, "declared size"
-    if size > max_position:
-        size, why = max_position, "max_position"
-    if max_notional is not None and size * price > max_notional:
-        size, why = max_notional / price, "max_notional"
-    size = (size / step).to_integral_value(rounding=ROUND_DOWN) * step
-    if size <= 0:
-        return Sizing(Decimal(0), f"{why}: below one step of {step}")
-    return Sizing(size, why)
 
 
 def rate_budget(recent_order_ts_ns: list[int], *, now_ns: int, per_minute: int) -> dict[str, Any]:
