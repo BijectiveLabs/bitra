@@ -9,6 +9,7 @@ the live views read reports and decide nothing.
 
 from __future__ import annotations
 
+import io
 import os
 import sys
 from collections.abc import Callable, Mapping, Sequence
@@ -52,8 +53,10 @@ def banner(width: int) -> str:
     return "\n".join(lines)
 
 
-def console() -> Console:
+def console(safe: bool = False) -> Console:
     global _console
+    if safe:
+        return _safe_console()
     if _console is None:
         _console = Console(highlight=False)
     return _console
@@ -652,7 +655,28 @@ def observe_view(record: Mapping[str, Any]) -> Group:
 
 
 def show(renderable: Any) -> None:
-    console().print(renderable)
+    """Draw it, and never let a character a console cannot encode end a run.
+
+    A model's answer carries whatever the model wrote - a non-breaking hyphen, an accent, a dash
+    from a headline - and an older Windows console encodes none of those. The run has already
+    happened and is already on disk by the time this draws it, so a console that cannot show a
+    character falls back to text rather than raising in front of the operator.
+    """
+    try:
+        console().print(renderable)
+    except UnicodeEncodeError:
+        console(safe=True).print(renderable)
+
+
+def _safe_console() -> Console:
+    """The same console, writing through a stream that replaces what it cannot encode."""
+    stream = getattr(sys.stdout, "buffer", None)
+    file = (
+        io.TextIOWrapper(stream, encoding="utf-8", errors="backslashreplace", newline="")
+        if stream is not None
+        else sys.stdout
+    )
+    return Console(highlight=False, file=file)
 
 
 Renderer = Callable[[], Any]

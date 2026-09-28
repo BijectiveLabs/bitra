@@ -235,3 +235,23 @@ def test_observe_and_check_render_through_the_cli(
     )
     payload = json.loads(captured.getvalue())
     assert payload["layer"] == 1
+
+
+def test_a_character_the_console_cannot_encode_does_not_end_the_run(
+    monkeypatch: pytest.MonkeyPatch, capsysbinary: pytest.CaptureFixture[bytes]
+) -> None:
+    """A model writes a non-breaking hyphen; an older console cannot encode it. The run stands."""
+
+    class Narrow:
+        def print(self, renderable: object) -> None:
+            raise UnicodeEncodeError("charmap", "x", 0, 1, "cannot encode")
+
+    monkeypatch.setattr(tui, "_console", Narrow())
+    drawn: list[object] = []
+    monkeypatch.setattr(
+        tui, "_safe_console", lambda: type("C", (), {"print": lambda _s, r: drawn.append(r)})()
+    )
+
+    said = "a reason with a non" + chr(0x2011) + "breaking hyphen"
+    tui.show(said)
+    assert drawn == [said]
