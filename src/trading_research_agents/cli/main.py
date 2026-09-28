@@ -15,11 +15,15 @@ import sys
 import threading
 import tomllib
 from collections.abc import Callable, Iterable, Iterator, Mapping
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
+from functools import partial
 from importlib.resources import files
 from itertools import pairwise
 from pathlib import Path
+from time import sleep
+from time import time as wall_clock
 from typing import Any
 from uuid import uuid4
 
@@ -32,7 +36,7 @@ from trading_research_agents.agents.context import (
     inspect_shelf,
     roster_for,
 )
-from trading_research_agents.agents.cycle import CycleError
+from trading_research_agents.agents.cycle import CycleError, budget_spent
 from trading_research_agents.agents.pipeline import read_refusals
 from trading_research_agents.agents.session import SessionError
 from trading_research_agents.chain import (
@@ -440,6 +444,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     run_cmd.add_argument("--ladder", type=Path, default=Path("ladder.json"))
+    run_cmd.add_argument(
+        "--every",
+        type=parse_duration_s,
+        default=None,
+        help="run a cycle every interval, on its boundary (30s, 5m, 1h); one cycle without it",
+    )
+    run_cmd.add_argument(
+        "--cycles", type=int, default=None, help="stop after this many cycles, with --every"
+    )
     run_cmd.add_argument(
         "--margin", type=parse_decimal, default=None, help="bps the edge must clear beyond cost"
     )
@@ -1171,6 +1184,16 @@ def read_env_file(path: Path) -> dict[str, str]:
     return values
 
 
+def parse_duration_s(text: str) -> float:
+    """`30s`, `5m`, `2h` to seconds, for a flag. The same spellings data.toml already takes."""
+    from trading_research_agents.data.sources import parse_duration
+
+    seconds = parse_duration(text)
+    if seconds < 5:
+        raise argparse.ArgumentTypeError("an interval below five seconds is not a trading cadence")
+    return seconds
+
+
 def _environment(env_file: Path | None) -> dict[str, str]:
     env = dict(os.environ)
     if env_file is not None:
@@ -1499,6 +1522,47 @@ size; name it in `[confluence].required` and its disagreement starts refusing th
 """
 
 
+@dataclass
+class Schedule:
+    """When the next cycle runs, and what ends the run.
+
+    A desk does not want a cycle every few seconds; it wants one when a bar has closed and the
+    figures have changed. So the wait lands on the interval's own boundary, and everything that
+    should end a run - the budget, the kill switch, the count asked for, a keyboard - ends it by
+    name rather than by the process stopping quietly.
+    """
+
+    every_s: float | None = None
+    cycles: int | None = None
+    kill_switch: Path | None = None
+    clock: Callable[[], float] = wall_clock
+    rest: Callable[[float], None] = sleep
+
+    @property
+    def looping(self) -> bool:
+        return self.every_s is not None
+
+    def stop_reason(self, result: Any, ran: int) -> str:
+        if not self.looping:
+            return "one cycle"
+        if result.stopped_by and budget_spent(str(result.stopped_by)):
+            return f"the budget: {result.stopped_by}"
+        if self.kill_switch is not None and self.kill_switch.exists():
+            return f"the kill switch at {self.kill_switch}"
+        if self.cycles is not None and ran >= self.cycles:
+            return f"the {self.cycles} cycle(s) asked for"
+        return ""
+
+    def wait(self) -> float:
+        """Sleep to the next boundary, so a cycle reads a bar that has finished happening."""
+        every = self.every_s or 0.0
+        if every <= 0:
+            return 0.0
+        left = every - (self.clock() % every)
+        self.rest(left)
+        return round(left, 3)
+
+
 def run_cycle_command(args: argparse.Namespace) -> int:
     """One cycle, end to end, from the files in the project."""
     from trading_research_agents.agents.cycle import CycleConfig, run_cycle
@@ -1573,47 +1637,81 @@ def run_cycle_command(args: argparse.Namespace) -> int:
             )
         return metered[role]
 
-    result = run_cycle(
-        CycleConfig(
-            instrument=instrument,
-            envelope=load_envelope(args.envelope),
-            venue_key=cfg.run.venue_key,
-            chains=chains,
-            completer_for=completer_for,
-            usage=usage,
-            root=out,
-            mechanism=a.mechanism,
-            size=cfg.run.size,
-            magnitude_bps=magnitude,
-            bar_interval_s=cfg.run.bar_interval_s,
-            lookback_bars=a.lookback_bars,
-            interval_s=cfg.run.bar_interval_s,
-            settlement_interval_s=cfg.run.settlement_interval_s,
-            latency_slippage_bps=cfg.run.slippage_bps,
-            margin_bps=args.margin if args.margin is not None else Decimal(0),
-            min_confidence=a.min_confidence,
-            mode=mode,
-            place=hand,
-            matrix=cfg.confluence,
-            conviction=cfg.conviction,
-            max_position=cfg.limits.max_position,
-            equity=cfg.run.equity,
-            size_step=cfg.run.size_step,
-            validators=a.validators,
-            targets=cfg.targets,
-            reward_to_risk=reward_risk(
-                stop_frac=cfg.exit_rule.stop_sigma_frac,
-                take_frac=cfg.exit_rule.take_profit_sigma_frac,
-            ),
+    cycle_cfg = CycleConfig(
+        instrument=instrument,
+        envelope=load_envelope(args.envelope),
+        venue_key=cfg.run.venue_key,
+        chains=chains,
+        completer_for=completer_for,
+        usage=usage,
+        root=out,
+        mechanism=a.mechanism,
+        size=cfg.run.size,
+        magnitude_bps=magnitude,
+        bar_interval_s=cfg.run.bar_interval_s,
+        lookback_bars=a.lookback_bars,
+        interval_s=cfg.run.bar_interval_s,
+        settlement_interval_s=cfg.run.settlement_interval_s,
+        latency_slippage_bps=cfg.run.slippage_bps,
+        margin_bps=args.margin if args.margin is not None else Decimal(0),
+        min_confidence=a.min_confidence,
+        mode=mode,
+        place=hand,
+        matrix=cfg.confluence,
+        conviction=cfg.conviction,
+        max_position=cfg.limits.max_position,
+        equity=cfg.run.equity,
+        size_step=cfg.run.size_step,
+        validators=a.validators,
+        targets=cfg.targets,
+        reward_to_risk=reward_risk(
             stop_frac=cfg.exit_rule.stop_sigma_frac,
             take_frac=cfg.exit_rule.take_profit_sigma_frac,
-            data_options={declared.kind: dict(declared.options) for declared in data_cfg.kinds},
-            series=series,
-            news=news,
-            analysts=analysts,
-            resume=bool(args.resume),
-        )
+        ),
+        stop_frac=cfg.exit_rule.stop_sigma_frac,
+        take_frac=cfg.exit_rule.take_profit_sigma_frac,
+        data_options={declared.kind: dict(declared.options) for declared in data_cfg.kinds},
+        series=series,
+        news=news,
+        analysts=analysts,
+        resume=bool(args.resume),
     )
+    schedule = Schedule(every_s=args.every, cycles=args.cycles, kill_switch=cfg.kill_switch)
+    ran = 0
+    while True:
+        result = run_cycle(cycle_cfg)
+        payload, lines = _cycle_report(result, usage, mode)
+        emit(payload, args.json, lines, partial(_cycle_view, payload))
+        ran += 1
+        cleared = CLEARED if result.stopped_by is None else REFUSED
+        stop = schedule.stop_reason(result, ran)
+        if stop:
+            if schedule.looping:
+                emit(
+                    {"cycles": ran, "stopped_by": stop},
+                    args.json,
+                    [f"scheduler: stopped by {stop}, after {ran} cycle(s)"],
+                )
+            return cleared
+        try:
+            waited = schedule.wait()
+        except KeyboardInterrupt:
+            emit(
+                {"cycles": ran, "stopped_by": "a keyboard interrupt"},
+                args.json,
+                [f"scheduler: stopped by a keyboard interrupt, after {ran} cycle(s)"],
+            )
+            return cleared
+        if not args.json:
+            sys.stdout.write(f"scheduler: {waited}s to the next cycle\n")
+
+
+def _cycle_view(payload: Mapping[str, Any]) -> Any:
+    return _ui().cycle_view(payload)
+
+
+def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], list[str]]:
+    """One cycle as a record and as the lines a person reads."""
     payload = result.record()
     payload["tokens"] = usage.tokens
     payload["out"] = str(result.path)
@@ -1681,14 +1779,22 @@ def run_cycle_command(args: argparse.Namespace) -> int:
             row = component.record()
             lines.append(f"  {row['name']:<18} {row['bps']:>10} bps  {row['certainty']}")
     if result.intent is not None:
-        lines.append(f"intent: {result.intent['target']} {result.intent['size']} ({args.mode})")
+        lines.append(f"intent: {result.intent['target']} {result.intent['size']} ({mode})")
+        placed = result.placed or {}
+        if placed.get("sent"):
+            at = "" if not placed.get("average") else f" at {placed['average']}"
+            lines.append(
+                f"placed: {placed.get('side')} {placed.get('size')} on {placed.get('venue')}"
+                f"{at}, stop {placed.get('stop_price')}, take {placed.get('take_price')}"
+            )
+        elif placed.get("refused"):
+            lines.append(f"not placed: {placed['refused']}")
     for refusal in result.refusals[:6]:
         lines.append(f"  refused {refusal}")
     if result.stopped_by:
         lines.append(f"stopped by: {result.stopped_by}")
     lines.append(f"snapshot.json, briefs, answers and cycle.json in {result.path}")
-    emit(payload, args.json, lines, lambda: _ui().cycle_view(payload))
-    return CLEARED if result.stopped_by is None else REFUSED
+    return payload, lines
 
 
 def check_project(args: argparse.Namespace) -> int:

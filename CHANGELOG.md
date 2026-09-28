@@ -35,6 +35,14 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- The stop and the take profit are sent to the venue attached to the entry, computed by code from
+  `[exit]` against the price the gate priced on. A venue that cannot take them with the entry is
+  refused rather than trusted, and `[execution].exits = "none"` is the only way to leave a fill
+  unattended - `tra check` lists it as a thing to fix. Any open position or any working order on
+  the instrument now refuses a new entry, so a second cycle cannot quietly double a position.
+- `tra run --every 5m [--cycles N]`: a cycle on the interval's own boundary, in one process, ending
+  by name on the budget, the kill switch, the count asked for, or a keyboard interrupt. A refusal
+  does not end the loop; the next cycle decides again with fresh figures.
 - `tra check` reads the three files against each other: whether the instrument is mapped for the
   sources, whether data comes from a venue other than the one whose fees are priced, and whether
   `[execution].venue` and `[run].venue_key` name the same venue - the last is a refusal, because an

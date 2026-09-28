@@ -1017,3 +1017,79 @@ def test_a_venue_that_refuses_leaves_the_decision_on_disk(
     assert any("venue: RuntimeError: insufficient margin" in r for r in result.refusals)
     where = Path(str(result.path))
     assert (where / "intents.jsonl").read_text("utf-8").strip()
+
+
+class Stopped:
+    """A cycle result as the schedule sees it: only what stopped it, if anything."""
+
+    def __init__(self, stopped_by: str | None = None) -> None:
+        self.stopped_by = stopped_by
+
+
+def test_the_schedule_runs_once_unless_an_interval_is_asked_for() -> None:
+    from trading_research_agents.cli.main import Schedule
+
+    once = Schedule()
+    assert not once.looping and once.stop_reason(Stopped(), 1) == "one cycle"
+    assert once.wait() == 0.0
+
+
+def test_the_schedule_lands_on_the_next_boundary(tmp_path: Path) -> None:
+    from trading_research_agents.cli.main import Schedule
+
+    slept: list[float] = []
+    # Twelve seconds past a five-minute boundary: the next cycle is 288 seconds away, not 300.
+    plan = Schedule(every_s=300.0, clock=lambda: 1_800_000_012.0, rest=lambda s: slept.append(s))
+    assert plan.wait() == 288.0 and slept == [288.0]
+
+
+def test_a_loop_ends_on_the_budget_the_kill_switch_or_the_count(tmp_path: Path) -> None:
+    from trading_research_agents.cli.main import Schedule
+
+    kill = tmp_path / "KILL"
+    plan = Schedule(every_s=60.0, cycles=3, kill_switch=kill, rest=lambda s: None)
+
+    assert plan.stop_reason(Stopped(), 1) == ""
+    assert "budget" in plan.stop_reason(Stopped("technical: BudgetSpentError: spent"), 1)
+    # A stop that is not the budget does not end the loop: the next cycle decides again.
+    assert plan.stop_reason(Stopped("no technical brief: ohlcv is not in the snapshot"), 1) == ""
+
+    assert plan.stop_reason(Stopped(), 3) == "the 3 cycle(s) asked for"
+
+    kill.write_text("stop", encoding="utf-8")
+    assert "kill switch" in plan.stop_reason(Stopped(), 1)
+
+
+def test_an_interval_below_a_trading_cadence_is_refused() -> None:
+    import argparse
+
+    from trading_research_agents.cli.main import parse_duration_s
+
+    assert parse_duration_s("5m") == 300.0
+    with pytest.raises(argparse.ArgumentTypeError, match="five seconds"):
+        parse_duration_s("1s")
+
+
+def test_the_intent_carries_the_exits_code_computed(tmp_path: Path, envelope: Envelope) -> None:
+    cfg, _, _ = cycle_config(
+        tmp_path,
+        envelope,
+        [analyst_answer()],
+        stop_frac=Decimal("0.01"),
+        take_frac=Decimal("0.02"),
+    )
+    result = run_cycle(cfg)
+
+    assert result.intent is not None
+    mid = Decimal(result.intent["mid"])
+    # A long stops below and takes above, both from the operator's own fractions.
+    assert Decimal(result.intent["stop_price"]) == (mid * Decimal("0.99")).quantize(mid)
+    assert Decimal(result.intent["take_price"]) == (mid * Decimal("1.02")).quantize(mid)
+
+
+def test_an_intent_without_declared_exits_carries_none(tmp_path: Path, envelope: Envelope) -> None:
+    cfg, _, _ = cycle_config(tmp_path, envelope, [analyst_answer()])
+    result = run_cycle(cfg)
+
+    assert result.intent is not None
+    assert "stop_price" not in result.intent and "take_price" not in result.intent

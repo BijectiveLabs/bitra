@@ -7,7 +7,28 @@ refusal with a reason. It is the unit this project works in, and the unit an aud
 tra init my-desk --profile autonomous     # the cycle laid down wired, every line commented
 tra run --env-file .env                   # data.toml, strategy.toml, envelope.toml from the project
 tra run --instrument ETHUSDT --margin 5 --mode signals
+tra run --every 5m --cycles 12 --env-file .env   # one cycle every five minutes, on the boundary
 ```
+
+## Running it on a schedule
+
+`--every` runs a cycle on the interval's own boundary, so a cycle reads a bar that has finished
+happening rather than one that is half built. One process, no cron, no daemon: the loop is in the
+same command, and everything that should end it ends it by name.
+
+| Ends the loop | Why |
+|---|---|
+| the budget | a cycle that stopped because the token budget is spent will not be followed by one that costs more |
+| the kill switch | the file named in `[controls].kill_switch` exists |
+| `--cycles N` | the count asked for |
+| a keyboard interrupt | the operator stopped it; the cycle that was running is already on disk |
+
+A refusal is not a reason to stop. A cycle that refused because a gate said no is a cycle that did
+its job, and the next one decides again with fresh figures. The frequency cap in `[targets]` still
+applies across the whole day, so an interval shorter than the desk's own limit simply produces more
+refusals, each one named.
+
+
 
 The profile is the short way in. It writes the same project as `tra init`, with four differences:
 the technical analyst is the core, the confluence matrix, the conviction ladder and the targets are
@@ -368,6 +389,23 @@ because a retry loop around real capital is how one defect becomes ten orders.
 The size is the one the conviction rule chose, capped again by `[execution].max_notional`. What came
 back is written to `placed.json` beside the intent, and the intent is written first: whatever the
 venue does next, the record of what this cycle decided survives it.
+
+### What happens after the order
+
+The stop and the take profit go to the venue **attached to the entry**, in the same call. Code
+computes both from `[exit].stop_sigma_frac` and `[exit].take_profit_sigma_frac` against the price
+the cost gate priced on, so no model is ever asked where a stop belongs. A filled position with no
+exit is the one state this software must never create, because it is the state that survives our
+process dying - and if the venue cannot take them with the entry, the order is not sent at all. An
+operator who carries the exits in their own system says so with `[execution].exits = "none"`, and
+`tra check` lists that as something to fix rather than a setting to admire.
+
+The same read that protects against a wrong-way position protects against a second one: any open
+position on the instrument refuses a new entry unless `adopt_open_position` says otherwise, because
+adding to a position is a larger position than the conviction rule sized. An order still working on
+the instrument refuses too - a second one would be a second decision on the same position - and the
+client order id is derived from the cycle and the instrument, so the same cycle run twice cannot
+open two.
 
 ## Modes
 
