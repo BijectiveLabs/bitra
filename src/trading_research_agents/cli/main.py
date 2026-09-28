@@ -1605,6 +1605,8 @@ def run_cycle_command(args: argparse.Namespace) -> int:
                 stop_frac=cfg.exit_rule.stop_sigma_frac,
                 take_frac=cfg.exit_rule.take_profit_sigma_frac,
             ),
+            stop_frac=cfg.exit_rule.stop_sigma_frac,
+            take_frac=cfg.exit_rule.take_profit_sigma_frac,
             data_options={declared.kind: dict(declared.options) for declared in data_cfg.kinds},
             series=series,
             news=news,
@@ -1864,6 +1866,7 @@ def _venue_hand(args: argparse.Namespace, cfg: Any, project: Path) -> Any:
         symbol=_symbol_for(cfg, project),
         max_notional=mandate.max_notional,
         role=channel.entry_role,
+        exits=mandate.exits,
         environment=cfg.live.environment if cfg.live is not None else "demo",
         limit_timeout_s=mandate.limit_timeout_s,
         price_offset_bps=mandate.price_offset_bps,
@@ -1993,6 +1996,16 @@ def _gate_lines(
                 f"execution: venue {mandate.venue}, signed by {mandate.acknowledged_by} on "
                 f"{mandate.acknowledged_on}, at most {mandate.max_notional} per order"
             )
+            if mandate.exits == "attached":
+                good.append(
+                    "execution: the stop and the take profit go to the venue with the entry, so a "
+                    "fill is never left unattended"
+                )
+            else:
+                bad.append(
+                    '[execution].exits is "none": a fill would sit at the venue with no stop and '
+                    "no take profit, and only you would be carrying them"
+                )
             if entry_role == "maker":
                 good.append(
                     "execution: an order that has not filled is cancelled after "

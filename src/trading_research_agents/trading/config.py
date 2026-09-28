@@ -355,6 +355,7 @@ EXECUTION_KEYS = (
     "acknowledged_on",
     "max_notional",
     "max_orders_per_cycle",
+    "exits",
     "limit_timeout_s",
     "price_offset_bps",
     "adopt_open_position",
@@ -385,6 +386,7 @@ def _mandate(raw: dict[str, Any], venue_key: str) -> Mandate:
             acknowledged_on=str(table.get("acknowledged_on", "")),
             max_notional=_dec(table, "max_notional") if "max_notional" in table else None,
             max_orders_per_cycle=int(table.get("max_orders_per_cycle", 1)),
+            exits=str(table.get("exits", "attached")),
             limit_timeout_s=float(table.get("limit_timeout_s", 30.0)),
             price_offset_bps=(
                 _dec(table, "price_offset_bps") if "price_offset_bps" in table else Decimal(0)

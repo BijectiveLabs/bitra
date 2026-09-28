@@ -119,6 +119,10 @@ class CycleConfig:
     equity: Decimal | None = None
     size_step: Decimal = Decimal("0.000001")
     reward_to_risk: Decimal | None = None
+    # The exit rule as declared, so the cycle can price the stop and the take profit for the venue.
+    # Code computes them from the operator's own fractions; no model is asked where a stop goes.
+    stop_frac: Decimal | None = None
+    take_frac: Decimal | None = None
     # [agents].validators: the stances to ask once there is a proposal worth arguing about. Each
     # stance is one more call, so an operator turns them on deliberately.
     validators: tuple[str, ...] = ()
@@ -470,6 +474,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         # The touch this cycle saw, so an order that rests on the book rests where the cost was
         # priced rather than wherever the book has moved to by the time it is sent.
         **_touch(snapshot),
+        **_exits(cfg, costs.cost.mid, analyst.target),
         "channel": cfg.venue_key,
         "entry_role": _channel(cfg).entry_role,
     }
@@ -669,6 +674,20 @@ def _votes(result: CycleResult) -> tuple[str, ...]:
         if role.startswith("validator") and isinstance(said.get("verdict"), str):
             out.append(str(said["verdict"]))
     return tuple(out)
+
+
+def _exits(cfg: CycleConfig, mid: Decimal, target: str) -> dict[str, str]:
+    """Where the stop and the take profit sit, from the operator's own fractions and this price.
+
+    A position without an exit is not a trade, so these travel with the intent and, in venue mode,
+    go to the venue attached to the entry. Nothing here asks a model where a stop belongs.
+    """
+    if cfg.stop_frac is None or cfg.take_frac is None or mid <= 0:
+        return {}
+    away = Decimal(1) if target == "long" else Decimal(-1)
+    stop = mid * (Decimal(1) - away * cfg.stop_frac)
+    take = mid * (Decimal(1) + away * cfg.take_frac)
+    return {"stop_price": str(stop.quantize(mid)), "take_price": str(take.quantize(mid))}
 
 
 def _touch(snapshot: Snapshot) -> dict[str, str]:

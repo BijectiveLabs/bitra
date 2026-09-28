@@ -15,6 +15,10 @@ Three habits make this auditable after a failure, which is the only time it matt
 carries a client id derived from the cycle, so the same cycle cannot open two positions; the account
 is read before anything is sent, so an order is never added to a position this desk did not expect;
 and nothing is retried. A retry loop around real capital is how one defect becomes ten orders.
+
+The exits go out attached to the entry rather than after it. A filled position with no stop
+is the one state this software must never create, because it is the state that survives our
+process dying.
 """
 
 from __future__ import annotations
@@ -28,6 +32,7 @@ from typing import Any
 
 SIDES = {"long": "buy", "short": "sell"}
 ROLES = ("maker", "taker")
+EXITS = ("attached", "none")
 BPS = Decimal(10_000)
 
 
@@ -49,6 +54,7 @@ class VenueHand:
     max_notional: Decimal
     keys: tuple[str, str]
     role: str = "taker"
+    exits: str = "attached"
     environment: str = "demo"
     limit_timeout_s: float = 30.0
     price_offset_bps: Decimal = Decimal(0)
@@ -70,6 +76,8 @@ class VenueHand:
             )
         if self.limit_timeout_s <= 0:
             raise DispatchError("[execution].limit_timeout_s is positive")
+        if self.exits not in EXITS:
+            raise DispatchError(f"[execution].exits is one of {list(EXITS)}")
         if self.client is None:
             self.client = self._build()
 
@@ -113,20 +121,36 @@ class VenueHand:
                 ),
             }
         standing = self._position()
-        if standing is not None and not self.adopt_open_position and standing != 0:
-            wanted = Decimal(1) if target == "long" else Decimal(-1)
-            if (standing > 0) != (wanted > 0):
-                return {
-                    "sent": False,
-                    "refused": (
-                        f"the account already holds {standing} of {self.symbol} the other way; "
-                        "flatten it or set [execution].adopt_open_position"
-                    ),
-                    "position": str(standing),
-                }
+        if standing and not self.adopt_open_position:
+            # Any open position, not only one pointing the other way. A second entry in the same
+            # direction is a larger position than the conviction rule sized, and nothing upstream
+            # asked for it.
+            way = "the other way" if (standing > 0) != (target == "long") else "the same way"
+            return {
+                "sent": False,
+                "refused": (
+                    f"the account already holds {standing} of {self.symbol} {way}; flatten it, "
+                    "wait for it to close, or set [execution].adopt_open_position"
+                ),
+                "position": str(standing),
+            }
+        resting = self._open_orders()
+        if resting:
+            return {
+                "sent": False,
+                "refused": (
+                    f"{resting} order(s) are still open on {self.symbol}; a second one would be a "
+                    "second decision on the same position"
+                ),
+                "open_orders": resting,
+            }
 
         order_id = _client_id(intent)
-        params = {"clientOrderId": order_id, **dict(self.params)}
+        params: dict[str, Any] = {"clientOrderId": order_id, **dict(self.params)}
+        protective = self._protective(intent, target)
+        if isinstance(protective, str):
+            return {"sent": False, "refused": protective}
+        params.update(protective)
         price = self._resting_price(intent, side) if self.role == "maker" else None
         if self.role == "maker":
             if price is None:
@@ -156,6 +180,9 @@ class VenueHand:
             "price": None if price is None else str(price),
             "notional": str(notional),
             "client_order_id": order_id,
+            "exits": self.exits,
+            "stop_price": str(intent.get("stop_price", "")) or None,
+            "take_price": str(intent.get("take_price", "")) or None,
             "order_id": str(order.get("id", "")),
             "status": str(order.get("status", "")),
             "filled": None if order.get("filled") is None else str(order["filled"]),
@@ -164,6 +191,51 @@ class VenueHand:
         if self.role == "maker":
             placed.update(self._settle(str(placed["order_id"])))
         return placed
+
+    def _protective(self, intent: Mapping[str, Any], target: str) -> dict[str, Any] | str:
+        """The stop and the take profit, attached to the entry so no fill is left unattended.
+
+        They go out with the entry rather than after it. A position that exists for a second
+        without an exit is a position this process can die in the middle of, and the whole point of
+        placing them at the venue is that they outlive us.
+        """
+        if self.exits == "none":
+            return {}
+        stop, take = intent.get("stop_price"), intent.get("take_price")
+        if not stop or not take:
+            return (
+                "no stop and take profit were computed for this intent; declare "
+                "[exit].stop_sigma_frac and [exit].take_profit_sigma_frac, or say "
+                '[execution].exits = "none" and carry the exits yourself'
+            )
+        if not self._can_attach():
+            return (
+                f"{self.venue} cannot take a stop and a take profit with the entry through ccxt; "
+                'set [execution].exits = "none" only if you are carrying the exits yourself'
+            )
+        low, high = Decimal(str(stop)), Decimal(str(take))
+        if (target == "long" and low >= high) or (target == "short" and low <= high):
+            return f"the stop {stop} and the take profit {take} are the wrong way round"
+        return {
+            "stopLoss": {"triggerPrice": float(low)},
+            "takeProfit": {"triggerPrice": float(high)},
+        }
+
+    def _can_attach(self) -> bool:
+        has = getattr(self.client, "has", {}) or {}
+        return bool(has.get("createOrderWithTakeProfitAndStopLoss"))
+
+    def _open_orders(self) -> int:
+        """How many orders still work on this instrument. A hand that cannot ask does not guess."""
+        fetch = getattr(self.client, "fetch_open_orders", None)
+        if fetch is None:
+            return 0
+        try:
+            return len(list(fetch(self.symbol)))
+        except Exception as exc:
+            raise DispatchError(
+                f"cannot read the open orders: {exc.__class__.__name__}: {exc}"
+            ) from exc
 
     def _position(self) -> Decimal | None:
         """What the account already holds, or nothing when the venue will not say.
@@ -257,6 +329,7 @@ def hand_for(
     symbol: str,
     max_notional: Decimal,
     role: str = "taker",
+    exits: str = "attached",
     environment: str = "demo",
     limit_timeout_s: float = 30.0,
     price_offset_bps: Decimal = Decimal(0),
@@ -273,6 +346,7 @@ def hand_for(
         max_notional=max_notional,
         keys=(f"{prefix}_API_KEY", f"{prefix}_API_SECRET"),
         role=role,
+        exits=exits,
         environment=environment,
         limit_timeout_s=limit_timeout_s,
         price_offset_bps=price_offset_bps,

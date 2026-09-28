@@ -70,6 +70,7 @@ class Mandate:
     max_orders_per_cycle: int = 1
     # A resting order is only worth resting for so long, and how far off the touch it sits is the
     # operator's call. `params` is handed to the venue verbatim, the way data.toml already does.
+    exits: str = "attached"
     limit_timeout_s: float = 30.0
     price_offset_bps: Decimal = Decimal(0)
     adopt_open_position: bool = False
@@ -82,6 +83,8 @@ class Mandate:
             raise MandateError("[execution].max_notional is positive")
         if self.max_orders_per_cycle < 1:
             raise MandateError("[execution].max_orders_per_cycle is at least 1")
+        if self.exits not in ("attached", "none"):
+            raise MandateError('[execution].exits is "attached" or "none"')
         if self.limit_timeout_s <= 0:
             raise MandateError("[execution].limit_timeout_s is positive")
         if self.price_offset_bps < 0:
@@ -106,6 +109,7 @@ class Mandate:
             "acknowledged_on": self.acknowledged_on,
             "max_notional": None if self.max_notional is None else str(self.max_notional),
             "max_orders_per_cycle": self.max_orders_per_cycle,
+            "exits": self.exits,
             "limit_timeout_s": self.limit_timeout_s,
             "price_offset_bps": str(self.price_offset_bps),
             "adopt_open_position": self.adopt_open_position,
