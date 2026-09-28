@@ -376,9 +376,7 @@ def _confluence(raw: dict[str, Any]) -> Matrix:
             short_states=_names(table.get("short_states"), "short_states") or ("bearish",),
             on_missing=str(table.get("on_missing", "refuse")),
             min_support=_count(table, "min_support"),
-            max_opposition=(
-                _count(table, "max_opposition") if "max_opposition" in table else None
-            ),
+            max_opposition=(_count(table, "max_opposition") if "max_opposition" in table else None),
         )
     except ConfluenceError as exc:
         raise ConfigError(str(exc)) from exc
