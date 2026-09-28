@@ -1235,12 +1235,44 @@ def parse_duration_s(text: str) -> float:
     return seconds
 
 
-def _environment(env_file: Path | None) -> dict[str, str]:
+def _load_env(args: argparse.Namespace) -> None:
+    """Keys into this process: the file the operator named, then the project's own `.env`.
+
+    The shell always wins. Nothing outside those two files is read, and a command that finds no key
+    still says which name it was looking for rather than failing at the vendor.
+    """
+    beside = getattr(args, "config", None)
+    here = beside.resolve().parent / ".env" if beside is not None else None
+    for path in (getattr(args, "env_file", None), here):
+        if path is None or not path.is_file():
+            continue
+        for key, value in read_env_file(path).items():
+            os.environ.setdefault(key, value)
+
+
+def _environment(env_file: Path | None, *, beside: Path | None = None) -> dict[str, str]:
+    """The environment, plus the file the operator named, plus the project's own `.env`.
+
+    A key in the shell wins over a file, and a file the operator named wins over the project's own.
+    `.env` beside the config is read because that is where `tra init` tells them to put it, and
+    because a check that says "no key" while the key sits in the next file is a check nobody trusts.
+    Which file was read is reported, so nothing is picked up silently.
+    """
     env = dict(os.environ)
-    if env_file is not None:
-        for key, value in read_env_file(env_file).items():
+    for path in (env_file, (beside / ".env") if beside is not None else None):
+        if path is None or not path.is_file():
+            continue
+        for key, value in read_env_file(path).items():
             env.setdefault(key, value)
     return env
+
+
+def _env_file_used(env_file: Path | None, beside: Path | None) -> Path | None:
+    """The file a check actually read a key from, for the line that says so."""
+    for path in (env_file, (beside / ".env") if beside is not None else None):
+        if path is not None and path.is_file():
+            return path
+    return None
 
 
 def trade_live(args: argparse.Namespace) -> int:
@@ -1316,9 +1348,7 @@ def run_audit_command(args: argparse.Namespace) -> int:
         UsageLedger,
     )
 
-    if args.env_file is not None:
-        for key, value in read_env_file(args.env_file).items():
-            os.environ.setdefault(key, value)
+    _load_env(args)
     cfg = load_strategy_config(args.config)
     if cfg.agents is None:
         raise ConfigError("an audit needs [agents] in strategy.toml; it asks a model")
@@ -1656,9 +1686,7 @@ def run_cycle_command(args: argparse.Namespace) -> int:
         UsageLedger,
     )
 
-    if args.env_file is not None:
-        for key, value in read_env_file(args.env_file).items():
-            os.environ.setdefault(key, value)
+    _load_env(args)
     cfg = load_strategy_config(args.config)
     if cfg.agents is None:
         raise ConfigError("a cycle needs [strategy].agent and [agents] in strategy.toml")
@@ -1892,7 +1920,11 @@ def check_project(args: argparse.Namespace) -> int:
 def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
     good: list[str] = []
     bad: list[str] = []
-    env = _environment(args.env_file)
+    beside = args.config.resolve().parent
+    env = _environment(args.env_file, beside=beside)
+    read_from = _env_file_used(args.env_file, beside)
+    if read_from is not None:
+        good.append(f"keys: read from {read_from.name} beside the config, and from the environment")
     cfg = None
     try:
         cfg = load_strategy_config(args.config)
@@ -1911,9 +1943,18 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
     except (EnvelopeError, OSError, ValueError) as exc:
         bad.append(f"{args.envelope}: {exc}")
     if cfg is not None:
+        # An autonomous project decides on live chains, so a recorded dataset and a funding file
+        # are what a backtest needs, not what a cycle needs. Saying otherwise sends an operator to
+        # fetch a day of prints they will not use.
+        cycles = cfg.agents is not None
         found = _datasets(args.config)
         if cfg.run.instrument in found:
             good.append(f"dataset: {found[cfg.run.instrument]}")
+        elif cycles:
+            good.append(
+                f"dataset: none; `tra run` decides on the live chains, and `tra backtest` is the "
+                f"one that would need `tra data get {cfg.run.instrument} YYYY-MM-DD`"
+            )
         else:
             bad.append(
                 f"no dataset for {cfg.run.instrument} in {_data_dir(args.config)}: "
@@ -1922,6 +1963,8 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
         funding = _data_dir(args.config) / f"{cfg.run.instrument}-funding.json"
         if cfg.funding is not None or funding.is_file():
             good.append("funding: present")
+        elif cycles and _declares_kind(args.config, "funding"):
+            good.append("funding: live, from the chain in data.toml")
         else:
             bad.append(
                 "funding: none; a run that spans a settlement will refuse (tra data get fetches it)"
@@ -2019,10 +2062,10 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
     next_command = "tra backtest"
     if not args.config.is_file():
         next_command = "tra init my-run"
+    elif cfg is not None and cfg.agents is not None:
+        next_command = "tra run"
     elif cfg is not None and cfg.run.instrument not in _datasets(args.config):
         next_command = f"tra data get {cfg.run.instrument} YYYY-MM-DD"
-    elif cfg is not None and cfg.agents is not None:
-        next_command = "tra run --env-file .env"
     return good, bad, next_command
 
 
@@ -2116,6 +2159,19 @@ def _agrees_across_files(cfg: Any, data: Any, bad: list[str]) -> list[str]:
             "an order would go to one venue at the other's fee"
         )
     return good
+
+
+def _declares_kind(config: Path, kind: str) -> bool:
+    """Whether data.toml beside this config declares a chain for one kind of live figure."""
+    where = config.resolve().parent / "data.toml"
+    if not where.is_file():
+        return False
+    try:
+        raw = tomllib.loads(where.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return False
+    table = raw.get("data")
+    return isinstance(table, dict) and isinstance(table.get(kind), dict)
 
 
 def _gate_lines(
@@ -2326,9 +2382,7 @@ def data_pull(args: argparse.Namespace) -> int:
     from trading_research_agents.data.sources import load_data_config
     from trading_research_agents.store import CycleDir, cycle_id, take_snapshot
 
-    if args.env_file is not None:
-        for key, value in read_env_file(args.env_file).items():
-            os.environ.setdefault(key, value)
+    _load_env(args)
     cfg = load_data_config(args.data_config)
     instrument = args.instrument
     if instrument is None:
@@ -2410,9 +2464,7 @@ def agent_session(args: argparse.Namespace) -> int:
         UsageLedger,
     )
 
-    if args.env_file is not None:
-        for key, value in read_env_file(args.env_file).items():
-            os.environ.setdefault(key, value)
+    _load_env(args)
     cfg = load_strategy_config(args.config)
     if cfg.agents is None:
         raise ConfigError("a session needs [strategy].agent and [agents] in strategy.toml")
@@ -2517,9 +2569,7 @@ def agent_session(args: argparse.Namespace) -> int:
 def agent_eval(args: argparse.Namespace) -> int:
     from trading_research_agents.agents.evals import EvalConfig, ModelSpec, evaluate, table
 
-    if args.env_file is not None:
-        for key, value in read_env_file(args.env_file).items():
-            os.environ.setdefault(key, value)
+    _load_env(args)
     cfg = load_strategy_config(args.config)
     if cfg.agents is None:
         raise ConfigError("an eval needs [strategy].agent and [agents] in strategy.toml")
