@@ -355,6 +355,10 @@ EXECUTION_KEYS = (
     "acknowledged_on",
     "max_notional",
     "max_orders_per_cycle",
+    "limit_timeout_s",
+    "price_offset_bps",
+    "adopt_open_position",
+    "params",
 )
 
 
@@ -381,6 +385,12 @@ def _mandate(raw: dict[str, Any], venue_key: str) -> Mandate:
             acknowledged_on=str(table.get("acknowledged_on", "")),
             max_notional=_dec(table, "max_notional") if "max_notional" in table else None,
             max_orders_per_cycle=int(table.get("max_orders_per_cycle", 1)),
+            limit_timeout_s=float(table.get("limit_timeout_s", 30.0)),
+            price_offset_bps=(
+                _dec(table, "price_offset_bps") if "price_offset_bps" in table else Decimal(0)
+            ),
+            adopt_open_position=_flag(table, "adopt_open_position"),
+            params=dict(table.get("params") or {}),
         )
     except MandateError as exc:
         raise ConfigError(str(exc)) from exc

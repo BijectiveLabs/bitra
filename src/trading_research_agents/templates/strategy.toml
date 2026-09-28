@@ -141,6 +141,15 @@ kill_switch = "KILL"               # touch this file to flatten and stop
 # acknowledged_on = "2026-09-28"
 # max_notional = 200               # one order, in quote currency
 # max_orders_per_cycle = 1
+# limit_timeout_s = 30             # a resting order that has not filled by then is cancelled
+# price_offset_bps = 0             # how far off the touch a resting order sits; 0 is at it
+# adopt_open_position = false      # deliberately add to a position this desk did not open
+# params = { positionIdx = 0 }     # handed to the venue verbatim, like data.toml's params
+#
+# The order follows the channel. [run].venue_key names a channel in envelope.toml, and a channel
+# named maker-taker was priced at the maker fee, so its entry rests on the book as a post-only
+# limit; taker-taker crosses it with a market order. A channel whose name says neither is refused
+# in venue mode rather than guessed at, because the fee you priced depends on the answer.
 
 # Is this the trade you said you wanted? Trading, not investing: what it has to be worth, and how
 # often you are willing to do it. The round trips are counted from the intents already on disk, so

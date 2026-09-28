@@ -19,8 +19,8 @@ in a file, and every gate in the cycle passed before there is an intent at all.
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -68,6 +68,12 @@ class Mandate:
     acknowledged_on: str = ""
     max_notional: Decimal | None = None
     max_orders_per_cycle: int = 1
+    # A resting order is only worth resting for so long, and how far off the touch it sits is the
+    # operator's call. `params` is handed to the venue verbatim, the way data.toml already does.
+    limit_timeout_s: float = 30.0
+    price_offset_bps: Decimal = Decimal(0)
+    adopt_open_position: bool = False
+    params: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.mode not in MODES:
@@ -76,6 +82,10 @@ class Mandate:
             raise MandateError("[execution].max_notional is positive")
         if self.max_orders_per_cycle < 1:
             raise MandateError("[execution].max_orders_per_cycle is at least 1")
+        if self.limit_timeout_s <= 0:
+            raise MandateError("[execution].limit_timeout_s is positive")
+        if self.price_offset_bps < 0:
+            raise MandateError("[execution].price_offset_bps is not negative")
         if self.acknowledged_on:
             try:
                 signed = date.fromisoformat(self.acknowledged_on)
@@ -96,6 +106,10 @@ class Mandate:
             "acknowledged_on": self.acknowledged_on,
             "max_notional": None if self.max_notional is None else str(self.max_notional),
             "max_orders_per_cycle": self.max_orders_per_cycle,
+            "limit_timeout_s": self.limit_timeout_s,
+            "price_offset_bps": str(self.price_offset_bps),
+            "adopt_open_position": self.adopt_open_position,
+            "params": {str(k): str(v) for k, v in sorted(self.params.items())},
         }
 
 

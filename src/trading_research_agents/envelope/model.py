@@ -23,6 +23,9 @@ class Channel:
     entry_fee_bps: Decimal
     exit_fee_bps: Decimal
     measured_round_trip_bps: Decimal | None = None
+    # A chain's own cost of a round trip, in quote currency, for venues where settlement is paid
+    # rather than netted out of the fee. Priced as a component like any other.
+    gas_quote: Decimal | None = None
 
     def __post_init__(self) -> None:
         if not self.venue.strip() or not self.name.strip():
@@ -40,10 +43,35 @@ class Channel:
                 raise EnvelopeError("measured_round_trip_bps must be a Decimal")
             if self.measured_round_trip_bps < 0:
                 raise EnvelopeError("measured_round_trip_bps cannot be negative")
+        if self.gas_quote is not None and (
+            not isinstance(self.gas_quote, Decimal) or self.gas_quote < 0
+        ):
+            raise EnvelopeError("gas_quote must be a non-negative Decimal")
 
     @property
     def key(self) -> str:
         return f"{self.venue}/{self.name}"
+
+    @property
+    def roles(self) -> tuple[str, str]:
+        """How this channel gets in and out: maker or taker per side, from its own name.
+
+        `maker-taker` is an entry that rests on the book and an exit that crosses it, and that is
+        the difference between the two fees beside it. A name that does not say is `undeclared`,
+        and code that has to know refuses rather than guessing on the cheap side.
+        """
+        halves = self.name.lower().split("-")
+        if len(halves) == 2 and all(half in ("maker", "taker") for half in halves):
+            return halves[0], halves[1]
+        return "undeclared", "undeclared"
+
+    @property
+    def entry_role(self) -> str:
+        return self.roles[0]
+
+    @property
+    def exit_role(self) -> str:
+        return self.roles[1]
 
     @property
     def round_trip_bps(self) -> Decimal:

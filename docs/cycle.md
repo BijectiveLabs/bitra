@@ -328,10 +328,28 @@ Venue mode does not start until all of this is true, and `tra check` names whate
 6. The venue's keys are in the environment. They are read by the execution layer alone, never from
    a file, and they never appear in a brief, a prompt, a record or a log.
 
-The order goes out as one market order, sized by the conviction rule and capped by
-`[execution].max_notional`, and what came back is written to `placed.json` beside the intent. The
-intent is written first: whatever the venue does next, the record of what this cycle decided
-survives it. A venue that refuses is recorded as a refusal, not retried with different words.
+The order follows the channel. `[run].venue_key` names a channel in `envelope.toml`, and the name
+is `<entry>-<exit>`, each `maker` or `taker`:
+
+| Channel entry | What is sent | If it does not fill |
+|---|---|---|
+| `taker` | a market order, crossing the book at once | it does |
+| `maker` | a post-only limit at this snapshot's own touch, offset by `price_offset_bps` | cancelled after `limit_timeout_s`; nothing is chased across the spread |
+| anything else | nothing | venue mode refuses: the fee you priced depends on the answer |
+
+That is not a style preference. A channel named `maker-taker` was priced at the maker fee, and
+sending a market order under it would pay a fee the gate never priced.
+
+Three habits make this auditable after a failure, which is the only time it matters. Every order
+carries a client id derived from the cycle and the instrument, so the same cycle run twice cannot
+open two positions. The account is read before anything is sent, and an order is never added to a
+position pointing the other way unless `adopt_open_position` says so - a hand that cannot read the
+account does not send at all. And nothing is retried: a venue that refuses is recorded as a refusal,
+because a retry loop around real capital is how one defect becomes ten orders.
+
+The size is the one the conviction rule chose, capped again by `[execution].max_notional`. What came
+back is written to `placed.json` beside the intent, and the intent is written first: whatever the
+venue does next, the record of what this cycle decided survives it.
 
 ## Modes
 

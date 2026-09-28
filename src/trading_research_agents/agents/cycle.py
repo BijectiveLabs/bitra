@@ -467,6 +467,11 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         "mode": cfg.mode,
         "mid": str(costs.cost.mid),
         "at": cycle,
+        # The touch this cycle saw, so an order that rests on the book rests where the cost was
+        # priced rather than wherever the book has moved to by the time it is sent.
+        **_touch(snapshot),
+        "channel": cfg.venue_key,
+        "entry_role": _channel(cfg).entry_role,
     }
     with (where.path / "intents.jsonl").open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(result.intent, sort_keys=True) + "\n")
@@ -664,6 +669,18 @@ def _votes(result: CycleResult) -> tuple[str, ...]:
         if role.startswith("validator") and isinstance(said.get("verdict"), str):
             out.append(str(said["verdict"]))
     return tuple(out)
+
+
+def _touch(snapshot: Snapshot) -> dict[str, str]:
+    """The best bid and ask of this snapshot's book, when it has one."""
+    try:
+        book = snapshot.get("orderbook").value
+    except KeyError:
+        return {}
+    bids, asks = getattr(book, "bids", ()), getattr(book, "asks", ())
+    if not bids or not asks:
+        return {}
+    return {"bid": str(bids[0].price), "ask": str(asks[0].price)}
 
 
 def _channel(cfg: CycleConfig) -> Channel:

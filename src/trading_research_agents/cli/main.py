@@ -1493,8 +1493,10 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
         )
     except (ConfigError, OSError, ValueError) as exc:
         bad.append(f"{args.config}: {exc}")
+    channels: tuple[Any, ...] = ()
     try:
         envelope = load_envelope(args.envelope)
+        channels = tuple(envelope.channels)
         good.append(f"{args.envelope}: {len(envelope.channels)} channels")
         if cfg is not None and not any(c.key == cfg.run.venue_key for c in envelope.channels):
             bad.append(f"[run].venue_key {cfg.run.venue_key!r} is not a channel in {args.envelope}")
@@ -1551,6 +1553,9 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
             project=args.config.resolve().parent,
             tier=Ladder(args.ladder).tier.name if args.ladder.is_file() else "REPLAY",
             env=env,
+            entry_role=next(
+                (c.entry_role for c in channels if c.key == cfg.run.venue_key), "undeclared"
+            ),
         )
         good.extend(ready)
         bad.extend(missing)
@@ -1619,12 +1624,26 @@ def _venue_hand(args: argparse.Namespace, cfg: Any, project: Path) -> Any:
     )
     if stops:
         raise ConfigError("venue mode is not authorised here: " + "; ".join(stops))
-    symbol = _symbol_for(cfg, project)
+    channel = next(
+        (c for c in load_envelope(args.envelope).channels if c.key == cfg.run.venue_key), None
+    )
+    if channel is None:
+        raise ConfigError(f"[run].venue_key {cfg.run.venue_key!r} is not a channel in the envelope")
+    if channel.entry_role not in ("maker", "taker"):
+        raise ConfigError(
+            f"channel {channel.key!r} does not say whether entry is maker or taker, and the fee "
+            "you priced depends on it; name it <entry>-<exit>, as in maker-taker"
+        )
     return hand_for(
         venue=mandate.venue,
-        symbol=symbol,
+        symbol=_symbol_for(cfg, project),
         max_notional=mandate.max_notional,
+        role=channel.entry_role,
         environment=cfg.live.environment if cfg.live is not None else "demo",
+        limit_timeout_s=mandate.limit_timeout_s,
+        price_offset_bps=mandate.price_offset_bps,
+        adopt_open_position=mandate.adopt_open_position,
+        params=mandate.params,
         env=env,
     )
 
@@ -1647,6 +1666,7 @@ def _gate_lines(
     project: Path,
     tier: str,
     env: Mapping[str, str],
+    entry_role: str = "undeclared",
 ) -> tuple[list[str], list[str]]:
     """What the two declared gates will do, and where they contradict the rest of the project.
 
@@ -1681,6 +1701,12 @@ def _gate_lines(
     from trading_research_agents.execution.mandate import blocking
 
     mandate = cfg.execution
+    if entry_role in ("maker", "taker"):
+        crosses = "crosses the book at once" if entry_role == "taker" else "rests on the book"
+        good.append(
+            f"channel: {cfg.run.venue_key} enters as a {entry_role}, priced at that fee; "
+            f"an order {crosses}"
+        )
     if not mandate.places_orders:
         good.append(
             f"execution: {mandate.mode}; nothing leaves the machine"
@@ -1704,6 +1730,16 @@ def _gate_lines(
                 f"execution: venue {mandate.venue}, signed by {mandate.acknowledged_by} on "
                 f"{mandate.acknowledged_on}, at most {mandate.max_notional} per order"
             )
+            if entry_role == "maker":
+                good.append(
+                    "execution: an order that has not filled is cancelled after "
+                    f"{mandate.limit_timeout_s}s; nothing is chased across the spread"
+                )
+            elif entry_role == "undeclared":
+                bad.append(
+                    f"channel {cfg.run.venue_key!r} does not say whether entry is maker or taker; "
+                    "the fee you priced depends on it"
+                )
     rule = cfg.conviction
     if rule.idle:
         good.append("conviction: not declared; every admitted cycle trades the base size")

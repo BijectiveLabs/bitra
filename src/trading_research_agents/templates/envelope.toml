@@ -1,6 +1,11 @@
 # An operating envelope. Every figure here belongs to the operator, not to the market.
 # Fees are per side in basis points, as quoted for the declared tier. Round trip = entry + exit.
 # measured_round_trip_bps is optional: what execution actually cost end to end, when known.
+#
+# The name is not decoration: <entry>-<exit>, each maker or taker. It is what the two fees mean,
+# and in venue mode it is how the order is sent - a maker entry rests on the book as a post-only
+# limit, a taker entry crosses it. gas_quote is optional and for chains that charge settlement
+# separately: a fixed cost in quote currency per round trip, priced as its own component.
 
 [envelope]
 order_latency_ms = 5.5
@@ -35,3 +40,12 @@ venue = "hyperliquid"
 name = "maker-maker"
 entry_fee_bps = 1.5
 exit_fee_bps = 1.5
+
+# A chain where settlement is paid rather than netted out of the fee. The gas is the operator's
+# own figure for a round trip, and the gate prices it against the notional like everything else.
+# [[channel]]
+# venue = "some-dex"
+# name = "taker-taker"
+# entry_fee_bps = 3.0
+# exit_fee_bps = 3.0
+# gas_quote = 1.40

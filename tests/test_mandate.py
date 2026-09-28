@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -37,26 +38,64 @@ SIGNED = Mandate(
 
 
 class FakeExchange:
-    """What ccxt hands back from create_order, in the shape the adapter reads."""
+    """ccxt 4.5.84's own shapes: create_order, fetch_order, cancel_order, fetch_position."""
 
-    def __init__(self, answer: object = None) -> None:
+    def __init__(
+        self,
+        answer: object = None,
+        *,
+        position: object = None,
+        statuses: list[dict[str, Any]] | None = None,
+    ) -> None:
         self.answer = answer or {
             "id": "order-1",
             "status": "closed",
             "filled": 0.01,
             "average": 100000.5,
         }
-        self.orders: list[tuple[object, ...]] = []
+        self.position = position
+        self.statuses = statuses or []
+        self.orders: list[dict[str, Any]] = []
+        self.cancelled: list[str] = []
         self.sandbox: bool | None = None
 
     def set_sandbox_mode(self, on: bool) -> None:
         self.sandbox = on
 
-    def create_order(self, symbol: str, kind: str, side: str, amount: float) -> object:
-        self.orders.append((symbol, kind, side, amount))
+    def create_order(
+        self,
+        symbol: str,
+        kind: str,
+        side: str,
+        amount: float,
+        price: float | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> object:
+        self.orders.append(
+            {
+                "symbol": symbol,
+                "type": kind,
+                "side": side,
+                "amount": amount,
+                "price": price,
+                "params": dict(params or {}),
+            }
+        )
         if isinstance(self.answer, Exception):
             raise self.answer
         return self.answer
+
+    def fetch_position(self, symbol: str) -> object:
+        if isinstance(self.position, Exception):
+            raise self.position
+        return self.position
+
+    def fetch_order(self, order_id: str, symbol: str) -> dict[str, Any]:
+        return self.statuses.pop(0) if self.statuses else {"status": "open"}
+
+    def cancel_order(self, order_id: str, symbol: str) -> dict[str, Any]:
+        self.cancelled.append(order_id)
+        return {"id": order_id, "status": "canceled"}
 
 
 def project_with_mandate(tmp_path: Path, text: str = DISCLAIMER) -> Path:
@@ -154,13 +193,159 @@ def test_the_hand_sends_one_order_and_records_what_came_back() -> None:
         client=venue,
     )
 
-    placed = hand({"target": "long", "size": "0.01", "mid": "100000"})
+    placed = hand(
+        {
+            "target": "long",
+            "size": "0.01",
+            "mid": "100000",
+            "at": "2026-09-28T02-55-40Z",
+            "instrument": "BTCUSDT",
+        }
+    )
     assert placed["sent"] is True and placed["order_id"] == "order-1"
-    assert placed["side"] == "buy" and placed["notional"] == "1000.00"
-    assert venue.orders == [("BTC/USDT:USDT", "market", "buy", 0.01)]
+    assert placed["side"] == "buy" and placed["notional"] == "1000.00" and placed["role"] == "taker"
+    sent = venue.orders[0]
+    assert sent["type"] == "market" and sent["side"] == "buy" and sent["price"] is None
+    # One client id per cycle and instrument: the same cycle cannot open two positions.
+    assert sent["params"]["clientOrderId"] == "tra-2026-09-28T02-55-40Z-BTCUSDT"
+    assert placed["client_order_id"] == sent["params"]["clientOrderId"]
 
     short = hand({"target": "short", "size": "0.01", "mid": "100000"})
     assert short["side"] == "sell"
+
+
+def test_a_maker_channel_rests_on_the_book_and_never_crosses_it() -> None:
+    venue = FakeExchange(statuses=[{"status": "closed", "filled": 0.01, "average": 99999.0}])
+    hand = VenueHand(
+        venue="bybit",
+        symbol="BTC/USDT:USDT",
+        max_notional=Decimal(2000),
+        keys=("BYBIT_API_KEY", "BYBIT_API_SECRET"),
+        role="maker",
+        client=venue,
+        clock=lambda: 0.0,
+        sleep=lambda _s: None,
+    )
+
+    placed = hand(
+        {
+            "target": "long",
+            "size": "0.01",
+            "mid": "100000",
+            "bid": "99999",
+            "ask": "100001",
+            "at": "2026-09-28T02-55-40Z",
+            "instrument": "BTCUSDT",
+        }
+    )
+    sent = venue.orders[0]
+    assert sent["type"] == "limit" and sent["price"] == 99999.0
+    assert sent["params"]["postOnly"] is True and sent["params"]["timeInForce"] == "GTC"
+    assert placed["filled"] == "0.01" and placed["cancelled"] is False
+
+
+def test_a_resting_order_that_does_not_fill_is_cancelled_rather_than_chased() -> None:
+    venue = FakeExchange()
+    ticks = iter([0.0, 0.0, 10.0, 40.0, 40.0])
+    hand = VenueHand(
+        venue="bybit",
+        symbol="BTC/USDT:USDT",
+        max_notional=Decimal(2000),
+        keys=("BYBIT_API_KEY", "BYBIT_API_SECRET"),
+        role="maker",
+        limit_timeout_s=30.0,
+        client=venue,
+        clock=lambda: next(ticks),
+        sleep=lambda _s: None,
+    )
+
+    placed = hand({"target": "long", "size": "0.01", "mid": "100000", "bid": "99999"})
+    assert placed["cancelled"] is True and venue.cancelled == ["order-1"]
+    assert "did not fill" in placed["note"]
+
+
+def test_a_maker_order_with_no_book_side_is_not_sent() -> None:
+    venue = FakeExchange()
+    hand = VenueHand(
+        venue="bybit",
+        symbol="BTC/USDT:USDT",
+        max_notional=Decimal(2000),
+        keys=("BYBIT_API_KEY", "BYBIT_API_SECRET"),
+        role="maker",
+        client=venue,
+    )
+    refused = hand({"target": "long", "size": "0.01", "mid": "100000"})
+
+    assert refused["sent"] is False and "no book side" in refused["refused"]
+    assert venue.orders == []
+
+
+def test_an_offset_moves_a_resting_order_away_from_the_touch() -> None:
+    venue = FakeExchange(statuses=[{"status": "closed", "filled": 0.01}])
+    hand = VenueHand(
+        venue="bybit",
+        symbol="BTC/USDT:USDT",
+        max_notional=Decimal(2000),
+        keys=("BYBIT_API_KEY", "BYBIT_API_SECRET"),
+        role="maker",
+        price_offset_bps=Decimal(10),
+        client=venue,
+        clock=lambda: 0.0,
+        sleep=lambda _s: None,
+    )
+    hand({"target": "long", "size": "0.01", "mid": "100000", "bid": "100000"})
+
+    # Ten basis points below the bid for a buy: further from a fill, further from crossing.
+    assert venue.orders[0]["price"] == 99900.0
+
+
+def test_an_order_is_not_added_to_a_position_the_desk_did_not_expect() -> None:
+    venue = FakeExchange(position={"contracts": 0.5, "side": "short"})
+    hand = VenueHand(
+        venue="bybit",
+        symbol="BTC/USDT:USDT",
+        max_notional=Decimal(2000),
+        keys=("BYBIT_API_KEY", "BYBIT_API_SECRET"),
+        client=venue,
+    )
+
+    refused = hand({"target": "long", "size": "0.01", "mid": "100000"})
+    assert refused["sent"] is False and "the other way" in refused["refused"]
+    assert venue.orders == []
+
+    adopting = VenueHand(
+        venue="bybit",
+        symbol="BTC/USDT:USDT",
+        max_notional=Decimal(2000),
+        keys=("BYBIT_API_KEY", "BYBIT_API_SECRET"),
+        adopt_open_position=True,
+        client=venue,
+    )
+    assert adopting({"target": "long", "size": "0.01", "mid": "100000"})["sent"] is True
+
+
+def test_a_hand_that_cannot_read_the_account_does_not_send() -> None:
+    hand = VenueHand(
+        venue="bybit",
+        symbol="BTC/USDT:USDT",
+        max_notional=Decimal(2000),
+        keys=("BYBIT_API_KEY", "BYBIT_API_SECRET"),
+        client=FakeExchange(position=RuntimeError("permission denied")),
+    )
+    with pytest.raises(DispatchError, match="cannot read the account"):
+        hand({"target": "long", "size": "0.01", "mid": "100000"})
+
+
+def test_a_channel_that_does_not_say_maker_or_taker_is_refused() -> None:
+    with pytest.raises(DispatchError, match="maker or taker"):
+        VenueHand(
+            venue="bybit",
+            symbol="BTC/USDT:USDT",
+            max_notional=Decimal(100),
+            keys=("K", "S"),
+            role="undeclared",
+            client=FakeExchange(),
+        )
 
 
 def test_the_hand_refuses_before_it_reaches_the_venue() -> None:

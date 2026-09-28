@@ -50,6 +50,7 @@ def _channel(index: int, raw: Any) -> Channel:
         if required not in raw:
             raise EnvelopeError(f"{where} is missing {required!r}")
     measured = raw.get("measured_round_trip_bps")
+    gas = raw.get("gas_quote")
     return Channel(
         venue=str(raw["venue"]),
         name=str(raw["name"]),
@@ -58,6 +59,7 @@ def _channel(index: int, raw: Any) -> Channel:
         measured_round_trip_bps=(
             None if measured is None else _decimal(f"{where}.measured_round_trip_bps", measured)
         ),
+        gas_quote=None if gas is None else _decimal(f"{where}.gas_quote", gas),
     )
 
 

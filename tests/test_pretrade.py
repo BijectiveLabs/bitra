@@ -209,3 +209,27 @@ def test_the_gate_records_where_the_edge_came_from(channel: Channel) -> None:
     )
     assert measured.record()["edge_certainty"] == "measured"
     assert "n=71" in measured.record()["edge_source"]
+
+
+def test_a_chains_own_cost_is_a_component_with_its_certainty() -> None:
+    from trading_research_agents.envelope.model import Channel
+
+    chain = Channel(
+        venue="some-dex",
+        name="taker-taker",
+        entry_fee_bps=Decimal(3),
+        exit_fee_bps=Decimal(3),
+        gas_quote=Decimal("1.40"),
+    )
+    book = book_from_levels(
+        bids=[("100.00", "5"), ("99.95", "50")], asks=[("100.02", "5"), ("100.07", "50")]
+    )
+    cost = pre_trade_cost(
+        channel=chain, book=book, size=Decimal("1"), direction=Direction.LONG, horizon_s=600
+    )
+    gas = next(c for c in cost.components if c.name == "gas")
+
+    # 1.40 of quote currency against 100.01 of notional is 139.99 bps, declared by the operator.
+    assert gas.certainty is Certainty.DECLARED
+    assert gas.bps.quantize(Decimal("0.01")) == Decimal("139.99")
+    assert "some-dex/taker-taker" in gas.source

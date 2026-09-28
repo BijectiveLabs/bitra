@@ -35,6 +35,17 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- The order follows the channel. A channel's name is `<entry>-<exit>`, each `maker` or `taker`, and
+  `Channel.entry_role` is now read by the venue hand: a maker entry rests on the book as a post-only
+  limit at the snapshot's own touch and is cancelled after `[execution].limit_timeout_s`, a taker
+  entry crosses with a market order, and a channel that says neither is refused rather than guessed
+  at - sending a market order under a maker-priced channel pays a fee the gate never priced.
+- Every order carries a client id derived from the cycle and instrument, so a cycle run twice cannot
+  open two positions; the account is read before anything is sent and an order is never added to a
+  position pointing the other way unless `[execution].adopt_open_position` says so; a hand that
+  cannot read the account does not send. `[execution].params` is handed to the venue verbatim.
+- `[[channel]].gas_quote`: a fixed cost in quote currency per round trip, for chains that charge
+  settlement separately, priced as its own `gas` component with `declared` certainty.
 - The execution mandate (`[execution]`, `execution/mandate.py`, `trading/dispatch.py`): three modes,
   `sandbox`, `signals` and `venue`. Venue mode does not start until the operator has printed the
   mandate text with `tra mandate`, put it in their own project word for word, signed it with a name

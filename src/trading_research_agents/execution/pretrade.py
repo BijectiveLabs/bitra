@@ -191,6 +191,21 @@ def pre_trade_cost(
             ),
         ),
     ]
+    if channel.gas_quote is not None and channel.gas_quote > 0:
+        notional = size * book.mid
+        if notional <= 0:
+            raise PreTradeError("a notional of zero cannot carry a gas cost")
+        components.append(
+            CostComponent(
+                name="gas",
+                bps=(channel.gas_quote / notional) * BPS,
+                certainty=Certainty.DECLARED,
+                source=(
+                    f"{channel.gas_quote} of quote currency per round trip on {channel.key}, "
+                    "declared by the operator"
+                ),
+            )
+        )
     if funding_rate is not None:
         if not isinstance(funding_rate, Decimal) or not funding_rate.is_finite():
             raise PreTradeError("funding_rate is a finite Decimal or None")
