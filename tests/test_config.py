@@ -192,3 +192,46 @@ def test_the_stances_are_named_and_asked_once() -> None:
         parse_strategy_config(agent_raw(agents={**AGENTS, "validators": ["bullish"]}))
     with pytest.raises(ConfigError, match="asks each stance once"):
         parse_strategy_config(agent_raw(agents={**AGENTS, "validators": ["pro", "pro"]}))
+
+
+def test_conviction_is_absent_until_declared_and_reads_its_ladder_from_the_top() -> None:
+    assert parse_strategy_config(agent_raw()).conviction.idle
+
+    cfg = parse_strategy_config(
+        agent_raw(
+            conviction={
+                "weights": {"technical_analyst": Decimal(2), "macro_analyst": Decimal(1)},
+                "validator_weight": Decimal(1),
+                "min_score": Decimal("0.4"),
+                "max_leverage": Decimal(3),
+                "ladder": [
+                    {"at_least": Decimal("0.4"), "size_multiple": Decimal("0.25")},
+                    {"at_least": Decimal("0.8"), "size_multiple": Decimal(1)},
+                ],
+            }
+        )
+    )
+    rule = cfg.conviction
+    assert not rule.idle and rule.max_leverage == Decimal(3)
+    assert [str(t.at_least) for t in rule.ladder] == ["0.8", "0.4"]
+    assert rule.weights["technical_analyst"] == Decimal(2)
+
+
+def test_a_conviction_rule_that_cannot_be_applied_is_refused() -> None:
+    with pytest.raises(ConfigError, match="is not a role that is asked"):
+        parse_strategy_config(agent_raw(conviction={"weights": {"portfolio_manager": Decimal(1)}}))
+    with pytest.raises(ConfigError, match="unknown"):
+        parse_strategy_config(agent_raw(conviction={"floor": Decimal("0.4")}))
+    with pytest.raises(ConfigError, match="at_least and size_multiple"):
+        parse_strategy_config(agent_raw(conviction={"ladder": [{"at_least": Decimal("0.5")}]}))
+    with pytest.raises(ConfigError, match="min_score"):
+        parse_strategy_config(agent_raw(conviction={"min_score": Decimal(2)}))
+    with pytest.raises(ConfigError, match="max_leverage"):
+        parse_strategy_config(agent_raw(conviction={"max_leverage": Decimal(0)}))
+
+
+def test_the_venue_size_step_is_declared_beside_the_size() -> None:
+    assert parse_strategy_config(agent_raw()).run.size_step == Decimal("0.000001")
+    declared = agent_raw()
+    declared["run"]["size_step"] = Decimal("0.001")
+    assert parse_strategy_config(declared).run.size_step == Decimal("0.001")

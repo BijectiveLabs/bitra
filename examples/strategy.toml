@@ -23,6 +23,7 @@ instrument = "BTCUSDT"
 venue_key = "bybit/taker-taker"    # a channel declared in envelope.toml
 bar_interval_s = 60
 size = 0.01
+size_step = 0.001                  # the venue's size increment; sizes round down to it
 spread_cost_bps = 3.0              # half-spread from the recorded book, declared here
 equity = 10000                     # in quote currency; leave out and every entry is refused
 latency_ms = 6                     # measured order round trip on a persistent connection
@@ -104,6 +105,30 @@ kill_switch = "KILL"               # touch this file to flatten and stop
 # min_support = 1                  # validators that must support it (needs [agents].validators)
 # max_opposition = 0               # validators that may oppose it; 0 is the strictest there is
 #
+# How much goes behind the idea. The matrix above answers whether to trade at all; this answers how
+# much, from the same declarations. Each role's weight is what its voice is worth to you, the
+# deciding analyst's weight is scaled by the confidence it gave, a role that declared nothing counts
+# as neither agreement nor disagreement, and each validator vote is worth validator_weight. The
+# score is what agreed minus what disagreed, over everything that could have agreed, so it sits
+# between 0 and 1. Nothing here can make a trade larger than [controls] and [run].size already
+# allow - it can only make it smaller.
+# [conviction]
+# weights = { technical_analyst = 2.0, onchain_analyst = 1.5, macro_analyst = 1.0, sentiment_analyst = 0.5 }
+# validator_weight = 1.0
+# min_score = 0.4                  # below this the desk does not trade, whatever the matrix said
+# max_leverage = 3.0               # notional against [run].equity; a ceiling, never a target
+#
+# The ladder from score to size. Written top down or bottom up, it is read from the top.
+# [[conviction.ladder]]
+# at_least = 0.75                  # everything agrees: the whole base size
+# size_multiple = 1.0
+# [[conviction.ladder]]
+# at_least = 0.55                  # mostly agreeing: half
+# size_multiple = 0.5
+# [[conviction.ladder]]
+# at_least = 0.4                   # thin but above the floor: a quarter
+# size_multiple = 0.25
+
 # Is this the trade you said you wanted? Trading, not investing: what it has to be worth, and how
 # often you are willing to do it. The round trips are counted from the intents already on disk, so
 # a restarted process cannot forget what it has already done today.

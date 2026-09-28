@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from trading_research_agents.execution.confluence import STANCES, ConfluenceError, Matrix
+from trading_research_agents.execution.conviction import Conviction, ConvictionError, Tier
 from trading_research_agents.execution.cost import CostError, FundingSchedule
 from trading_research_agents.execution.targets import TargetError, Targets
 from trading_research_agents.strategy.core import Strategy
@@ -39,6 +40,8 @@ class RunSettings:
     latency_ms: Decimal
     slippage_bps: Decimal
     settlement_interval_s: int
+    # The venue's own size increment. Sizes are always rounded down to it, never up.
+    size_step: Decimal = Decimal("0.000001")
 
 
 @dataclass(frozen=True)
@@ -126,6 +129,8 @@ class StrategyConfig:
     # direction, and whether the trade is the shape this desk said it wanted.
     confluence: Matrix = field(default_factory=Matrix)
     targets: Targets = field(default_factory=Targets)
+    # How much capital goes behind an idea, from the same declarations the matrix reads.
+    conviction: Conviction = field(default_factory=Conviction)
 
 
 def load_strategy_config(path: Path) -> StrategyConfig:
@@ -172,6 +177,7 @@ def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> S
         latency_ms=_dec(run_raw, "latency_ms"),
         slippage_bps=_dec(run_raw, "slippage_bps"),
         settlement_interval_s=_int(run_raw, "settlement_interval_s"),
+        size_step=_dec(run_raw, "size_step") if "size_step" in run_raw else Decimal("0.000001"),
     )
     if not run.instrument or not run.venue_key:
         raise ConfigError("[run] names the instrument and the venue_key (venue/channel)")
@@ -195,6 +201,7 @@ def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> S
         agents=agents,
         confluence=_confluence(raw),
         targets=_targets(raw, exit_rule),
+        conviction=_conviction(raw),
     )
 
 
@@ -335,6 +342,49 @@ CONFLUENCE_KEYS = (
     "max_opposition",
 )
 TARGET_KEYS = ("min_net_bps", "min_reward_risk", "max_round_trips_per_day")
+
+
+CONVICTION_KEYS = ("weights", "validator_weight", "min_score", "max_leverage", "ladder")
+
+
+def _conviction(raw: dict[str, Any]) -> Conviction:
+    """[conviction]: what each voice is worth, the floor, and the ladder from score to size."""
+    table = raw.get("conviction")
+    if table is None:
+        return Conviction()
+    if not isinstance(table, dict):
+        raise ConfigError("[conviction] must be a table")
+    unknown = sorted(set(table) - set(CONVICTION_KEYS))
+    if unknown:
+        raise ConfigError(f"[conviction]: unknown {unknown}; have {list(CONVICTION_KEYS)}")
+    weights_raw = table.get("weights") or {}
+    if not isinstance(weights_raw, dict):
+        raise ConfigError("[conviction].weights is a table of role to weight")
+    stray = sorted(set(weights_raw) - set(ASKABLE))
+    if stray:
+        raise ConfigError(f"[conviction].weights: {stray} is not a role that is asked")
+    weights = {role: _dec(weights_raw, role) for role in weights_raw}
+    rungs = []
+    for entry in table.get("ladder") or ():
+        if not isinstance(entry, dict) or set(entry) != {"at_least", "size_multiple"}:
+            raise ConfigError(
+                "[[conviction.ladder]] entries carry at_least and size_multiple, nothing else"
+            )
+        rungs.append(
+            Tier(at_least=_dec(entry, "at_least"), size_multiple=_dec(entry, "size_multiple"))
+        )
+    try:
+        return Conviction(
+            weights=weights,
+            validator_weight=(
+                _dec(table, "validator_weight") if "validator_weight" in table else Decimal(0)
+            ),
+            min_score=_dec(table, "min_score") if "min_score" in table else Decimal(0),
+            ladder=tuple(rungs),
+            max_leverage=_dec(table, "max_leverage") if "max_leverage" in table else None,
+        )
+    except ConvictionError as exc:
+        raise ConfigError(str(exc)) from exc
 
 
 def _validators(raw: Any) -> tuple[str, ...]:
