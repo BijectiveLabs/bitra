@@ -12,10 +12,11 @@ rewritten. No model sits on the order path, no agent holds a key, and the defaul
 simulator. What survives that is worth looking at; what does not is recorded as dead, with the
 reason it died.
 
-Status: pre-release, under active development. The API is not stable and the package is not
-yet on PyPI. Running today: the gates, the ladder, the roles, the console. Landing next: the
-autonomous cycle, live data sources with free and paid chains, the validators, and the two
-auditors.
+Status: pre-release, under active development. The API is not stable and the package is not yet on
+PyPI. Running today: the autonomous cycle end to end, live data sources with free and paid chains,
+four analysts and three validators, the confluence matrix, conviction sizing, the cost gate, the
+desk's own targets, venue execution behind a written mandate, and the two auditors. Landing next:
+the release pass - diagrams, the packaging, and the first tag.
 
 ---
 
@@ -28,8 +29,28 @@ cp .env.example .env                # your model key; no venue key is needed for
 tra run --env-file .env             # one autonomous cycle, in the sandbox
 ```
 
-```
-snapshot (engine)  ->  briefs (code)  ->  agents (parallel)  ->  cost gate (code)  ->  intent or refusal
+```mermaid
+flowchart TD
+    engine[["engine pulls<br/>free then paid, with the age of every value"]] --> briefs
+    briefs["code builds the briefs<br/>each role sees only its own figures"] --> round1
+    subgraph round1["asked together"]
+        direction LR
+        tech["technical analyst<br/>direction, confidence, horizon"]
+        macro["macro analyst"]
+        chain["on-chain analyst"]
+        mood["sentiment analyst"]
+    end
+    round1 --> price["code prices the round trip<br/>fee, spread, impact, funding, gas"]
+    price --> round2["validators pro, contra, neutral<br/>claims must cite a figure or they are discarded"]
+    round2 --> matrix{"confluence<br/>do the declared states agree?"}
+    matrix -- "no" --> refused["refusal with the figure that refused it"]
+    matrix -- "yes" --> size["conviction<br/>how much, off the operator's ladder"]
+    size --> gate{"cost gate<br/>does the claimed edge clear its cost?"}
+    gate -- "no" --> refused
+    gate -- "yes" --> targets{"targets<br/>net bps, reward-to-risk, round trips today"}
+    targets -- "no" --> refused
+    targets -- "yes" --> intent["intent written to the cycle"]
+    intent --> venue["venue mode only<br/>one order with the stop and take profit attached"]
 ```
 
 What that prints, from a real cycle on live data with a real model:
@@ -51,6 +72,10 @@ the edge is declared: [agents].magnitude_bps, declared by the operator and not m
   latency_slippage       2.0000 bps  estimated
 intent: long 0.01 (sandbox)
 ```
+
+The same cycle in the terminal, with the panels the console draws:
+
+![one cycle](assets/cycle.svg)
 
 Three things in that output are the whole argument of this project. The model never computed a
 number: every figure it read was built by code from a snapshot that says how old it is. Eleven of
@@ -81,6 +106,37 @@ The same four commands take you to paper (`tra paper`) and, behind the ladder, t
 session on a live venue (`tra live`, `docs/live.md`). Total time from install to a first
 backtest is a few minutes, most of it the download.
 
+### Nothing starts before `tra check` says it can
+
+![the cockpit](assets/cockpit.svg)
+
+Typed with no arguments, `tra` opens the cockpit above: what is ready, what is missing, and the one
+command to type next. `tra check` is the same thing as a list, and it is the whole of the setup
+you have to hold in your head. This is a project written by `tra init --profile autonomous`, one
+minute old, before its operator has done anything:
+
+```
+ok    strategy.toml: valid; core 'agent-pending'; instrument BTCUSDT
+ok    sources: derivatives, macro, news, onchain, sentiment on the shelf, nothing declared yet;
+      fill one in and its analyst joins the roster
+ok    roster: technical_analyst; `tra run` asks these
+ok    channel: bybit/taker-taker enters as a taker, priced at that fee; an order crosses the book
+ok    execution: sandbox; nothing leaves the machine
+ok    conviction: floor 0.4; ladder 0.75+ -> 1.0x, 0.55+ -> 0.5x, 0.4+ -> 0.25x
+ok    targets: at least 5 bps net; at most 6 round trips a day
+ok    data.toml: chains for ohlcv, orderbook, funding, open_interest; `tra run` uses them
+ok    symbols: BTCUSDT is BTC/USDT:USDT to the sources
+ok    venues: fees are priced on bybit, data also comes from binance; deliberate is fine
+todo  no dataset for BTCUSDT in data: run `tra data get BTCUSDT YYYY-MM-DD`
+todo  funding: none; a run that spans a settlement will refuse (tra data get fetches it)
+todo  [agents].provider is still the placeholder; name the provider you have a key for
+3 thing(s) to fix first
+```
+
+Three things to do, each one named. When they are done, `tra run --env-file .env` decides once, and
+`tra run --every 5m --env-file .env` keeps deciding on the bar's own boundary until the budget, the
+kill switch or you stop it.
+
 ## Why this exists
 
 Most trading-agent frameworks are good at producing a decision and silent about whether the
@@ -106,6 +162,36 @@ what each one died of. The agent inherits that discipline as code:
 Two required dependencies, `numpy` and `rich`. No orchestration framework, no dataframe
 library, no vendor lock-in. Everything that touches money is `Decimal`; the statistics run in
 floating point from the collapsed series on.
+
+## Who is asked, and what each one may do
+
+Every role reads figures code computed, answers inside a closed schema, and decides nothing on its
+own. What follows a decision is arithmetic over the operator's own declarations.
+
+| Role | Reads | Answers | May never |
+|---|---|---|---|
+| technical analyst | closed candles, spread, funding | a direction, a confidence, a horizon | size the trade |
+| macro analyst | dated levels and rates, dated text | a regime | propose a direction |
+| on-chain analyst | chain figures and derivative figures | accumulation, distribution or neutral | propose a direction |
+| sentiment analyst | dated scores, dated notes | negative, neutral, positive, or not declared | invent a mood no figure supports |
+| validators (three stances) | the proposal and the figures behind it | support, oppose or abstain, with cited claims | claim a figure it was not given |
+| technology auditor | the cycles this project recorded | findings and proposed changes | change anything |
+| quant auditor | the desk's own decisions and round trips | findings and proposed changes | change anything |
+
+```mermaid
+flowchart LR
+    ops["operator<br/>declares the thresholds, weights, caps and mandate"] --> files[("strategy.toml<br/>sources/*.toml<br/>envelope.toml<br/>data.toml")]
+    files --> code["code<br/>briefs, declared states, gates, sizing"]
+    code --> models["models<br/>read figures, answer in a schema"]
+    models -- "labels and claims" --> code
+    code --> record[("the cycle on disk<br/>snapshot, briefs, answers, intent, refusals")]
+    code --> order["one order, behind the mandate"]
+    audit["two auditors"] --> record
+    audit --> proposals["proposals.md<br/>a person applies them"]
+    proposals -.-> ops
+```
+
+The arrow that is missing is the point: no model reaches the order, and no model edits a file.
 
 ## How it fits together
 

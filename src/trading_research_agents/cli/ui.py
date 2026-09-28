@@ -32,7 +32,7 @@ BANNER = r"""
   |_|  |_| \_\/_/   \_\
 """.strip("\n")
 
-TAGLINE = "trading-research-agents: a research agent that refuses to claim what it has not measured"
+TAGLINE = "trading-research-agents: autonomous trading agents that cannot lie about their results"
 _console: Console | None = None
 
 
