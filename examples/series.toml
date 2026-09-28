@@ -4,6 +4,11 @@
 # the moment it was known. Thresholds are yours, labelled as declared; the correlation of each
 # series with the instrument's returns is measured on your data, with its sample size, and is
 # never a constant here.
+#
+# This is the map `tra agent session --macro` takes, and it is the older name a cycle still reads
+# when it sits beside the config. A cycle prefers the shelf: sources/macro.toml for these series,
+# sources/onchain.toml and sources/derivatives.toml for chain and derivative figures, one file per
+# class of data.
 
 [[series]]
 name = "us10y"

@@ -26,8 +26,34 @@ All notable changes to this project are recorded here. The format follows
 - `requirements.txt` carries the runtime pins generated from `uv.lock`, with the extras
   spelled out in comments.
 
+### Fixed
+
+- A cycle now hands each source what the operator declared for that kind in `data.toml`. It was
+  passing only the candle window it needed, so `levels`, `params` and anything else in a
+  `[data.<kind>]` table were silently dropped on the `tra run` path while `tra data pull` honoured
+  them.
+
 ### Added
 
+- The source shelf: `sources/macro.toml`, `sources/news.toml`, `sources/sentiment.toml`,
+  `sources/onchain.toml`, `sources/derivatives.toml`. One declaration per class of data rather
+  than one per vendor, so replacing a provider is an edit on one line and nothing else in the
+  project moves. `tra init` writes all five as forms with the entries commented out; a form
+  declares nothing, so an untouched project asks only the technical analyst. The older layout
+  (`series.toml`, `onchain.toml`, `sentiment.toml` beside the config) is still read.
+  `agents/context.py`.
+- Dated text is its own class: `[[news]]` entries name files of `when,what[,source]` rows, read by
+  the macro analyst as events and by the sentiment analyst as notes. Several files per class and
+  several classes per role are both allowed, which is how the on-chain analyst reads chain and
+  derivative figures side by side. `data.series.load_news`.
+- `[data.<kind>].params` is handed to the venue verbatim, so a venue's own spelling lives in the
+  operator's file instead of in this package. Measured on 2026-09-28: asked plainly, Bybit answers
+  `fetch_open_interest` with the last hourly bucket, so the figure arrives up to an hour old;
+  `params = { intervalTime = "5min" }` brings it back to about two minutes. The shipped `data.toml`
+  declares it.
+- `tra check` reads the shelf without reading the data: what each file declares, an export that is
+  declared but not on disk, and the roster the next `tra run` will ask. `tra run` takes one flag
+  per class (`--macro --onchain --derivatives --sentiment --news`), each overriding one file.
 - Four analysts in one cycle, asked at the same time: the technical analyst that decides, and the
   macro and news, on-chain and sentiment analysts that read. Each one gets a brief built by code
   from the snapshot and the series the operator mapped in, each answer is recorded with its tokens

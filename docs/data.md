@@ -146,6 +146,53 @@ second old, and open interest stamped fifteen minutes back. That last one is the
 kind has its own `ttl`: one number for all of them would either reject the open interest a venue
 publishes slowly or accept a book that is no longer a book.
 
+### A venue's own parameters
+
+`[data.<kind>].params` is a table handed to the source verbatim. Venues differ in ways no generic
+adapter should pretend away, and the operator's file is where a vendor's spelling belongs.
+
+The case that made this necessary, measured on 2026-09-28 against ccxt 4.5.84: asked plainly, Bybit
+answers `fetch_open_interest` with the last hourly bucket, so the figure is up to an hour old and
+any freshness window under an hour refuses by construction. Asked for a finer bucket it answers
+about two minutes back:
+
+```
+[data.open_interest]
+chain = ["ccxt:bybit"]
+ttl = "10m"
+params = { intervalTime = "5min" }
+```
+
+The parameters a kind was fetched with are recorded beside the value, because they are part of why
+the age is what it is. Both `tra data pull` and `tra run` pass them.
+
+## The shelf: what the reading analysts are given
+
+Live values come in chains, above. Everything a reading analyst sees comes from the shelf instead:
+one declaration file per class of data, beside the config, under `sources/`.
+
+| File | Class | Shape | Read by |
+|---|---|---|---|
+| `sources/macro.toml` | dated levels and rates | `[[series]]`, one per file | `macro_analyst` |
+| `sources/news.toml` | dated text | `[[news]]`, one per file | `macro_analyst`, `sentiment_analyst` |
+| `sources/sentiment.toml` | dated scores | `[[series]]` | `sentiment_analyst` |
+| `sources/onchain.toml` | dated chain figures | `[[series]]` | `onchain_analyst` |
+| `sources/derivatives.toml` | dated funding, open interest, basis | `[[series]]` | `onchain_analyst` |
+
+The split is by class of data, not by vendor. A vendor is a line in a file, so a desk that moves
+from a free export to a paid subscription edits one entry and nothing else changes: not the code,
+not the briefs, not the prompts. That also means no vendor's format becomes the shape everything
+else has to match.
+
+Nothing on the shelf fetches. Each entry names a local file the operator produced, with its
+columns, its timestamp unit and its `publish_lag`, and the series engine applies the same as-of
+rule to all of them. `[[news]]` entries name dated-text files (`when,what[,source]`) and the macro
+analyst reads them as events while the sentiment analyst reads them as notes.
+
+`tra init` writes all five files as forms with the entries commented out. A form declares nothing,
+so an untouched project asks only the technical analyst. `tra check` prints what each file
+declares, flags an export that is declared but missing, and prints the roster.
+
 ## The audit
 
 ```python

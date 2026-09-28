@@ -234,8 +234,11 @@ is a plugin (`docs/venues.md`); data from anywhere else comes through a column m
 
 The spellings people expect are the tiers of the ladder: `tra backtest` is `trade replay`
 (T0), `tra paper` is `trade shadow` (T1/T2), `tra live` is `trade live` (T3, canary). `tra
-init DIR` writes a project: `strategy.toml`, `envelope.toml`, `mapping.toml`, an example core
-beside the config, `.env.example`, `.gitignore`. Inside a project the run commands need no
+init DIR` writes a project: `strategy.toml`, `envelope.toml`, `mapping.toml`, `data.toml`, the
+`sources/` shelf, an example core beside the config, `.env.example`, `.gitignore`. The shelf is one
+declaration per class of data (macro, news, sentiment, on-chain, derivatives), shipped as forms with
+the entries commented out: fill one in and the analyst that reads it joins the roster, leave it and
+that role is never asked. Inside a project the run commands need no
 flags: `strategy.toml` and `envelope.toml` from the directory, the newest dataset in `data/`,
 funding beside it, a run directory under `runs/`. Every flag still exists for anyone who wants
 it elsewhere. Keys come from the environment (`BYBIT_API_KEY`, `BYBIT_API_SECRET`) or an

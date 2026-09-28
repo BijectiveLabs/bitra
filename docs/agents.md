@@ -137,6 +137,10 @@ the operator's data every session and reported with its n and window.
 tra agent session --macro series.toml --events events.json --onchain onchain.toml
 ```
 
+A session takes its maps as paths, one flag at a time. A cycle (`tra run`) reads the shelf instead:
+`sources/<class>.toml` beside the config, one file per class of data, described in
+[the cycle](cycle.md). Same engine, same as-of rule, different way of saying what the desk has.
+
 ## Cost and latency as numbers
 
 Every model call is one line in `usage.jsonl`: role, provider, model, tokens in and out,

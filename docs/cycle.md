@@ -46,9 +46,45 @@ a prompt.
 | Agent | Reads | Answers | Asked when |
 |---|---|---|---|
 | `technical_analyst` | the closed candles of the snapshot, the spread, the funding rate | a target, a confidence, a horizon, a reason | every cycle; it is the role that decides |
-| `macro_analyst` | the macro series and the dated calendar the operator mapped in | a regime, the events it saw, a reason | when `series.toml` sits beside the config, or `--macro` names one |
-| `onchain_analyst` | on-chain series: flows, supply, whatever was mapped in | accumulation, distribution or neutral, and why | when `onchain.toml` is there, or `--onchain` |
-| `sentiment_analyst` | dated scores and dated notes the operator curates | negative, neutral, positive, or not declared | when `sentiment.toml` is there, or `--sentiment` |
+| `macro_analyst` | macro series and the dated text of `news.toml` | a regime, the events it saw, a reason | when `sources/macro.toml` or `sources/news.toml` declares something, or `--macro` / `--news` names a file |
+| `onchain_analyst` | chain figures and derivative figures, read side by side | accumulation, distribution or neutral, and why | when `sources/onchain.toml` or `sources/derivatives.toml` declares something, or `--onchain` / `--derivatives` |
+| `sentiment_analyst` | dated scores, plus the same dated text as notes | negative, neutral, positive, or not declared | when `sources/sentiment.toml` declares something, or `--sentiment` |
+
+### The shelf
+
+A desk does not have one data source. It has a shelf of them, and the shelf changes when a
+subscription starts or a free endpoint goes away. So the declarations are one file per class of
+data, never one file per vendor:
+
+```
+my-run/
+  strategy.toml
+  data.toml               live values for the cycle: candles, book, funding, open interest
+  sources/
+    macro.toml            dated levels and rates
+    news.toml             dated text: releases, statements, the desk's own notes
+    sentiment.toml        dated scores: a fear index, a positioning score
+    onchain.toml          dated chain figures: venue flows, supply held, active addresses
+    derivatives.toml      dated funding, open interest, basis
+```
+
+A vendor is a line inside one of those files, so replacing one with another is an edit in one place
+and nothing else in the project moves. `tra init` writes all five as forms with every entry
+commented out, and a form declares nothing: an untouched project asks only the technical analyst
+and pays for nothing else. Fill one in and its analyst joins the roster on the next run. Two
+classes can feed one role, which is why the on-chain analyst reads chain and derivative figures
+together.
+
+`tra check` reads the shelf without reading the data: it names what each file declares, names an
+export that is declared but not on disk, and prints the roster the next `tra run` will ask. The
+older layout (`series.toml`, `onchain.toml`, `sentiment.toml` beside the config) is still read, so
+a project written before the shelf existed keeps working.
+
+Each file goes through the same series engine as `tra agent session`: `publish_lag` decides when a
+figure became knowable, and a free CSV export and a paid vendor's dump are read the same way. The
+live numbers a cycle decides on are a different thing, and they come from `data.toml` with their
+age attached. Keeping them apart is what stops a daily file from standing in for a number that has
+to be fresh.
 
 The three reading analysts go out together with the technical analyst, so the cycle waits for the
 slowest of them and not for the sum of all four. Each one reads through the same series engine as
@@ -56,9 +92,10 @@ slowest of them and not for the sum of all four. Each one reads through the same
 published, and the operator's `publish_lag` is what decides that moment.
 
 Two habits are enforced rather than encouraged. Nothing is scraped: an analyst reads the files its
-operator mapped in, and there is no code path from an agent to the internet. And a role with no
+operator declared, and there is no code path from an agent to the internet. And a role with no
 source says so; the sentiment analyst answers `not declared` rather than `neutral`, because those
-are different facts and an operator has to be able to tell them apart.
+are different facts and an operator has to be able to tell them apart. A role whose files are all
+unreadable is not asked at all, and the cycle records which files it could not read.
 
 A role can run on its own model. `[agents.roles.<role>]` overrides the provider, the model, the
 output cap, the timeout and the retries for that role alone, and anything it does not override it
