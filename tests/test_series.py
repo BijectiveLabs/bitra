@@ -19,6 +19,8 @@ from trading_research_agents.data.series import (
     correlation,
     lead_lag,
     load_all,
+    load_news,
+    load_news_map,
     load_series_map,
     net_flow,
     read_events,
@@ -186,3 +188,56 @@ def test_json_series_and_events_load(tmp_path: Path) -> None:
     assert [e.what for e in soon] == ["CPI release"] and soon[0].record()["when"].startswith(
         "2025-01-10"
     )
+
+
+def test_news_declares_dated_text_files_and_reads_them_as_one_list(tmp_path: Path) -> None:
+    (tmp_path / "news.toml").write_text(
+        '[[news]]\nname = "policy"\nfile = "news/policy.csv"\nsource = "central bank"\n'
+        '[[news]]\nname = "desk"\nfile = "news/desk.csv"\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "news").mkdir()
+    (tmp_path / "news" / "policy.csv").write_text(
+        "when,what\n2025-02-01T13:30:00Z,no change\n", encoding="utf-8"
+    )
+    (tmp_path / "news" / "desk.csv").write_text(
+        "when,what,source\n2025-01-20T09:00:00Z,thin book into the close,the desk\n",
+        encoding="utf-8",
+    )
+
+    specs = load_news_map(tmp_path / "news.toml")
+    assert [s.name for s in specs] == ["policy", "desk"]
+
+    events = load_news(tmp_path / "news.toml")
+    assert [e.what for e in events] == ["thin book into the close", "no change"]
+    # A declared source fills a blank column; a row that names its own is left alone.
+    assert [e.source for e in events] == ["the desk", "central bank"]
+
+
+def test_a_news_declaration_says_what_is_wrong_with_it(tmp_path: Path) -> None:
+    (tmp_path / "news.toml").write_text("[news]\nfile = 'x.csv'\n", encoding="utf-8")
+    with pytest.raises(SeriesError, match=r"\[\[news\]\] entry naming a file"):
+        load_news_map(tmp_path / "news.toml")
+
+    (tmp_path / "news.toml").write_text('[[news]]\nname = "x"\n', encoding="utf-8")
+    with pytest.raises(SeriesError, match="news entry 1 names its file"):
+        load_news_map(tmp_path / "news.toml")
+
+    (tmp_path / "news.toml").write_text('[[news]]\nfile = "gone.csv"\n', encoding="utf-8")
+    with pytest.raises(SeriesError, match="does not exist"):
+        load_news(tmp_path / "news.toml")
+
+
+def test_the_example_shelf_is_a_form_nobody_has_filled_in_yet() -> None:
+    shelf = EXAMPLES / "sources"
+    assert {path.name for path in shelf.glob("*.toml")} == {
+        "macro.toml",
+        "onchain.toml",
+        "derivatives.toml",
+        "sentiment.toml",
+        "news.toml",
+    }
+    for path in shelf.glob("*.toml"):
+        text = path.read_text(encoding="utf-8")
+        assert "[[" not in text.replace("# [[", ""), f"{path.name} declares an entry out of the box"
+        assert "http" not in text, f"{path.name} names an endpoint; the shelf reads files only"

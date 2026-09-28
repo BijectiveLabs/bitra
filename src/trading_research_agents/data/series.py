@@ -406,6 +406,64 @@ def read_events(path: Path) -> tuple[Event, ...]:
     return tuple(sorted(events, key=lambda e: e.when_ns))
 
 
+@dataclass(frozen=True)
+class NewsSpec:
+    """One dated-text file a project declares: a release, a statement, a note the desk wrote."""
+
+    name: str
+    file: str
+    source: str
+
+
+def load_news_map(path: Path) -> tuple[NewsSpec, ...]:
+    """`news.toml`: one `[[news]]` per dated-text file the operator wants a role to read.
+
+    Dated text is its own class of data, declared the way a series is, so a desk can keep a
+    curated file of its own beside a vendor's export and neither becomes the format the other
+    has to match.
+
+        [[news]]
+        name = "policy"
+        file = "news/policy.csv"     # columns: when, what[, source]
+        source = "operator export"
+    """
+    try:
+        raw = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        raise SeriesError(f"{path}: {exc}") from exc
+    entries = raw.get("news")
+    if not isinstance(entries, list) or not entries:
+        raise SeriesError(f"{path}: a [[news]] entry naming a file is required")
+    specs = []
+    for number, entry in enumerate(entries, start=1):
+        if not isinstance(entry, dict) or not entry.get("file"):
+            raise SeriesError(f"{path}: news entry {number} names its file")
+        specs.append(
+            NewsSpec(
+                name=str(entry.get("name", "")).strip() or f"news {number}",
+                file=str(entry["file"]),
+                source=str(entry.get("source", "")).strip(),
+            )
+        )
+    return tuple(specs)
+
+
+def load_news(path: Path) -> tuple[Event, ...]:
+    """Every dated-text file a `news.toml` names, read as one list of events."""
+    base = path.resolve().parent
+    out: list[Event] = []
+    for spec in load_news_map(path):
+        target = Path(spec.file)
+        for event in read_events(target if target.is_absolute() else base / target):
+            # A declared source is a fallback, never an overwrite: the row knows better.
+            out.append(
+                Event(event.when_ns, event.what, event.source or spec.source)
+                if spec.source
+                else event
+            )
+    return tuple(sorted(out, key=lambda e: e.when_ns))
+
+
 def upcoming(events: Sequence[Event], now_ns: int, *, horizon: timedelta) -> list[Event]:
     end = now_ns + int(horizon.total_seconds() * NS_PER_S)
     return [e for e in events if now_ns <= e.when_ns <= end]

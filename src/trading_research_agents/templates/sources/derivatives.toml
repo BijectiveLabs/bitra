@@ -1,0 +1,31 @@
+# Derivative series this desk reads: dated funding history, open interest, basis. The on-chain
+# analyst reads these beside the chain figures, because they answer the same question from the other
+# side: who is positioned, and who is paying to stay there.
+#
+# This file is for series, for analysis over time. The live funding rate and open interest a cycle
+# decides on come through data.toml, from the venue, with their age attached. Keeping them apart is
+# what stops a stale daily file from standing in for a number that has to be fresh.
+
+# Nothing is switched on yet. Uncomment an entry and put the file where it points; the on-chain
+# analyst reads this class beside onchain.toml.
+
+# [[series]]
+# name = "funding_8h"
+# file = "derivatives/funding_8h.csv"   # columns: date,value  (fraction: 0.0001 is one basis point)
+# ts = "date"
+# ts_unit = "iso8601"
+# value = "value"
+# unit = "fraction"
+# publish_lag = "0s"                    # a settled rate is known at settlement
+# source = "your export"
+# threshold = { bearish_above = 0.0005, bullish_below = -0.0002 }
+
+# [[series]]
+# name = "open_interest"
+# file = "derivatives/open_interest.csv"
+# ts = "date"
+# ts_unit = "iso8601"
+# value = "value"
+# unit = "contracts"
+# publish_lag = "15m"                 # one venue stamps it about fifteen minutes back
+# source = "your subscription"

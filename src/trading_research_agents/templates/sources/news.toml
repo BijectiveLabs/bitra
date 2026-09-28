@@ -1,0 +1,23 @@
+# Dated text this desk reads: releases, policy statements, the notes you write yourself. Declared
+# here, read by the macro analyst as events and by the sentiment analyst as notes.
+#
+# Each entry names a file of dated rows:
+#
+#   when,what[,source]
+#   2026-09-26T12:30:00+00:00,policy statement, no change,central bank
+#
+# `when` carries a timezone or is a bare date. Nothing is scraped and nothing is fetched: this is
+# your file, and an agent reads it only as text with a date on it.
+
+# Nothing is switched on yet. Uncomment an entry and put the file where it points; the macro and
+# sentiment analysts both read this class.
+
+# [[news]]
+# name = "policy"
+# file = "news/policy.csv"
+# source = "your export"
+
+# [[news]]
+# name = "desk_notes"
+# file = "news/desk_notes.csv"
+# source = "the desk"

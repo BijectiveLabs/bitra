@@ -1,0 +1,51 @@
+# Macro series this desk reads: dated levels and rates. One file per class of data, never one file
+# per vendor, so swapping a provider is an edit here and nothing else moves.
+#
+# Every entry names a local file you produced: a free export from a central bank or statistics
+# office, a paid vendor's dump, your own recorder. Nothing in this package fetches these, and no
+# agent ever sees a URL or a key.
+#
+#   ts_unit      s | ms | us | ns | iso8601. A bare date (2026-09-26) is read as UTC midnight.
+#   publish_lag  how long after the observation the figure was actually knowable. A monthly print
+#                released two weeks later is "14d", and a value is never used before that moment.
+#   threshold    yours. It is labelled a declaration in every brief, and it is what the gate reads.
+#
+# The correlation of each series with the instrument's returns is measured on your own data and
+# carries its sample size. It is never a constant in this file.
+
+# Nothing is switched on yet. Uncomment an entry, put the file where it points, and the macro
+# analyst joins the roster on the next run. Left as it is, that role is not asked and not paid
+# for.
+
+# [[series]]
+# name = "us10y"
+# file = "macro/us10y.csv"             # columns: date,value
+# ts = "date"
+# ts_unit = "iso8601"
+# value = "value"
+# unit = "percent"
+# publish_lag = "0s"                   # a market yield is known when it prints
+# source = "your export"
+# threshold = { bullish_below = 3.5, bearish_above = 4.25 }
+
+# [[series]]
+# name = "dxy"
+# file = "macro/dxy.csv"
+# ts = "date"
+# ts_unit = "iso8601"
+# value = "value"
+# unit = "index"
+# publish_lag = "0s"
+# source = "your export"
+# threshold = { bullish_below = 103, bearish_above = 106 }
+
+# [[series]]
+# name = "cpi_yoy"
+# file = "macro/cpi_yoy.csv"
+# ts = "date"
+# ts_unit = "iso8601"
+# value = "value"
+# unit = "percent"
+# publish_lag = "14d"                # a monthly print lands about two weeks after the month
+# source = "statistics office"
+# threshold = { bearish_above = 3.0, bullish_below = 2.0 }

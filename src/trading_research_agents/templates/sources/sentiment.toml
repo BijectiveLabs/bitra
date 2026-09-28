@@ -1,0 +1,23 @@
+# Sentiment series this desk reads: dated scores. A fear index, a positioning survey, a score your
+# own model produces. Numbers with dates, nothing else.
+#
+# Dated text belongs in news.toml, not here. They are different shapes and they are read by
+# different code: a score goes through the series engine and gets a threshold and a correlation, a
+# headline goes through the calendar reader and keeps its words.
+#
+# With nothing declared here, the sentiment analyst answers "not declared" rather than "neutral".
+# Those are different facts and the reports keep them apart.
+
+# Nothing is switched on yet. Uncomment an entry, put the file where it points, and the
+# sentiment analyst joins the roster on the next run.
+
+# [[series]]
+# name = "fear_greed"
+# file = "sentiment/fear_greed.csv"     # columns: date,value  (0 to 100)
+# ts = "date"
+# ts_unit = "iso8601"
+# value = "value"
+# unit = "index"
+# publish_lag = "0s"
+# source = "your export"
+# threshold = { bullish_above = 60, bearish_below = 25 }
