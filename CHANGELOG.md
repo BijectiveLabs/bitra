@@ -35,6 +35,12 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- `docs/boundaries.md`: where this software stops and why, in one page - one order per decision
+  and no retries, no routing or execution algorithms, no account or treasury operations, a chain
+  that can be priced but not traded, no optimiser in the research chain, no model that can size a
+  trade or change a file, files rather than a database, and no production tier. Each boundary says
+  what to do instead, and the last section names the tests that keep them true. Linked from the
+  README and from `docs/liability.md`.
 - Two auditors (`tra audit`, `agents/tech_auditor/`, `agents/quant_auditor/`): one over the
   machinery, one over the desk's own results, both reading only records this project wrote and
   neither able to reach a venue or a key. Each finding must cite figures from its brief with their

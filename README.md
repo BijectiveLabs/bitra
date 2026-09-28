@@ -253,6 +253,12 @@ runs, and every report is a table. The figures are the same ones the plain outpu
 
 ## What the package does not contain
 
+`docs/boundaries.md` is the full statement of where this software stops and why: one order per
+decision and no retries, no routing or execution algorithms, no account or treasury operations, no
+DEX execution (a chain can be priced, not traded), no optimiser in the research chain, and no model
+that can size a trade or change a file. Every line of it is a decision rather than an oversight, and
+each one says what to do instead. The short version:
+
 - **A strategy.** The mechanism ships (the protocol, the exits, the walk-forward harness); the
   cores in `examples/strategies/` are examples of it, measured and closed in the research it
   descends from, and a run points at them by file like it would at your own.
@@ -265,6 +271,9 @@ runs, and every report is a table. The figures are the same ones the plain outpu
   that trades, promotes or records. `docs/liability.md` says where the responsibility sits.
 - **A production tier.** Real orders exist at canary only, with hard caps, behind a ladder
   that needs evidence and a signature at every step and refuses production outright.
+- **A book to manage.** This project executes one decision; a trading platform manages a
+  portfolio across venues over time. Keeping the two apart is what lets this one stay small
+  enough to read.
 
 ## Roadmap
 
@@ -293,7 +302,8 @@ uv run pytest
 ```
 
 See `CONTRIBUTING.md` for the branch flow and the standards the code is held to,
-`docs/architecture.md` for the package boundaries and the file formats at them, `docs/data.md`
+`docs/boundaries.md` for where this software stops and why, `docs/architecture.md` for the package
+boundaries and the file formats at them, `docs/data.md`
 for the data gate, `docs/cycle.md` for the cycle, `docs/chain.md` for the chain, `docs/execution.md` for execution realism,
 `docs/agent.md` for the research agent, `docs/trading.md` for the trading agent, and
 `docs/ledger.md` for the verdict vocabulary.
