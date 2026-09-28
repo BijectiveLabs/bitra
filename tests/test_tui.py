@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 from rich.console import Console
 
-from trading_research_agents.cli import ui
+from trading_research_agents.cli import tui
 from trading_research_agents.cli.main import main
 from trading_research_agents.trading import RunReport
 
@@ -22,26 +22,26 @@ from trading_research_agents.trading import RunReport
 def recorded(monkeypatch: pytest.MonkeyPatch) -> Console:
     """A console that records to a string, with the terminal rule forced on."""
     console = Console(file=io.StringIO(), force_terminal=False, width=100, record=True)
-    monkeypatch.setattr(ui, "_console", console)
-    monkeypatch.setattr(ui, "enabled", lambda plain=False, as_json=False: not (plain or as_json))
+    monkeypatch.setattr(tui, "_console", console)
+    monkeypatch.setattr(tui, "enabled", lambda plain=False, as_json=False: not (plain or as_json))
     return console
 
 
 def test_the_wordmark_fits_or_the_short_banner_is_used() -> None:
-    wide = ui.banner(140)
+    wide = tui.banner(140)
     assert len(wide.splitlines()) == 6 and "/____/" in wide and wide.isascii()
-    assert ui.banner(80) == ui.BANNER and ui.BANNER.isascii()
+    assert tui.banner(80) == tui.BANNER and tui.BANNER.isascii()
 
 
 def test_the_console_is_off_for_scripts_and_json(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("TRA_PLAIN", raising=False)
     monkeypatch.setattr("sys.stdout", io.StringIO())
-    assert ui.enabled() is False  # not a terminal
+    assert tui.enabled() is False  # not a terminal
     monkeypatch.setattr("sys.stdout.isatty", lambda: True)
-    assert ui.enabled() is True
-    assert ui.enabled(plain=True) is False and ui.enabled(as_json=True) is False
+    assert tui.enabled() is True
+    assert tui.enabled(plain=True) is False and tui.enabled(as_json=True) is False
     monkeypatch.setenv("TRA_PLAIN", "1")
-    assert ui.enabled() is False
+    assert tui.enabled() is False
 
 
 def test_tra_alone_is_the_cockpit_in_both_faces(
@@ -74,12 +74,12 @@ def test_views_render_the_figures(recorded: Console, tmp_path: Path) -> None:
         "bars_held": 2,
         "last_price": "99",
     }
-    ui.show(ui.run_panel(report, "runs/x"))
+    tui.show(tui.run_panel(report, "runs/x"))
     text = recorded.export_text()
     assert "replay AAAUSDT" in text and "3 (1 refused)" in text and "-8.50 bps" in text
     assert "short 0.01 at 100, 2 bars held, last 99" in text and "kill switch" in text
 
-    ui.show(ui.check_table(["config: valid"], ["funding: none"]))
+    tui.show(tui.check_table(["config: valid"], ["funding: none"]))
     text = recorded.export_text()
     assert "ok" in text and "config: valid" in text and "todo" in text and "funding: none" in text
 
@@ -111,19 +111,19 @@ def test_views_render_the_figures(recorded: Console, tmp_path: Path) -> None:
         audit={"verdict": "sound", "summary": "fine"},
         refusals=["executor: x"],
     )
-    ui.show(ui.session_report(result, Usage(), "runs/s"))
+    tui.show(tui.session_report(result, Usage(), "runs/s"))
     text = recorded.export_text()
     assert "kept" in text and "excluded" in text and "tighten: one loss" in text
     assert "sound: fine" in text and "1200 (cost 0.01)" in text and "executor: x" in text
 
-    with ui.SessionView(Usage()) as view:
+    with tui.SessionView(Usage()) as view:
         view.on_step("market_screener", "done", "1 kept")
         view.on_step("run:AAAUSDT", "running", "")
         assert view.order.index("run:AAAUSDT") < view.order.index("risk_manager")
     text = recorded.export_text()
     assert "market_screener" in text and "run:AAAUSDT" in text
 
-    with ui.RunView("runs/x") as live:
+    with tui.RunView("runs/x") as live:
         live.observe(report, None)
         assert live.bars == 8
 
@@ -150,7 +150,7 @@ def test_views_render_the_figures(recorded: Console, tmp_path: Path) -> None:
         stopped_by=None,
         out=tmp_path,
     )
-    ui.show(ui.eval_table([row], "AAAUSDT", "d.parquet"))
+    tui.show(tui.eval_table([row], "AAAUSDT", "d.parquet"))
     text = recorded.export_text()
     assert "p:m" in text and "120" in text and "same bars, same controls" in text
 
@@ -164,12 +164,12 @@ def test_views_render_the_figures(recorded: Console, tmp_path: Path) -> None:
         market=[Event("t", "fill", "A", "open long")],
         roles=[Event("01", "answer", "screener", "kept")],
     )
-    ui.show(ui.trace_view(t))
+    tui.show(tui.trace_view(t))
     text = recorded.export_text()
     assert "A: round_trips: 1" in text and "error: ProviderError" in text and "open long" in text
 
-    ui.show(
-        ui.ledger_table(
+    tui.show(
+        tui.ledger_table(
             [
                 {
                     "entry_id": "H-1",
@@ -192,8 +192,8 @@ def test_views_render_the_figures(recorded: Console, tmp_path: Path) -> None:
     text = recorded.export_text()
     assert "H-1" in text and "cost" in text and "power" in text and "CLOSED 1" in text
 
-    ui.show(
-        ui.ladder_table(
+    tui.show(
+        tui.ladder_table(
             "0 REPLAY",
             [
                 {

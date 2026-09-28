@@ -35,6 +35,17 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- `tra venues [name...]`: what a venue can actually do through ccxt - which kinds of data it
+  serves, whether it takes orders, whether it can carry the stop and take profit with the entry,
+  whether the account reads a cycle needs are there, and whether it has a test environment. Read
+  from the library with no network, no key and no order, because "ccxt supports a hundred venues" is
+  true and not the question. Measured today: bybit, hyperliquid and okx do everything a cycle needs;
+  binance takes orders but cannot attach the exits; kraken is spot-shaped and serves neither funding
+  nor open interest.
+- `docs/venues.md` gains the two sections an operator actually needs: adding a venue they trade on
+  (ask `tra venues`, then the three places that must agree) and stopping one (take it out of the
+  chains; a kind with no source is refused rather than guessed).
+- `cli/ui.py` is now `cli/tui.py`, which is what it is.
 - `[agents].fallback` and `[agents.roles.<role>].fallback`: `provider:model` entries tried in order
   when a provider cannot be reached, with the same brief, since a role call carries no conversation.
   Every attempt is recorded with the vendor's own error class; a link is built the first time it is

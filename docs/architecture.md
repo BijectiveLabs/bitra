@@ -70,7 +70,7 @@ the research it descends from.
 
 Not every package exists yet. The list is the plan; a package is added when its first gate
 lands with tests. Today: `ledger`, `envelope`, `data`, `chain`, `execution`, `strategy`,
-`trading`, `llm`, `store`, `agents`, `mcp`, `cli` (with `cli/ui.py`, the console face on `rich`, which reads reports and decides nothing). Outside the package: `examples/` (an envelope, a run
+`trading`, `llm`, `store`, `agents`, `mcp`, `cli` (with `cli/tui.py`, the console face on `rich`, which reads reports and decides nothing). Outside the package: `examples/` (an envelope, a run
 config, a column map, two example cores), never imported by it; `templates/` inside the
 package is a copy of those examples that `tra init` writes into a new project, and is never
 imported either.

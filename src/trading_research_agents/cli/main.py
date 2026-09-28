@@ -499,6 +499,14 @@ def build_parser() -> argparse.ArgumentParser:
     audit_cmd.add_argument("--env-file", type=Path, default=None)
     audit_cmd.add_argument("--json", action="store_true")
 
+    venues_cmd = top.add_parser(
+        "venues", help="what a venue can do through ccxt: data, orders, exits, account reads"
+    )
+    venues_cmd.set_defaults(command="venues")
+    venues_cmd.add_argument("venue", nargs="*", help="default: the venue in [run].venue_key")
+    venues_cmd.add_argument("--config", type=Path, default=Path("strategy.toml"))
+    venues_cmd.add_argument("--json", action="store_true")
+
     mandate_cmd = top.add_parser(
         "mandate",
         help="print the execution mandate; venue mode needs it in the project, word for word",
@@ -606,9 +614,9 @@ _PLAIN = False
 
 def _watching(as_json: bool = False) -> bool:
     """A person at a terminal, who gets the console view instead of the lines."""
-    from trading_research_agents.cli import ui
+    from trading_research_agents.cli import tui
 
-    return ui.enabled(_PLAIN, as_json)
+    return tui.enabled(_PLAIN, as_json)
 
 
 def emit(
@@ -620,16 +628,16 @@ def emit(
     if as_json:
         print(json.dumps(payload, indent=2, sort_keys=True, default=str))
     elif render is not None and _watching():
-        from trading_research_agents.cli import ui
+        from trading_research_agents.cli import tui
 
-        ui.show(render())
+        tui.show(render())
     else:
         print("\n".join(lines))
 
 
 def cockpit(args: argparse.Namespace) -> int:
     """`tra` alone: the banner, what is ready, and the one command to type next."""
-    from trading_research_agents.cli import ui
+    from trading_research_agents.cli import tui
 
     defaults = argparse.Namespace(
         config=Path("strategy.toml"),
@@ -644,7 +652,7 @@ def cockpit(args: argparse.Namespace) -> int:
         print("\n".join([*(f"ok    {g}" for g in good), *(f"todo  {b}" for b in bad)]))
         print(f"next: {next_command}")
         return CLEARED
-    ui.cockpit(__version__, good, bad, next_command)
+    tui.cockpit(__version__, good, bad, next_command)
     return CLEARED
 
 
@@ -1124,9 +1132,9 @@ def _report(args: argparse.Namespace, report: Any) -> int:
 
 
 def _ui() -> Any:
-    from trading_research_agents.cli import ui
+    from trading_research_agents.cli import tui
 
-    return ui
+    return tui
 
 
 def _run_watched(args: argparse.Namespace, build: Callable[[Any], TradingConfig]) -> Any:
@@ -1376,6 +1384,46 @@ def run_audit_command(args: argparse.Namespace) -> int:
         lines.append(f"{role}: {error}")
     lines.append(f"proposals.md and audit.json in {result.path}; nothing has been applied")
     emit(payload, args.json, lines, lambda: _ui().audit_view(payload))
+    return CLEARED
+
+
+def show_venues(args: argparse.Namespace) -> int:
+    """What a venue can actually do, asked of ccxt rather than promised in a README."""
+    from trading_research_agents.data.sources.capability import CapabilityError, capability_of
+
+    names = list(args.venue)
+    if not names and args.config.is_file():
+        raw = tomllib.loads(args.config.read_text(encoding="utf-8"))
+        declared = str(raw.get("run", {}).get("venue_key", "")).partition("/")[0]
+        names = [declared] if declared else []
+    if not names:
+        raise ConfigError("name a venue, or run this inside a project with [run].venue_key")
+
+    found = []
+    lines: list[str] = []
+    for name in names:
+        try:
+            able = capability_of(name)
+        except CapabilityError as exc:
+            lines.append(f"{name}: {exc}")
+            continue
+        found.append(able.record())
+        serves = ", ".join(able.serves_data) or "nothing this project reads"
+        lines.append(f"{able.venue}")
+        lines.append(f"  data        {serves}")
+        missing = [kind for kind, ok in sorted(able.data.items()) if not ok]
+        if missing:
+            lines.append(f"  no data for {', '.join(missing)}; do not declare those in data.toml")
+        lines.append(
+            "  execution   "
+            + ", ".join(
+                f"{what}: {'yes' if able.execution.get(what) else 'no'}"
+                for what in ("create_order", "attached_exits", "position", "open_orders", "cancel")
+            )
+        )
+        lines.append(f"  test env    {'yes' if able.sandbox else 'no'}")
+        lines.append(f"  verdict     {able.verdict()}")
+    emit({"venues": found}, args.json, lines)
     return CLEARED
 
 
@@ -2700,6 +2748,7 @@ HANDLERS = {
     ("data", "pull"): data_pull,
     ("check", "check"): check_project,
     ("mandate", "mandate"): show_mandate,
+    ("venues", "venues"): show_venues,
     ("audit", "audit"): run_audit_command,
     ("run", "run"): run_cycle_command,
     ("chain", "floor"): chain_floor,

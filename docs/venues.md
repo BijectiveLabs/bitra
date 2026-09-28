@@ -17,6 +17,64 @@ Data that comes from somewhere other than a venue's public archive (a vendor exp
 Client's own recorder) does not need a plugin at all: a column map takes it through the same
 gate. See `docs/data.md`, section "Any other source".
 
+## Adding a venue you trade on
+
+Most operators never write a plugin. A venue that ccxt already knows is three lines of
+configuration, and the first thing to do is ask what that venue can actually do:
+
+```bash
+tra venues bybit binance kraken
+```
+
+```
+bybit
+  data        funding, ohlcv, open_interest, orderbook
+  execution   create_order: yes, attached_exits: yes, position: yes, open_orders: yes, cancel: yes
+  test env    yes
+  verdict     data and venue execution, with the exits attached and the account readable
+binance
+  execution   create_order: yes, attached_exits: no, position: yes, open_orders: yes, cancel: yes
+  verdict     data, and orders only with [execution].exits = "none"
+```
+
+That is read from the library, not from a promise: no network, no key, no order. "ccxt supports a
+hundred venues" is true and not the question - a spot exchange has no funding rate, some venues
+cannot attach a stop to an entry, and a few will not say what position you hold. Each of those
+decides whether a cycle runs or refuses, so ask before you commit a key.
+
+Then three places name the venue, and they have to agree:
+
+```toml
+# data.toml - where the figures come from, in order
+[data.ohlcv]
+chain = ["ccxt:bybit", "ccxt:binance", "file:data"]
+
+# envelope.toml - what it costs, and how you get in and out
+[[channel]]
+venue = "bybit"
+name = "taker-taker"          # <entry>-<exit>: the fee beside it is what this means
+entry_fee_bps = 5.5
+exit_fee_bps = 5.5
+
+# strategy.toml - which channel this desk trades on
+[run]
+venue_key = "bybit/taker-taker"
+```
+
+`tra check` reads the three against each other and says so when they disagree - an instrument that
+is not mapped for the sources, data coming from a venue whose fees you are not pricing, or an
+`[execution].venue` that is not the venue in `venue_key` (that last one is a refusal, because the
+order would go to one venue at the other's fee).
+
+## Stopping a venue
+
+Take it out of the chains in `data.toml`. A kind of data with no source left is refused rather than
+guessed, and the cycle says which kind and why. If it was the venue you traded on, change
+`[run].venue_key` to a channel you still have, and `tra check` will tell you if anything still
+points at the old one. Nothing needs uninstalling, and no code changes.
+
+## A venue ccxt does not know
+
 ## An archive venue
 
 ```python
