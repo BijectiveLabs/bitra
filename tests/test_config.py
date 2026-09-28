@@ -107,3 +107,88 @@ def test_file_loading_fails_closed(tmp_path: Path) -> None:
         raw({"file": str(good), "class": "Quiet", "params": {"threshold": 3}})
     )
     assert cfg.strategy.name == "quiet"
+
+
+AGENTS = {
+    "provider": "groq",
+    "model": "a-model",
+    "mechanism": "short-horizon reversion after a burst of prints",
+    "token_budget": 60000,
+    "max_calls_per_hour": 60,
+    "min_interval_s": 0,
+    "magnitude_bps": Decimal("25"),
+}
+
+
+def agent_raw(**tables: Any) -> dict[str, Any]:
+    out = raw({"agent": "technical_analyst"})
+    out["agents"] = dict(AGENTS)
+    out.update(tables)
+    return out
+
+
+def test_the_two_gates_are_absent_until_they_are_declared() -> None:
+    cfg = parse_strategy_config(agent_raw())
+    assert cfg.confluence.idle and cfg.targets.idle
+    assert cfg.agents is not None and cfg.agents.validators == ()
+
+
+def test_a_declared_matrix_carries_the_roles_and_the_policy() -> None:
+    cfg = parse_strategy_config(
+        agent_raw(
+            confluence={
+                "required": ["macro_analyst", "onchain_analyst"],
+                "long_states": ["bullish"],
+                "on_missing": "ignore",
+                "min_support": 2,
+                "max_opposition": 0,
+            }
+        )
+    )
+    matrix = cfg.confluence
+    assert matrix.required == ("macro_analyst", "onchain_analyst")
+    assert matrix.on_missing == "ignore" and matrix.min_support == 2
+    assert matrix.max_opposition == 0 and not matrix.idle
+
+
+def test_a_matrix_that_names_something_that_reads_nothing_is_refused() -> None:
+    with pytest.raises(ConfigError, match="does not read a context"):
+        parse_strategy_config(agent_raw(confluence={"required": ["technical_analyst"]}))
+    with pytest.raises(ConfigError, match="unknown"):
+        parse_strategy_config(agent_raw(confluence={"requires": ["macro_analyst"]}))
+    with pytest.raises(ConfigError, match="on_missing"):
+        parse_strategy_config(agent_raw(confluence={"on_missing": "maybe"}))
+    with pytest.raises(ConfigError, match="min_support is a non-negative integer"):
+        parse_strategy_config(agent_raw(confluence={"min_support": -1}))
+
+
+def test_targets_are_read_and_a_ratio_needs_a_take_profit() -> None:
+    declared = agent_raw(
+        targets={
+            "min_net_bps": Decimal("5"),
+            "max_round_trips_per_day": 6,
+        }
+    )
+    cfg = parse_strategy_config(declared)
+    assert cfg.targets.min_net_bps == Decimal("5")
+    assert cfg.targets.max_round_trips_per_day == 6 and not cfg.targets.idle
+
+    ratio = agent_raw(targets={"min_reward_risk": Decimal("1.5")})
+    with pytest.raises(ConfigError, match=r"needs \[exit\].take_profit_sigma_frac"):
+        parse_strategy_config(ratio)
+
+    ratio["exit"]["take_profit_sigma_frac"] = Decimal("0.02")
+    assert parse_strategy_config(ratio).targets.min_reward_risk == Decimal("1.5")
+
+    with pytest.raises(ConfigError, match="unknown"):
+        parse_strategy_config(agent_raw(targets={"min_net": Decimal("5")}))
+
+
+def test_the_stances_are_named_and_asked_once() -> None:
+    cfg = parse_strategy_config(agent_raw(agents={**AGENTS, "validators": ["pro", "contra"]}))
+    assert cfg.agents is not None and cfg.agents.validators == ("pro", "contra")
+
+    with pytest.raises(ConfigError, match="is not a stance"):
+        parse_strategy_config(agent_raw(agents={**AGENTS, "validators": ["bullish"]}))
+    with pytest.raises(ConfigError, match="asks each stance once"):
+        parse_strategy_config(agent_raw(agents={**AGENTS, "validators": ["pro", "pro"]}))

@@ -12,7 +12,9 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from trading_research_agents.execution.confluence import STANCES, ConfluenceError, Matrix
 from trading_research_agents.execution.cost import CostError, FundingSchedule
+from trading_research_agents.execution.targets import TargetError, Targets
 from trading_research_agents.strategy.core import Strategy
 from trading_research_agents.strategy.exits import ExitRule
 from trading_research_agents.trading.canary import CanaryError, CanaryLimits
@@ -79,6 +81,9 @@ class AgentSettings:
     # [agents].analysts: the roster, when the operator wants to say it outright. Empty means the
     # cycle asks the technical analyst plus whichever reading analysts have a declared source.
     analysts: tuple[str, ...] = ()
+    # [agents].validators: the stances asked about a proposal once there is one. Each stance is one
+    # more call, so this is empty until an operator asks for it.
+    validators: tuple[str, ...] = ()
 
     def for_role(self, role: str) -> RoleModel:
         """What this role is asked with: its own model where declared, otherwise the default."""
@@ -117,6 +122,10 @@ class StrategyConfig:
     canary: CanaryLimits | None = None
     funding: FundingSchedule | None = None
     agents: AgentSettings | None = None
+    # Two gates the operator declares and code applies: whether the context agrees with the
+    # direction, and whether the trade is the shape this desk said it wanted.
+    confluence: Matrix = field(default_factory=Matrix)
+    targets: Targets = field(default_factory=Targets)
 
 
 def load_strategy_config(path: Path) -> StrategyConfig:
@@ -184,6 +193,8 @@ def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> S
         canary=_canary(raw),
         funding=funding,
         agents=agents,
+        confluence=_confluence(raw),
+        targets=_targets(raw, exit_rule),
     )
 
 
@@ -212,6 +223,8 @@ KNOWN_ROLES = (
     "risk_manager",
     "executor",
     "auditor",
+    # One stance is one call, so a validator may run on its own model like any other role.
+    "validator",
 )
 ROLE_KEYS = ("provider", "model", "base_url", "max_output_tokens", "call_timeout_s", "max_retries")
 
@@ -309,7 +322,112 @@ def _agents(raw: dict[str, Any], strategy_raw: dict[str, Any]) -> AgentSettings 
         screen=_screen(table.get("screen")),
         roles=_roles(table.get("roles")),
         analysts=_analysts(table.get("analysts")),
+        validators=_validators(table.get("validators")),
     )
+
+
+CONFLUENCE_KEYS = (
+    "required",
+    "long_states",
+    "short_states",
+    "on_missing",
+    "min_support",
+    "max_opposition",
+)
+TARGET_KEYS = ("min_net_bps", "min_reward_risk", "max_round_trips_per_day")
+
+
+def _validators(raw: Any) -> tuple[str, ...]:
+    """`[agents].validators`: the stances that argue about a proposal before the votes are read."""
+    if raw is None:
+        return ()
+    if not isinstance(raw, list) or not all(isinstance(name, str) for name in raw):
+        raise ConfigError("[agents].validators is a list of stances")
+    names = [str(name) for name in raw]
+    unknown = sorted(set(names) - set(STANCES))
+    if unknown:
+        raise ConfigError(f"[agents].validators: {unknown} is not a stance; have {list(STANCES)}")
+    if len(set(names)) != len(names):
+        raise ConfigError("[agents].validators asks each stance once")
+    return tuple(names)
+
+
+def _confluence(raw: dict[str, Any]) -> Matrix:
+    """[confluence]: which roles must agree with the direction, and how votes are counted."""
+    table = raw.get("confluence")
+    if table is None:
+        return Matrix()
+    if not isinstance(table, dict):
+        raise ConfigError("[confluence] must be a table")
+    unknown = sorted(set(table) - set(CONFLUENCE_KEYS))
+    if unknown:
+        raise ConfigError(f"[confluence]: unknown {unknown}; have {list(CONFLUENCE_KEYS)}")
+    required = _names(table.get("required"), "required")
+    reading = tuple(r for r in ASKABLE if r != "technical_analyst")
+    stray = sorted(set(required) - set(reading))
+    if stray:
+        raise ConfigError(
+            f"[confluence].required: {stray} does not read a context; have {list(reading)}"
+        )
+    try:
+        return Matrix(
+            required=required,
+            long_states=_names(table.get("long_states"), "long_states") or ("bullish",),
+            short_states=_names(table.get("short_states"), "short_states") or ("bearish",),
+            on_missing=str(table.get("on_missing", "refuse")),
+            min_support=_count(table, "min_support"),
+            max_opposition=(
+                _count(table, "max_opposition") if "max_opposition" in table else None
+            ),
+        )
+    except ConfluenceError as exc:
+        raise ConfigError(str(exc)) from exc
+
+
+def _targets(raw: dict[str, Any], exit_rule: ExitRule) -> Targets:
+    """[targets]: what a trade has to be worth, and how often this desk will take one."""
+    table = raw.get("targets")
+    if table is None:
+        return Targets()
+    if not isinstance(table, dict):
+        raise ConfigError("[targets] must be a table")
+    unknown = sorted(set(table) - set(TARGET_KEYS))
+    if unknown:
+        raise ConfigError(f"[targets]: unknown {unknown}; have {list(TARGET_KEYS)}")
+    if "min_reward_risk" in table and exit_rule.take_profit_sigma_frac is None:
+        raise ConfigError(
+            "[targets].min_reward_risk needs [exit].take_profit_sigma_frac; "
+            "a ratio without a take profit is not a ratio"
+        )
+    try:
+        return Targets(
+            min_net_bps=_dec(table, "min_net_bps") if "min_net_bps" in table else None,
+            min_reward_risk=(
+                _dec(table, "min_reward_risk") if "min_reward_risk" in table else None
+            ),
+            max_round_trips_per_day=(
+                _count(table, "max_round_trips_per_day")
+                if "max_round_trips_per_day" in table
+                else None
+            ),
+        )
+    except TargetError as exc:
+        raise ConfigError(str(exc)) from exc
+
+
+def _names(raw: Any, key: str) -> tuple[str, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, list) or not all(isinstance(name, str) for name in raw):
+        raise ConfigError(f"[confluence].{key} is a list of names")
+    return tuple(str(name) for name in raw)
+
+
+def _count(table: dict[str, Any], key: str) -> int:
+    value = table.get(key, 0)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ConfigError(f"{key} is a non-negative integer")
+    return value
 
 
 def _screen(raw: Any) -> dict[str, float]:
