@@ -405,6 +405,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--agent", metavar="PROVIDER", help="make the technical analyst the core, on this provider"
     )
     init_cmd.add_argument("--model", help="the model for --agent")
+    init_cmd.add_argument(
+        "--profile",
+        choices=("default", "autonomous"),
+        default="default",
+        help="autonomous lays the cycle down wired: the shelf, the gates and the ladder, live",
+    )
     init_cmd.add_argument("--json", action="store_true")
 
     signals = top.add_parser(
@@ -1334,42 +1340,78 @@ def init_project(args: argparse.Namespace) -> int:
     existing = [name for name in TEMPLATE_FILES if (target / name).exists()]
     if existing:
         raise ValueError(f"{target}: already has {existing}; init never overwrites")
+    autonomous = args.profile == "autonomous"
     if args.agent and not args.model:
         raise ValueError("--agent needs --model")
     if args.agent:
         provider(args.agent)
+    if autonomous and not args.agent:
+        # The profile exists to save an operator the assembly, not to guess which model they pay
+        # for. It lays the gates down live and leaves the provider for them to name.
+        args.agent, args.model = "", ""
     for name, source in TEMPLATE_FILES.items():
         out = target / name
         out.parent.mkdir(parents=True, exist_ok=True)
         text = templates.joinpath(*source.split("/")).read_text(encoding="utf-8")
-        if name == "strategy.toml" and args.agent:
-            text = _agent_config(text, args.agent, args.model)
+        if name == "strategy.toml" and (args.agent or autonomous):
+            text = _agent_config(text, args.agent or "your-provider", args.model or "your-model")
+        if name == "strategy.toml" and autonomous:
+            text = text.replace("\n[data]\n", AUTONOMOUS_GATES + "[data]\n", 1)
+        if name == "README.md" and autonomous:
+            text = text.rstrip() + FIRST_HOUR
         out.write_text(text, encoding="utf-8")
     lines = [f"{target}: {len(TEMPLATE_FILES)} files", *(f"  {n}" for n in TEMPLATE_FILES)]
     if args.agent:
         key = provider(args.agent).key_env
         if key:
             lines.append(f"put {key} in .env (copy .env.example)")
-    lines.append("next: cd there, `tra data get BTCUSDT 2025-01-01`, then `tra backtest`")
+    if autonomous:
+        lines.append(
+            "the cycle is wired: the shelf, the matrix, the conviction ladder, the targets"
+        )
+        lines.append("next: put your key in .env, name the provider in [agents], then `tra check`")
+    else:
+        lines.append("next: cd there, `tra data get BTCUSDT 2025-01-01`, then `tra backtest`")
     emit({"directory": str(target), "files": list(TEMPLATE_FILES)}, args.json, lines)
     return CLEARED
 
 
+# What `tra init --profile autonomous` writes where the operator's own provider goes. `tra check`
+# names it rather than passing the vendor's "no such provider" error through.
+PLACEHOLDER_PROVIDER = "your-provider"
+
+AGENT_HEAD = (
+    "[strategy]\n"
+    'agent = "technical_analyst"          # the model decides on each closed bar\n'
+    "# file = ... / class = ...             # or a code core instead (docs/trading.md)\n\n"
+)
+
+
+def _without_commented(text: str, marker: str) -> str:
+    """Drop one commented-out block, from its marker to the blank line that ends it.
+
+    The template is a page an operator reads, so a block that has been replaced by a live table
+    should go, and every block after it should stay. Cutting to the end of the file would take the
+    gates and the data section with it.
+    """
+    if marker not in text:
+        return text
+    start = text.index(marker)
+    lines = text[start:].splitlines(keepends=True)
+    taken = 0
+    for line in lines:
+        if line.strip() == "":
+            break
+        taken += 1
+    return text[:start] + "".join(lines[taken:]).lstrip("\n")
+
+
 def _agent_config(text: str, provider_name: str, model: str) -> str:
     """The template with the technical analyst as the core and the [agents] table live."""
-    start = text.index("[strategy]")
-    end = text.index("[exit]")
-    head = (
-        "[strategy]\n"
-        'agent = "technical_analyst"          # the model decides on each closed bar\n'
-        "# file = ... / class = ...             # or a code core instead (docs/trading.md)\n\n"
-    )
-    text = text[:start] + head + text[end:]
-    marker = "# [agents]"
-    if marker in text:
-        text = text[: text.index(marker)]
-    text = text.rstrip() + (
-        "\n\n[agents]\n"
+    text = text[: text.index("[strategy]")] + AGENT_HEAD + text[text.index("[exit]") :]
+    text = _without_commented(text, "# [agents]")
+    agents = (
+        "[agents]\n"
         f'provider = "{provider_name}"\n'
         f'model = "{model}"\n'
         'mechanism = "state the mechanism the analyst reasons from"\n'
@@ -1381,9 +1423,80 @@ def _agent_config(text: str, provider_name: str, model: str) -> str:
         "magnitude_bps = 20                 # the claimed edge, for the cost floor\n"
         f"\n[agents.pricing.{model}]           # what you were quoted; never a constant\n"
         "input_per_million = 0\n"
-        "output_per_million = 0\n"
+        "output_per_million = 0\n\n"
     )
-    return text
+    return text.replace("[data]\n", agents + "[data]\n", 1)
+
+
+AUTONOMOUS_GATES = """
+[confluence]
+# Which reading analysts must agree with the direction. Empty until you declare their sources in
+# sources/, because a role that was never asked has agreed to nothing and this gate fails closed.
+required = []
+long_states = ["bullish"]
+short_states = ["bearish"]
+on_missing = "refuse"
+min_support = 0                    # validators that must support it; needs [agents].validators
+
+[conviction]
+# What each voice is worth, and how much of the base size their agreement buys. With nothing on the
+# shelf yet, the only voice is the deciding analyst, so the score is its own confidence. Add a
+# weight beside each analyst as you declare its sources.
+weights = { technical_analyst = 2.0 }
+min_score = 0.4                    # below this the desk does not trade, whatever the gates said
+# max_leverage = 3.0               # notional against [run].equity; a ceiling, never a target
+
+[[conviction.ladder]]
+at_least = 0.75                    # everything agrees: the whole base size
+size_multiple = 1.0
+
+[[conviction.ladder]]
+at_least = 0.55
+size_multiple = 0.5
+
+[[conviction.ladder]]
+at_least = 0.4
+size_multiple = 0.25
+
+[targets]
+# What a trade has to be worth and how often you will take one. Yours to change; these are a start.
+min_net_bps = 5
+max_round_trips_per_day = 6
+
+[execution]
+# sandbox keeps the intent here. signals writes it for your own executor. venue sends it, and does
+# not start until `tra mandate > MANDATE.md`, a signature below, the ladder at CANARY, [canary]
+# declared and the keys in your environment. `tra check` names whatever is missing.
+mode = "sandbox"
+# acknowledged_by = "your name"
+# acknowledged_on = "YYYY-MM-DD"
+# max_notional = 200
+
+"""
+
+FIRST_HOUR = """
+
+## Your first hour
+
+This project was written by `tra init --profile autonomous`, so the cycle is already wired. Three
+things are yours before it can decide anything:
+
+1. **A model.** Put your key in `.env` (copy `.env.example`) and name the provider and model in
+   `[agents]` in `strategy.toml`.
+2. **The mechanism and the edge.** `[agents].mechanism` is the sentence the analyst reasons from,
+   and `[agents].magnitude_bps` is the edge you claim, in basis points. The cost gate holds that
+   claim against what a round trip actually costs, so an honest number here is the whole point.
+3. **Data to decide on.** `tra data get BTCUSDT 2025-01-01` for a dataset, and `data.toml` already
+   declares the live chains a cycle pulls through.
+
+Then `tra check` tells you what is still missing, and `tra run --env-file .env` runs one cycle.
+
+Optional, and worth doing in this order: fill in a file under `sources/` and its analyst joins the
+roster; give that analyst a weight in `[conviction].weights` and its agreement starts changing the
+size; name it in `[confluence].required` and its disagreement starts refusing the trade.
+
+`docs/boundaries.md` says what this software will not do, and why.
+"""
 
 
 def run_cycle_command(args: argparse.Namespace) -> int:
@@ -1683,7 +1796,12 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
                     )
         elif cfg.agents is not None:
             bad.append("data.toml: missing; `tra run` needs it (tra init writes one)")
-        if cfg.agents is not None:
+        if cfg.agents is not None and cfg.agents.provider == PLACEHOLDER_PROVIDER:
+            bad.append(
+                "[agents].provider is still the placeholder; name the provider you have a key "
+                f"for, and its model ({', '.join(providers())})"
+            )
+        elif cfg.agents is not None:
             try:
                 p = provider(cfg.agents.provider)
             except UnknownProviderError as exc:

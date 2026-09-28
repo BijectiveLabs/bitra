@@ -35,6 +35,14 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- `tra init --profile autonomous`: a project with the cycle already wired - the technical analyst as
+  the core, the confluence matrix, the conviction ladder and the targets as live tables, execution
+  in sandbox, and a "your first hour" section in the project's own README naming the three things
+  that are the operator's. The gates ask for nothing until they are given something, so a fresh
+  project refuses nothing it was never told about, and `tra check` names the provider placeholder
+  in its own words instead of passing a registry error through.
+- `tra init --agent` no longer truncates the rest of the configuration when it writes the live
+  `[agents]` table: the gates and `[data]` stayed behind in the template and are now kept.
 - `docs/boundaries.md`: where this software stops and why, in one page - one order per decision
   and no retries, no routing or execution algorithms, no account or treasury operations, a chain
   that can be priced but not traded, no optimiser in the research chain, no model that can size a

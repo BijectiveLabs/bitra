@@ -4,9 +4,24 @@ One cycle is one pass from what the market is doing to a decision that is either
 refusal with a reason. It is the unit this project works in, and the unit an auditor replays.
 
 ```bash
-tra run --env-file .env          # data.toml, strategy.toml, envelope.toml from the project
+tra init my-desk --profile autonomous     # the cycle laid down wired, every line commented
+tra run --env-file .env                   # data.toml, strategy.toml, envelope.toml from the project
 tra run --instrument ETHUSDT --margin 5 --mode signals
 ```
+
+The profile is the short way in. It writes the same project as `tra init`, with four differences:
+the technical analyst is the core, the confluence matrix, the conviction ladder and the targets are
+live tables rather than commented ones, `[execution].mode` is `sandbox`, and the project's README
+carries the three things that are yours before a cycle can decide anything - a model and its key,
+the mechanism and the edge you claim, and data to decide on. `tra check` names whatever is still
+missing, including the provider placeholder.
+
+The gates it writes ask for nothing until you give them something: `[confluence].required` is empty,
+because a role nobody asked has agreed to nothing, and `[conviction].weights` names only the
+deciding analyst, so the conviction score is that analyst's own confidence. Fill in a file under
+`sources/` and its analyst joins the roster; give that analyst a weight and its agreement starts
+changing the size; name it in `required` and its disagreement starts refusing the trade. Three steps,
+in that order, each one visible in `tra check` before it costs a token.
 
 ```
 snapshot (engine)

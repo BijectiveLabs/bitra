@@ -23,7 +23,7 @@ auditors.
 
 ```bash
 pip install 'trading-research-agents[ccxt,openai,data]'
-tra init my-desk && cd my-desk      # strategy.toml, data.toml, envelope.toml, all commented
+tra init my-desk --profile autonomous && cd my-desk   # the cycle, wired, commented line by line
 cp .env.example .env                # your model key; no venue key is needed for a cycle
 tra run --env-file .env             # one autonomous cycle, in the sandbox
 ```

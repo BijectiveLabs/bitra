@@ -306,3 +306,60 @@ def test_funding_pages_backwards_and_writes_the_schedule(
     assert code == 0 and payload["interval_s"] == 28800 and payload["count"] == 93
     schedule = load_funding(out, 28800)
     assert len(schedule.rates) == 93
+
+
+def test_the_autonomous_profile_lays_the_cycle_down_wired(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from trading_research_agents.trading.config import load_strategy_config
+
+    target = tmp_path / "desk"
+    assert main(["init", str(target), "--profile", "autonomous"]) == 0
+    said = capsys.readouterr().out
+    assert "the cycle is wired" in said and "name the provider" in said
+
+    cfg = load_strategy_config(target / "strategy.toml")
+    assert cfg.agents is not None and cfg.agents.role == "technical_analyst"
+    # The gates are live rather than commented, and they are the operator's to change.
+    assert not cfg.conviction.idle and cfg.conviction.min_score == Decimal("0.4")
+    assert [str(t.size_multiple) for t in cfg.conviction.ladder] == ["1.0", "0.5", "0.25"]
+    assert cfg.targets.min_net_bps == Decimal("5")
+    assert cfg.execution.mode == "sandbox"
+    # Nothing is required of the matrix yet: no source is declared, and a role nobody asked has
+    # agreed to nothing.
+    assert cfg.confluence.required == ()
+    assert cfg.conviction.weights == {"technical_analyst": Decimal("2.0")}
+
+    # The data section survived the rewrite that put [agents] in, and so did the shelf.
+    assert "[data]" in (target / "strategy.toml").read_text("utf-8")
+    assert (target / "sources" / "macro.toml").is_file()
+    assert "Your first hour" in (target / "README.md").read_text("utf-8")
+
+    monkeypatch.chdir(target)
+    capsys.readouterr()
+    main(["check"])
+    out = capsys.readouterr().out
+    assert "ok    conviction: floor 0.4" in out
+    assert "ok    execution: sandbox; nothing leaves the machine" in out
+    assert "todo  [agents].provider is still the placeholder" in out
+
+
+def test_the_default_profile_is_unchanged_and_agent_init_keeps_the_gates(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from trading_research_agents.trading.config import load_strategy_config
+
+    plain = tmp_path / "plain"
+    assert main(["init", str(plain)]) == 0
+    capsys.readouterr()
+    cfg = load_strategy_config(plain / "strategy.toml")
+    assert cfg.agents is None and cfg.conviction.idle and cfg.targets.idle
+
+    with_agent = tmp_path / "agent"
+    assert main(["init", str(with_agent), "--agent", "groq", "--model", "a-model"]) == 0
+    capsys.readouterr()
+    text = (with_agent / "strategy.toml").read_text("utf-8")
+    # The live [agents] table replaced the commented one without taking the rest of the page.
+    assert '[agents]\nprovider = "groq"' in text
+    assert "# [agents]" not in text
+    assert "[data]" in text and "# [conviction]" in text and "# [execution]" in text
