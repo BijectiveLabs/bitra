@@ -363,3 +363,30 @@ def test_the_default_profile_is_unchanged_and_agent_init_keeps_the_gates(
     assert '[agents]\nprovider = "groq"' in text
     assert "# [agents]" not in text
     assert "[data]" in text and "# [conviction]" in text and "# [execution]" in text
+
+
+def test_check_says_what_the_three_files_add_up_to(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "desk"
+    assert main(["init", str(target), "--profile", "autonomous"]) == 0
+    monkeypatch.chdir(target)
+    capsys.readouterr()
+
+    main(["check"])
+    out = capsys.readouterr().out
+    assert "ok    symbols: BTCUSDT is BTC/USDT:USDT to the sources" in out
+    # The shipped chains fail over to a second venue, and a desk should know it prices only one.
+    assert "venues: fees are priced on bybit, data also comes from binance" in out
+
+    # An order that would go to one venue at another's fee is a refusal, not a note.
+    config = target / "strategy.toml"
+    config.write_text(
+        config.read_text("utf-8").replace(
+            'mode = "sandbox"', 'mode = "venue"\nvenue = "binance"', 1
+        ),
+        "utf-8",
+    )
+    main(["check"])
+    said = capsys.readouterr().out
+    assert "at the other's fee" in said

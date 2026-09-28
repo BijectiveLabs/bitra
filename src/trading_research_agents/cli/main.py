@@ -1794,6 +1794,7 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
                         "data.toml: no [data.orderbook] chain, so a cycle cannot price a trade "
                         "and `tra run` will stop at the cost gate"
                     )
+                good.extend(_agrees_across_files(cfg, declared_data, bad))
         elif cfg.agents is not None:
             bad.append("data.toml: missing; `tra run` needs it (tra init writes one)")
         if cfg.agents is not None and cfg.agents.provider == PLACEHOLDER_PROVIDER:
@@ -1881,6 +1882,44 @@ def _symbol_for(cfg: Any, project: Path) -> str:
         if mapped:
             return str(mapped)
     return str(cfg.run.instrument)
+
+
+def _agrees_across_files(cfg: Any, data: Any, bad: list[str]) -> list[str]:
+    """Whether the instrument and the venue mean the same thing in every file that names them.
+
+    Three declarations sit in three files, and a desk that prices one venue's fees while taking its
+    candles from another has made a decision without noticing. Nothing here decides for them; it
+    says what the files add up to.
+    """
+    good: list[str] = []
+    instrument = cfg.run.instrument
+    venue = cfg.run.venue_key.partition("/")[0]
+    symbols = dict(data.settings.get("symbols") or {})
+    if instrument in symbols:
+        good.append(f"symbols: {instrument} is {symbols[instrument]} to the sources")
+    else:
+        good.append(
+            f"symbols: {instrument} is not mapped in data.toml, so each source looks it up itself"
+        )
+    named = {
+        source.partition(":")[2]
+        for kind in data.kinds
+        for source in kind.chain
+        if source.startswith("ccxt:")
+    }
+    strangers = sorted(named - {venue})
+    if strangers:
+        elsewhere = ", ".join(strangers)
+        good.append(
+            f"venues: fees are priced on {venue}, data also comes from {elsewhere}; "
+            "deliberate is fine, accidental is not"
+        )
+    if cfg.execution.places_orders and cfg.execution.venue != venue:
+        bad.append(
+            f"[execution].venue is {cfg.execution.venue!r} but [run].venue_key prices {venue!r}; "
+            "an order would go to one venue at the other's fee"
+        )
+    return good
 
 
 def _gate_lines(

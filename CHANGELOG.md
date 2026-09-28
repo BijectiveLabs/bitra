@@ -35,6 +35,10 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- `tra check` reads the three files against each other: whether the instrument is mapped for the
+  sources, whether data comes from a venue other than the one whose fees are priced, and whether
+  `[execution].venue` and `[run].venue_key` name the same venue - the last is a refusal, because an
+  order would go to one venue at the other's fee.
 - `tra init --profile autonomous`: a project with the cycle already wired - the technical analyst as
   the core, the confluence matrix, the conviction ladder and the targets as live tables, execution
   in sandbox, and a "your first hour" section in the project's own README naming the three things

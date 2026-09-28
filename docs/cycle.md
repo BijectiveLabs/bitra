@@ -14,7 +14,10 @@ the technical analyst is the core, the confluence matrix, the conviction ladder 
 live tables rather than commented ones, `[execution].mode` is `sandbox`, and the project's README
 carries the three things that are yours before a cycle can decide anything - a model and its key,
 the mechanism and the edge you claim, and data to decide on. `tra check` names whatever is still
-missing, including the provider placeholder.
+missing, including the provider placeholder, and reads the three files against each other: the
+instrument as the sources know it, a venue supplying data that is not the venue whose fees are
+priced, and an `[execution].venue` that does not match `[run].venue_key` - that last one is a
+refusal rather than a note.
 
 The gates it writes ask for nothing until you give them something: `[confluence].required` is empty,
 because a role nobody asked has agreed to nothing, and `[conviction].weights` names only the
