@@ -56,6 +56,7 @@ from trading_research_agents.execution.conviction import (
     score_of,
     stake_for,
 )
+from trading_research_agents.execution.mandate import MODES as MANDATE_MODES
 from trading_research_agents.execution.pretrade import PreTradeVerdict, admit
 from trading_research_agents.execution.targets import (
     Targets,
@@ -68,7 +69,9 @@ from trading_research_agents.llm.usage import BudgetSpentError, UsageLedger
 from trading_research_agents.store.cycles import CycleDir
 from trading_research_agents.store.snapshot import Snapshot, cycle_id, take_snapshot
 
-MODES = ("sandbox", "signals")
+# The third mode sends orders, and it only exists when the caller hands the cycle something to
+# send them with. That hand is built by the CLI, and only after the mandate has cleared.
+MODES = MANDATE_MODES
 TARGETS = {"long": Direction.LONG, "short": Direction.SHORT}
 # The analysts that only read and label. They run beside the technical analyst, they never place
 # anything, and each one's answer is recorded whether or not the operator gave it a source.
@@ -119,6 +122,8 @@ class CycleConfig:
     # [agents].validators: the stances to ask once there is a proposal worth arguing about. Each
     # stance is one more call, so an operator turns them on deliberately.
     validators: tuple[str, ...] = ()
+    # What actually sends an order, when the operator is in venue mode and the mandate cleared.
+    place: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None
     # A reading analyst is asked only when the roster names it. `tra run` names the ones with a
     # declared source, because paying a model to say it was given nothing is waste; an operator who
     # wants a role asked anyway, on notes alone, names it in [agents].analysts.
@@ -147,7 +152,12 @@ class CycleConfig:
         if len(set(self.validators)) != len(self.validators):
             raise CycleError("each stance is asked once")
         if self.mode not in MODES:
-            raise CycleError(f"mode is one of {list(MODES)}; venue execution is not in this build")
+            raise CycleError(f"mode is one of {list(MODES)}")
+        if self.mode == "venue" and self.place is None:
+            raise CycleError(
+                "venue mode needs something to send with; the CLI builds it from [execution] "
+                "once the mandate, the ladder and the keys are all in place"
+            )
         if not isinstance(self.size, Decimal) or self.size <= 0:
             raise CycleError("size is a positive Decimal")
         if not isinstance(self.magnitude_bps, Decimal) or self.magnitude_bps <= 0:
@@ -179,6 +189,7 @@ class CycleResult:
     verdict: PreTradeVerdict | None = None
     targets: TargetVerdict | None = None
     intent: dict[str, Any] | None = None
+    placed: dict[str, Any] | None = None
     refusals: list[str] = field(default_factory=list)
     stopped_by: str | None = None
     path: Path | None = None
@@ -201,6 +212,7 @@ class CycleResult:
             "cost": None if self.verdict is None else self.verdict.record(),
             "targets": None if self.targets is None else self.targets.record(),
             "intent": self.intent,
+            "placed": self.placed,
             "refusals": self.refusals,
             "stopped_by": self.stopped_by,
             "mode": self.briefs.get("mode"),
@@ -458,6 +470,20 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
     }
     with (where.path / "intents.jsonl").open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(result.intent, sort_keys=True) + "\n")
+
+    if cfg.mode == "venue" and cfg.place is not None:
+        # The intent is already on disk. Whatever the venue does next, the record of what this
+        # cycle decided survives it.
+        try:
+            result.placed = dict(cfg.place(result.intent))
+        except Exception as exc:
+            result.placed = {"sent": False, "error": f"{exc.__class__.__name__}: {exc}"}
+            result.refusals.append(f"venue: {exc.__class__.__name__}: {exc}")
+        else:
+            where.path.joinpath("placed.json").write_text(
+                json.dumps(result.placed, indent=2, sort_keys=True, default=str) + "\n",
+                encoding="utf-8",
+            )
     _finish(cfg, where, result)
     return result
 

@@ -35,6 +35,14 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- The execution mandate (`[execution]`, `execution/mandate.py`, `trading/dispatch.py`): three modes,
+  `sandbox`, `signals` and `venue`. Venue mode does not start until the operator has printed the
+  mandate text with `tra mandate`, put it in their own project word for word, signed it with a name
+  and a date, capped one order with `max_notional`, promoted the ladder to `CANARY`, declared
+  `[canary]`, and put the venue's keys in the environment. `tra check` and `tra run` both name
+  whatever is missing, and neither spends a token before refusing. The order goes out as one market
+  order through ccxt, sized by the conviction rule, and what came back is written to `placed.json`
+  beside the intent that was already on disk.
 - Conviction (`[conviction]`, `execution/conviction.py`): what the analysts say now decides how much
   capital goes behind an idea, not only whether it happens. Each role's declared state contributes
   its weight for or against the direction, silence contributes nothing, the deciding analyst's

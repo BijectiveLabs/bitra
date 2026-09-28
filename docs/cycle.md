@@ -307,6 +307,32 @@ keeps what it already paid for; `--resume` then reuses those answers instead of 
 failed agent becomes a line in `cycle.json` rather than a traceback, and the results are always
 reported in the same order no matter who finished first.
 
+## The execution mandate
+
+Three modes, and the distance between them is deliberate.
+
+| Mode | What happens to an admitted intent | What it needs |
+|---|---|---|
+| `sandbox` | written into the cycle's own directory | nothing; this is the default |
+| `signals` | written for execution somewhere else, by someone else's system | nothing |
+| `venue` | sent to the venue, with real capital behind it | a mandate, the canary tier, the caps, the keys |
+
+Venue mode does not start until all of this is true, and `tra check` names whatever is not:
+
+1. `MANDATE.md` is in the project and carries the mandate text word for word. Print it with
+   `tra mandate > MANDATE.md`, and read it before you do - it says that the losses are yours.
+2. `[execution].acknowledged_by` and `acknowledged_on` name who signed it and when.
+3. `[execution].max_notional` caps one order. There is no default.
+4. The ladder stands at `CANARY`, promoted with evidence and a signature.
+5. `[canary]` limits are declared.
+6. The venue's keys are in the environment. They are read by the execution layer alone, never from
+   a file, and they never appear in a brief, a prompt, a record or a log.
+
+The order goes out as one market order, sized by the conviction rule and capped by
+`[execution].max_notional`, and what came back is written to `placed.json` beside the intent. The
+intent is written first: whatever the venue does next, the record of what this cycle decided
+survives it. A venue that refuses is recorded as a refusal, not retried with different words.
+
 ## Modes
 
 | Mode | What happens |

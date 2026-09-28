@@ -14,7 +14,7 @@ import re
 import sys
 import threading
 import tomllib
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 from importlib.resources import files
@@ -426,10 +426,14 @@ def build_parser() -> argparse.ArgumentParser:
     run_cmd.add_argument("--data-config", type=Path, default=Path("data.toml"))
     run_cmd.add_argument(
         "--mode",
-        choices=("sandbox", "signals"),
-        default="sandbox",
-        help="sandbox writes the intent to the cycle; signals writes it for your own executor",
+        choices=("sandbox", "signals", "venue"),
+        default=None,
+        help=(
+            "sandbox keeps the intent in the cycle, signals writes it for your own executor, "
+            "venue sends it; default [execution].mode"
+        ),
     )
+    run_cmd.add_argument("--ladder", type=Path, default=Path("ladder.json"))
     run_cmd.add_argument(
         "--margin", type=parse_decimal, default=None, help="bps the edge must clear beyond cost"
     )
@@ -456,6 +460,13 @@ def build_parser() -> argparse.ArgumentParser:
     run_cmd.add_argument("--json", action="store_true")
 
     check_cmd = top.add_parser("check", help="what is ready and what is missing, in plain words")
+    mandate_cmd = top.add_parser(
+        "mandate",
+        help="print the execution mandate; venue mode needs it in the project, word for word",
+    )
+    mandate_cmd.set_defaults(command="mandate")
+    mandate_cmd.add_argument("--json", action="store_true")
+
     check_cmd.set_defaults(command="check")
     check_cmd.add_argument("--config", type=Path, default=Path("strategy.toml"))
     check_cmd.add_argument("--envelope", type=Path, default=Path("envelope.toml"))
@@ -1200,6 +1211,17 @@ TEMPLATE_FILES = {
 }
 
 
+def show_mandate(args: argparse.Namespace) -> int:
+    """The text venue mode needs, printed so an operator can read it and keep it."""
+    from trading_research_agents.execution.mandate import DISCLAIMER, MANDATE_FILE
+
+    if args.json:
+        emit({"mandate": DISCLAIMER, "file": MANDATE_FILE}, True, [])
+        return CLEARED
+    sys.stdout.write(DISCLAIMER)
+    return CLEARED
+
+
 def init_project(args: argparse.Namespace) -> int:
     target: Path = args.directory
     templates = files("trading_research_agents").joinpath("templates")
@@ -1303,6 +1325,10 @@ def run_cycle_command(args: argparse.Namespace) -> int:
         news = (beside / "events.csv",)
     # A declared roster wins; otherwise the roles with something to read are the ones to pay for.
     analysts = a.analysts or roster_for(declared, "technical_analyst")
+    mode = args.mode or cfg.execution.mode
+    hand = None
+    if mode == "venue":
+        hand = _venue_hand(args, cfg, beside)
     usage = UsageLedger(out / "usage.jsonl")
     limits = BudgetLimits(
         token_budget=a.token_budget,
@@ -1347,7 +1373,8 @@ def run_cycle_command(args: argparse.Namespace) -> int:
             latency_slippage_bps=cfg.run.slippage_bps,
             margin_bps=args.margin if args.margin is not None else Decimal(0),
             min_confidence=a.min_confidence,
-            mode=args.mode,
+            mode=mode,
+            place=hand,
             matrix=cfg.confluence,
             conviction=cfg.conviction,
             max_position=cfg.limits.max_position,
@@ -1518,7 +1545,13 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
             )
         roster = roster_for(shelf, "technical_analyst")
         good.append(f"roster: {', '.join(roster)}; `tra run` asks these")
-        ready, missing = _gate_lines(cfg, roster)
+        ready, missing = _gate_lines(
+            cfg,
+            roster,
+            project=args.config.resolve().parent,
+            tier=Ladder(args.ladder).tier.name if args.ladder.is_file() else "REPLAY",
+            env=env,
+        )
         good.extend(ready)
         bad.extend(missing)
         data_config = args.config.resolve().parent / "data.toml"
@@ -1568,7 +1601,53 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
     return good, bad, next_command
 
 
-def _gate_lines(cfg: Any, roster: tuple[str, ...]) -> tuple[list[str], list[str]]:
+def _venue_hand(args: argparse.Namespace, cfg: Any, project: Path) -> Any:
+    """What venue mode sends with, built only after everything standing in the way is cleared."""
+    from trading_research_agents.execution.mandate import blocking
+    from trading_research_agents.trading.dispatch import hand_for
+
+    mandate = cfg.execution
+    env = _environment(getattr(args, "env_file", None))
+    prefix = mandate.venue.strip().upper()
+    keys = (f"{prefix}_API_KEY", f"{prefix}_API_SECRET") if prefix else ()
+    stops = blocking(
+        mandate,
+        project=project,
+        tier=Ladder(args.ladder).tier.name if args.ladder.is_file() else "REPLAY",
+        missing_keys=[k for k in keys if not env.get(k)],
+        canary_declared=cfg.canary is not None,
+    )
+    if stops:
+        raise ConfigError("venue mode is not authorised here: " + "; ".join(stops))
+    symbol = _symbol_for(cfg, project)
+    return hand_for(
+        venue=mandate.venue,
+        symbol=symbol,
+        max_notional=mandate.max_notional,
+        environment=cfg.live.environment if cfg.live is not None else "demo",
+        env=env,
+    )
+
+
+def _symbol_for(cfg: Any, project: Path) -> str:
+    """The venue's own name for the instrument, as data.toml already maps it."""
+    declared = project / "data.toml"
+    if declared.is_file():
+        raw = tomllib.loads(declared.read_text(encoding="utf-8"))
+        mapped = (raw.get("data", {}).get("symbols") or {}).get(cfg.run.instrument)
+        if mapped:
+            return str(mapped)
+    return str(cfg.run.instrument)
+
+
+def _gate_lines(
+    cfg: Any,
+    roster: tuple[str, ...],
+    *,
+    project: Path,
+    tier: str,
+    env: Mapping[str, str],
+) -> tuple[list[str], list[str]]:
     """What the two declared gates will do, and where they contradict the rest of the project.
 
     A gate that can never pass is worth saying out loud here, before a cycle spends a token finding
@@ -1598,6 +1677,32 @@ def _gate_lines(cfg: Any, roster: tuple[str, ...]) -> tuple[list[str], list[str]
             bad.append(
                 f"[confluence].min_support is {matrix.min_support} but "
                 f"{len(stances)} validator(s) are asked; no cycle can clear it"
+            )
+    from trading_research_agents.execution.mandate import blocking
+
+    mandate = cfg.execution
+    if not mandate.places_orders:
+        good.append(
+            f"execution: {mandate.mode}; nothing leaves the machine"
+            if mandate.mode == "sandbox"
+            else "execution: signals; intents are written for your own executor"
+        )
+    else:
+        prefix = mandate.venue.strip().upper()
+        keys = (f"{prefix}_API_KEY", f"{prefix}_API_SECRET") if prefix else ()
+        stops = blocking(
+            mandate,
+            project=project,
+            tier=tier,
+            missing_keys=[k for k in keys if not env.get(k)],
+            canary_declared=cfg.canary is not None,
+        )
+        if stops:
+            bad.extend(f"execution: {stop}" for stop in stops)
+        else:
+            good.append(
+                f"execution: venue {mandate.venue}, signed by {mandate.acknowledged_by} on "
+                f"{mandate.acknowledged_on}, at most {mandate.max_notional} per order"
             )
     rule = cfg.conviction
     if rule.idle:
@@ -2130,6 +2235,7 @@ HANDLERS = {
     ("data", "get"): data_get,
     ("data", "pull"): data_pull,
     ("check", "check"): check_project,
+    ("mandate", "mandate"): show_mandate,
     ("run", "run"): run_cycle_command,
     ("chain", "floor"): chain_floor,
     ("chain", "observe"): chain_observe,

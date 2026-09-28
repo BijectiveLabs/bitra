@@ -15,6 +15,7 @@ from typing import Any
 from trading_research_agents.execution.confluence import STANCES, ConfluenceError, Matrix
 from trading_research_agents.execution.conviction import Conviction, ConvictionError, Tier
 from trading_research_agents.execution.cost import CostError, FundingSchedule
+from trading_research_agents.execution.mandate import Mandate, MandateError
 from trading_research_agents.execution.targets import TargetError, Targets
 from trading_research_agents.strategy.core import Strategy
 from trading_research_agents.strategy.exits import ExitRule
@@ -131,6 +132,8 @@ class StrategyConfig:
     targets: Targets = field(default_factory=Targets)
     # How much capital goes behind an idea, from the same declarations the matrix reads.
     conviction: Conviction = field(default_factory=Conviction)
+    # What a cycle may do with an admitted intent: keep it, export it, or send it.
+    execution: Mandate = field(default_factory=Mandate)
 
 
 def load_strategy_config(path: Path) -> StrategyConfig:
@@ -202,6 +205,7 @@ def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> S
         confluence=_confluence(raw),
         targets=_targets(raw, exit_rule),
         conviction=_conviction(raw),
+        execution=_mandate(raw, run.venue_key),
     )
 
 
@@ -342,6 +346,44 @@ CONFLUENCE_KEYS = (
     "max_opposition",
 )
 TARGET_KEYS = ("min_net_bps", "min_reward_risk", "max_round_trips_per_day")
+
+
+EXECUTION_KEYS = (
+    "mode",
+    "venue",
+    "acknowledged_by",
+    "acknowledged_on",
+    "max_notional",
+    "max_orders_per_cycle",
+)
+
+
+def _mandate(raw: dict[str, Any], venue_key: str) -> Mandate:
+    """[execution]: the mode, and the acknowledgement venue mode needs before it starts."""
+    table = raw.get("execution")
+    if table is None:
+        return Mandate()
+    if not isinstance(table, dict):
+        raise ConfigError("[execution] must be a table")
+    unknown = sorted(set(table) - set(EXECUTION_KEYS))
+    if unknown:
+        raise ConfigError(f"[execution]: unknown {unknown}; have {list(EXECUTION_KEYS)}")
+    leaked = [k for k in table if any(word in k.lower() for word in SECRET_LIKE)]
+    if leaked:
+        raise ConfigError(
+            f"[execution] carries {leaked}; keys come from the environment, never from a file"
+        )
+    try:
+        return Mandate(
+            mode=str(table.get("mode", "sandbox")),
+            venue=str(table.get("venue") or venue_key.partition("/")[0]),
+            acknowledged_by=str(table.get("acknowledged_by", "")),
+            acknowledged_on=str(table.get("acknowledged_on", "")),
+            max_notional=_dec(table, "max_notional") if "max_notional" in table else None,
+            max_orders_per_cycle=int(table.get("max_orders_per_cycle", 1)),
+        )
+    except MandateError as exc:
+        raise ConfigError(str(exc)) from exc
 
 
 CONVICTION_KEYS = ("weights", "validator_weight", "min_score", "max_leverage", "ladder")

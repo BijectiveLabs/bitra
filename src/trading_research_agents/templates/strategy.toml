@@ -129,6 +129,19 @@ kill_switch = "KILL"               # touch this file to flatten and stop
 # at_least = 0.4                   # thin but above the floor: a quarter
 # size_multiple = 0.25
 
+# What a cycle may do with an admitted intent. sandbox keeps it in the cycle's own directory,
+# signals writes it for your own executor, venue sends it to the venue with your capital behind it.
+# Venue mode does not start until MANDATE.md is in this project word for word (`tra mandate >
+# MANDATE.md`), you have signed it here, the ladder stands at CANARY, [canary] is declared, and the
+# keys are in the environment. `tra check` names whatever is missing.
+# [execution]
+# mode = "venue"
+# venue = "bybit"                  # a live venue; defaults to the venue half of [run].venue_key
+# acknowledged_by = "your name"
+# acknowledged_on = "2026-09-28"
+# max_notional = 200               # one order, in quote currency
+# max_orders_per_cycle = 1
+
 # Is this the trade you said you wanted? Trading, not investing: what it has to be worth, and how
 # often you are willing to do it. The round trips are counted from the intents already on disk, so
 # a restarted process cannot forget what it has already done today.

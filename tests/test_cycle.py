@@ -465,7 +465,9 @@ def test_a_cycle_with_no_data_stops_before_it_asks_a_model(
 def test_a_cycle_refuses_to_be_configured_wrong(tmp_path: Path, envelope: Envelope) -> None:
     for overrides, message in (
         ({"instrument": " "}, "names its instrument"),
-        ({"mode": "venue"}, "mode is one of"),
+        ({"mode": "nowhere"}, "mode is one of"),
+        # Venue mode is refused unless the caller hands the cycle something to send with.
+        ({"mode": "venue"}, "needs something to send with"),
         ({"size": Decimal(0)}, "size is a positive"),
         ({"magnitude_bps": Decimal(0)}, "edge the operator claims"),
         ({"venue_key": "nowhere/taker"}, "is not a channel"),
@@ -975,3 +977,43 @@ def test_a_context_that_disagrees_costs_size_rather_than_being_averaged_away(
     result = run_cycle(agreeing)
     assert result.stake is not None and result.stake.multiple == Decimal("0.5")
     assert result.stake.score.score == Decimal("0.500")
+
+
+def test_venue_mode_sends_the_intent_and_keeps_what_came_back(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    sent: list[dict[str, Any]] = []
+
+    def hand(intent: Any) -> dict[str, Any]:
+        sent.append(dict(intent))
+        return {"sent": True, "order_id": "order-1", "status": "closed"}
+
+    cfg, _, _ = cycle_config(tmp_path, envelope, [analyst_answer()], mode="venue", place=hand)
+    result = run_cycle(cfg)
+
+    assert result.acted and result.placed == {
+        "sent": True,
+        "order_id": "order-1",
+        "status": "closed",
+    }
+    assert sent and sent[0]["target"] == "long"
+    where = Path(str(result.path))
+    assert json.loads((where / "placed.json").read_text("utf-8"))["order_id"] == "order-1"
+    summary = json.loads((where / "cycle.json").read_text("utf-8"))
+    assert summary["placed"]["sent"] is True and summary["mode"] == "venue"
+
+
+def test_a_venue_that_refuses_leaves_the_decision_on_disk(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    def hand(intent: Any) -> dict[str, Any]:
+        raise RuntimeError("insufficient margin")
+
+    cfg, _, _ = cycle_config(tmp_path, envelope, [analyst_answer()], mode="venue", place=hand)
+    result = run_cycle(cfg)
+
+    # The intent was written before anything was sent, and it stays written.
+    assert result.acted and result.placed is not None and result.placed["sent"] is False
+    assert any("venue: RuntimeError: insufficient margin" in r for r in result.refusals)
+    where = Path(str(result.path))
+    assert (where / "intents.jsonl").read_text("utf-8").strip()
