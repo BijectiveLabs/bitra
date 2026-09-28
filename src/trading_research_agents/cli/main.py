@@ -1999,6 +1999,12 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
             else:
                 if p.key_env and not env.get(p.key_env):
                     bad.append(f"{p.key_env} is not set; put it in .env and pass --env-file .env")
+                elif not p.installed:
+                    module, extra = p.needs
+                    bad.append(
+                        f"provider {p.name}: the {module} SDK is not installed; "
+                        f"pip install 'trading-research-agents[{extra}]'"
+                    )
                 else:
                     good.append(f"provider {p.name}: ready")
         if cfg.live is not None:

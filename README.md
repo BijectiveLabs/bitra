@@ -23,11 +23,23 @@ the release pass - diagrams, the packaging, and the first tag.
 ## One cycle
 
 ```bash
-pip install 'trading-research-agents[ccxt,openai,data]'
+# Not on PyPI yet, so install from the source tree. `uv tool install` puts `tra` on your PATH:
+git clone https://github.com/BijectiveLabs/trading-research-agents && cd trading-research-agents
+uv tool install --editable . --with 'ccxt>=4.5' --with 'openai>=1' --with 'pyarrow>=18'
+
 tra init my-desk --profile autonomous && cd my-desk   # the cycle, wired, commented line by line
 cp .env.example .env                # your model key; no venue key is needed for a cycle
 tra run --env-file .env             # one autonomous cycle, in the sandbox
 ```
+
+The three `--with` extras are the SDKs this project talks through, and each one buys something
+specific: `ccxt` is live venue data and, later, execution; `openai` is the client every
+OpenAI-compatible provider uses (Groq, DeepSeek, xAI, OpenRouter, a local server); `pyarrow` is the
+dataset format `tra data get` writes. Add `--with 'anthropic>=1'` or `--with 'google-genai>=1'` for
+those providers. `tra check` names a missing one before a cycle spends anything finding out.
+
+Without `uv`: `pip install -e '.[ccxt,openai,data]'` inside a virtual environment does the same,
+and `tra` is then on that environment's PATH.
 
 ```mermaid
 flowchart TD

@@ -35,6 +35,12 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- `tra check` now says when a provider's SDK is not installed, with the extra that installs it,
+  instead of reporting the provider ready and failing in the middle of a cycle. A `Provider` carries
+  what it needs (`anthropic`, `openai`, `google.genai`) and whether it is importable.
+- The README's install block installs from the source tree, because the package is not on PyPI yet
+  and `pip install trading-research-agents` does not work today. `uv tool install --editable .` puts
+  `tra` on the PATH, and each extra says what it buys.
 - `tra venues [name...]`: what a venue can actually do through ccxt - which kinds of data it
   serves, whether it takes orders, whether it can carry the stop and take profit with the entry,
   whether the account reads a cycle needs are there, and whether it has a test environment. Read

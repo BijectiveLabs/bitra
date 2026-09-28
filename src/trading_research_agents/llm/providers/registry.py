@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from importlib.metadata import entry_points
+from importlib.util import find_spec
 
 from trading_research_agents.llm.completer import Completer
 from trading_research_agents.llm.providers.presets import PRESETS
@@ -49,6 +50,14 @@ class Provider:
     build: Callable[[str | None, str | None], Completer]
     note: str = ""
     build_with: Callable[[str | None, str | None, CallOptions], Completer] | None = None
+    # The SDK this provider talks through, and the extra that installs it. A missing SDK is a
+    # thing to say at `tra check`, before a cycle has paid for data and briefs to find out.
+    needs: tuple[str, str] = ("", "")
+
+    @property
+    def installed(self) -> bool:
+        module, _ = self.needs
+        return not module or find_spec(module) is not None
 
 
 _registry: dict[str, Provider] = {}
@@ -132,15 +141,40 @@ def _bundled() -> None:
     from trading_research_agents.llm.providers.anthropic import DEFAULT_MODEL
 
     register(
-        Provider("anthropic", "ANTHROPIC_API_KEY", DEFAULT_MODEL, False, _anthropic, "", _anthropic)
+        Provider(
+            "anthropic",
+            "ANTHROPIC_API_KEY",
+            DEFAULT_MODEL,
+            False,
+            _anthropic,
+            "",
+            _anthropic,
+            ("anthropic", "anthropic"),
+        )
     )
     register(
-        Provider("google", "GEMINI_API_KEY", None, False, _google, "or GOOGLE_API_KEY", _google)
+        Provider(
+            "google",
+            "GEMINI_API_KEY",
+            None,
+            False,
+            _google,
+            "or GOOGLE_API_KEY",
+            _google,
+            ("google.genai", "google"),
+        )
     )
     for name, p in PRESETS.items():
         register(
             Provider(
-                name, p.key_env, None, True, _two_args(_compatible(name)), p.note, _compatible(name)
+                name,
+                p.key_env,
+                None,
+                True,
+                _two_args(_compatible(name)),
+                p.note,
+                _compatible(name),
+                ("openai", "openai"),
             )
         )
 
