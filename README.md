@@ -2,21 +2,20 @@
 
 # trading-research-agents
 
-**Autonomous trading agents for crypto that cannot lie about their own results.**
+**Autonomous trading agents for crypto that can't fudge their own results.**
 
-Agents that decide, and code that refuses. An engine pulls the data, normalises it, and hands
-each agent a brief of figures the agent did not compute itself. Models read those figures and
-decide. Then code takes over: it prices the round trip before the order exists, enforces the
-limits you declared, and writes every intent, refusal and fill to a ledger that is never
-rewritten. No model sits on the order path, no agent holds a key, and the default venue is a
-simulator. What survives that is worth looking at; what does not is recorded as dead, with the
-reason it died.
+Models decide; code checks the arithmetic. An engine fetches the data, tidies it up, and hands each
+agent a short brief of figures it did not work out for itself. The agents read those figures and say
+what they think. From there it's all code: the round trip is priced before an order exists, your own
+limits are applied, and every intent, refusal and fill is written down in a file nobody rewrites
+later. No model touches the order path, no agent holds a key, and the default venue is a simulator.
+Ideas that survive all that are worth a look. The ones that don't are kept too, with the reason they
+died.
 
-Status: pre-release, under active development. The API is not stable and the package is not yet on
-PyPI. Running today: the autonomous cycle end to end, live data sources with free and paid chains,
-four analysts and three validators, the confluence matrix, conviction sizing, the cost gate, the
-desk's own targets, venue execution behind a written mandate, and the two auditors. Landing next:
-the release pass - diagrams, the packaging, and the first tag.
+It's a pre-release and the API still moves. It isn't on PyPI yet. What runs today: the whole
+autonomous cycle, live data with free and paid sources, four analysts and three validators, the
+confluence matrix, conviction sizing, the cost gate, your own targets, venue execution behind a
+mandate you sign, and two auditors. Next up: the release pass - packaging and the first tag.
 
 ---
 
@@ -43,27 +42,31 @@ and `tra` is then on that environment's PATH.
 
 ```mermaid
 flowchart TD
-    engine[["engine pulls<br/>free then paid, with the age of every value"]] --> briefs
-    briefs["code builds the briefs<br/>each role sees only its own figures"] --> round1
-    subgraph round1["asked together"]
+    engine[["the engine fetches<br/>sources in the order you declared, each value carrying its age"]] --> briefs
+    briefs["code writes the briefs<br/>a role only sees the figures its own job needs"] --> round1
+    subgraph round1["asked at the same time"]
         direction LR
-        tech["technical analyst<br/>direction, confidence, horizon"]
+        tech["technical analyst<br/>a direction, a confidence, a horizon"]
         macro["macro analyst"]
         chain["on-chain analyst"]
         mood["sentiment analyst"]
     end
     round1 --> price["code prices the round trip<br/>fee, spread, impact, funding, gas"]
-    price --> round2["validators pro, contra, neutral<br/>claims must cite a figure or they are discarded"]
-    round2 --> matrix{"confluence<br/>do the declared states agree?"}
-    matrix -- "no" --> refused["refusal with the figure that refused it"]
-    matrix -- "yes" --> size["conviction<br/>how much, off the operator's ladder"]
-    size --> gate{"cost gate<br/>does the claimed edge clear its cost?"}
+    price --> round2["validators: pro, contra, neutral<br/>a claim that cites no figure is thrown away"]
+    round2 --> matrix{"confluence<br/>do the states you declared agree with the direction?"}
+    matrix -- "no" --> refused["a refusal that names the figure behind it"]
+    matrix -- "yes" --> size["conviction<br/>how much, off your ladder - then priced again at that size"]
+    size --> gate{"cost gate<br/>does the claimed edge clear what it costs?"}
     gate -- "no" --> refused
-    gate -- "yes" --> targets{"targets<br/>net bps, reward-to-risk, round trips today"}
+    gate -- "yes" --> targets{"targets<br/>net bps, reward to risk, round trips today"}
     targets -- "no" --> refused
-    targets -- "yes" --> intent["intent written to the cycle"]
-    intent --> venue["venue mode only<br/>one order with the stop and take profit attached"]
+    targets -- "yes" --> intent["the intent, written into the cycle"]
+    intent --> venue["venue mode only<br/>one order, with the stop and take profit attached to it"]
 ```
+
+Four of those steps only run if you ask for them. The validators, the confluence matrix, the
+conviction ladder and the targets are all empty until you declare them, and a fresh project has the
+ladder and the targets filled in and the other two waiting. Everything else always happens.
 
 What that prints, from a real cycle on live data with a real model:
 
@@ -85,47 +88,41 @@ the edge is declared: [agents].magnitude_bps, declared by the operator and not m
 intent: long 0.01 (sandbox)
 ```
 
-The same cycle in the terminal, with the panels the console draws:
+And the same cycle in a terminal, with the panels the console draws:
 
-![one cycle](assets/cycle.svg)
+![one cycle](assets/cycle.png)
 
-Three things in that output are the whole argument of this project. The model never computed a
-number: every figure it read was built by code from a snapshot that says how old it is. Eleven of
-the thirteen basis points of cost are the venue's own fee schedule, printed before any order
-exists. And the claimed edge is labelled a declaration, because it has not been measured yet.
-`docs/cycle.md` is the rest of it.
+Three things in that output carry the whole idea. The model never worked out a number: every
+figure it read was computed by code from a snapshot that says how old it is. Eleven of the thirteen
+basis points of cost are the venue's own fees, printed before an order exists. And the edge is
+labelled a declaration, because nobody has measured it yet - you said it, so we show it as yours.
+`docs/cycle.md` has the rest.
 
-## Four commands
+## If you'd rather backtest first
 
-```bash
-pip install 'trading-research-agents[data]'     # numpy and pyarrow; nothing else
-tra init my-run && cd my-run                  # strategy.toml, envelope.toml, an example core
-tra data get BTCUSDT 2025-01-01               # fetch, audit, Parquet and funding, into data/
-tra backtest                                  # the example core on that day, net of costs
-```
-
-`tra check` says what is ready and what is still missing, in plain words, before you run.
-Every file `tra init` wrote is commented line by line; nothing in the logic is a constant.
-To make a model the decision core instead of a code core:
+The cycle above decides on live figures. If you want to see the machinery on recorded data before
+you point it at anything live, that's four commands and no key at all:
 
 ```bash
-tra init my-run --agent deepseek --model deepseek-flash   # any provider in docs/providers.md
-cp .env.example .env                                      # and put the key in it
-tra backtest --env-file .env                              # or: tra agent session
+tra init my-run && cd my-run          # a project with an example core instead of an agent
+tra data get BTCUSDT 2025-01-01       # fetch a day, audit it, write Parquet and funding into data/
+tra check                             # what's ready, what's missing
+tra backtest                          # that day, net of costs
 ```
 
-The same four commands take you to paper (`tra paper`) and, behind the ladder, to a canary
-session on a live venue (`tra live`, `docs/live.md`). Total time from install to a first
-backtest is a few minutes, most of it the download.
+Every file `tra init` writes is commented line by line, and nothing in the logic is a constant you
+can't see. The same commands take you to paper trading (`tra paper`) and, once the ladder says so,
+to a small live session (`tra live`, `docs/live.md`). From install to a first backtest is a few
+minutes, most of it the download.
 
-### Nothing starts before `tra check` says it can
+### `tra check` tells you what's left to do
 
-![the cockpit](assets/cockpit.svg)
+![the cockpit](assets/cockpit.png)
 
-Typed with no arguments, `tra` opens the cockpit above: what is ready, what is missing, and the one
-command to type next. `tra check` is the same thing as a list, and it is the whole of the setup
-you have to hold in your head. This is a project written by `tra init --profile autonomous`, one
-minute old, before its operator has done anything:
+Type `tra` on its own and you get the cockpit above: what's ready, what isn't, and the one command
+to type next. `tra check` is the same thing as a plain list. Between them, that's the whole of the
+setup you have to keep in your head. Here's a project made by `tra init --profile autonomous`, about
+a minute old, before anyone has touched it:
 
 ```
 ok    strategy.toml: valid; core 'agent-pending'; instrument BTCUSDT
@@ -145,40 +142,40 @@ todo  [agents].provider is still the placeholder; name the provider you have a k
 3 thing(s) to fix first
 ```
 
-Three things to do, each one named. When they are done, `tra run --env-file .env` decides once, and
-`tra run --every 5m --env-file .env` keeps deciding on the bar's own boundary until the budget, the
-kill switch or you stop it.
+Three things to do, each one named. Once they're done, `tra run` decides once, and
+`tra run --every 5m` keeps deciding as each bar closes until the budget runs out, you touch the kill
+switch, or you stop it yourself. Your key goes in `.env` next to the config and every command picks
+it up from there - no flag needed.
 
 ## Why this exists
 
-Most trading-agent frameworks are good at producing a decision and silent about whether the
-decision was earned. They do not carry a cost model, they do not hold out data, and they
-cannot tell you which of their past calls were wrong and why.
+Most trading-agent projects are good at producing a decision and quiet about whether the decision
+was earned. They carry no cost model, they hold nothing out, and they can't tell you which of their
+past calls were wrong or why.
 
-This project starts from the opposite end. It is built on a research programme that closed
-thirty hypotheses in four months without committing capital to any of them, and wrote down
-what each one died of. The agent inherits that discipline as code:
+This one starts from the other end. It grew out of a research programme that closed thirty
+hypotheses in four months without putting capital behind any of them, and wrote down what each one
+died of. The agents inherit that habit as code:
 
-- **Cost first.** A 3.0 bps signal with a p-value of zero is dead against a 9.0 bps round trip.
-  That comparison is layer 0 and it runs before anything else.
-- **Net from day one.** Fees, spread, slippage and funding are in every figure. Gross is
-  reported, labelled, and never carries a verdict.
-- **Power before verdict.** An underpowered result is `NOT PROVEN`, not `FALSIFIED`. The two
-  are enforced as different words because the difference is a closed branch nobody closed.
-- **Reversal points.** A verdict blocked by fees records the fee at which it reverses, so a
-  reader with a better schedule reuses the work instead of repeating it.
-- **Fewer agents, more gates.** Language models write the mechanism memo, the falsifiable
-  claim and the exit design. The arithmetic and the statistics are code, and cannot be argued
-  with.
+- **Cost first.** A 3.0 bps signal with a perfect p-value is still dead against a 9.0 bps round
+  trip. That comparison is layer 0, and it runs before anything else does.
+- **Net from day one.** Fees, spread, slippage and funding are in every figure. Gross numbers are
+  shown, labelled as gross, and never carry a verdict.
+- **Power before verdict.** A result with too little data is `NOT PROVEN`, not `FALSIFIED`. They're
+  different words on purpose: one of them is a branch nobody actually closed.
+- **Reversal points.** When fees kill a verdict, the fee at which it comes back is written down, so
+  the next reader with a better schedule reuses the work instead of redoing it.
+- **Fewer agents, more gates.** Models write the mechanism memo, the falsifiable claim and the exit
+  design. The arithmetic and the statistics are code, and code doesn't argue.
 
-Two required dependencies, `numpy` and `rich`. No orchestration framework, no dataframe
-library, no vendor lock-in. Everything that touches money is `Decimal`; the statistics run in
-floating point from the collapsed series on.
+Two required dependencies: `numpy` and `rich`. No orchestration framework, no dataframe library,
+nothing you can't swap. Anything touching money is `Decimal`; the statistics run in floating point
+once the series has collapsed to numbers.
 
 ## Who is asked, and what each one may do
 
-Every role reads figures code computed, answers inside a closed schema, and decides nothing on its
-own. What follows a decision is arithmetic over the operator's own declarations.
+Each role reads figures that code worked out, answers inside a fixed shape, and decides nothing on
+its own. Everything after the decision is arithmetic over the numbers you declared.
 
 | Role | Reads | Answers | May never |
 |---|---|---|---|
@@ -203,7 +200,8 @@ flowchart LR
     proposals -.-> ops
 ```
 
-The arrow that is missing is the point: no model reaches the order, and no model edits a file.
+The arrow that isn't there is the point: no model reaches the order, and no model edits your
+files.
 
 ## How it fits together
 
@@ -224,22 +222,25 @@ flowchart LR
     T1 -- "layer 5 on its trades" --> L5
     gates --> ledger[("kill ledger<br/>append-only")]
     tiers --> ladder[("ladder.json<br/>promotions with evidence and a signature")]
-    agents["seven roles / any MCP host<br/>read the gates, tighten, demote, halt"] -.-> gates
+    agents["the roles, and any MCP host<br/>read the gates, tighten, demote, halt"] -.-> gates
     agents -.-> tiers
 ```
 
-An idea enters at layer 0 and dies at the cheapest layer that can kill it; what survives is
-a decision core the same runtime takes from replay to a capped live session, one tier at a
-time; the ledger records every death, the ladder every promotion. Models sit on the surface:
-they read what the gates measured and can only tighten what code enforces.
+An idea comes in at layer 0 and dies at the cheapest layer that can kill it. Whatever survives is
+a decision core, and the same runtime carries it from replay to a small live session, one rung at a
+time. The ledger keeps every death, the ladder every promotion. Models sit on the surface of all
+this: they read what the gates measured, and the only thing they can do to a limit is make it
+tighter.
 
 ```mermaid
 flowchart TB
     cli["cli  (tra, the console face)"] --> agents["agents  (roles, session, tool loop, eval, trace)"]
     cli --> mcp["mcp  (read-only server)"]
-    agents --> llm["llm  (completer, schema parser, budget, vendor adapters)"]
+    agents --> llm["llm  (completer, schema parser, budget, model chain, vendor adapters)"]
+    agents --> store["store  (snapshots, cycle directories, the TTL cache)"]
     agents --> surface["surface  (the gates as tools, tighten-only actions)"]
     mcp --> surface
+    store --> data
     surface --> trading["trading  (feeds, simulated venue, controls, ladder, runtime, live plugins)"]
     trading --> strategy["strategy  (core protocol, exits, walk-forward)"]
     strategy --> execution["execution  (cost identity, fills, markout)"]
@@ -249,10 +250,10 @@ flowchart TB
     data --> ledger["ledger  (verdicts, axes, store)"]
 ```
 
-Imports go downward only, and a test enforces it (`tests/test_boundaries.py`). `llm` is the
-only package that speaks to a model vendor, and it knows nothing about markets; `agents` is
-the only package that speaks to `llm`. Only the plugin directories, and the files `tra init`
-copies, name a venue.
+Imports only ever point downward, and a test keeps them honest (`tests/test_boundaries.py`). `llm`
+is the only package that talks to a model vendor, and it knows nothing about markets. `agents` is
+the only package that talks to `llm`. The only places a venue is named by name are the plugin
+directories and the files `tra init` copies into your project.
 
 ## What is here today
 
@@ -330,43 +331,45 @@ is a plugin (`docs/venues.md`); data from anywhere else comes through a column m
 
 ## Common conventions
 
-The spellings people expect are the tiers of the ladder: `tra backtest` is `trade replay`
-(T0), `tra paper` is `trade shadow` (T1/T2), `tra live` is `trade live` (T3, canary). `tra
-init DIR` writes a project: `strategy.toml`, `envelope.toml`, `mapping.toml`, `data.toml`, the
-`sources/` shelf, an example core beside the config, `.env.example`, `.gitignore`. The shelf is one
-declaration per class of data (macro, news, sentiment, on-chain, derivatives), shipped as forms with
-the entries commented out: fill one in and the analyst that reads it joins the roster, leave it and
-that role is never asked. Inside a project the run commands need no
-flags: `strategy.toml` and `envelope.toml` from the directory, the newest dataset in `data/`,
-funding beside it, a run directory under `runs/`. Every flag still exists for anyone who wants
-it elsewhere. Keys come from the environment (`BYBIT_API_KEY`, `BYBIT_API_SECRET`) or an
-explicit `--env-file`; nothing is read silently.
-Venues, feeds and live adapters register through entry points. The MCP server behind the
-`[mcp]` extra exposes the gates as read-only tools to any host.
+The command names are the words people already use: `tra backtest` is replay (T0), `tra paper` is
+shadow (T1/T2), `tra live` is the canary tier (T3). `tra init DIR` lays down a project -
+`strategy.toml`, `envelope.toml`, `mapping.toml`, `data.toml`, the `sources/` shelf, an example core
+beside the config, `.env.example`, `.gitignore`. The shelf is one file per class of data (macro,
+news, sentiment, on-chain, derivatives), shipped as forms with the entries commented out: fill one
+in and the analyst that reads it joins the roster; leave it alone and that role is never asked.
 
-At a terminal, `tra` alone shows what is ready and the one command to type next; a run shows
-a live panel of bars, intents, fills and net basis points, a session shows each role as it
-runs, and every report is a table. The figures are the same ones the plain output carries:
-`--json` is untouched, and `--plain` (or `TRA_PLAIN=1`, or a pipe) gives the text form.
+Inside a project you don't need flags. The commands pick up `strategy.toml` and `envelope.toml` from
+the directory you're standing in, the newest dataset in `data/`, funding beside it, and they write
+into `runs/`. Your keys come from the shell or from the `.env` next to the config, and nothing
+outside those two places is ever read. Every flag still exists if you want to point somewhere else.
+Venues, feeds and live adapters plug in through entry points, and the MCP server behind the `[mcp]`
+extra hands the gates to any host as read-only tools.
+
+At a terminal, `tra` on its own shows what's ready and the one command to type next. A run draws a
+live panel of bars, intents, fills and net basis points; a session shows each role as it goes; every
+report is a table. The numbers are the same ones the plain output carries, so nothing is hidden in
+the pretty version: `--json` is untouched, and `--plain` (or `TRA_PLAIN=1`, or piping it anywhere)
+gives you text.
 
 ## What the package does not contain
 
-`docs/boundaries.md` is the full statement of where this software stops and why: one order per
-decision and no retries, no routing or execution algorithms, no account or treasury operations, no
-DEX execution (a chain can be priced, not traded), no optimiser in the research chain, and no model
-that can size a trade or change a file. Every line of it is a decision rather than an oversight, and
-each one says what to do instead. The short version:
+`docs/boundaries.md` spells out where this software stops and why: one order per decision and no
+retries, no routing or execution algorithms, no account or treasury operations, no DEX execution (a
+chain can be priced, not traded), no optimiser in the research chain, and no model that can size a
+trade or edit a file. Every line there is a decision we made on purpose, not something we forgot,
+and each one says what to do instead. The short version:
 
-- **A strategy.** The mechanism ships (the protocol, the exits, the walk-forward harness); the
-  cores in `examples/strategies/` are examples of it, measured and closed in the research it
-  descends from, and a run points at them by file like it would at your own.
+- **A strategy.** The machinery ships - the protocol, the exits, the walk-forward harness. The
+  cores in `examples/strategies/` are examples, measured and closed in the research this came from,
+  and a run points at them by file exactly the way it would point at yours.
 - **A venue.** The two that ship are plugins found through the same registry as a
   third-party one. Nothing in the gates names a venue, and a test fails the build if it does.
 - **A data vendor.** Any CSV with a declared column map goes through the same gate.
-- **A model that can loosen a control.** Agents have full access to data, gates and, as the
-  technical analyst, to the decision on each bar; the limits, the caps, the ladder and the kill
-  switch are code that a role can only tighten, step down or arm. The MCP server has no tool
-  that trades, promotes or records. `docs/liability.md` says where the responsibility sits.
+- **A model that can loosen a control.** The agents see everything - the data, the gates, and as
+  the technical analyst, the decision on each bar. But the limits, the caps, the ladder and the kill
+  switch are code, and a role can only tighten them, step one down, or pull the switch. The MCP
+  server has no tool that trades, promotes or records. `docs/liability.md` says plainly where the
+  responsibility sits.
 - **A production tier.** Real orders exist at canary only, with hard caps, behind a ladder
   that needs evidence and a signature at every step and refuses production outright.
 - **A book to manage.** This project executes one decision; a trading platform manages a
