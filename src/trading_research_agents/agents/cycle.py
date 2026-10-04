@@ -1,9 +1,16 @@
 """One cycle: what the engine saw, what the agents said, what the cost gate decided.
 
-The order is fixed and short. Code takes a snapshot. Code builds the briefs. Agents read the
-briefs, in parallel, and answer inside a schema. Code prices the round trip on the book it is
-holding and compares it with the edge the analyst claimed. Only then is there an intent, and in
-the default mode that intent goes to a file rather than to a venue.
+The order is fixed and short. Code takes a snapshot, which costs nothing, and asks the trigger
+whether anything has happened worth paying a model to look at. Code builds the briefs. Agents read
+the briefs, in parallel, and answer inside a schema. Code prices the round trip on the book it is
+holding, sizes the position from the agreement and then from what the account can afford to lose
+at the stop, and compares what is left with the edge the analyst claimed. Only then is there an
+intent, and in the default mode that intent goes to a file rather than to a venue.
+
+Two steps here belong to a risk manager and are deliberately not a model's to make. How much goes
+behind an idea comes from the conviction ladder; how much the account may lose if the stop is hit
+comes from `[controls].max_risk_per_trade_bps`. Both are arithmetic over the operator's own
+declarations, so neither can be talked out of.
 
 Everything the cycle touched stays in the cycle's directory, so an auditor can replay the
 reasoning without asking anyone to remember it.
@@ -34,7 +41,20 @@ from trading_research_agents.agents.briefs import (
     declared_state,
     technical_brief,
 )
+from trading_research_agents.agents.cited import survived
 from trading_research_agents.agents.parallel import FanOut, Task, run_tasks
+from trading_research_agents.agents.progress import (
+    DONE,
+    FAILED,
+    HELD,
+    REFUSED,
+    RUNNING,
+    SKIPPED,
+    Watch,
+    announce,
+    silent,
+    timed,
+)
 from trading_research_agents.agents.roles import RoleError, prompt
 from trading_research_agents.agents.scope import brief_for, crossings, dropped
 from trading_research_agents.agents.validator.tools import checked, figures_of, validator_brief
@@ -56,13 +76,24 @@ from trading_research_agents.execution.conviction import (
     score_of,
     stake_for,
 )
+from trading_research_agents.execution.desk import Desk, DeskVerdict, Open, within_desk
 from trading_research_agents.execution.mandate import MODES as MANDATE_MODES
 from trading_research_agents.execution.pretrade import PreTradeVerdict, admit
+from trading_research_agents.execution.risk import RiskVerdict, within_risk
 from trading_research_agents.execution.targets import (
     Targets,
     TargetVerdict,
+    edge_multiple,
     intents_today,
+    research_bps,
     within_targets,
+)
+from trading_research_agents.execution.trigger import (
+    Trigger,
+    Wake,
+    last_seen,
+    spread_of,
+    worth_asking,
 )
 from trading_research_agents.llm.completer import Completer
 from trading_research_agents.llm.usage import BudgetSpentError, UsageLedger
@@ -98,8 +129,12 @@ class CycleConfig:
     usage: UsageLedger
     root: Path
     mechanism: str
-    size: Decimal
     magnitude_bps: Decimal
+    # The base position, in base units. A desk that watches several instruments says it in quote
+    # currency instead - 0.01 is eight hundred dollars of one and twenty-seven of another - and the
+    # cycle converts it at its own mid.
+    size: Decimal = Decimal(0)
+    size_quote: Decimal | None = None
     bar_interval_s: int = 60
     lookback_bars: int = 60
     interval_s: int = 60
@@ -119,6 +154,23 @@ class CycleConfig:
     equity: Decimal | None = None
     size_step: Decimal = Decimal("0.000001")
     reward_to_risk: Decimal | None = None
+    # [trigger]: what has to have happened before anyone is paid to have an opinion. Undeclared,
+    # every scheduled cycle asks the whole roster, which is what it did before.
+    trigger: Trigger = field(default_factory=Trigger)
+    # [controls].max_risk_per_trade_bps, applied to the size the conviction ladder arrived at. The
+    # session runtime has always enforced this; a cycle that places its own orders has to as well.
+    max_risk_per_trade_bps: Decimal | None = None
+    # [desk]: what the whole book may carry at once, and where to look for what is already open.
+    # The caller decides where to look, because only the caller knows: the venue in venue mode, the
+    # intents on disk everywhere else.
+    desk: Desk = field(default_factory=Desk)
+    held: Callable[[], tuple[tuple[Open, ...], str]] | None = None
+    # What the models have already cost since this desk last wrote an intent. A day of refusals is
+    # paid for by whatever trade the day produces, so the caller carries the figure across cycles.
+    carried_spend: Decimal = Decimal(0)
+    # `tra run --now`: ask the roster whatever the trigger would have said. An override belongs to
+    # the operator, and it is written into the cycle rather than left to be inferred.
+    forced: bool = False
     # The exit rule as declared, so the cycle can price the stop and the take profit for the venue.
     # Code computes them from the operator's own fractions; no model is asked where a stop goes.
     stop_frac: Decimal | None = None
@@ -137,6 +189,9 @@ class CycleConfig:
     analysts: tuple[str, ...] = (technical_analyst.ROLE,)
     resume: bool = False
     max_workers: int = 4
+    # Progress, on its own wire. A watcher sees the steps as they happen and can change none of
+    # them; the default is nobody watching.
+    watch: Watch = silent
     clock: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
 
     def __post_init__(self) -> None:
@@ -162,8 +217,18 @@ class CycleConfig:
                 "venue mode needs something to send with; the CLI builds it from [execution] "
                 "once the mandate, the ladder and the keys are all in place"
             )
-        if not isinstance(self.size, Decimal) or self.size <= 0:
-            raise CycleError("size is a positive Decimal")
+        if self.size < 0 or (self.size_quote is not None and self.size_quote <= 0):
+            raise CycleError("[run].size and [run].size_quote are positive when declared")
+        declared = [
+            name
+            for name, value in (("size", self.size), ("size_quote", self.size_quote))
+            if value is not None and value > 0
+        ]
+        if len(declared) != 1:
+            raise CycleError(
+                "a cycle is sized by [run].size in base units or [run].size_quote in quote "
+                f"currency, and exactly one of them: {declared or 'neither'} is declared"
+            )
         if not isinstance(self.magnitude_bps, Decimal) or self.magnitude_bps <= 0:
             raise CycleError("magnitude_bps is the edge the operator claims, in bps, positive")
         if self.channel is None:
@@ -188,8 +253,11 @@ class CycleResult:
     debate: FanOut | None = None
     context: dict[str, Any] = field(default_factory=dict)
     analyst: Any = None
+    cited: list[dict[str, str]] = field(default_factory=list)
     confluence: Confluence | None = None
     stake: Stake | None = None
+    risk: RiskVerdict | None = None
+    book: DeskVerdict | None = None
     verdict: PreTradeVerdict | None = None
     targets: TargetVerdict | None = None
     intent: dict[str, Any] | None = None
@@ -197,6 +265,11 @@ class CycleResult:
     refusals: list[str] = field(default_factory=list)
     stopped_by: str | None = None
     path: Path | None = None
+    # What this cycle saw for free, and what the trigger made of it. The mid is written down even on
+    # a cycle that asked nobody, because the next cycle measures its move against it.
+    seen: dict[str, Any] = field(default_factory=dict)
+    wake: Wake | None = None
+    held: bool = False
 
     @property
     def acted(self) -> bool:
@@ -207,18 +280,26 @@ class CycleResult:
             "cycle_id": self.cycle,
             "instrument": self.instrument,
             "data": self.briefs.get("data"),
+            # Present only when the size was declared in quote currency: what it was converted at.
+            "size": self.briefs.get("size"),
             "agents": self.fan.record(),
             "validators": None if self.debate is None else self.debate.record(),
-            "analyst": None if self.analyst is None else vars(self.analyst),
+            "analyst": None if self.analyst is None else _said(self.analyst),
+            "cited": self.cited,
             "context": self.context,
             "confluence": None if self.confluence is None else self.confluence.record(),
             "conviction": None if self.stake is None else self.stake.record(),
+            "risk": None if self.risk is None else self.risk.record(),
+            "desk": None if self.book is None else self.book.record(),
             "cost": None if self.verdict is None else self.verdict.record(),
             "targets": None if self.targets is None else self.targets.record(),
             "intent": self.intent,
             "placed": self.placed,
             "refusals": self.refusals,
             "stopped_by": self.stopped_by,
+            "seen": self.seen,
+            "trigger": None if self.wake is None else self.wake.record(),
+            "held": self.held,
             "mode": self.briefs.get("mode"),
         }
 
@@ -237,9 +318,11 @@ def _ask(
 
 def run_cycle(cfg: CycleConfig) -> CycleResult:
     """Take one snapshot, ask the agents, price the trade, and write the cycle down."""
-    cycle = cycle_id(cfg.clock())
+    cycle = cycle_id(cfg.clock(), cfg.instrument)
     where = CycleDir(root=cfg.root, cycle=cycle).make()
+    spent_before = cfg.usage.cost
     kinds = list(cfg.chains)
+    announce(cfg.watch, "data", RUNNING, f"{len(kinds)} kind(s)")
     # What the operator declared per kind in data.toml, then the window this cycle needs. A venue
     # quirk lives in that file, so dropping it here would be dropping the operator's own decision.
     options = {kind: dict(cfg.data_options.get(kind, {})) for kind in kinds}
@@ -255,6 +338,67 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         result.refusals.append(f"data {kind}: {reason}")
     for kind in snapshot.stale:
         result.refusals.append(f"data {kind}: used while stale, because the config allows it")
+    announce(cfg.watch, "data", DONE, f"{len(snapshot.refused)} refused")
+
+    bid, ask = _prices(snapshot)
+    mid_now, spread_now = spread_of(bid, ask)
+    base = cfg.size
+    result.seen = {
+        "mid": None if mid_now is None else str(mid_now),
+        "spread_bps": None if spread_now is None else str(spread_now),
+    }
+    if cfg.forced and not cfg.trigger.idle:
+        result.wake = Wake(
+            ask=True, reasons=("the operator asked with --now, so the trigger was not applied",)
+        )
+        announce(cfg.watch, "trigger", SKIPPED, "asked with --now")
+    elif not cfg.trigger.idle:
+        wake = worth_asking(
+            cfg.trigger,
+            mid=mid_now,
+            spread_bps=spread_now,
+            seen=last_seen(cfg.root, instrument=cfg.instrument),
+            now=cfg.clock(),
+            round_trips_today=intents_today(cfg.root, at=cfg.clock(), instrument=cfg.instrument),
+            max_round_trips_per_day=cfg.targets.max_round_trips_per_day,
+        )
+        result.wake = wake
+        if not wake.ask:
+            result.held = True
+            for reason in wake.reasons:
+                result.refusals.append(f"trigger: {reason}")
+            announce(cfg.watch, "trigger", HELD, wake.reasons[0])
+            _finish(cfg, where, result)
+            return result
+        announce(
+            cfg.watch,
+            "trigger",
+            DONE,
+            "" if wake.moved_bps is None else f"moved {wake.moved_bps} bps",
+        )
+
+    if cfg.size_quote is not None:
+        # Converted before anyone is asked: a size that cannot exist is not worth a model call.
+        if mid_now is None:
+            why = (
+                "size: [run].size_quote is declared and this snapshot has no two-sided book, so "
+                "there is no price to convert it at"
+            )
+            return _stop_before_asking(cfg, where, result, why)
+        base = _quantized(cfg.size_quote / mid_now, cfg.size_step)
+        result.briefs["size"] = {
+            "size_quote": str(cfg.size_quote),
+            "mid": str(mid_now),
+            "size": str(base),
+            "step": str(cfg.size_step),
+        }
+        if base <= 0:
+            why = (
+                f"size: {cfg.size_quote} of quote at {mid_now} is less than one step of "
+                f"{cfg.size_step}, so there is no size to trade"
+            )
+            return _stop_before_asking(cfg, where, result, why)
+        announce(cfg.watch, "size", DONE, f"{cfg.size_quote} of quote is {base} at {mid_now}")
 
     try:
         technical = technical_brief(
@@ -276,7 +420,11 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
     tasks = [
         Task(
             name="technical",
-            work=lambda: _ask(cfg, technical_analyst.ROLE, asked, technical_analyst.SCHEMA),
+            work=timed(
+                cfg.watch,
+                "technical",
+                lambda: _ask(cfg, technical_analyst.ROLE, asked, technical_analyst.SCHEMA),
+            ),
             path=where.answer("technical"),
         )
     ]
@@ -297,7 +445,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         tasks.append(
             Task(
                 name=role,
-                work=_reading_task(cfg, module, brief),
+                work=timed(cfg.watch, role, _reading_task(cfg, module, brief)),
                 path=where.answer(role),
             )
         )
@@ -323,14 +471,39 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         return result
     result.analyst = analyst
 
+    kept, lost = survived(analyst.figures_used, figures_of(asked))
+    result.cited = [figure.record() for figure in kept]
+    for gone in lost:
+        result.refusals.append(f"technical: discarded a citation, {gone}")
+
     if analyst.target == "flat":
         result.refusals.append("technical: flat, so there is nothing to price")
+        announce(cfg.watch, "technical", DONE, "flat")
+        _finish(cfg, where, result)
+        return result
+    if not kept:
+        # The role that decides is the one role whose citations have teeth. A direction that cannot
+        # point at a figure in its own brief is a direction that came from somewhere else.
+        result.refusals.append(
+            "technical: not one figure from its own brief survived the check, so the direction "
+            "rests on nothing this cycle measured"
+        )
+        announce(cfg.watch, "technical", REFUSED, "cited nothing")
+        _finish(cfg, where, result)
+        return result
+    if analyst.setup == "no_setup":
+        result.refusals.append(
+            f"technical: {analyst.target} with no setup named; a direction without a shape behind "
+            "it is not something this desk can act on or review afterwards"
+        )
+        announce(cfg.watch, "technical", REFUSED, "no setup")
         _finish(cfg, where, result)
         return result
     if analyst.confidence < cfg.min_confidence:
         result.refusals.append(
             f"technical: confidence {analyst.confidence} below the declared {cfg.min_confidence}"
         )
+        announce(cfg.watch, "technical", REFUSED, "below the confidence floor")
         _finish(cfg, where, result)
         return result
 
@@ -339,7 +512,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         costs = cost_brief(
             snapshot,
             channel=_channel(cfg),
-            size=cfg.size,
+            size=base,
             direction=direction,
             horizon_bars=analyst.horizon_bars,
             bar_interval_s=cfg.bar_interval_s,
@@ -355,6 +528,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
     where.brief("cost").write_text(
         json.dumps(costs.record(), indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
     )
+    announce(cfg.watch, "cost", DONE, f"round trip {costs.cost.round_trip_bps} bps")
 
     if cfg.validators:
         _run_validators(cfg, where, result, asked=asked, analyst=analyst, costs=costs)
@@ -373,11 +547,17 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         result.confluence = agreement
         for reason in agreement.reasons:
             result.refusals.append(f"confluence: {reason}")
+        announce(
+            cfg.watch,
+            "confluence",
+            DONE if agreement.admitted else REFUSED,
+            agreement.reasons[0] if agreement.reasons else "",
+        )
         if not agreement.admitted:
             _finish(cfg, where, result)
             return result
 
-    size = cfg.size
+    size = base
     if not cfg.conviction.idle:
         stake = stake_for(
             cfg.conviction,
@@ -392,43 +572,106 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
                 confidence=analyst.confidence,
                 votes=_votes(result),
             ),
-            base_size=cfg.size,
+            base_size=base,
             price=costs.cost.mid,
-            max_position=cfg.max_position if cfg.max_position is not None else cfg.size,
+            max_position=cfg.max_position if cfg.max_position is not None else base,
             equity=cfg.equity,
             step=cfg.size_step,
         )
         result.stake = stake
         for reason in stake.reasons:
             result.refusals.append(f"conviction: {reason}")
+        announce(
+            cfg.watch,
+            "conviction",
+            DONE if stake.admitted else REFUSED,
+            f"score {stake.score.score}",
+        )
         if not stake.admitted:
             _finish(cfg, where, result)
             return result
         size = stake.size
-        if size != cfg.size:
-            # Impact is a function of the size that actually goes out, so the gate prices the trade
-            # it is admitting rather than the one the operator declared as a base.
-            try:
-                costs = cost_brief(
-                    snapshot,
-                    channel=_channel(cfg),
-                    size=size,
-                    direction=direction,
-                    horizon_bars=analyst.horizon_bars,
-                    bar_interval_s=cfg.bar_interval_s,
-                    settlement_interval_s=cfg.settlement_interval_s,
-                    latency_slippage_bps=cfg.latency_slippage_bps,
-                )
-            except BriefError as exc:
-                result.refusals.append(f"cost at {size}: {exc}")
-                result.stopped_by = f"cost at {size}: {exc}"
-                _finish(cfg, where, result)
-                return result
-            result.briefs["cost"] = costs.record()
-            where.brief("cost").write_text(
-                json.dumps(costs.record(), indent=2, sort_keys=True, default=str) + "\n",
-                encoding="utf-8",
+
+    exits = _exits(cfg, costs.cost.mid, analyst.target)
+    stop_at = exits.get("stop_price")
+    if cfg.max_risk_per_trade_bps is not None and stop_at is None:
+        # A declared risk limit that cannot be computed is not a limit. Fail closed and say which
+        # declaration is missing rather than sending a size nothing checked.
+        result.refusals.append(
+            "risk: [controls].max_risk_per_trade_bps is declared and no stop is, so the loss at "
+            "the stop cannot be computed; declare [exit].stop_sigma_frac or drop the limit"
+        )
+        announce(cfg.watch, "risk", REFUSED, "no stop to size from")
+        _finish(cfg, where, result)
+        return result
+    capped = within_risk(
+        size=size,
+        entry=costs.cost.mid,
+        stop=None if stop_at is None else Decimal(stop_at),
+        equity=cfg.equity,
+        allowed_bps=cfg.max_risk_per_trade_bps,
+        step=cfg.size_step,
+    )
+    result.risk = capped
+    for reason in capped.reasons:
+        result.refusals.append(f"risk: {reason}")
+    announce(
+        cfg.watch,
+        "risk",
+        DONE if capped.admitted else REFUSED,
+        "" if capped.risk_bps is None else f"{capped.risk_bps} bps of equity at the stop",
+    )
+    if not capped.admitted:
+        _finish(cfg, where, result)
+        return result
+    size = capped.size
+
+    if cfg.desk.bounds_a_trade:
+        held, source = _held(cfg, result)
+        book = within_desk(
+            cfg.desk,
+            instrument=cfg.instrument,
+            adding_bps=capped.risk_bps,
+            held=held,
+            source=source,
+        )
+        result.book = book
+        for reason in book.reasons:
+            result.refusals.append(f"desk: {reason}")
+        announce(
+            cfg.watch,
+            "desk",
+            DONE if book.admitted else REFUSED,
+            "" if book.open_risk_bps is None else f"{book.open_risk_bps} bps open across the book",
+        )
+        if not book.admitted:
+            _finish(cfg, where, result)
+            return result
+
+    if size != base:
+        # Impact is a function of the size that actually goes out, so the gate prices the trade it
+        # is admitting rather than the one the operator declared as a base.
+        try:
+            costs = cost_brief(
+                snapshot,
+                channel=_channel(cfg),
+                size=size,
+                direction=direction,
+                horizon_bars=analyst.horizon_bars,
+                bar_interval_s=cfg.bar_interval_s,
+                settlement_interval_s=cfg.settlement_interval_s,
+                latency_slippage_bps=cfg.latency_slippage_bps,
             )
+        except BriefError as exc:
+            result.refusals.append(f"cost at {size}: {exc}")
+            result.stopped_by = f"cost at {size}: {exc}"
+            _finish(cfg, where, result)
+            return result
+        result.briefs["cost"] = costs.record()
+        where.brief("cost").write_text(
+            json.dumps(costs.record(), indent=2, sort_keys=True, default=str) + "\n",
+            encoding="utf-8",
+        )
 
     verdict = admit(
         edge_bps=cfg.magnitude_bps,
@@ -437,21 +680,36 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         edge_source="[agents].magnitude_bps, declared by the operator and not measured here",
     )
     result.verdict = verdict
+    announce(
+        cfg.watch,
+        "cost gate",
+        DONE if verdict.admitted else REFUSED,
+        f"net {verdict.net_bps} bps",
+    )
     if not verdict.admitted:
         result.refusals.append(f"cost gate: {verdict.reason}")
         _finish(cfg, where, result)
         return result
 
+    spent = cfg.carried_spend + (cfg.usage.cost - spent_before)
     if not cfg.targets.idle:
         met = within_targets(
             cfg.targets,
             net_bps=verdict.net_bps,
             reward_to_risk=cfg.reward_to_risk,
             round_trips_today=intents_today(cfg.root, at=cfg.clock(), instrument=cfg.instrument),
+            over_cost=edge_multiple(edge_bps=cfg.magnitude_bps, cost_bps=costs.cost.round_trip_bps),
+            research=research_bps(spend=spent, notional=size * costs.cost.mid),
         )
         result.targets = met
         for reason in met.reasons:
             result.refusals.append(f"targets: {reason}")
+        announce(
+            cfg.watch,
+            "targets",
+            DONE if met.admitted else REFUSED,
+            met.reasons[0] if met.reasons else "",
+        )
         if not met.admitted:
             _finish(cfg, where, result)
             return result
@@ -459,15 +717,32 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
     result.intent = {
         "instrument": cfg.instrument,
         "target": analyst.target,
+        "setup": analyst.setup,
         "size": str(size),
-        "base_size": str(cfg.size),
+        "base_size": str(base),
         "conviction": None if result.stake is None else str(result.stake.score.score),
+        "risk_bps": None
+        if result.risk is None or result.risk.risk_bps is None
+        else str(result.risk.risk_bps),
         "horizon_bars": analyst.horizon_bars,
         "confidence": analyst.confidence,
         "reason": analyst.reason,
+        # What the direction was read from, after code checked each figure against the brief. An
+        # intent that cannot say this is an intent nobody can review a month later.
+        "cited": result.cited,
         "edge_bps": str(cfg.magnitude_bps),
         "edge_source": verdict.edge_source,
         "net_bps": str(verdict.net_bps),
+        "edge_multiple": (
+            None
+            if result.targets is None or result.targets.edge_multiple is None
+            else str(result.targets.edge_multiple)
+        ),
+        "research_bps": (
+            None
+            if result.targets is None or result.targets.research_bps is None
+            else str(result.targets.research_bps)
+        ),
         "mode": cfg.mode,
         "mid": str(costs.cost.mid),
         "at": cycle,
@@ -478,22 +753,32 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         "channel": cfg.venue_key,
         "entry_role": _channel(cfg).entry_role,
     }
+    announce(cfg.watch, "intent", DONE, f"{analyst.target} {size} on {analyst.setup}")
     with (where.path / "intents.jsonl").open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(result.intent, sort_keys=True) + "\n")
 
     if cfg.mode == "venue" and cfg.place is not None:
         # The intent is already on disk. Whatever the venue does next, the record of what this
         # cycle decided survives it.
+        announce(cfg.watch, "venue", RUNNING)
         try:
             result.placed = dict(cfg.place(result.intent))
         except Exception as exc:
             result.placed = {"sent": False, "error": f"{exc.__class__.__name__}: {exc}"}
             result.refusals.append(f"venue: {exc.__class__.__name__}: {exc}")
+            announce(cfg.watch, "venue", FAILED, exc.__class__.__name__)
         else:
+            announce(cfg.watch, "venue", DONE, str(result.placed.get("id", "sent")))
             where.path.joinpath("placed.json").write_text(
                 json.dumps(result.placed, indent=2, sort_keys=True, default=str) + "\n",
                 encoding="utf-8",
             )
+            if result.placed.get("interrupted"):
+                result.stopped_by = f"interrupted at the venue: {result.placed.get('note')}"
+                _finish(cfg, where, result)
+                # The record is on disk and the order is off the book; now the operator gets the
+                # stop they asked for, instead of a scheduler that carries on.
+                raise KeyboardInterrupt(result.stopped_by)
     _finish(cfg, where, result)
     return result
 
@@ -564,6 +849,22 @@ def _context_of(
         declared = declared_state(role, briefs.get(role, {}))
         label = said.get("regime") or said.get("signal") or said.get("state")
         said["declared_state"] = declared
+        cited = said.get("figures_used")
+        if isinstance(cited, tuple):
+            kept, lost = survived(cited, figures_of(briefs.get(role, {})))
+            said["figures_used"] = [figure.record() for figure in kept]
+            if lost:
+                said["uncited"] = list(lost)
+                for gone in lost:
+                    result.refusals.append(f"{role}: discarded a citation, {gone}")
+            if not kept:
+                # The label still counts for nothing on its own - the gates read the operator's own
+                # declared state - but a sentence with no figure behind it should not sit in the
+                # record looking like evidence.
+                result.refusals.append(
+                    f"{role}: pointed at no figure in its own brief; the label is recorded and "
+                    "supports nothing"
+                )
         reached = crossings(role, said)
         if reached:
             said["out_of_scope"] = list(reached)
@@ -615,6 +916,7 @@ def _run_validators(
         if isinstance(said.get("declared_state"), Mapping)
     }
     tasks = []
+    seen: dict[str, dict[str, str]] = {}
     for stance in cfg.validators:
         name = f"validator_{stance}"
         brief = _within_scope(
@@ -632,7 +934,16 @@ def _run_validators(
         where.brief(name).write_text(
             json.dumps(brief, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
         )
-        tasks.append(Task(name=name, work=_validator_task(cfg, brief), path=where.answer(name)))
+        # What this validator may cite is what this validator was given - the proposal's own
+        # figures and the cost included - rather than a narrower set it never saw.
+        seen[name] = figures_of(brief)
+        tasks.append(
+            Task(
+                name=name,
+                work=timed(cfg.watch, name, _validator_task(cfg, brief)),
+                path=where.answer(name),
+            )
+        )
 
     fan = run_tasks(tasks, max_workers=cfg.max_workers, resume=cfg.resume)
     result.debate = fan
@@ -648,7 +959,7 @@ def _run_validators(
             result.context[name] = {"stance": stance, "error": str(exc)}
             result.refusals.append(f"{name}: {exc}")
             continue
-        verdict = checked(said, figures)
+        verdict = checked(said, seen.get(name, figures))
         record = verdict.record()
         reached = crossings(validator.ROLE, {"reason": verdict.reason})
         if reached:
@@ -676,30 +987,76 @@ def _votes(result: CycleResult) -> tuple[str, ...]:
     return tuple(out)
 
 
+def _held(cfg: CycleConfig, result: CycleResult) -> tuple[tuple[Open, ...], str]:
+    """What this desk is already carrying, from wherever the caller said to look.
+
+    A reader that cannot answer is not a reason to lose the cycle, but it is a reason to refuse the
+    trade: a desk limit measured against an unknown book is not a limit. The failure is recorded and
+    the book comes back empty with the reason in its place.
+    """
+    if cfg.held is None:
+        return (), "nothing was asked; no reader was given to this cycle"
+    try:
+        return cfg.held()
+    except Exception as exc:
+        result.refusals.append(
+            f"desk: could not read what is open: {exc.__class__.__name__}: {exc}"
+        )
+        return (Open(instrument="unknown"),), f"unreadable: {exc.__class__.__name__}"
+
+
+def _said(analyst: Any) -> dict[str, Any]:
+    """The deciding analyst's answer as JSON, with its citations flattened for the record."""
+    out = dict(vars(analyst))
+    cited = out.get("figures_used")
+    if isinstance(cited, tuple):
+        out["figures_used"] = [figure.record() for figure in cited]
+    return out
+
+
 def _exits(cfg: CycleConfig, mid: Decimal, target: str) -> dict[str, str]:
     """Where the stop and the take profit sit, from the operator's own fractions and this price.
 
     A position without an exit is not a trade, so these travel with the intent and, in venue mode,
-    go to the venue attached to the entry. Nothing here asks a model where a stop belongs.
+    go to the venue attached to the entry. Nothing here asks a model where a stop belongs. Each half
+    is computed on its own: a desk that declared a stop and no take profit still gets its stop.
     """
-    if cfg.stop_frac is None or cfg.take_frac is None or mid <= 0:
+    if mid <= 0:
         return {}
     away = Decimal(1) if target == "long" else Decimal(-1)
-    stop = mid * (Decimal(1) - away * cfg.stop_frac)
-    take = mid * (Decimal(1) + away * cfg.take_frac)
-    return {"stop_price": str(stop.quantize(mid)), "take_price": str(take.quantize(mid))}
+    out: dict[str, str] = {}
+    if cfg.stop_frac is not None:
+        out["stop_price"] = str((mid * (Decimal(1) - away * cfg.stop_frac)).quantize(mid))
+    if cfg.take_frac is not None:
+        out["take_price"] = str((mid * (Decimal(1) + away * cfg.take_frac)).quantize(mid))
+    return out
+
+
+def _quantized(size: Decimal, step: Decimal) -> Decimal:
+    """Down to the venue's own increment, never up: a size it would refuse is not a size."""
+    if step <= 0:
+        return size
+    return (size / step).to_integral_value(rounding="ROUND_DOWN") * step
+
+
+def _prices(snapshot: Snapshot) -> tuple[Decimal | None, Decimal | None]:
+    """The best bid and ask of this snapshot's book, as numbers, when it has one."""
+    try:
+        book = snapshot.get("orderbook").value
+    except KeyError:
+        return None, None
+    bids, asks = getattr(book, "bids", ()), getattr(book, "asks", ())
+    if not bids or not asks:
+        return None, None
+    return Decimal(str(bids[0].price)), Decimal(str(asks[0].price))
 
 
 def _touch(snapshot: Snapshot) -> dict[str, str]:
     """The best bid and ask of this snapshot's book, when it has one."""
-    try:
-        book = snapshot.get("orderbook").value
-    except KeyError:
+    bid, ask = _prices(snapshot)
+    if bid is None or ask is None:
         return {}
-    bids, asks = getattr(book, "bids", ()), getattr(book, "asks", ())
-    if not bids or not asks:
-        return {}
-    return {"bid": str(bids[0].price), "ask": str(asks[0].price)}
+    return {"bid": str(bid), "ask": str(ask)}
 
 
 def _channel(cfg: CycleConfig) -> Channel:
@@ -707,6 +1064,16 @@ def _channel(cfg: CycleConfig) -> Channel:
     if channel is None:  # pragma: no cover - CycleConfig refuses this
         raise CycleError(f"venue_key {cfg.venue_key!r} is not a channel in the envelope")
     return channel
+
+
+def _stop_before_asking(
+    cfg: CycleConfig, where: CycleDir, result: CycleResult, why: str
+) -> CycleResult:
+    result.refusals.append(why)
+    result.stopped_by = why
+    announce(cfg.watch, "size", REFUSED, why)
+    _finish(cfg, where, result)
+    return result
 
 
 def _finish(cfg: CycleConfig, where: CycleDir, result: CycleResult) -> None:
