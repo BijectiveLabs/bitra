@@ -94,6 +94,8 @@ step               state        detail
 ────────────────────────────────────────────────
 data               done         4 kind(s) (1.2s)
 trigger            done         moved 41.20 bps
+capital            done         equity 10412.80, used 10000
+regime             done         ranging on 1m, 15m mixed, 1h trending up
 technical          / running    4s
 macro              / running    4s
 sentiment          done         2.5s
@@ -109,11 +111,22 @@ intent             pending
 ```
 
 A desk that watches several instruments shows the same kind of table for the pass over them first,
-one row per instrument. Between scheduled cycles it counts down to the next one, and an auditor
-woken by an alarm gets a spinner of its own. When the cycle finishes, the table gives way to the
-result:
+one row per instrument, with why each one was taken or held. Here a `tra run --every 5m` desk on
+three instruments takes SOL and holds the other two, then works through the cycle with both
+validators still thinking:
+
+![a scheduled desk at work](assets/trading-agents.png)
+
+Between scheduled cycles it counts down to the next one, and an auditor woken by an alarm gets a
+spinner of its own. When the cycle finishes, the table gives way to the result: the data it used
+and what the round trip costs,
 
 ![one cycle](assets/cycle.png)
+
+then what each validator argued, how conviction weighed the analysts, the risk at the stop, and
+whether the trade clears the desk's targets:
+
+![validators, conviction, risk and targets](assets/one-cycle.png)
 
 The same cycle as plain text (`--plain`, a pipe or a log), from a real run on live data, shortened:
 
