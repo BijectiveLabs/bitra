@@ -45,6 +45,7 @@ from trading_research_agents.ledger.entry import LedgerEntry
 from trading_research_agents.ledger.store import Ledger
 from trading_research_agents.ledger.vocabulary import Axis, Verdict
 from trading_research_agents.llm.completer import Completer
+from trading_research_agents.records import append_line
 
 SUBJECT_LENGTH = 120
 
@@ -183,9 +184,7 @@ class _Run:
             idea=self.idea,
         )
         if self.config.refusals is not None:
-            self.config.refusals.parent.mkdir(parents=True, exist_ok=True)
-            with self.config.refusals.open("a", encoding="utf-8") as fh:
-                fh.write(json.dumps(_refusal_record(refusal), sort_keys=True) + "\n")
+            append_line(self.config.refusals, _refusal_record(refusal))
         return refusal
 
     def finish(

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from trading_research_agents.llm.usage import UsageLedger
+from trading_research_agents.records import read_lines
 
 
 def usage_summary(usage_path: Path, *, round_trips: int) -> dict[str, Any]:
@@ -46,9 +47,7 @@ def usage_summary(usage_path: Path, *, round_trips: int) -> dict[str, Any]:
 
 
 def _trades(path: Path) -> list[dict[str, Any]]:
-    if not path.is_file():
-        return []
-    return [json.loads(line) for line in path.read_text("utf-8").splitlines() if line.strip()]
+    return read_lines(path)
 
 
 def run_vs_replay(run_dir: Path, replay_dir: Path) -> dict[str, Any]:

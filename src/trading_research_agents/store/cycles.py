@@ -16,10 +16,11 @@ can read any of them, and a tool that walks them does not need a manifest to kno
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from trading_research_agents.records import write_json
 
 SNAPSHOT = "snapshot.json"
 SUMMARY = "cycle.json"
@@ -63,11 +64,7 @@ class CycleDir:
         return self.path / ANSWERS / f"{agent}.json"
 
     def write_summary(self, payload: dict[str, Any]) -> Path:
-        self.path.mkdir(parents=True, exist_ok=True)
-        self.summary.write_text(
-            json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
-        )
-        return self.summary
+        return write_json(self.summary, payload)
 
 
 def cycles_in(root: Path) -> list[CycleDir]:

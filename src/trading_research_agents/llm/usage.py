@@ -16,7 +16,6 @@ total past the figure. The rate ceilings are counted across every role in one ru
 
 from __future__ import annotations
 
-import json
 import threading
 import time
 from collections import deque
@@ -27,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from trading_research_agents.llm.completer import Completer, Completion
+from trading_research_agents.records import append_line, read_lines
 
 
 class BudgetError(ValueError):
@@ -117,11 +117,9 @@ class UsageLedger:
         self._lock = threading.Lock()
 
     def append(self, record: UsageRecord) -> None:
-        line = json.dumps(record.record(), sort_keys=True) + "\n"
         with self._lock:
             self.records.append(record)
-            with self.path.open("a", encoding="utf-8") as fh:
-                fh.write(line)
+            append_line(self.path, record.record())
 
     @property
     def tokens(self) -> int:
@@ -145,9 +143,7 @@ class UsageLedger:
 
     @classmethod
     def read(cls, path: Path) -> list[dict[str, Any]]:
-        if not path.is_file():
-            return []
-        return [json.loads(line) for line in path.read_text("utf-8").splitlines() if line.strip()]
+        return read_lines(path)
 
 
 @dataclass

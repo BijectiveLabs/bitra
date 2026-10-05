@@ -20,6 +20,8 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any
 
+from trading_research_agents.records import write_json
+
 MAX_WORKERS = 4
 
 
@@ -97,10 +99,7 @@ def _reuse(path: Path | None) -> Any | None:
 def _write(path: Path | None, payload: Any) -> None:
     if path is None:
         return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
-    )
+    write_json(path, payload)
 
 
 def run_tasks(

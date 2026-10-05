@@ -14,6 +14,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from trading_research_agents.records import append_line
+
 BPS = Decimal(10_000)
 EQUITY_LOG = "equity.jsonl"
 
@@ -141,9 +143,7 @@ def day_loss_bps(root: Path, now: datetime, equity: Decimal) -> Decimal:
                 start = _dec(row.get("equity"))
                 break
     if start is None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps({"day": day, "equity": str(equity), "at": now.isoformat()}) + "\n")
+        append_line(path, {"day": day, "equity": str(equity), "at": now.isoformat()}, durable=True)
         return Decimal(0)
     if start <= 0:
         return Decimal(0)

@@ -8,7 +8,6 @@ skipped, because a ledger with a silently missing row is worse than one that ref
 from __future__ import annotations
 
 import json
-import os
 from collections.abc import Iterator
 from datetime import datetime
 from decimal import Decimal
@@ -17,6 +16,7 @@ from typing import Any
 
 from trading_research_agents.ledger.entry import LedgerEntry, LedgerError, ReversalPoint
 from trading_research_agents.ledger.vocabulary import Axis, Transferability, Verdict
+from trading_research_agents.records import append_line
 
 SCHEMA = 1
 
@@ -112,12 +112,7 @@ class Ledger:
         if entry.verdict is Verdict.WITHDRAWN:
             self._check_retraction(entry, existing)
 
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        line = json.dumps(to_record(entry), ensure_ascii=True, sort_keys=True)
-        with self.path.open("a", encoding="utf-8") as fh:
-            fh.write(line + "\n")
-            fh.flush()
-            os.fsync(fh.fileno())
+        append_line(self.path, to_record(entry), durable=True)
 
     def withdraw(
         self, entry_id: str, *, new_entry_id: str, reason: str, recorded_at: datetime

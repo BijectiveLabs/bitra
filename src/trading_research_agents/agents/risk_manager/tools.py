@@ -8,7 +8,6 @@ what the run was supposed to do.
 
 from __future__ import annotations
 
-import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
@@ -16,12 +15,11 @@ from pathlib import Path
 from typing import Any
 
 from trading_research_agents.execution.excursion import summarise
+from trading_research_agents.records import read_lines
 
 
 def _lines(path: Path) -> list[dict[str, Any]]:
-    if not path.is_file():
-        return []
-    return [json.loads(line) for line in path.read_text("utf-8").splitlines() if line.strip()]
+    return read_lines(path)
 
 
 @dataclass(frozen=True)

@@ -23,6 +23,7 @@ from typing import Any
 
 from trading_research_agents.data.schema import Direction, Trade
 from trading_research_agents.execution.excursion import ExcursionTracker
+from trading_research_agents.records import append_line
 from trading_research_agents.strategy.core import Bar, Signal, Strategy, Target
 from trading_research_agents.strategy.exits import (
     ExitRule,
@@ -107,8 +108,7 @@ class _Writer:
         path.parent.mkdir(parents=True, exist_ok=True)
 
     def append(self, record: dict[str, Any]) -> None:
-        with self.path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(record, sort_keys=True, default=str) + "\n")
+        append_line(self.path, record, durable=True)
 
 
 class _Loop:

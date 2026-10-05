@@ -18,7 +18,9 @@ PACKAGE = "trading_research_agents"
 
 GATES = {"ledger", "envelope", "data", "chain", "execution", "strategy", "trading"}
 
-ALLOWED: dict[str, set[str]] = {
+# How records reach the disk is beneath everything: any package may write one, and it imports none.
+_ALLOWED: dict[str, set[str]] = {
+    "records": set(),
     "ledger": set(),
     "envelope": set(),
     # The model layer sits beside the gates, not above them: it knows nothing about markets.
@@ -33,6 +35,9 @@ ALLOWED: dict[str, set[str]] = {
     "agents": GATES | {"llm", "store", "surface"},
     "mcp": GATES | {"surface"},
     "cli": GATES | {"llm", "store", "surface", "agents", "mcp"},
+}
+ALLOWED = {
+    name: deps | ({"records"} if name != "records" else set()) for name, deps in _ALLOWED.items()
 }
 
 LLM_CLIENTS = {"anthropic", "openai", "langchain", "langgraph", "litellm", "ollama"}

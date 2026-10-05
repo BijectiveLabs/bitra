@@ -23,6 +23,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from trading_research_agents.records import append_line
+
 STOPPING = ("SIGTERM", "SIGHUP", "SIGBREAK")
 LOG = "scheduler.jsonl"
 
@@ -73,13 +75,9 @@ def journal(where: Path, event: str, **fields: Any) -> None:
     the difference between knowing the desk was down for an hour and guessing.
     """
     line = {"at": datetime.now(UTC).isoformat(), "event": event, "pid": os.getpid(), **fields}
-    try:
-        where.mkdir(parents=True, exist_ok=True)
-        with (where / LOG).open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(line, sort_keys=True, default=str) + "\n")
-    except OSError:
-        # The journal is a convenience over the cycle records, never a reason to stop trading.
-        pass
+    # The journal is a convenience over the cycle records, never a reason to stop trading.
+    with suppress(OSError):
+        append_line(where / LOG, line, durable=True)
 
 
 LOCK = "desk.lock"

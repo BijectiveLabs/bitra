@@ -19,6 +19,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from trading_research_agents.records import append_line
+
 JOURNAL = "positions.jsonl"
 ROUND_TRIPS = "round_trips.jsonl"
 HOLD_LIMITS = ("timeout", "horizon", "none")
@@ -117,10 +119,7 @@ def finished_orders(root: Path) -> set[str]:
 
 
 def _write(root: Path, name: str, row: Mapping[str, Any]) -> None:
-    path = Path(root) / name
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(row, sort_keys=True, default=str) + "\n")
+    append_line(Path(root) / name, row, durable=True)
 
 
 @dataclass

@@ -17,6 +17,7 @@ from typing import Any
 # The arithmetic of how large an order may be belongs with the other capital gates, and this role
 # calls it rather than keeping a second copy of it.
 from trading_research_agents.execution.sizing import Sizing, size_for
+from trading_research_agents.records import read_lines
 
 __all__ = ["Sizing", "export_signals", "rate_budget", "size_for"]
 
@@ -29,10 +30,7 @@ def export_signals(run_dir: Path, *, instrument: str, out: Path, fmt: str = "jso
     if not intents.is_file():
         raise FileNotFoundError(f"{intents} does not exist")
     rows = []
-    for line in intents.read_text("utf-8").splitlines():
-        if not line.strip():
-            continue
-        i = json.loads(line)
+    for i in read_lines(intents):
         if not i.get("admitted"):
             continue
         rows.append(

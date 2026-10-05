@@ -11,7 +11,6 @@ back stale, and what was refused outright.
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -20,6 +19,7 @@ from typing import Any
 
 from trading_research_agents.data.sources.base import Fetched
 from trading_research_agents.data.sources.chain import Attempt, ChainExhaustedError, SourceChain
+from trading_research_agents.records import write_json
 
 CYCLE_FORMAT = "%Y-%m-%dT%H-%M-%SZ"
 
@@ -80,11 +80,7 @@ class Snapshot:
         }
 
     def write(self, path: Path, now: float | None = None) -> Path:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            json.dumps(self.record(now), indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
-        return path
+        return write_json(path, self.record(now))
 
 
 def take_snapshot(

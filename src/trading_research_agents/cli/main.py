@@ -99,6 +99,7 @@ from trading_research_agents.llm.providers import (
     providers,
 )
 from trading_research_agents.llm.providers.anthropic import DEFAULT_MODEL
+from trading_research_agents.records import write_json
 from trading_research_agents.strategy import ExitError
 from trading_research_agents.trading import (
     ConfigError,
@@ -2632,10 +2633,7 @@ def _sweep(
             screened = look(view.on_step)
     where = out.parent / "screens"
     where.mkdir(parents=True, exist_ok=True)
-    (where / f"{screened.at}.json").write_text(
-        json.dumps(screened.record(), indent=2, sort_keys=True, default=str) + "\n",
-        encoding="utf-8",
-    )
+    write_json(where / f"{screened.at}.json", screened.record())
     return screened.chosen, screened
 
 

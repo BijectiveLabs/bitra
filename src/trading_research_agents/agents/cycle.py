@@ -100,6 +100,7 @@ from trading_research_agents.execution.trigger import (
 )
 from trading_research_agents.llm.completer import Completer
 from trading_research_agents.llm.usage import BudgetSpentError, UsageLedger
+from trading_research_agents.records import append_line, write_json
 from trading_research_agents.store.cycles import CycleDir
 from trading_research_agents.store.snapshot import Snapshot, cycle_id, take_snapshot
 from trading_research_agents.trading.capital import day_loss_bps, sizing_equity
@@ -492,10 +493,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         _finish(cfg, where, result)
         return result
     asked = _within_scope(technical_analyst.ROLE, technical.record(), result)
-    where.brief("technical").write_text(
-        json.dumps(asked, indent=2, sort_keys=True, default=str) + "\n",
-        encoding="utf-8",
-    )
+    write_json(where.brief("technical"), asked)
     announce(cfg.watch, "regime", DONE, _regime_line(cfg, technical))
 
     tasks = [
@@ -510,9 +508,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         )
     ]
     for role, brief in reading_briefs.items():
-        where.brief(role).write_text(
-            json.dumps(brief, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
-        )
+        write_json(where.brief(role), brief)
         module = READING[role]
         tasks.append(
             Task(
@@ -605,9 +601,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         _finish(cfg, where, result)
         return result
     result.briefs["cost"] = costs.record()
-    where.brief("cost").write_text(
-        json.dumps(costs.record(), indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
-    )
+    write_json(where.brief("cost"), costs.record())
     announce(cfg.watch, "cost", DONE, f"round trip {costs.cost.round_trip_bps:.2f} bps")
 
     if cfg.validators:
@@ -767,10 +761,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
             _finish(cfg, where, result)
             return result
         result.briefs["cost"] = costs.record()
-        where.brief("cost").write_text(
-            json.dumps(costs.record(), indent=2, sort_keys=True, default=str) + "\n",
-            encoding="utf-8",
-        )
+        write_json(where.brief("cost"), costs.record())
 
     verdict = admit(
         edge_bps=cfg.magnitude_bps,
@@ -853,8 +844,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         "entry_role": _channel(cfg).entry_role,
     }
     announce(cfg.watch, "intent", DONE, f"{analyst.target} {size} on {analyst.setup}")
-    with (where.path / "intents.jsonl").open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(result.intent, sort_keys=True) + "\n")
+    append_line(where.path / "intents.jsonl", result.intent, durable=True)
 
     if cfg.mode == "venue" and cfg.place is not None:
         # The intent is already on disk. Whatever the venue does next, the record of what this
@@ -873,10 +863,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
                 )
             else:
                 announce(cfg.watch, "venue", REFUSED, str(result.placed.get("refused", "not sent")))
-            where.path.joinpath("placed.json").write_text(
-                json.dumps(result.placed, indent=2, sort_keys=True, default=str) + "\n",
-                encoding="utf-8",
-            )
+            write_json(where.path.joinpath("placed.json"), result.placed, durable=True)
             if result.placed.get("interrupted"):
                 result.stopped_by = f"interrupted at the venue: {result.placed.get('note')}"
                 _finish(cfg, where, result)
@@ -1127,9 +1114,7 @@ def _run_validators(
             ),
             result,
         )
-        where.brief(name).write_text(
-            json.dumps(brief, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
-        )
+        write_json(where.brief(name), brief)
         # What this validator may cite is what this validator was given - the proposal's own
         # figures and the cost included - rather than a narrower set it never saw.
         seen[name] = figures_of(brief)
