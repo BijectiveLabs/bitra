@@ -8,6 +8,36 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- A pass holds every candidate before any model is asked when the desk already carries
+  `[desk].max_open_positions`; those cycles could only be refused at the desk step, and their calls
+  counted against the provider's rate limit (seen live: a validator rate-limited on a cycle that
+  was refused anyway).
+- In venue mode an instrument with a position already open at the venue is skipped by the pass and
+  held by the cycle before any model is asked, unless `[execution].adopt_open_position` is set; the
+  venue hand would refuse the entry anyway, so asking the roster only cost tokens.
+- The default channel stays `taker-taker`, and the templates and README now say why and how to
+  switch to `maker-taker`.
+- **Conviction weighs each voice by how strong it is, not by its word.** A reading analyst's
+  score is now graded from its own figures: how far each series sits past the operator's line, in
+  widths of the neutral band between the bullish and the bearish line, signed and between -1 and 1.
+  The score is the net of every voice over the weight it expressed, so weak opposition costs a
+  little size, strong opposition costs a lot, and only opposition that outweighs the case refuses
+  the trade; silence neither lifts nor dilutes the deciding analyst's confidence. Before this, a
+  macro reading barely past its line counted as a full voice against and could zero a clear case
+  (seen live on 2026-10-04). The report and the panel show each voice against its weight.
+- A reading analyst's declared state is recorded even when its model did not answer: it is code
+  over the operator's thresholds and does not depend on the model.
+- **Nothing caps what a role may spend any more.** `token_budget`, `max_calls_per_hour`,
+  `min_interval_s` and `max_output_tokens` are all optional, and undeclared means counted rather
+  than capped: an answer cut off halfway is a wasted call and a worse decision, not a saving. Every
+  call is still a line in `usage.jsonl` with its tokens, latency and price, every cycle reports what
+  it spent, and the auditors read those records and propose where to spend less. An operator who
+  wants a hard ceiling declares one and `tra check` says what it will do. The Anthropic API requires
+  `max_tokens` on every request, so an undeclared cap becomes a generous default there and nothing
+  at all for the other vendors.
+- `tra init` no longer writes a token budget or a rate limit into a new project, and no longer
+  writes a zero price that reads as free. `effort` is written commented with the vocabulary beside
+  it, so a model with no reasoning to configure is left alone until an operator asks.
 - The project is now one thing, not two: autonomous trading agents, with the falsification
   chain as the safety rail rather than the product. The README says so.
 - The package is `trading_research_agents` and the distribution is `trading-research-agents`;
@@ -25,16 +55,183 @@ All notable changes to this project are recorded here. The format follows
   as `agents.RoleError`).
 - `requirements.txt` carries the runtime pins generated from `uv.lock`, with the extras
   spelled out in comments.
-
-### Fixed
-
-- A cycle now hands each source what the operator declared for that kind in `data.toml`. It was
-  passing only the candle window it needed, so `levels`, `params` and anything else in a
-  `[data.<kind>]` table were silently dropped on the `tra run` path while `tra data pull` honoured
-  them.
+- The README is rewritten around what a newcomer looks for first: what it solves, a quick start,
+  what the terminal shows, the venue and provider tables, and the path to real orders.
+- The Anthropic adapter defaults to `claude-opus-5-5`.
+- A canary cap that is already met ends the session when flat.
+- The console output escapes what the terminal's encoding cannot show instead of ending
+  the command.
+- CI also installs the built wheel into an empty environment and runs the command, audits
+  the lock against OSV (`uv audit`), and builds and runs the container image.
+- The container image builds its environment at the path it runs from; the previous image
+  copied a venv whose scripts named an interpreter that no longer existed.
+- `tra agent session` exits refused when the session never reached its audit verdict.
+- A `9router` preset (a local router at `http://localhost:20128/v1`, `9ROUTER_API_KEY`);
+  an answer without a usage block no longer crashes the OpenAI-compatible adapter: the call
+  is counted with zero tokens and the usage line says `ok, no usage reported`.
+- `[agents].call_timeout_s` now reaches the vendor client as a per-request timeout, with
+  `[agents].max_retries` (default 2) for the SDK's own backoff on 429s and 5xx; before, the
+  declared timeout was recorded and not enforced. `CallOptions` carries all three to a
+  provider's `build_with`.
+- The runtime reads a `halt` from its core and ends the session flat.
 
 ### Added
 
+- The technical analyst now sees the market around its decision: the regime on its own timeframe
+  (`regime`, `trend_strength`, `net_bps`), the same on higher timeframes declared in
+  `[run].context_intervals`, the order book imbalance near the touch, the open interest change
+  since the previous snapshot, and what the operator's thresholds say on the macro and other series
+  (`readings`), all computed by code before any model is asked.
+- `[regime]`: a setup that does not fit the regime measured on the decision timeframe (a trend
+  setup in a range, a range fade or a pullback against a trend) is refused by name;
+  `setups_must_fit = false` records it and lets the trade go on. `tra check` states the lines.
+- `[agents].on_missing_validator` (default `refuse`): a declared validator that no model answered
+  refuses the trade instead of letting it go on one opinion; `continue` keeps the old behaviour.
+- `[agents].max_retry_wait_s` (default 15): a provider that says "try again in N seconds" within
+  that bound is waited for once before the next link in the chain, read from the vendor's
+  retry-after header or its message.
+- `tra check` says how many calls a cycle makes within a minute and on which providers, suggests
+  giving validators their own provider when every role is on one, and states the validator policy.
+- One desk per project in venue mode. `tra run` takes `runs/cycles/desk.lock` and refuses to start
+  while another live process holds it, so two processes never send orders for one account from the
+  same project; a lock left by a process that died is taken over.
+- **Capital, orders and positions in venue mode.** Before every order: the account's equity and
+  free margin are read, sizing uses the smaller of the account equity and `[run].equity`, an order
+  may use at most `max_margin_share` of the free margin, and `[controls].daily_loss_limit_bps`
+  stops new entries for the day. At send time: `[execution].leverage` (now required in venue mode)
+  and `margin_mode` are applied at the venue and read back, the estimated liquidation must sit
+  beyond the stop plus `liquidation_buffer_bps`, a taker entry is a limit IOC within
+  `max_slippage_bps` with its fill read back, and `[controls].max_orders_per_minute` is enforced
+  across the desk. At the start of every pass: positions are matched to the orders that filled
+  them, closed with a reduce-only order past `[execution].hold_limit`, recorded when the venue's
+  exits closed them, and flattened when the kill switch is armed. New records: `positions.jsonl`,
+  `round_trips.jsonl`, `equity.jsonl`. All through ccxt's unified calls, nothing venue-specific.
+- A partial fill now carries only its share of the risk in the desk's book.
+
+- The venue hand reads the book again just before sending. A maker order rests at the touch as it
+  is then, not at the snapshot's (seen live: a post-only order rested at a half-minute-old price was
+  on the wrong side of the market and rejected at once), and the record carries the priced mid, the
+  drift and where it rested. `[execution].max_drift_bps` refuses an order whose mid has moved that
+  far against the trade since it was priced.
+- The live view shows every configured step from the start, a spinner and a running clock on each
+  step in progress, and a line saying who is working right now; the pass over a universe gets the
+  same view, the wait between scheduled cycles is a countdown, and an auditor woken by an alarm has
+  a spinner.
+- `tra venues NAME --setup`: the blocks to paste into `envelope.toml`, `data.toml`, `strategy.toml`
+  and `.env`, shaped by what the venue can do. The fees are left blank so the file refuses to load
+  until the operator writes their own.
+- The venue hand refuses to send when this machine's clock is more than a second from the venue's,
+  the bound `tra live` already held.
+- `docs/venues.md` lists which venues work today and what has been run end to end, and adding a
+  venue is four steps.
+- `[run].size_quote`: the base size in quote currency, converted at each cycle's own mid and rounded
+  down to the instrument's step, so one figure means the same money on every instrument a desk
+  watches. It is converted before any model is asked, recorded in `cycle.json`, and exactly one of
+  `size` and `size_quote` may be declared. Replay, paper and live sessions trade a fixed size and
+  refuse it by name.
+- `[run].size_step` may be a table with one increment per instrument; it has to name every
+  instrument the desk can trade.
+- The venue hand refuses a size off the venue's step or under its minimum instead of letting ccxt
+  round it on the way out, which would send a different size from the one priced and recorded.
+- `tra run` treats SIGTERM, SIGHUP and SIGBREAK like Ctrl-C. A maker order resting when the stop
+  arrives is cancelled first and the record says so; stopping inside a cycle exits as a refusal.
+- `runs/cycles/scheduler.jsonl`: one line per start and stop of `tra run`, with what stopped it.
+- `tra check` reads the size against `[execution].max_notional` in quote terms, including the top
+  rung of the conviction ladder, and says what one unit of size means across a universe.
+- `tra watch`: a read-only view of a desk from the records it writes. It opens no socket, builds no
+  client, holds no key and takes no lock, so opening it and closing it does nothing at all to a
+  running desk; a record still being written is skipped rather than shown wrong. It shows the last
+  decisions and what became of them, the last pass over the universe, the book as the newest cycle
+  recorded it, anything that broke, and what the models cost across the cycles in view.
+- `[desk]`: what the whole book may carry at once, as opposed to what any one trade may risk.
+  `max_open_risk_bps` sums what every open position loses at its own stop and refuses the trade that
+  would take the total over; `max_open_positions` is a plain count; `correlation_above` refuses a
+  candidate that has been moving with something already open, because one trade in two names is not
+  two trades. What counts as open comes from the venue in venue mode and from the intents on disk
+  everywhere else, and the cycle records which. A position whose risk is not on the record refuses
+  the next trade rather than being left out of the sum.
+- `tra paper --minutes N` ends a shadow session after that long. Without it a session runs until
+  somebody stops it, which is right for a desk and wrong for the first one anybody runs.
+- `tra -c` opens no history file and builds no line editor: a one-shot in a script has nothing to
+  arrow back through. The history in `.tra-history` is a convenience for the prompt, not an audit
+  trail - what the desk did is in `runs/`, where nothing is rewritten.
+- The console prompt is `>` with a line above and below it, so one command's output never runs into
+  the next, and an empty prompt says what it is waiting for.
+- `tra keys`: whether every credential this project would actually reach is there and works, without
+  any of them being shown. Every provider in play - the declared one, whatever a role was given
+  instead, and every link of every fallback chain - plus the venue an order would go through.
+  `--probe` proves each one with a free authenticated call (a model list, an account read); `--all`
+  shows every provider this machine holds a variable for, including the ones set to nothing. Keys
+  are shown as eight hex characters of their own SHA-256: enough to tell two apart, impossible to
+  turn back into either, and anything a vendor says back is scrubbed of every secret this process
+  knows before it is printed.
+- `[universe]`: the instruments a desk watches, and a pass that chooses between them before any of
+  them costs a roster of models. One data pull per instrument and no tokens, the same `[trigger]`
+  applied to each, and what survives ordered by how far the mid has moved against that instrument's
+  own spread. The order is code, because it decides where capital gets to be considered at all; an
+  instrument nobody has looked at before keeps the place the operator gave it, which is how a new
+  instrument enters a running desk. `max_per_cycle` says how many a pass runs in full and
+  `max_intents_per_day` counts the whole desk's day rather than one instrument's.
+- `[universe].screener` puts the market screener over what code admitted, as a second opinion from
+  the same figures. It may only take an instrument out - not add one, not reorder, not mention a
+  direction or a size - and a screener that cannot answer leaves the pass as code left it. It reads
+  its own doctrine (`market_screener_live.md`), because the same role answers a different question
+  over recorded trades in a session than it does over one live snapshot in a cycle.
+- A cycle directory now carries the instrument in its name (`2026-09-29T07-44-43Z-ETHUSDT`), so a
+  desk running several instruments in the same second keeps them apart on disk. The moment is still
+  the first twenty characters of a cycle id, wherever one is read back. The pass itself is written
+  to `runs/screens/<time>.json` whether or not it chose anything.
+- `tra` on its own now opens a console instead of printing one screen and handing the shell back.
+  The cockpit first, then a prompt that takes every command this CLI has and draws it where the
+  operator is looking, with history in `.tra-history`, tab completion, `help` and `exit`. It is a
+  place to stand rather than a second way of doing anything: each line goes through the same parser
+  and the same handler a shell would reach, so a command typed at the prompt and the same command
+  typed in a terminal are one code path leaving one record. `tra -c "run --now"` runs one command
+  and leaves, for scripts and for a server, and `--no-history` keeps nothing.
+- `[audit]`: the auditors wake without anyone typing the command, and they wake differently because
+  they answer different questions. `on_alarm` asks the technical auditor when a cycle records
+  something broken - the cycle did not finish, a model call never came back, a data chain ran out,
+  a venue refused - at most once per kind per `alarm_cooldown_s`. `quant_every_cycles` runs the
+  quant auditor on a count of cycles. A gate refusing is not an alarm. Neither auditor can act on
+  what it finds, an auditor that fails is a line in the run's output rather than the end of the run,
+  and their calls are counted in their own ledger so what the desk spent deciding stays separable
+  from what it spent looking at itself.
+- `[trigger]`: what has to have happened before a cycle pays the roster for an opinion. The mid's
+  move since the last cycle, the width of the book, a cooldown after an intent, and a widening rule
+  that asks for more movement after a run of refusals with nothing changing, capped at eight times
+  the baseline so a desk can never be talked into going blind. Every figure is free - the snapshot's
+  own touch, the cycle summaries on disk, the clock - so a cycle that holds costs one data pull and
+  no tokens, and the hold is recorded with its arithmetic. A cycle the trigger held does not count
+  towards the streak. `tra run --now` overrides it, and the cycle records the override.
+- `[controls].max_risk_per_trade_bps` is now applied inside the cycle, between the conviction ladder
+  and the cost gate. The loss at the stop against equity, in basis points; over the allowance the
+  size is cut to fit, never the stop moved; under one step of the venue the cycle refuses. The
+  figure travels in the intent as `risk_bps`. It had only ever been enforced by the session runtime,
+  so a cycle in venue mode could send a size nobody had measured against the account.
+- `[targets].min_edge_multiple`: the claimed edge as a multiple of the round trip. A cost of 18 bps
+  against an edge of 20 is not a two basis point trade - the fees are certain, the edge is a
+  probability, and slippage moves only one of them. `tra init --profile autonomous` writes 2.0.
+- `[targets].max_research_bps`: every model call since the last intent, against the notional of the
+  trade those calls produced, so a day of refusals is paid for by whatever the day trades rather
+  than disappearing from the track record. `tra check` refuses the target when no model price is
+  declared, or when the declared price is zero.
+- The technical analyst answers a `setup` named from a closed list (`trend_continuation`,
+  `pullback_in_trend`, `range_reversion`, `range_breakout`, `momentum_exhaustion`,
+  `volatility_expansion`, `no_setup`). A direction with `no_setup` is refused, and the name travels
+  into the intent, so which setups a desk has been paid for is a question the records answer.
+- Every role that speaks about numbers answers `figures_used` as `{figure, value}` pairs, checked
+  against its own brief by the same code the validators and auditors are held to. A reading
+  analyst's uncited label is recorded and supports nothing; the analyst that decides is refused
+  outright when not one citation survives, because a direction that cannot point at a figure in its
+  brief came from somewhere the cycle cannot see.
+- `effort` per role: one vocabulary (`minimal` to `max`) declared in `[agents]` and overridden in
+  `[agents.roles.<role>]`, mapped onto Anthropic's `output_config.effort`, Gemini's
+  `thinking_config.thinking_level` and OpenAI's `reasoning_effort`, each verified against the
+  installed SDK. Undeclared, the field is left out of the request entirely.
+- A live cycle draws its own steps as they happen - the whole configured pipeline, pending first,
+  then running, done, refused, failed or held. Progress travels on its own wire and can change
+  nothing: a watcher that throws is swallowed, because a broken progress bar is not a reason to lose
+  a decision.
 - `tra check` now says when a provider's SDK is not installed, with the extra that installs it,
   instead of reporting the provider ready and failing in the middle of a cycle. A `Provider` carries
   what it needs (`anthropic`, `openai`, `google.genai`) and whether it is importable.
@@ -103,8 +300,8 @@ All notable changes to this project are recorded here. The format follows
 - The order follows the channel. A channel's name is `<entry>-<exit>`, each `maker` or `taker`, and
   `Channel.entry_role` is now read by the venue hand: a maker entry rests on the book as a post-only
   limit at the snapshot's own touch and is cancelled after `[execution].limit_timeout_s`, a taker
-  entry crosses with a market order, and a channel that says neither is refused rather than guessed
-  at - sending a market order under a maker-priced channel pays a fee the gate never priced.
+  entry crosses the book (a limit IOC within `max_slippage_bps`), and a channel that says neither is refused rather than guessed
+  at - sending a taker order under a maker-priced channel pays a fee the gate never priced.
 - Every order carries a client id derived from the cycle and instrument, so a cycle run twice cannot
   open two positions; the account is read before anything is sent and an order is never added to a
   position pointing the other way unless `[execution].adopt_open_position` says so; a hand that
@@ -197,7 +394,6 @@ All notable changes to this project are recorded here. The format follows
   record, not the end of the cycle.
 - `tra check` reads `data.toml` and says when a cycle could not price a trade for want of a book
   chain.
-
 - `data/sources/`: live sources behind a chain. The operator declares an order per kind of data
   in `data.toml`, the first source that answers inside the declared freshness wins, and every
   attempt, every stale value and every refusal is recorded. `ccxt:<venue>` reads public
@@ -214,7 +410,6 @@ All notable changes to this project are recorded here. The format follows
   It exits refused when any kind was refused or came back stale.
 - Datasets written before the package was renamed still read: the Parquet marker is accepted
   under both prefixes.
-
 - Agents with full access through the gates. Seven role packages under `agent/`
   (market screener, technical analyst, macro analyst, on-chain analyst, risk manager,
   executor, auditor), each a schema, a parser and a venue-neutral prompt. `tra agent
@@ -268,24 +463,132 @@ All notable changes to this project are recorded here. The format follows
   tables. Off for `--json`, `--plain`, `TRA_PLAIN=1` and pipes. Two observation hooks carry
   it: `TradingConfig.observer` and `SessionConfig.on_step`; neither can decide anything.
 
-### Changed
+### Fixed
 
-- A canary cap that is already met ends the session when flat.
-- The console output escapes what the terminal's encoding cannot show instead of ending
-  the command.
-- CI also installs the built wheel into an empty environment and runs the command, audits
-  the lock against OSV (`uv audit`), and builds and runs the container image.
-- The container image builds its environment at the path it runs from; the previous image
-  copied a venv whose scripts named an interpreter that no longer existed.
-- `tra agent session` exits refused when the session never reached its audit verdict.
-- A `9router` preset (a local router at `http://localhost:20128/v1`, `9ROUTER_API_KEY`);
-  an answer without a usage block no longer crashes the OpenAI-compatible adapter: the call
-  is counted with zero tokens and the usage line says `ok, no usage reported`.
-- `[agents].call_timeout_s` now reaches the vendor client as a per-request timeout, with
-  `[agents].max_retries` (default 2) for the SDK's own backoff on 429s and 5xx; before, the
-  declared timeout was recorded and not enforced. `CallOptions` carries all three to a
-  provider's `build_with`.
-- The runtime reads a `halt` from its core and ends the session flat.
+- A pass reported instruments with an open position, or held by a full desk, as "not moved enough
+  for [trigger]" whenever the trigger had also held them. The book is now checked first, and every
+  instrument is named once, under the first cause that holds it.
+- A pass that ran no cycle said "nothing was worth a cycle", which read as a quiet market even when
+  the desk's own book was the reason. It now names each cause: an instrument open at the venue, the
+  others moving with it above `[desk].correlation_above`, or too little movement for `[trigger]`,
+  and says when a correlated universe leaves the desk one position at a time.
+- A screen held by correlation printed its reason twice.
+- **A position carried past midnight UTC froze the desk.** In venue mode, what an open position
+  risks was looked up among the intents written today only, so after the day rolled over the desk
+  could no longer state its own book and refused every new trade (seen live on 2026-10-05). It is
+  now matched to the newest order this desk sent that the venue filled, on the same side, whatever
+  the day; a later intent that was refused or cancelled no longer stands in for it.
+- **A maker order the venue had already ended was reported as possibly still resting** (seen live
+  on the Bybit demo, 2026-10-04). One venue's `fetch_order` through ccxt refuses unless told the
+  order is among its last 500, and the refusal was read as "no answer" for the whole wait. The hand
+  now asks per state (open, then closed) where the venue supports it, stops waiting as soon as the
+  venue reports the order cancelled, rejected or expired, and records how much of it filled.
+- The plain report of a sent order now carries an `outcome:` line (filled, ended by the venue,
+  cancelled unfilled), and `tra watch` shows the same; "placed" alone read as a position.
+- `--cycles N` counts scheduled passes. It counted cycles, so on a quiet market where the trigger
+  held every pass the run never ended.
+- `tra watch` rows carry the date as well as the time; a view spanning two days read out of order.
+- The conviction refusal no longer reads "conviction: conviction 0.000".
+- A reading analyst could read a declared `bullish` on a yield series as yields rising and call it
+  risk-off (seen live). Each declared state in a brief now carries `state_for` (the traded
+  instrument) and the operator's `threshold` in words, and the prompts say how to read them.
+- The Gemini SDK printed an automatic-function-calling warning into the terminal on every call; it
+  is switched off, since no role is ever given tools.
+- Plain output carries models' typographic quotes, dashes and ellipses as ASCII, so a log or an
+  old console no longer shows escapes; the records keep the original text.
+- Plain and JSON reports are flushed as they are written, so a desk logging to a file can be read
+  while it runs.
+- **A cycle in venue mode ignored `[live].environment` and sent orders to the wrong place.** It
+  switched the client into the venue's testnet for both `demo` and `testnet`, so a demo key was
+  rejected by testnet - and, worse for anyone whose key is accepted there, an operator who declared
+  `demo` had their orders routed somewhere they had not declared. Each environment is now reached
+  through its own switch, and a venue with no switch for the environment declared is refused rather
+  than sent somewhere close. Found by sending a real order on a demo venue and reading what came
+  back; nothing in the test suite could have caught it, because the suite never reached a venue.
+- **A desk watching several instruments built one hand and sent every instrument's orders through
+  it.** The symbol came from `[run].instrument`, so an intent for one instrument would have gone out
+  under another's symbol. A hand is now built per instrument, and refuses an intent about any other
+  instrument even if one reaches it.
+- `tra keys --probe` checks the venue through both clients that can reach it - the live session's
+  own REST client and the cycle's ccxt client - because a readiness check that proves one path works
+  proves nothing about the other, and it is the second one a cycle uses.
+- `[live].key_ip_unbound_ok` could never be declared: the guard that keeps credentials out of config
+  files matched the word "key" anywhere in a setting's name, and refused the whole file. The guard
+  now runs over settings the table does not declare, so a flag about a key is not mistaken for a
+  key. `[live]` gained the key allowlist every other table already had, so a typo there is named
+  rather than ignored.
+- `tra check` reported two different ladder tiers in the same run: one line read the ladder, the
+  other invented the string "REPLAY", which is not a tier this ladder has. Both now read the ladder.
+- The move since the last cycle is measured whenever there is something to measure against, not
+  only when `[trigger].min_move_bps` is declared. A pass over several instruments is ordered by that
+  figure, and it was disappearing exactly when the trigger was waived with `--run --now`.
+- `tra run --now` overrides the trigger for the pass as well as for the cycle. An operator who asked
+  anyway was being told nothing was worth looking at.
+- A resting order whose cancel the venue refused was recorded as "cancelled" anyway, beside a flag
+  that said otherwise. The cancel now reports what the venue said, and the record asks the venue
+  what became of the order: either it had already ended it, which is ordinary for a post-only
+  limit, or it is still resting there - which is said loudly, because an order nobody knows about
+  is the one thing a record cannot make up for afterwards.
+- A placement record carried the string "None" where a venue reported no status. It now carries
+  nothing, which is what it means.
+- A validator was held to a narrower set of figures than the brief it was handed: it could see the
+  proposal's claimed edge and the round trip's cost, and citing either was discarded as an invented
+  figure. What it may cite is now what it was shown.
+- A citation written as one word where the brief writes a path - `us10y_value` for
+  `series.us10y.value` - now resolves, by comparing the two with every separator removed and only
+  after the exact and segment matches have failed. A name the brief does not carry is still refused,
+  however it is spelled, and the value still has to match whatever it resolved to.
+- Citations were being thrown away that the models had read correctly. `figures_of` skipped lists,
+  and a reading brief carries a row per series, so `us10y value = 4.02` was a real number from the
+  brief that no reader could point at. A list of rows that each name what they are about is now
+  flattened into citable figures (a list of sixty bars names nothing and stays out), and a citation
+  resolves when its words are the tail of exactly one figure's name, the shallowest winning a tie,
+  with a block measured by its own sample size resolving to the number in it. The value still has to
+  match whichever figure the name resolved to, so nothing about this loosens the rule.
+- The intent carried no stop when `[exit].take_profit_sigma_frac` was absent, because both halves
+  were computed together. Each half now stands on its own: a desk that declared a stop and no take
+  profit gets its stop.
+- A cycle now hands each source what the operator declared for that kind in `data.toml`. It was
+  passing only the candle window it needed, so `levels`, `params` and anything else in a
+  `[data.<kind>]` table were silently dropped on the `tra run` path while `tra data pull` honoured
+  them.
+- `tra venues` reported a test environment for every venue, because ccxt's base class defines the
+  switch everywhere and only refuses it underneath. It now reports `demo` and `testnet` separately,
+  from what each venue implements and the URLs it carries.
+- A venue that signs with a passphrase (OKX, Bitget, KuCoin) or a wallet (Hyperliquid) could not
+  authenticate: the venue hand only ever read a key and a secret. It now reads whatever ccxt says the
+  venue requires, and `tra check` and `tra keys` name each variable.
+- Demo or testnet requested on a venue without one now fails with a sentence naming `tra venues`,
+  instead of ccxt's NotSupported.
+- The console dropped any text in square brackets from tables and panels, so a refusal naming
+  `[run].slippage_bps` read `.slippage_bps`. Rich markup is off for every rendered line.
+- Unrounded decimals in the live view and the targets panel (`net 14.83045252144942739852674872`).
+- A venue refusal was shown as a finished `venue` step; it is now shown as refused, with the reason.
+- The scheduler printed how long it was going to wait after it had waited.
+- `tra data pull` wrote its snapshot among the cycles, where the trigger, the desk and the auditors
+  read; it now writes to `runs/pulls/`.
+- `tra venues` verdicts name which account read is missing, and a venue that cannot report the
+  position is listed as data only, since the hand refuses to send without it.
+
+### Security
+
+- The read tools only open paths inside a declared root, and never a hidden file. This covers the
+  auditor's tool loop in a session (project, session and ladder directories) and the MCP server
+  (the working directory, or `tra mcp serve --root DIR`, repeatable). Before this a model could pass
+  any path on the machine to a reader.
+- A vendor's or a venue's error text is scrubbed of any credential the process holds before it is
+  recorded or put into a brief.
+- `max_calls_per_hour` and `min_interval_s` count across every role in a `tra run`, as the setting
+  reads; each role used to keep its own window, which allowed the declared figure once per role.
+- `usage.jsonl` appends are serialised. Parallel analysts on Windows could interleave lines.
+- The reading analysts, validators and auditors are told that text in their brief is material to
+  read, never an instruction.
+
+### Removed
+
+- `tra run --resume`. The cycle id comes from the clock, so it never found anything to reuse, and
+  reusing answers against a newer snapshot would be wrong anyway. `tra agent session --resume`
+  stays.
 
 ## [0.5.0] - 2026-09-13
 

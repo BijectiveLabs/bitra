@@ -4,46 +4,151 @@
 
 **Autonomous trading agents for crypto that can't fudge their own results.**
 
-Models decide; code checks the arithmetic. An engine fetches the data, tidies it up, and hands each
-agent a short brief of figures it did not work out for itself. The agents read those figures and say
-what they think. From there it's all code: the round trip is priced before an order exists, your own
-limits are applied, and every intent, refusal and fill is written down in a file nobody rewrites
-later. No model touches the order path, no agent holds a key, and the default venue is a simulator.
-Ideas that survive all that are worth a look. The ones that don't are kept too, with the reason they
-died.
+Language models are good at reading a market and saying what they think. They are bad at
+arithmetic, they don't know what a trade costs, and they will happily overrule a limit you set.
+This project uses them for the first part only. Code fetches the data and works out every figure.
+The agents read those figures and give an opinion. Then code prices the trade, applies your limits,
+sizes it, and either writes it down or sends one order with the stop attached. Every decision and
+every refusal is kept on disk with its reason, so you can check afterwards what happened and why.
 
-It's a pre-release and the API still moves. It isn't on PyPI yet. What runs today: the whole
-autonomous cycle, live data with free and paid sources, four analysts and three validators, the
-confluence matrix, conviction sizing, the cost gate, your own targets, venue execution behind a
-mandate you sign, and two auditors. Next up: the release pass - packaging and the first tag.
+It's a pre-release and isn't on PyPI yet. What works today: the full autonomous cycle on live data,
+four analysts and three validators, the gates that decide, sizing from your own rules, real orders on
+a venue's practice environment behind a mandate you sign, and two auditors that read the records.
 
 ---
 
-## One cycle
+## Contents
+
+- [What it solves](#what-it-solves)
+- [Quick start](#quick-start)
+- [What you see while it runs](#what-you-see-while-it-runs)
+- [How one cycle decides](#how-one-cycle-decides)
+- [Venues](#venues)
+- [Models and providers](#models-and-providers)
+- [From a replay to real orders](#from-a-replay-to-real-orders)
+- [Your money, your orders, your positions](#your-money-your-orders-your-positions)
+- [The console, and watching a desk](#the-console-and-watching-a-desk)
+- [Command line](#command-line)
+- [Where this software stops](#where-this-software-stops)
+- [Documentation](#documentation)
+
+## What it solves
+
+| The usual problem with trading agents | What happens here |
+|---|---|
+| The model invents or miscalculates a number | Models never compute. Every figure comes from code, and a figure a model cites is checked against its brief, value included. |
+| Nobody knows what a trade cost until it's done | The round trip (fees, spread, impact, funding, slippage) is priced before an order exists, and a trade whose claimed edge doesn't clear it is refused. |
+| The agent sizes its own position | Size comes from your conviction ladder and your risk limit. No model can make a trade bigger. |
+| A model "decides" to ignore your settings | Your declared thresholds decide. A model's opinion is recorded beside them, never instead of them. |
+| Something went wrong and there is no trace | Each cycle keeps its snapshot, briefs, answers, the intent and what the venue said. Nothing is rewritten. |
+| A crash leaves a position with no stop | The stop and take profit go to the venue attached to the entry, so they survive this process dying. |
+
+## Quick start
+
+You need Python 3.11 or newer and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-# Not on PyPI yet, so install from the source tree. `uv tool install` puts `tra` on your PATH:
 git clone https://github.com/BijectiveLabs/trading-research-agents && cd trading-research-agents
 uv tool install --editable . --with 'ccxt>=4.5' --with 'openai>=1' --with 'pyarrow>=18'
 
-tra init my-desk --profile autonomous && cd my-desk   # the cycle, wired, commented line by line
-cp .env.example .env                # your model key; no venue key is needed for a cycle
-tra run --env-file .env             # one autonomous cycle, in the sandbox
+tra init my-desk --profile autonomous && cd my-desk
+cp .env.example .env        # put your model key in here; no venue key is needed yet
+tra check                   # what's ready, and the one thing to fix next
+tra run                     # one autonomous cycle, in the sandbox: nothing leaves your machine
 ```
 
-The three `--with` extras are the SDKs this project talks through, and each one buys something
-specific: `ccxt` is live venue data and, later, execution; `openai` is the client every
-OpenAI-compatible provider uses (Groq, DeepSeek, xAI, OpenRouter, a local server); `pyarrow` is the
-dataset format `tra data get` writes. Add `--with 'anthropic>=1'` or `--with 'google-genai>=1'` for
-those providers. `tra check` names a missing one before a cycle spends anything finding out.
+The `--with` extras are what the project talks through: `ccxt` for venue data and orders, `openai`
+for every OpenAI-compatible provider (Groq, DeepSeek, xAI, OpenRouter, a local server), `pyarrow`
+for datasets. Add `--with 'anthropic>=1'` or `--with 'google-genai>=1'` for those providers.
+Without uv, `pip install -e '.[ccxt,openai,data]'` in a virtual environment does the same.
 
-Without `uv`: `pip install -e '.[ccxt,openai,data]'` inside a virtual environment does the same,
-and `tra` is then on that environment's PATH.
+A project made by `tra init --profile autonomous` checks out like this before you touch it
+(shortened):
+
+```
+ok    strategy.toml: valid; core 'agent-pending'; instrument BTCUSDT
+ok    roster: technical_analyst; `tra run` asks these
+ok    channel: bybit/taker-taker enters as a taker, priced at that fee; an order crosses the book at once
+ok    execution: sandbox; nothing leaves the machine
+ok    conviction: floor 0.4; ladder 0.75+ -> 1.0x, 0.55+ -> 0.5x, 0.4+ -> 0.25x
+ok    targets: at least 5 bps net; at least 2.0x the round trip; at most 6 round trips a day
+ok    risk per trade: 50 bps of equity at the stop, applied to every size the ladder produces
+ok    size: 0.01 in base units, step 0.001
+ok    data.toml: chains for ohlcv, orderbook, funding, open_interest; `tra run` uses them
+todo  [agents].provider is still the placeholder; name the provider you have a key for, and its model
+1 thing(s) to fix first
+```
+
+Name your provider and model in `strategy.toml` (see [Models and providers](#models-and-providers))
+and `tra run` decides once. `tra run --every 5m` keeps deciding as each bar closes.
+
+## What you see while it runs
+
+A cycle spends most of its time waiting on models, so the terminal shows the whole pipeline from
+the start and updates it as each step begins and ends. Steps that run at the same time spin at the
+same time, each with its own clock, and the line underneath says who is working right now:
+
+```
+                     cycle
+step               state        detail
+────────────────────────────────────────────────
+data               done         4 kind(s) (1.2s)
+trigger            done         moved 41.20 bps
+technical          / running    4s
+macro              / running    4s
+sentiment          done         2.5s
+cost               pending
+validator pro      pending
+validator contra   pending
+conviction         pending
+risk               pending
+cost gate          pending
+targets            pending
+intent             pending
+6s | working: technical, macro | 1792 tokens
+```
+
+A desk that watches several instruments shows the same kind of table for the pass over them first,
+one row per instrument. Between scheduled cycles it counts down to the next one, and an auditor
+woken by an alarm gets a spinner of its own. When the cycle finishes, the table gives way to the
+result:
+
+![one cycle](assets/cycle.png)
+
+The same cycle as plain text (`--plain`, a pipe or a log), from a real run on live data, shortened:
+
+```
+cycle 2026-09-29T02-59-16Z BTCUSDT: 5.344s of agents, 15.042s of validators
+  funding        ccxt:bybit         age 4.267s
+  ohlcv          ccxt:bybit         age 32.746s
+  orderbook      ccxt:bybit         age 7.544s
+macro      risk-off: the operator declared a bullish state for US10Y; measured correlation is
+           neutral (0.0) on a modest sample, weak evidence that does not overturn the declaration
+sentiment  positive: declared state is bullish, and the measured figures both support it
+technical: long on range_reversion at 0.65 over 5 bars: the close is stretched low in the window
+read: zscore=-0.587, vwap_gap_bps=-3.99, ret_1_bps=1.59
+validator contra   oppose on 2 cited figure(s)
+validator pro      support on 3 cited figure(s)
+conviction: 0.800 of 1.0 (macro 1.0, sentiment 0.5, technical 1.300)
+risk: 8.29 bps of equity at the stop against the declared 50 bps, size 0.010
+cost: 12.87 bps round trip, 2.00 of it estimated
+gate: 25.0000 bps claimed clears 12.8723 bps cost plus 0.0000 bps margin
+  refused targets: the claimed edge is 1.94x the round trip and the desk declared 2.0x;
+                   the cost is certain and the edge is not
+```
+
+That trade was refused. It cleared the cost gate and still died, because this desk asks for an edge
+of twice the cost and got 1.94 times. A refusal names the figure behind it, every time.
+
+## How one cycle decides
 
 ```mermaid
 flowchart TD
-    engine[["the engine fetches<br/>sources in the order you declared, each value carrying its age"]] --> briefs
-    briefs["code writes the briefs<br/>a role only sees the figures its own job needs"] --> round1
+    engine[["code fetches the data<br/>each value carries its source and age"]] --> wake
+    wake{"trigger<br/>has anything moved since the last look?"}
+    wake -- "no" --> held["held: one data pull, no tokens spent"]
+    wake -- "yes" --> briefs
+    briefs["code writes the briefs<br/>each role sees only the figures its job needs"] --> round1
     subgraph round1["asked at the same time"]
         direction LR
         tech["technical analyst<br/>a direction, a confidence, a horizon"]
@@ -51,347 +156,279 @@ flowchart TD
         chain["on-chain analyst"]
         mood["sentiment analyst"]
     end
-    round1 --> price["code prices the round trip<br/>fee, spread, impact, funding, gas"]
+    round1 --> price["code prices the round trip<br/>fee, spread, impact, funding, slippage"]
     price --> round2["validators: pro, contra, neutral<br/>a claim that cites no figure is thrown away"]
-    round2 --> matrix{"confluence<br/>do the states you declared agree with the direction?"}
-    matrix -- "no" --> refused["a refusal that names the figure behind it"]
-    matrix -- "yes" --> size["conviction<br/>how much, off your ladder - then priced again at that size"]
-    size --> gate{"cost gate<br/>does the claimed edge clear what it costs?"}
+    round2 --> matrix{"confluence<br/>do your declared states agree with the direction?"}
+    matrix -- "no" --> refused["a refusal that names its figure"]
+    matrix -- "yes" --> size["conviction<br/>how much, from your ladder"]
+    size --> risk{"risk per trade<br/>what does it lose at the stop?"}
+    risk --> gate{"cost gate and targets<br/>does the edge clear the cost, by your margin?"}
     gate -- "no" --> refused
-    gate -- "yes" --> targets{"targets<br/>net bps, reward to risk, round trips today"}
-    targets -- "no" --> refused
-    targets -- "yes" --> intent["the intent, written into the cycle"]
-    intent --> venue["venue mode only<br/>one order, with the stop and take profit attached to it"]
+    gate -- "yes" --> intent["the intent, written into the cycle"]
+    intent --> venue["venue mode only<br/>one order, the stop and take profit attached"]
 ```
 
-Four of those steps only run if you ask for them. The validators, the confluence matrix, the
-conviction ladder and the targets are all empty until you declare them, and a fresh project has the
-ladder and the targets filled in and the other two waiting. Everything else always happens.
+Who does what:
 
-What that prints, from a real cycle on live data with a real model:
+| Role | Reads | Answers | Can never |
+|---|---|---|---|
+| technical analyst | candles, spread, funding, book imbalance, open interest change, and the regime on its timeframe and the higher ones you declare | a direction, a setup from a fixed list, a confidence, a horizon | size the trade, or run a trend setup in a range |
+| macro analyst | dated rates and levels, dated text | risk-on, risk-off or neutral | propose a direction |
+| on-chain analyst | chain and derivatives figures | accumulation, distribution or neutral | propose a direction |
+| sentiment analyst | dated scores and notes you curate | negative, neutral, positive, or not declared | invent a mood no figure supports |
+| validators (pro, contra, neutral) | the proposal and the figures behind it | support, oppose or abstain, with cited claims | cite a figure it wasn't given |
+| technology and quant auditors | the cycles this desk recorded | findings and proposed changes | change anything |
 
-```
-cycle 2026-09-27T14-51-23Z BTCUSDT: 8.46s of agents
-  funding        ccxt:bybit         age 0.764s
-  ohlcv          ccxt:bybit         age 35.705s
-  orderbook      ccxt:bybit         age 5.303s
-technical: long at 0.68 over 3 bars: short-horizon reversion of the close against its window
-           triggered by a zscore of -2.197, vwap_gap_bps of -24.21 and volume_ratio 2.392
-cost: 13.48 bps round trip, 2.00 of it estimated
-gate: 25.0000 bps claimed clears 13.4800 bps cost plus 0.0000 bps margin
-the edge is declared: [agents].magnitude_bps, declared by the operator and not measured here
-  fee_round_trip        11.0000 bps  declared
-  spread_cost            0.0118 bps  measured
-  impact                 0.0000 bps  computed
-  funding_accrual        0.4682 bps  declared
-  latency_slippage       2.0000 bps  estimated
-intent: long 0.01 (sandbox)
-```
+Analysts are allowed to disagree. Each one's view becomes a score between -1 and 1, computed from
+its own figures against the lines you drew, so a macro reading barely past its line counts as a small
+voice and one far past it counts as a big one. Conviction adds them up: agreement grows the size,
+opposition shrinks it in proportion, and only opposition that outweighs the case stops the trade. A
+short at 0.70 confidence against a barely bullish macro and sentiment scores 0.56 and trades at half
+size; against a strongly bullish context it scores 0 and doesn't trade.
 
-And the same cycle in a terminal, with the panels the console draws:
+The technical analyst knows what kind of market it is working in before it decides. Code measures
+the regime on its timeframe (trending up, trending down, ranging or mixed) and on the higher
+timeframes you list in `[run].context_intervals`, and it hands over what your macro thresholds say
+this cycle as well. A setup that doesn't fit the regime, such as a trend trade in a sideways
+market, is refused by name; `[regime]` holds the lines.
 
-![one cycle](assets/cycle.png)
+Everything after the analysts is arithmetic over numbers you declared. No model can place, cancel or
+resize an order, read a file outside the project, or edit your configuration. `docs/agents.md` has
+the full table of what an agent can reach, and `docs/cycle.md` walks through every step.
 
-Three things in that output carry the whole idea. The model never worked out a number: every
-figure it read was computed by code from a snapshot that says how old it is. Eleven of the thirteen
-basis points of cost are the venue's own fees, printed before an order exists. And the edge is
-labelled a declaration, because nobody has measured it yet - you said it, so we show it as yours.
-`docs/cycle.md` has the rest.
+## Venues
 
-## If you'd rather backtest first
+A cycle reaches venues through ccxt. Here is what that means in practice today:
 
-The cycle above decides on live figures. If you want to see the machinery on recorded data before
-you point it at anything live, that's four commands and no key at all:
+| Venue | What a cycle can do there | Practice environment | Run end to end by us |
+|---|---|---|---|
+| **Bybit** (the default) | everything: orders with the stop and take profit attached | demo, testnet | **yes**, on demo: real orders, exits attached, a resting order cancelled |
+| OKX, Bitget, BingX, KuCoin Futures, Hyperliquid | everything | varies, see `tra venues` | not yet |
+| Binance, Deribit, HTX, Gate, MEXC | orders, but you carry the stop yourself (`exits = "none"`) | varies | not yet |
+| Kraken, Kraken Futures, Phemex | data only: they can't report the position, so no order is sent | | |
+
+"Everything" means ccxt reports the five things a safe order needs: send it, attach the exits, read
+the position, read the open orders, cancel. Only Bybit has been run end to end with real orders, so
+treat every other venue as untested: start on its practice environment and read what it sends.
+
+Adding the venue you trade on is four steps, and one command writes most of it:
 
 ```bash
-tra init my-run && cd my-run          # a project with an example core instead of an agent
-tra data get BTCUSDT 2025-01-01       # fetch a day, audit it, write Parquet and funding into data/
-tra check                             # what's ready, what's missing
-tra backtest                          # that day, net of costs
+tra venues okx            # what it can do, and which keys it signs with
+tra venues okx --setup    # the blocks to paste into envelope.toml, data.toml, strategy.toml and .env
 ```
 
-Every file `tra init` writes is commented line by line, and nothing in the logic is a constant you
-can't see. The same commands take you to paper trading (`tra paper`) and, once the ladder says so,
-to a small live session (`tra live`, `docs/live.md`). From install to a first backtest is a few
-minutes, most of it the download.
+The setup leaves your fees blank on purpose, because a guessed fee would price every trade wrong,
+and the file won't load until you fill them in. `docs/venues.md` has the full table, the keys each
+venue needs, and the four steps.
 
-### `tra check` tells you what's left to do
+## Models and providers
+
+You choose the provider and the model; nothing is hard-coded. Each provider reads its key from the
+environment (or the `.env` beside your config) and nowhere else.
+
+| Provider | Key in `.env` | Install with | Structured output | Tested live here |
+|---|---|---|---|---|
+| `groq` | `GROQ_API_KEY` | `openai` | JSON mode, checked by code | **yes**: `openai/gpt-oss-120b`, every live cycle in our records |
+| `google` | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | `google-genai` | JSON schema | **yes**: `gemini-flash-latest`, as the fallback |
+| `anthropic` | `ANTHROPIC_API_KEY` | `anthropic` | JSON schema | unit-tested; default model `claude-opus-5-5` |
+| `openai` | `OPENAI_API_KEY` | `openai` | strict JSON schema | unit-tested |
+| `deepseek` | `DEEPSEEK_API_KEY` | `openai` | JSON mode | preset only |
+| `mistral` | `MISTRAL_API_KEY` | `openai` | JSON schema | preset only |
+| `xai` | `XAI_API_KEY` | `openai` | JSON mode | preset only |
+| `openrouter` | `OPENROUTER_API_KEY` | `openai` | JSON mode | preset only |
+| `qwen` | `DASHSCOPE_API_KEY` | `openai` | JSON mode | preset only; pass `--base-url` for your region |
+| `ollama` | none | `openai` | JSON mode | preset only; a local server |
+| `local` | none | `openai` | JSON mode | any OpenAI-compatible server; pass `--base-url` |
+| `9router` | `9ROUTER_API_KEY` | `openai` | JSON schema | preset only; a local router |
+
+Whatever the provider, every answer is parsed against a closed schema by code before anyone reads
+it, so a model that only offers JSON mode is held to the same shape as one with strict schemas.
+
+```toml
+[agents]
+provider = "groq"
+model = "openai/gpt-oss-120b"
+effort = "medium"                    # minimal | low | medium | high | xhigh | max, where the
+                                     # vendor takes it; left out, the vendor's default applies
+fallback = ["google:gemini-flash-latest", "anthropic:claude-opus-5-5"]
+
+[agents.roles.sentiment_analyst]     # a role that only labels can run on a cheaper model
+model = "a-cheaper-model"
+effort = "low"
+```
+
+`fallback` is tried in order when a provider is rate limited or down, with the same brief. Every
+call is a line in `usage.jsonl` with its tokens and latency, and nothing caps spend unless you
+declare a ceiling. `tra keys --probe` proves each key works without sending a prompt. A vendor of
+your own is about thirty lines (`docs/providers.md`).
+
+## From a replay to real orders
+
+You can stop at any of these steps. Each is one command, and each was run end to end before this
+README was written.
+
+| Step | Command | What happens | Needs |
+|---|---|---|---|
+| 1. Replay | `tra data get BTCUSDT 2025-01-01`, then `tra backtest` | a day of the venue's own archive, checksum-verified and audited, replayed net of every cost | nothing |
+| 2. Shadow | `tra paper --minutes 30` | the live public feed, decisions recorded, nothing sent | nothing |
+| 3. Canary | `tra live` | a small live session behind hard caps and the ladder | a venue key, a promotion with evidence |
+| 4. Agents | `tra run` | the cycle above instead of a code core; sandbox until you say otherwise | a model key |
+| 5. Venue mode | `tra run` with `[execution].mode = "venue"` | one order per decision, exits attached, positions looked after | a signed `MANDATE.md`, the canary tier, caps, a leverage, venue keys |
+
+The replay of that day printed `net -294.19 bps` for the example core, and it is shown as it came
+out: a backtest that only shows good news is one nobody should believe.
+
+Venue mode is the only mode that can lose money, so it has a door in front of it. `tra mandate`
+prints the text you have to keep in your project word for word, and `tra check` names every missing
+piece.
+
+### Your money, your orders, your positions
+
+Once orders flow, three things look after the money, all of them code and none of them a model:
+
+| Before an order | When it is sent | While it is open |
+|---|---|---|
+| the account's real equity and free margin are read | your leverage is applied at the venue and read back | at the start of every pass, each position is checked against the venue |
+| sizing uses the smaller of the real equity and what you allow the desk | an order whose liquidation would sit inside its stop is refused | one that outlives its hold limit is closed with a reduce-only order |
+| an order may use only part of the free margin | a taker entry is a limit IOC within your slippage band, never a naked market order | one the venue's stop or take profit closed is written up with its real fees and funding |
+| a day's loss past your limit stops new entries | the stop and take profit go with the entry, so they outlive this process | the kill switch flattens everything before the desk stops |
+
+Who decides what, in one line each: **the analysts propose the direction, your risk rule sets the
+size, you choose the leverage, and no model touches the last two.** Leverage never makes a trade
+bigger. It only decides how much margin the trade ties up and how far away liquidation sits.
+
+```toml
+[execution]
+mode = "venue"
+leverage = 3                     # the one setting you must choose; everything else has a default
+margin_mode = "isolated"         # isolated | cross
+hold_limit = "timeout"           # close by time after [exit].timeout_bars; or horizon, or none
+```
+
+Underneath, on every venue: the order goes only to the environment you declared (demo, testnet or
+mainnet); an open position or a working order refuses a second entry; a size off the venue's step is
+refused rather than rounded; a clock more than a second off the venue's refuses before anything is
+signed; and Ctrl-C or a service stop cancels a resting order before the process leaves. Every close
+goes to `positions.jsonl` and every finished trade to `round_trips.jsonl`. `docs/capital.md` has
+every setting, every refusal and the arithmetic behind each one.
+
+One thing to know before you rely on it: the position checks run at the start of each pass of
+`tra run --every`. With no desk running, an open position has its venue-side stop and take profit
+and nothing else, so a desk meant to run unattended belongs under a supervisor.
+
+Orders cross the book by default (`taker-taker`): they always fill, which is how most desks trade.
+Point `[run].venue_key` at a `maker-taker` channel and entries rest on the book as post-only orders
+instead - a lower fee, fewer fills, since a resting order can be left behind by the market. Either
+way the cost gate prices the fee of the channel you chose.
+
+## The console, and watching a desk
 
 ![the cockpit](assets/cockpit.png)
 
-Type `tra` on its own and you get the cockpit above: what's ready, what isn't, and the one command
-to type next. `tra check` is the same thing as a plain list. Between them, that's the whole of the
-setup you have to keep in your head. Here's a project made by `tra init --profile autonomous`, about
-a minute old, before anyone has touched it:
+Type `tra` on its own and it opens a console: the cockpit above (what's ready, what isn't, the next
+command), then a prompt that takes every command and draws it right there. Arrow keys go back
+through what you typed, tab completes, `help` lists the commands and `exit` leaves. For scripts and
+cron, `tra -c "run --now"` runs one command and exits.
 
-```
-ok    strategy.toml: valid; core 'agent-pending'; instrument BTCUSDT
-ok    sources: derivatives, macro, news, onchain, sentiment on the shelf, nothing declared yet;
-      fill one in and its analyst joins the roster
-ok    roster: technical_analyst; `tra run` asks these
-ok    channel: bybit/taker-taker enters as a taker, priced at that fee; an order crosses the book
-ok    execution: sandbox; nothing leaves the machine
-ok    conviction: floor 0.4; ladder 0.75+ -> 1.0x, 0.55+ -> 0.5x, 0.4+ -> 0.25x
-ok    targets: at least 5 bps net; at most 6 round trips a day
-ok    data.toml: chains for ohlcv, orderbook, funding, open_interest; `tra run` uses them
-ok    symbols: BTCUSDT is BTC/USDT:USDT to the sources
-ok    venues: fees are priced on bybit, data also comes from binance; deliberate is fine
-todo  no dataset for BTCUSDT in data: run `tra data get BTCUSDT YYYY-MM-DD`
-todo  funding: none; a run that spans a settlement will refuse (tra data get fetches it)
-todo  [agents].provider is still the placeholder; name the provider you have a key for
-3 thing(s) to fix first
+The console runs commands in its own process, so closing it ends what it was running. A desk that
+should keep running belongs under a supervisor (systemd, a service manager, `tmux`), and then you
+look at it from anywhere with:
+
+```bash
+tra watch --every 5s       # a read-only view built from the records the desk writes
 ```
 
-Three things to do, each one named. Once they're done, `tra run` decides once, and
-`tra run --every 5m` keeps deciding as each bar closes until the budget runs out, you touch the kill
-switch, or you stop it yourself. Your key goes in `.env` next to the config and every command picks
-it up from there - no flag needed.
+`tra watch` opens no connection, holds no key and takes no lock, so opening and closing it does
+nothing to the desk.
 
-## Why this exists
+What is kept, and where:
 
-Most trading-agent projects are good at producing a decision and quiet about whether the decision
-was earned. They carry no cost model, they hold nothing out, and they can't tell you which of their
-past calls were wrong or why.
-
-This one starts from the other end. It grew out of a research programme that closed thirty
-hypotheses in four months without putting capital behind any of them, and wrote down what each one
-died of. The agents inherit that habit as code:
-
-- **Cost first.** A 3.0 bps signal with a perfect p-value is still dead against a 9.0 bps round
-  trip. That comparison is layer 0, and it runs before anything else does.
-- **Net from day one.** Fees, spread, slippage and funding are in every figure. Gross numbers are
-  shown, labelled as gross, and never carry a verdict.
-- **Power before verdict.** A result with too little data is `NOT PROVEN`, not `FALSIFIED`. They're
-  different words on purpose: one of them is a branch nobody actually closed.
-- **Reversal points.** When fees kill a verdict, the fee at which it comes back is written down, so
-  the next reader with a better schedule reuses the work instead of redoing it.
-- **Fewer agents, more gates.** Models write the mechanism memo, the falsifiable claim and the exit
-  design. The arithmetic and the statistics are code, and code doesn't argue.
-
-Two required dependencies: `numpy` and `rich`. No orchestration framework, no dataframe library,
-nothing you can't swap. Anything touching money is `Decimal`; the statistics run in floating point
-once the series has collapsed to numbers.
-
-## Who is asked, and what each one may do
-
-Each role reads figures that code worked out, answers inside a fixed shape, and decides nothing on
-its own. Everything after the decision is arithmetic over the numbers you declared.
-
-| Role | Reads | Answers | May never |
-|---|---|---|---|
-| technical analyst | closed candles, spread, funding | a direction, a confidence, a horizon | size the trade |
-| macro analyst | dated levels and rates, dated text | a regime | propose a direction |
-| on-chain analyst | chain figures and derivative figures | accumulation, distribution or neutral | propose a direction |
-| sentiment analyst | dated scores, dated notes | negative, neutral, positive, or not declared | invent a mood no figure supports |
-| validators (three stances) | the proposal and the figures behind it | support, oppose or abstain, with cited claims | claim a figure it was not given |
-| technology auditor | the cycles this project recorded | findings and proposed changes | change anything |
-| quant auditor | the desk's own decisions and round trips | findings and proposed changes | change anything |
-
-```mermaid
-flowchart LR
-    ops["operator<br/>declares the thresholds, weights, caps and mandate"] --> files[("strategy.toml<br/>sources/*.toml<br/>envelope.toml<br/>data.toml")]
-    files --> code["code<br/>briefs, declared states, gates, sizing"]
-    code --> models["models<br/>read figures, answer in a schema"]
-    models -- "labels and claims" --> code
-    code --> record[("the cycle on disk<br/>snapshot, briefs, answers, intent, refusals")]
-    code --> order["one order, behind the mandate"]
-    audit["two auditors"] --> record
-    audit --> proposals["proposals.md<br/>a person applies them"]
-    proposals -.-> ops
-```
-
-The arrow that isn't there is the point: no model reaches the order, and no model edits your
-files.
-
-## How it fits together
-
-```mermaid
-flowchart LR
-    subgraph gates["The falsification chain (docs/chain.md)"]
-        direction LR
-        L0["0 cost floor"] --> L1["1 observation"] --> L2["2 mechanism memo"] --> L3["3 pre-registration"]
-        L3 --> L4["4 data requirements"] --> L5["5 validation"] --> L6["6 exits bound to the mechanism"]
-    end
-    subgraph tiers["The ladder (docs/trading.md, docs/live.md)"]
-        direction LR
-        T0["T0 replay<br/>tra backtest"] --> T1["T1/T2 shadow<br/>tra paper"] --> T3["T3 canary<br/>tra live"]
-    end
-    data[("any trade data<br/>venue plugin or column map")] --> L1
-    data --> T0
-    L6 --> T0
-    T1 -- "layer 5 on its trades" --> L5
-    gates --> ledger[("kill ledger<br/>append-only")]
-    tiers --> ladder[("ladder.json<br/>promotions with evidence and a signature")]
-    agents["the roles, and any MCP host<br/>read the gates, tighten, demote, halt"] -.-> gates
-    agents -.-> tiers
-```
-
-An idea comes in at layer 0 and dies at the cheapest layer that can kill it. Whatever survives is
-a decision core, and the same runtime carries it from replay to a small live session, one rung at a
-time. The ledger keeps every death, the ladder every promotion. Models sit on the surface of all
-this: they read what the gates measured, and the only thing they can do to a limit is make it
-tighter.
-
-```mermaid
-flowchart TB
-    cli["cli  (tra, the console face)"] --> agents["agents  (roles, session, tool loop, eval, trace)"]
-    cli --> mcp["mcp  (read-only server)"]
-    agents --> llm["llm  (completer, schema parser, budget, model chain, vendor adapters)"]
-    agents --> store["store  (snapshots, cycle directories, the TTL cache)"]
-    agents --> surface["surface  (the gates as tools, tighten-only actions)"]
-    mcp --> surface
-    store --> data
-    surface --> trading["trading  (feeds, simulated venue, controls, ladder, runtime, live plugins)"]
-    trading --> strategy["strategy  (core protocol, exits, walk-forward)"]
-    strategy --> execution["execution  (cost identity, fills, markout)"]
-    execution --> chain["chain  (layers 0, 1, 3, 4, 5 and the era seal)"]
-    chain --> data["data  (venue plugins, column maps, audit, Parquet)"]
-    data --> envelope["envelope  (fees, round trips, latency)"]
-    data --> ledger["ledger  (verdicts, axes, store)"]
-```
-
-Imports only ever point downward, and a test keeps them honest (`tests/test_boundaries.py`). `llm`
-is the only package that talks to a model vendor, and it knows nothing about markets. `agents` is
-the only package that talks to `llm`. The only places a venue is named by name are the plugin
-directories and the files `tra init` copies into your project.
-
-## What is here today
-
-| Package | Purpose |
-|---|---|
-| `trading_research_agents.ledger` | The kill ledger: a closed vocabulary of verdicts and axes, an append-only store, and the consistency rules between them |
-| `trading_research_agents.envelope` | The operating envelope: fees per channel, measured round trips, latency. Configuration, never constants |
-| `trading_research_agents.data` | The data gate: any trade data to canonical trades, through a venue plugin or a declared column map; a one-pass audit with findings, a manifest with checksums, and exact `DECIMAL` Parquet with the `[data]` extra |
-| `trading_research_agents.data.sources` | Live sources behind a chain: free before paid, failover recorded, a time to live per kind, and provenance on every value. `ccxt:<venue>` reads public endpoints of more than a hundred venues and is never given a key |
-| `trading_research_agents.strategy` | The decision-core protocol, exits bound to the mechanism (layer 6, causal stops with adverse fills), the walk-forward harness that refuses precomputed parameters. No strategy of its own |
-| `trading_research_agents.trading` | The trading agent: recorded feeds and live feed plugins, a simulated venue on the execution rules, controls that fail closed, the promotion ladder, one runtime for replay and shadow |
-| `trading_research_agents.store` | What a run remembers: the snapshot a cycle is decided from with provenance and age on every value, the cycle directory an auditor replays, and a cache that only returns what is still fresh |
-| `trading_research_agents.llm` | Everything that talks to a language model and nothing that decides: the completer protocol, the structured-output parser, the call budget with `usage.jsonl`, and the vendor adapters behind `[anthropic]`, `[openai]`, `[google]` plus verified OpenAI-compatible presets |
-| `trading_research_agents.agents` | The roles: what each agent is asked, what it may answer, and what it may never do. Seven today (screener, technical analyst as a decision core, macro, on-chain, risk manager, executor, auditor) in a fixed session, a bounded tool loop, model comparison, and traces |
-| `trading_research_agents.surface` | The gates as callable tools for the MCP server and the roles: ten reads, and actions that only tighten, demote or halt |
-| `trading_research_agents.cli` | The `tra` command: run, data, chain, agent, trade, ladder, ledger, and the console face |
-| `trading_research_agents.chain` | The falsification chain: layer 0 (cost floor), layer 1 (market observation), layer 3 (sealed pre-registration), layer 4 (data requirements), layer 5 (validation: net returns, block bootstrap, matched null, subperiods, power, BH, anchor robustness), and the era seal |
-| `trading_research_agents.execution` | Execution realism: the cost identity with funding, walk-the-book, passive fills with trade-through, effective cost across unfilled orders, markout, and the pre-trade cost a cycle is gated on |
-
-Layer 0 in six lines:
-
-```python
-from decimal import Decimal
-from trading_research_agents.envelope import load_envelope
-from trading_research_agents.chain import cost_floor
-
-envelope = load_envelope("examples/envelope.toml")
-check = cost_floor(envelope, Decimal("3.0"), venue="hyperliquid")
-print(check.outcome, check.margin_bps)
-```
-
-A stop at layer 0 becomes a `CLOSED` row on the cost axis, envelope-bound, with the reversal
-point recorded. A pass records nothing, because clearing the cheapest test is not a verdict.
+| What | Where | Notes |
+|---|---|---|
+| everything one cycle did | `runs/cycles/<id>/` | snapshot, briefs, answers, intent, `placed.json`, `cycle.json` |
+| every model call | `runs/cycles/usage.jsonl` | tokens, latency, price |
+| when the desk ran and what stopped it | `runs/cycles/scheduler.jsonl` | one line per start and stop |
+| every position closed, by time, by the venue or by the kill switch | `runs/cycles/positions.jsonl` | venue mode |
+| every finished trade with entry, exit, fees and funding | `runs/cycles/round_trips.jsonl` | venue mode; what the quant auditor reads |
+| the first equity reading of each day | `runs/cycles/equity.jsonl` | what the daily loss limit is measured from |
+| what you typed at the prompt | `.tra-history` | a convenience only; `tra -c` keeps none |
 
 ## Command line
 
-The same gates from a shell. Exit code 0 means the gate was cleared, 1 means it said no, 2 is
-a usage error; add `--json` to any command for machine-readable output.
+Every command says what it did. Exit code 0 means cleared, 1 means a gate said no, 2 is a usage
+error. `--json` gives machine-readable output and `--plain` gives text instead of panels.
 
-```bash
-tra data get BTCUSDT 2025-01-01                 # fetch + audit + Parquet + funding
-tra check                                        # what is ready, what is missing
-tra data fetch --venue binance --instrument BTCUSDT --month 2025-01 --out data/
-tra data audit data/BTCUSDT-trades-2025-01.zip --venue binance --instrument BTCUSDT \
-    --max-gap 5m --manifest data/manifest.json
-tra data audit export.csv --mapping examples/mapping.toml --instrument BTCUSDT --max-gap 5m
-tra data pull BTCUSDT                            # one live snapshot through the chains in data.toml
-tra run --env-file .env                          # one autonomous cycle; docs/cycle.md
-tra chain floor --envelope examples/envelope.toml --magnitude 3.0 --venue hyperliquid     --subject "informed-flow burst drift" --ledger ledger.jsonl --id H-001
-tra chain observe --dataset data/BTCUSDT-2025-01-01.parquet   # layer 1: does the event recur? observation.toml
-tra chain check preregistration.json
-tra ledger show
-tra agent propose --idea "Longs paying high funding get squeezed into settlement"     --envelope examples/envelope.toml --provider anthropic
-tra agent refusals
-tra chain requirements --registration runs/<id>/preregistration.json --manifest data/manifest.json
-tra chain validate --registration runs/<id>/preregistration.json --trades trades.jsonl \
-    --cost-bps 15.0 --block-length 7 --ledger ledger.jsonl --id V-001
-tra init my-run                                  # or: --agent deepseek --model deepseek-flash
-tra backtest                                     # config, envelope, dataset, out: by convention
-tra paper
-tra ladder promote --evidence "layer 5 OPEN on backtest-1" --signed-by operator
-tra data funding --venue bybit --instrument BTCUSDT --from 2025-01-01 --to 2025-01-31 \
-    --out funding.json
-tra live --env-file .env                        # canary tier, behind the ladder; docs/live.md
-tra mcp serve                               # the read gates for any agent host; docs/mcp.md
-tra agent session --env-file .env               # the seven roles over data/; docs/agents.md
-tra agent eval --model groq:openai/gpt-oss-120b --model deepseek:deepseek-flash --env-file .env
-tra agent trace runs/session-1                  # the record of a run or a session, in order
-```
+**Getting started**
 
-`data fetch` streams the archive to a `.part` file, hashes it as it arrives, and keeps it only
-if the size and, where the venue publishes one, the checksum agree. `data audit` refuses a
-dataset the way the gate would, and writes the manifest with the finding either way. A venue
-is a plugin (`docs/venues.md`); data from anywhere else comes through a column map.
-
-## Common conventions
-
-The command names are the words people already use: `tra backtest` is replay (T0), `tra paper` is
-shadow (T1/T2), `tra live` is the canary tier (T3). `tra init DIR` lays down a project -
-`strategy.toml`, `envelope.toml`, `mapping.toml`, `data.toml`, the `sources/` shelf, an example core
-beside the config, `.env.example`, `.gitignore`. The shelf is one file per class of data (macro,
-news, sentiment, on-chain, derivatives), shipped as forms with the entries commented out: fill one
-in and the analyst that reads it joins the roster; leave it alone and that role is never asked.
-
-Inside a project you don't need flags. The commands pick up `strategy.toml` and `envelope.toml` from
-the directory you're standing in, the newest dataset in `data/`, funding beside it, and they write
-into `runs/`. Your keys come from the shell or from the `.env` next to the config, and nothing
-outside those two places is ever read. Every flag still exists if you want to point somewhere else.
-Venues, feeds and live adapters plug in through entry points, and the MCP server behind the `[mcp]`
-extra hands the gates to any host as read-only tools.
-
-At a terminal, `tra` on its own shows what's ready and the one command to type next. A run draws a
-live panel of bars, intents, fills and net basis points; a session shows each role as it goes; every
-report is a table. The numbers are the same ones the plain output carries, so nothing is hidden in
-the pretty version: `--json` is untouched, and `--plain` (or `TRA_PLAIN=1`, or piping it anywhere)
-gives you text.
-
-## What the package does not contain
-
-`docs/boundaries.md` spells out where this software stops and why: one order per decision and no
-retries, no routing or execution algorithms, no account or treasury operations, no DEX execution (a
-chain can be priced, not traded), no optimiser in the research chain, and no model that can size a
-trade or edit a file. Every line there is a decision we made on purpose, not something we forgot,
-and each one says what to do instead. The short version:
-
-- **A strategy.** The machinery ships - the protocol, the exits, the walk-forward harness. The
-  cores in `examples/strategies/` are examples, measured and closed in the research this came from,
-  and a run points at them by file exactly the way it would point at yours.
-- **A venue.** The two that ship are plugins found through the same registry as a
-  third-party one. Nothing in the gates names a venue, and a test fails the build if it does.
-- **A data vendor.** Any CSV with a declared column map goes through the same gate.
-- **A model that can loosen a control.** The agents see everything - the data, the gates, and as
-  the technical analyst, the decision on each bar. But the limits, the caps, the ladder and the kill
-  switch are code, and a role can only tighten them, step one down, or pull the switch. The MCP
-  server has no tool that trades, promotes or records. `docs/liability.md` says plainly where the
-  responsibility sits.
-- **A production tier.** Real orders exist at canary only, with hard caps, behind a ladder
-  that needs evidence and a signature at every step and refuses production outright.
-- **A book to manage.** This project executes one decision; a trading platform manages a
-  portfolio across venues over time. Keeping the two apart is what lets this one stay small
-  enough to read.
-
-## Roadmap
-
-| Release | Adds |
+| Command | What it does |
 |---|---|
-| 0.1 | Ledger, envelope, layer 0, pre-registration with numeric kill criteria, public-archive ingestion and dataset audit for two venues, `tra` CLI |
-| 0.2 | The agent: bound, mechanism memo with a critic, and pre-registration drafted by a language model, validated by the existing gates, recorded to the ledger; bounded revision loop; Anthropic and OpenAI adapters |
-| 0.3 | Execution realism: cost identity, latency-shifted fills, trade-through matching, fill probability, markout; layers 4 and 5 with the era seal |
-| 0.4 | The trading agent: layer 6 exits, walk-forward harness, replay and shadow on one code path, controls, ladder, a live public feed (`[shadow]`) |
-| 0.4.1 | Adoption rules: no strategy in the core, venues as plugins with entry points, any data through a column map |
-| 0.5 | The canary tier: a live venue plugin behind a security review that runs as tests, hard caps, the ladder gate; funding as charged; MCP server exposing the read gates to any agent host; `tra init`, `backtest`, `paper`, `live` |
-| 0.6 | Agents with full access through the gates: seven roles in a fixed session, the technical analyst as a metered decision core, providers as plugins with verified presets, `usage.jsonl`; the bounded tool loop, resume, eval and trace; layer 1 of the chain; the console face |
-| 0.7 | Production tier behind an operational runbook; private execution stream; maker channels; a second live venue |
+| `tra` | opens the console |
+| `tra init my-desk --profile autonomous` | a project wired for the agents, every file commented |
+| `tra check` | every setting read against the others, with what to fix |
+| `tra keys --probe` | proves every key works; no key is printed, no prompt or order sent |
+| `tra venues okx --setup` | what a venue can do, and the blocks to paste to trade on it |
+| `tra mandate` | the text venue mode requires: `tra mandate > MANDATE.md` |
 
-Crypto perpetuals first. The core vocabulary is market-agnostic (`venue`, `instrument`,
-`session`), but every number in the gates was measured on crypto venues and nothing is promised
-for other markets until it has been measured there too.
+**Running**
+
+| Command | What it does |
+|---|---|
+| `tra run` | one autonomous cycle |
+| `tra run --every 5m --cycles 12` | twelve scheduled passes, five minutes apart, on the interval's own boundary |
+| `tra run --now` | ask the roster even if the trigger would have held a quiet market |
+| `tra watch --every 5s` | a read-only view of a running desk |
+| `tra audit` | both auditors over the records; nothing is applied |
+| `tra backtest`, `tra paper`, `tra live` | replay, shadow, canary |
+
+**Data**
+
+| Command | What it does |
+|---|---|
+| `tra data get BTCUSDT 2025-01-01` | download a day, verify its checksum, audit it, write Parquet and funding |
+| `tra data audit export.csv --mapping mapping.toml` | your own CSV, through the same audit |
+| `tra data pull BTCUSDT` | one live snapshot through the chains in `data.toml` |
+
+**The ladder, research and hosts**
+
+| Command | What it does |
+|---|---|
+| `tra ladder show`, `promote`, `demote` | which tier the desk stands at; one step up with evidence, or down |
+| `tra chain floor`, `observe`, `check`, `validate` | the research chain, layer by layer (`docs/chain.md`) |
+| `tra ledger show` | every idea that died, and what killed it |
+| `tra agent session`, `eval`, `trace` | the research session, model comparison, a run read back |
+| `tra mcp serve` | the read-only gates as tools for any MCP host |
+
+## Where this software stops
+
+These are decisions, not gaps, and `docs/boundaries.md` gives the reason for each and what to do
+instead:
+
+- **No strategy ships.** The example cores are examples; your edge is yours to declare.
+- **One order per decision.** No retries, no execution algorithms, no portfolio across venues.
+- **No account or treasury operations.** No transfers, no withdrawals.
+- **No DEX execution.** A chain can be priced, not traded.
+- **No model can loosen a control.** A model can tighten a limit, step the ladder down or arm the
+  kill switch. It can never widen a limit, promote the ladder or disarm the switch.
+
+`docs/liability.md` says plainly where responsibility sits when real capital is involved.
+
+## Documentation
+
+| Read this | For |
+|---|---|
+| `docs/cycle.md` | the cycle step by step, and every setting that shapes it |
+| `docs/agents.md` | each role, what it reads, and what an agent can and cannot reach |
+| `docs/capital.md` | equity, margin, leverage, liquidation, daily loss, time exits, the kill switch, and the records they leave |
+| `docs/venues.md` | which venues work, and adding yours |
+| `docs/llm.md`, `docs/providers.md` | how models are used: fallback, spend, adding a provider |
+| `docs/live.md`, `docs/trading.md` | the ladder from replay to a live session |
+| `docs/data.md` | the data gate, and bringing your own data |
+| `docs/boundaries.md`, `docs/liability.md` | where the software stops, and who is responsible |
+| `docs/agent.md`, `docs/mcp.md` | the research agent, and the MCP server |
+| `docs/architecture.md` | packages, import rules, file formats |
+| `docs/chain.md`, `docs/execution.md`, `docs/ledger.md` | the research chain, execution realism, verdicts |
+| `CHANGELOG.md` | what changed |
 
 ## Development
 
@@ -402,13 +439,7 @@ uv run mypy
 uv run pytest
 ```
 
-See `CONTRIBUTING.md` for the branch flow and the standards the code is held to,
-`docs/boundaries.md` for where this software stops and why, `docs/llm.md` for how models are used
-(no framework, stateless roles, provider fallback, caching, batching, why no fine-tuning),
-`docs/architecture.md` for the package boundaries and the file formats at them, `docs/data.md`
-for the data gate, `docs/cycle.md` for the cycle, `docs/chain.md` for the chain, `docs/execution.md` for execution realism,
-`docs/agent.md` for the research agent, `docs/trading.md` for the trading agent, and
-`docs/ledger.md` for the verdict vocabulary.
+`CONTRIBUTING.md` has the branch flow and the standards the code is held to.
 
 ## License
 
