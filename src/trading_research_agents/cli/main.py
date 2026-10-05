@@ -15,7 +15,7 @@ import sys
 import threading
 import tomllib
 from collections.abc import Callable, Iterable, Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 from functools import partial
@@ -53,6 +53,8 @@ from trading_research_agents.chain.preregistration import from_record as prereg_
 from trading_research_agents.chain.requirements import to_entry as requirements_entry
 from trading_research_agents.chain.validation import to_entry as validation_entry
 from trading_research_agents.chain.validation import to_record as validation_record
+from trading_research_agents.cli import console, shutdown
+from trading_research_agents.cli.console import HISTORY_FILE
 from trading_research_agents.data import (
     NORMALISER_VERSION,
     ArchiveError,
@@ -156,6 +158,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"tra {__version__}")
     parser.add_argument(
         "--plain", action="store_true", help="plain text even at a terminal (or TRA_PLAIN=1)"
+    )
+    parser.add_argument(
+        "-c",
+        dest="once",
+        metavar="COMMAND",
+        help="run one command and leave, instead of opening the console",
+    )
+    parser.add_argument(
+        "--no-history",
+        dest="history",
+        action="store_false",
+        help=f"do not keep {HISTORY_FILE} beside the project",
     )
     top = parser.add_subparsers(dest="group", required=False)
 
@@ -392,6 +406,13 @@ def build_parser() -> argparse.ArgumentParser:
         cmd.add_argument(
             "--feed", help="live feed plugin; defaults to the venue named in [run].venue_key"
         )
+    for cmd in (shadow_cmd, paper_cmd):
+        cmd.add_argument(
+            "--minutes",
+            type=float,
+            default=None,
+            help="end the session after this long; without it, it runs until you stop it",
+        )
     for cmd in (live_cmd, live_alias):
         cmd.add_argument("--ladder", type=Path, default=Path("ladder.json"))
         cmd.add_argument(
@@ -401,7 +422,16 @@ def build_parser() -> argparse.ArgumentParser:
     mcp_p = top.add_parser("mcp", help="the gates as MCP tools").add_subparsers(
         dest="command", required=True
     )
-    mcp_p.add_parser("serve", help="serve the read tools over stdio (needs the [mcp] extra)")
+    mcp_serve_cmd = mcp_p.add_parser(
+        "serve", help="serve the read tools over stdio (needs the [mcp] extra)"
+    )
+    mcp_serve_cmd.add_argument(
+        "--root",
+        type=Path,
+        action="append",
+        default=None,
+        help="a directory the tools may read under; repeatable; default: the working directory",
+    )
 
     init_cmd = top.add_parser("init", help="a new project directory from the templates")
     init_cmd.set_defaults(command="init")
@@ -452,7 +482,48 @@ def build_parser() -> argparse.ArgumentParser:
         help="run a cycle every interval, on its boundary (30s, 5m, 1h); one cycle without it",
     )
     run_cmd.add_argument(
-        "--cycles", type=int, default=None, help="stop after this many cycles, with --every"
+        "--cycles",
+        type=int,
+        default=None,
+        help="stop after this many scheduled passes, with --every, cycles or not",
+    )
+    watch_cmd = top.add_parser(
+        "watch", help="a read-only view of a desk from the records it writes; it changes nothing"
+    )
+    watch_cmd.set_defaults(command="watch")
+    watch_cmd.add_argument("--out", type=Path, default=None, help="default: runs/cycles")
+    watch_cmd.add_argument(
+        "--every", type=parse_duration_s, default=None, help="redraw on an interval (5s, 1m)"
+    )
+    watch_cmd.add_argument("--limit", type=int, default=12, help="cycles in view; default 12")
+    watch_cmd.add_argument("--json", action="store_true")
+
+    keys_cmd = top.add_parser(
+        "keys", help="whether every key this project needs is there and works; none is shown"
+    )
+    keys_cmd.set_defaults(command="keys")
+    keys_cmd.add_argument("--config", type=Path, default=Path("strategy.toml"))
+    keys_cmd.add_argument("--envelope", type=Path, default=Path("envelope.toml"))
+    keys_cmd.add_argument("--ladder", type=Path, default=Path("ladder.json"))
+    keys_cmd.add_argument("--env-file", type=Path, help="a .env to read; the shell still wins")
+    keys_cmd.add_argument(
+        "--all",
+        dest="every",
+        action="store_true",
+        help="every provider this machine holds a key for, not only the ones this project reaches",
+    )
+    keys_cmd.add_argument(
+        "--probe",
+        action="store_true",
+        help="prove each one works: one free authenticated call per provider, the venue's own "
+        "preflight. No prompt is sent and no order is placed",
+    )
+    keys_cmd.add_argument("--json", action="store_true")
+
+    run_cmd.add_argument(
+        "--now",
+        action="store_true",
+        help="ask the roster whatever [trigger] would have said; the cycle records the override",
     )
     run_cmd.add_argument(
         "--margin", type=parse_decimal, default=None, help="bps the edge must clear beyond cost"
@@ -473,9 +544,6 @@ def build_parser() -> argparse.ArgumentParser:
             help=f"a declaration for {what}; default sources/{flag}.toml",
         )
     run_cmd.add_argument("--out", type=Path, default=None, help="default: runs/cycles")
-    run_cmd.add_argument(
-        "--resume", action="store_true", help="reuse answers already written for this cycle"
-    )
     run_cmd.add_argument("--env-file", type=Path)
     run_cmd.add_argument("--json", action="store_true")
 
@@ -504,6 +572,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     venues_cmd.set_defaults(command="venues")
     venues_cmd.add_argument("venue", nargs="*", help="default: the venue in [run].venue_key")
+    venues_cmd.add_argument(
+        "--setup",
+        action="store_true",
+        help="print what to paste into envelope.toml, data.toml, strategy.toml and .env",
+    )
     venues_cmd.add_argument("--config", type=Path, default=Path("strategy.toml"))
     venues_cmd.add_argument("--json", action="store_true")
 
@@ -557,7 +630,46 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     global _PLAIN
     _PLAIN = bool(args.plain)
+    if args.once is not None:
+        return _console_for(parser, args, interactive=False).one(args.once, say=False) or CLEARED
+    if args.group is None and console.interactive() and not _PLAIN:
+        # A person at a terminal gets somewhere to stand, not one screen and their shell back.
+        return _console_for(parser, args).loop()
     handler = cockpit if args.group is None else HANDLERS[(args.group, args.command)]
+    return _dispatch(handler, args)
+
+
+def _set_plain(plain: bool) -> None:
+    global _PLAIN
+    _PLAIN = plain
+
+
+def _console_for(
+    parser: argparse.ArgumentParser, args: argparse.Namespace, *, interactive: bool = True
+) -> console.Console:
+    """The console, wired to the same parser and the same handlers a shell would reach.
+
+    `tra -c` runs one command and leaves, so it is given no reader and no history: a one-shot in a
+    script has nothing to arrow back through, and a history file it never types into is a file it
+    has no business opening.
+    """
+    return console.Console(
+        parser=parser,
+        run=lambda parsed: _dispatch(HANDLERS[(parsed.group, parsed.command)], parsed),
+        cockpit=lambda: cockpit(args),
+        commands=[f"{group} {command}" for group, command in sorted(HANDLERS)],
+        set_plain=_set_plain,
+        history=console.history_path(bool(args.history)) if interactive else None,
+        read=None if interactive else (lambda: ""),
+    )
+
+
+def _dispatch(handler: Callable[[argparse.Namespace], int], args: argparse.Namespace) -> int:
+    """Run one command and turn the failures this project knows about into one line.
+
+    The console and the shell share this, so a command behaves the same in both: a refusal is a
+    refusal, not a traceback, and nothing here decides what a command does.
+    """
     try:
         return handler(args)
     except BrokenPipeError:
@@ -626,13 +738,39 @@ def emit(
     render: Callable[[], Any] | None = None,
 ) -> None:
     if as_json:
-        print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+        print(json.dumps(payload, indent=2, sort_keys=True, default=str), flush=True)
     elif render is not None and _watching():
         from trading_research_agents.cli import tui
 
         tui.show(render())
     else:
-        print("\n".join(lines))
+        # Flushed per report: a desk logging to a file is read while it runs, not after it stops.
+        print(plain_text("\n".join(lines)), flush=True)
+
+
+# Typographic characters models like to write. A log or an old console shows them as escapes or
+# replacement marks, so plain output carries their ASCII form; the records keep the original.
+TYPOGRAPHY = str.maketrans(
+    {
+        "\u2018": "'",
+        "\u2019": "'",
+        "\u201c": '"',
+        "\u201d": '"',
+        "\u2010": "-",
+        "\u2011": "-",
+        "\u2012": "-",
+        "\u2013": "-",
+        "\u2014": "-",
+        "\u2212": "-",
+        "\u2026": "...",
+        "\u00a0": " ",
+        "\u202f": " ",
+    }
+)
+
+
+def plain_text(text: str) -> str:
+    return text.translate(TYPOGRAPHY)
 
 
 def cockpit(args: argparse.Namespace) -> int:
@@ -1021,9 +1159,10 @@ def _completer_for_role(
     for name in settings.fallback:
         named, model = parse_link(name)
         links.append(Link(name, _link(a, settings, floor, provider_name=named, model=model)))
-    if len(links) == 1:
+    wait = float(getattr(a, "max_retry_wait_s", 0.0) or 0.0)
+    if len(links) == 1 and wait <= 0:
         return links[0].build()
-    return CompleterChain(role=role, links=links, on_attempt=on_attempt)
+    return CompleterChain(role=role, links=links, on_attempt=on_attempt, max_wait_s=wait)
 
 
 def _link(
@@ -1038,10 +1177,14 @@ def _link(
 
     def build() -> Completer:
         p = provider(provider_name or settings.provider)
+        declared = settings.max_output_tokens
         options = CallOptions(
-            max_output_tokens=max(settings.max_output_tokens, floor),
+            # No cap stays no cap: the floor exists to raise one an operator set too low, and a
+            # report needs more room than a one-line answer does.
+            max_output_tokens=None if declared is None else max(declared, floor),
             timeout_s=float(settings.call_timeout_s),
             max_retries=settings.max_retries,
+            effort=settings.effort,
         )
         wanted = model if provider_name else settings.model
         base = None if provider_name else settings.base_url
@@ -1057,6 +1200,7 @@ def _call_options(a: Any) -> CallOptions:
         max_output_tokens=a.max_output_tokens,
         timeout_s=float(a.call_timeout_s),
         max_retries=a.max_retries,
+        effort=a.effort,
     )
 
 
@@ -1092,7 +1236,7 @@ def _trading_config(
         controls=controls,
         out_dir=args.out,
         bar_interval_ns=cfg.run.bar_interval_s * 1_000_000_000,
-        size=cfg.run.size,
+        size=cfg.run.fixed_size(),
         spread_cost_bps=cfg.run.spread_cost_bps,
         equity=cfg.run.equity,
         label=label,
@@ -1200,9 +1344,18 @@ def trade_shadow(args: argparse.Namespace) -> int:
 
 
 def _live_feed(args: argparse.Namespace, cfg: Any, name: str) -> Any:
-    return live_feed(name)(
-        cfg.run.instrument, stop=threading.Event(), max_reconnects=args.max_reconnects
-    )
+    """The public feed, and the clock that ends the session when the operator named one.
+
+    A shadow session runs until it is stopped, which is right for a desk and wrong for the first
+    one anybody runs: `--minutes` gives it an end without anybody having to reach for Ctrl-C.
+    """
+    stop = threading.Event()
+    minutes = getattr(args, "minutes", None)
+    if minutes:
+        ending = threading.Timer(float(minutes) * 60.0, stop.set)
+        ending.daemon = True
+        ending.start()
+    return live_feed(name)(cfg.run.instrument, stop=stop, max_reconnects=args.max_reconnects)
 
 
 def read_env_file(path: Path) -> dict[str, str]:
@@ -1338,23 +1491,14 @@ TEMPLATE_FILES = {
 }
 
 
-def run_audit_command(args: argparse.Namespace) -> int:
-    """Two auditors over the records this project already wrote. Nothing is applied."""
-    from trading_research_agents.agents.audit import AuditConfig, run_audit
-    from trading_research_agents.llm.usage import (
-        BudgetLimits,
-        MeteredCompleter,
-        Pricing,
-        UsageLedger,
-    )
+def _metered_roles(a: Any, usage: Any, *, floor: int = 0) -> Callable[[str], Any]:
+    """One metered completer per role, built when the role is first asked.
 
-    _load_env(args)
-    cfg = load_strategy_config(args.config)
-    if cfg.agents is None:
-        raise ConfigError("an audit needs [agents] in strategy.toml; it asks a model")
-    a = cfg.agents
-    out = args.out or Path("audits")
-    usage = UsageLedger(out / "usage.jsonl")
+    A role may run on its own model without the others paying for it, and every call goes through
+    the same ledger, so what a desk spent is one file however many roles were involved.
+    """
+    from trading_research_agents.llm.usage import BudgetLimits, MeteredCompleter, Pricing
+
     limits = BudgetLimits(
         token_budget=a.token_budget,
         max_calls_per_hour=a.max_calls_per_hour,
@@ -1368,7 +1512,7 @@ def run_audit_command(args: argparse.Namespace) -> int:
         if role not in metered:
             settings = a.for_role(role)
             metered[role] = MeteredCompleter(
-                _completer_for_role(a, role, floor=REPORT_HEADROOM),
+                _completer_for_role(a, role, floor=floor),
                 role=role,
                 provider=settings.provider,
                 limits=limits,
@@ -1377,21 +1521,11 @@ def run_audit_command(args: argparse.Namespace) -> int:
             )
         return metered[role]
 
-    who = ("tech_auditor", "quant_auditor") if args.who == "both" else (args.who,)
-    raised = [r for r in who if a.for_role(r).max_output_tokens < REPORT_HEADROOM]
-    result = run_audit(
-        AuditConfig(
-            runs=args.runs,
-            completer_for=completer_for,
-            usage=usage,
-            root=out,
-            config=args.config,
-            sessions=args.sessions,
-            auditors=who,
-        )
-    )
-    payload = result.record()
-    payload["out"] = str(result.path)
+    return completer_for
+
+
+def _audit_lines(result: Any, raised: list[str]) -> list[str]:
+    """One audit as the lines a person reads, used by the command and by a scheduled run."""
     lines = [f"audit {result.at}: {result.cycles} cycle(s) read, {result.findings} finding(s)"]
     if raised:
         lines.append(
@@ -1413,13 +1547,229 @@ def run_audit_command(args: argparse.Namespace) -> int:
     for role, error in sorted(result.failed.items()):
         lines.append(f"{role}: {error}")
     lines.append(f"proposals.md and audit.json in {result.path}; nothing has been applied")
-    emit(payload, args.json, lines, lambda: _ui().audit_view(payload))
+    return lines
+
+
+def run_audit_command(args: argparse.Namespace) -> int:
+    """Two auditors over the records this project already wrote. Nothing is applied."""
+    from trading_research_agents.agents.audit import AuditConfig, run_audit
+    from trading_research_agents.llm.usage import UsageLedger
+
+    _load_env(args)
+    cfg = load_strategy_config(args.config)
+    if cfg.agents is None:
+        raise ConfigError("an audit needs [agents] in strategy.toml; it asks a model")
+    a = cfg.agents
+    out = args.out or Path("audits")
+    usage = UsageLedger(out / "usage.jsonl")
+    completer_for = _metered_roles(a, usage, floor=REPORT_HEADROOM)
+
+    who = ("tech_auditor", "quant_auditor") if args.who == "both" else (args.who,)
+    # Only a declared cap can be too low; an undeclared one is the vendor's own maximum.
+    raised = [
+        r for r in who if (a.for_role(r).max_output_tokens or REPORT_HEADROOM) < REPORT_HEADROOM
+    ]
+    result = run_audit(
+        AuditConfig(
+            runs=args.runs,
+            completer_for=completer_for,
+            usage=usage,
+            root=out,
+            config=args.config,
+            sessions=args.sessions,
+            auditors=who,
+        )
+    )
+    payload = result.record()
+    payload["out"] = str(result.path)
+    emit(payload, args.json, _audit_lines(result, raised), lambda: _ui().audit_view(payload))
     return CLEARED
+
+
+def watch_desk(args: argparse.Namespace) -> int:
+    """What a desk is doing, read from its own records. Nothing here can reach it.
+
+    This is the answer to "can I watch a running desk without disturbing it": the command opens no
+    socket, builds no client, holds no key and takes no lock. Closing it is closing a reader.
+    """
+    from trading_research_agents.cli.watch import look, short_time
+
+    out = args.out or Path("runs") / "cycles"
+    if not out.is_dir():
+        raise ConfigError(f"{out}: no cycles have been written here yet; run `tra run` first")
+
+    def desk() -> dict[str, Any]:
+        return look(out, limit=max(1, args.limit)).record()
+
+    if args.json or args.every is None or not _watching(args.json):
+        payload = desk()
+        lines = [
+            f"{short_time(row['at'])}  {row['instrument']:<9} {row['outcome']:<11} {row['detail']}"[
+                :120
+            ]
+            for row in payload["decisions"]
+        ]
+        lines.append(f"reading {out}; this view only reads, and changes nothing")
+        emit(payload, args.json, lines, lambda: _ui().watch_view(payload))
+        return CLEARED
+
+    with _ui().WatchView(desk, every_s=args.every) as view:
+        try:
+            while True:
+                sleep(args.every)
+                view.draw()
+        except KeyboardInterrupt:
+            pass
+    print(f"stopped watching {out}; nothing about the desk changed")
+    return CLEARED
+
+
+def show_keys(args: argparse.Namespace) -> int:
+    """Every credential this configuration would reach, and whether it is in a position to work."""
+    from trading_research_agents.cli.credentials import Readiness, in_play, provider_row, venue_row
+
+    _load_env(args)
+    beside = args.config.resolve().parent
+    env = _environment(args.env_file, beside=beside)
+    out = Readiness()
+    cfg = None
+    if args.config.is_file():
+        try:
+            cfg = load_strategy_config(args.config)
+        except (ConfigError, OSError, ValueError) as exc:
+            print(f"tra: {args.config}: {exc}", file=sys.stderr)
+    wanted: list[tuple[str, str]] = []
+    if cfg is not None and cfg.agents is not None and not args.every:
+        wanted = in_play(cfg.agents)
+    else:
+        # No project, no agents in it, or --all: say what this machine is holding keys for.
+        reached = dict(in_play(cfg.agents)) if cfg is not None and cfg.agents is not None else {}
+        wanted = [
+            (name, reached.get(name, "a key is named for it"))
+            for name in providers()
+            if _named(name, env)
+        ]
+    for name, why in wanted:
+        try:
+            p = provider(name)
+        except UnknownProviderError as exc:
+            out.rows.append(_unknown_provider(name, why, str(exc)))
+            continue
+        out.rows.append(
+            provider_row(p, env, label=f"provider {name} ({why})", verify=bool(args.probe))
+        )
+    if cfg is not None and cfg.live is not None:
+        venue = live_venue(cfg.live.venue)
+        out.rows.append(
+            venue_row(
+                venue,
+                env,
+                label=f"venue {cfg.live.venue} ({cfg.live.environment}), for `tra live`",
+                preflight=_venue_preflight(cfg, env) if args.probe else None,
+            )
+        )
+    if cfg is not None and cfg.execution.places_orders:
+        # The cycle sends through a different client than a live session does, so a probe that only
+        # checked the session's client would be checking a path no order takes.
+        out.rows.append(
+            venue_row(
+                _DispatchKeys(cfg.execution.venue),
+                env,
+                label=f"venue {cfg.execution.venue} ({_declared_environment(cfg)}), for `tra run`",
+                preflight=_dispatch_ready(args, cfg) if args.probe else None,
+            )
+        )
+    lines = []
+    for row in out.rows:
+        state = "ok" if row.ready else "todo"
+        held = ", ".join(
+            f"{name} {fp}" for name, fp in zip(row.present, row.fingerprints, strict=False)
+        )
+        lines.append(f"{state:<5} {row.what}: {row.verdict}" + (f" [{held}]" if held else ""))
+    lines.append(
+        "every key above is shown as a fingerprint of itself, never as its value"
+        if out.rows
+        else "no credential is declared or set for this project"
+    )
+    if not args.probe and out.rows:
+        lines.append("`tra keys --probe` proves each one works: no prompt is sent, no order placed")
+    emit(out.record(), args.json, lines, lambda: _ui().keys_table(out.record()))
+    return CLEARED if out.ready else REFUSED
+
+
+def _named(name: str, env: Mapping[str, str]) -> bool:
+    """Whether this machine has a variable for this provider at all, filled in or not.
+
+    An empty one is worth showing rather than hiding: somebody meant to use that provider and has
+    not finished, and a list that quietly leaves it out is how they find out mid-cycle.
+    """
+    try:
+        p = provider(name)
+    except UnknownProviderError:
+        return False
+    return bool(p.key_env and p.key_env in env)
+
+
+def _unknown_provider(name: str, why: str, said: str) -> Any:
+    from trading_research_agents.cli.credentials import Credential
+
+    return Credential(what=f"provider {name} ({why})", env=(), missing=(name,), note=said)
+
+
+@dataclass(frozen=True)
+class _DispatchKeys:
+    """The key names the cycle's own hand reads, named the way that hand names them."""
+
+    venue: str
+
+    @property
+    def env_keys(self) -> tuple[str, ...]:
+        from trading_research_agents.trading.dispatch import credentials_for
+
+        return tuple(credentials_for(self.venue).values())
+
+
+def _declared_environment(cfg: Any) -> str:
+    return cfg.live.environment if cfg.live is not None else "demo"
+
+
+def _dispatch_ready(args: argparse.Namespace, cfg: Any) -> Callable[[], Any]:
+    """Read the account through the very client an order would go through. Nothing is sent."""
+
+    def run() -> Any:
+        hand = _venue_hand(args, cfg, args.config.resolve().parent)
+        said = hand.ready()
+        if said:
+            raise RuntimeError(said)
+        return said
+
+    return run
+
+
+def _venue_preflight(cfg: Any, env: Mapping[str, str]) -> Callable[[], Any]:
+    """The venue's own preflight, as the readiness check runs it: no order, no session."""
+
+    def run() -> Any:
+        settings = LiveVenueSettings(
+            instrument=cfg.run.instrument,
+            channel=cfg.run.venue_key.partition("/")[2] or cfg.run.venue_key,
+            funding=cfg.funding
+            or FundingSchedule(interval_s=cfg.run.settlement_interval_s, rates={}),
+            environment=cfg.live.environment,
+            run_id="readiness",
+            key_ip_unbound_ok=cfg.live.key_ip_unbound_ok,
+            adopt_open_position=True,
+            poll_interval_ms=cfg.live.poll_interval_ms,
+        )
+        return live_venue(cfg.live.venue)(settings, env).preflight()
+
+    return run
 
 
 def show_venues(args: argparse.Namespace) -> int:
     """What a venue can actually do, asked of ccxt rather than promised in a README."""
     from trading_research_agents.data.sources.capability import CapabilityError, capability_of
+    from trading_research_agents.trading.dispatch import credentials_for
 
     names = list(args.venue)
     if not names and args.config.is_file():
@@ -1451,10 +1801,76 @@ def show_venues(args: argparse.Namespace) -> int:
                 for what in ("create_order", "attached_exits", "position", "open_orders", "cancel")
             )
         )
-        lines.append(f"  test env    {'yes' if able.sandbox else 'no'}")
+        lines.append(f"  practice    {able.practice}")
+        keys = list(credentials_for(able.venue).values())
+        lines.append(f"  keys        {', '.join(keys)}")
         lines.append(f"  verdict     {able.verdict()}")
+        if args.setup:
+            snippet = venue_setup(able, keys)
+            found[-1]["setup"] = snippet
+            lines.extend(["", *snippet.splitlines(), ""])
     emit({"venues": found}, args.json, lines)
     return CLEARED
+
+
+def venue_setup(able: Any, keys: list[str]) -> str:
+    """The blocks an operator pastes to trade on a venue, shaped by what the venue can do.
+
+    The fees are left blank on purpose. A fee is the largest figure in the cost gate, it depends on
+    the account's own tier, and a placeholder number would price every trade at a rate nobody
+    checked; a blank one makes the file refuse to load until somebody writes theirs in.
+    """
+    name = able.venue
+    serves = list(able.serves_data)
+    environment = "demo" if able.demo else "testnet" if able.testnet else "mainnet"
+    out = [f"# {name}: {able.verdict()}"]
+    if able.level == "data":
+        out += [
+            "# This venue can feed a cycle's figures but not take its orders. In data.toml,",
+            f'# put "ccxt:{name}" in the chain of: {", ".join(serves) or "nothing this reads"}.',
+        ]
+        return "\n".join(out)
+    out += [
+        "",
+        "# 1. envelope.toml: what a round trip costs here. Write your own account's fees, in bps",
+        "#    (0.055% is 5.5); the file will not load while they are blank.",
+        "[[channel]]",
+        f'venue = "{name}"',
+        'name = "taker-taker"',
+        "entry_fee_bps =                  # your taker fee",
+        "exit_fee_bps =                   # your taker fee",
+        "",
+        "[[channel]]",
+        f'venue = "{name}"',
+        'name = "maker-taker"',
+        "entry_fee_bps =                  # your maker fee",
+        "exit_fee_bps =                   # your taker fee",
+        "",
+        f'# 2. data.toml: put "ccxt:{name}" first in the chain of {", ".join(serves)}.',
+        "#    Each instrument may need its ccxt symbol under [data].symbols.",
+        "",
+        "# 3. strategy.toml",
+        "[run]",
+        f'venue_key = "{name}/taker-taker"',
+        "size_step = { BTCUSDT = 0.001 }   # this venue's increment per instrument; an order off",
+        "                                 # it is refused, and the refusal names the right step",
+        "",
+        "[execution]",
+        f'venue = "{name}"',
+        "leverage = 3                     # yours to choose; applied at the venue and read back",
+        'margin_mode = "isolated"         # isolated keeps one position from drawing on the rest',
+    ]
+    if able.level == "exits-none":
+        out += [
+            'exits = "none"                   # this venue cannot attach a stop to the entry;',
+            "                                 # you carry the stop and take profit yourself",
+        ]
+    out += ["", "[live]", f'environment = "{environment}"']
+    if environment == "mainnet":
+        out.append("# no practice environment through ccxt: the first order here is real money")
+    out += ["", "# 4. .env beside the config, never in a file you commit", *(f"{k}=" for k in keys)]
+    out += ["", f"# Then: tra check, and tra keys --probe to prove the keys reach {name}."]
+    return "\n".join(out)
 
 
 def show_mandate(args: argparse.Namespace) -> int:
@@ -1549,15 +1965,19 @@ def _agent_config(text: str, provider_name: str, model: str) -> str:
         f'provider = "{provider_name}"\n'
         f'model = "{model}"\n'
         'mechanism = "state the mechanism the analyst reasons from"\n'
-        "token_budget = 200000              # the whole session, every role\n"
-        "max_calls_per_hour = 60\n"
-        "min_interval_s = 60\n"
         "lookback_bars = 60\n"
         "min_confidence = 0.6\n"
         "magnitude_bps = 20                 # the claimed edge, for the cost floor\n"
-        f"\n[agents.pricing.{model}]           # what you were quoted; never a constant\n"
-        "input_per_million = 0\n"
-        "output_per_million = 0\n\n"
+        '# effort = "medium"                # minimal .. max, where your vendor takes one\n'
+        "\n"
+        "# Nothing caps what a role may spend: every call is counted in usage.jsonl\n"
+        "# and each cycle reports what it cost. Declare token_budget or\n"
+        "# max_calls_per_hour only if you want a hard stop, and know that it stops\n"
+        "# the desk rather than slowing it down.\n"
+        "\n"
+        f"# [agents.pricing.{model}]\n"
+        "# input_per_million = 0.0          # what you were quoted, per million tokens\n"
+        "# output_per_million = 0.0\n\n"
     )
     return text.replace("[data]\n", agents + "[data]\n", 1)
 
@@ -1594,8 +2014,39 @@ size_multiple = 0.25
 
 [targets]
 # What a trade has to be worth and how often you will take one. Yours to change; these are a start.
+# The multiple is the one to think about: the cost is certain and the edge is not, so a trade worth
+# a little more than it costs is a trade that needs everything to go right.
 min_net_bps = 5
+min_edge_multiple = 2.0
 max_round_trips_per_day = 6
+# max_research_bps = 25            # model spend since the last intent, against this notional;
+#                                  # needs [agents.pricing.<model>] to mean anything
+
+[trigger]
+# What has to have happened before the roster is paid to have an opinion. All of it is computed from
+# the snapshot and the cycles on disk, so a cycle that holds here costs one data pull and no tokens.
+min_move_bps = 15
+max_spread_bps = 8
+cooldown_s = 900
+widen_after = 6
+
+[audit]
+# The two auditors wake differently because they answer different questions. Something breaking is
+# an event, so the technical auditor wakes on an alarm - a provider that stopped answering, a data
+# chain that ran out, a venue that refused - and reports without acting. Whether the desk is earning
+# what it costs is a stretch of time, so the quant auditor runs on a count of cycles.
+on_alarm = true
+alarm_cooldown_s = 1800            # per kind of alarm, not overall
+quant_every_cycles = 20
+
+# What this desk watches. Left out, every cycle is [run].instrument. Declared, a pass looks at each
+# instrument for one data pull and no tokens, applies [trigger] to each, and spends its cycles on
+# whatever moved most against its own spread.
+# [universe]
+# instruments = ["BTCUSDT", "ETHUSDT"]
+# max_per_cycle = 1
+# max_intents_per_day = 6          # across every instrument, not per one
+# screener = false                 # ask the screener to narrow what the trigger admitted
 
 [execution]
 # sandbox keeps the intent here. signals writes it for your own executor. venue sends it, and does
@@ -1656,33 +2107,41 @@ class Schedule:
     def stop_reason(self, result: Any, ran: int) -> str:
         if not self.looping:
             return "one cycle"
-        if result.stopped_by and budget_spent(str(result.stopped_by)):
-            return f"the budget: {result.stopped_by}"
+        # A pass that chose nothing has no result to read, and that is not a reason to stop.
+        stopped = getattr(result, "stopped_by", None)
+        if stopped and budget_spent(str(stopped)):
+            return f"the budget: {stopped}"
         if self.kill_switch is not None and self.kill_switch.exists():
             return f"the kill switch at {self.kill_switch}"
         if self.cycles is not None and ran >= self.cycles:
-            return f"the {self.cycles} cycle(s) asked for"
+            return f"the {self.cycles} pass(es) asked for"
         return ""
 
-    def wait(self) -> float:
-        """Sleep to the next boundary, so a cycle reads a bar that has finished happening."""
+    def left(self) -> float:
+        """Seconds to the next boundary, so a cycle reads a bar that has finished happening."""
         every = self.every_s or 0.0
         if every <= 0:
             return 0.0
-        left = every - (self.clock() % every)
-        self.rest(left)
-        return round(left, 3)
+        return round(every - (self.clock() % every), 3)
+
+    def wait(self) -> float:
+        """Sleep to the next boundary and say how long that was."""
+        left = self.left()
+        if left > 0:
+            self.rest(left)
+        return left
 
 
 def run_cycle_command(args: argparse.Namespace) -> int:
     """One cycle, end to end, from the files in the project."""
-    from trading_research_agents.agents.cycle import CycleConfig, run_cycle
+    from trading_research_agents.agents.cycle import CycleConfig
     from trading_research_agents.data.sources import load_data_config
     from trading_research_agents.execution.targets import reward_risk
     from trading_research_agents.llm.usage import (
         BudgetLimits,
         MeteredCompleter,
         Pricing,
+        RateWindow,
         UsageLedger,
     )
 
@@ -1718,9 +2177,15 @@ def run_cycle_command(args: argparse.Namespace) -> int:
     # A declared roster wins; otherwise the roles with something to read are the ones to pay for.
     analysts = a.analysts or roster_for(declared, "technical_analyst")
     mode = args.mode or cfg.execution.mode
-    hand = None
-    if mode == "venue":
-        hand = _venue_hand(args, cfg, beside)
+    # A hand for the instrument this run starts on, so a misconfigured mandate is refused before any
+    # data is pulled. A pass over a universe builds another one for whichever instrument it chose:
+    # one hand per instrument, because a hand carries the symbol an order goes out under.
+    hand = _venue_hand(args, cfg, beside, instrument) if mode == "venue" else None
+    # One order log for the whole run, so [controls].max_orders_per_minute is the desk's.
+    from trading_research_agents.trading.dispatch import OrderRate
+
+    rate = OrderRate(cfg.limits.max_orders_per_minute)
+    keeper = _keeper(args, cfg, beside, out, instrument, rate) if mode == "venue" else None
     usage = UsageLedger(out / "usage.jsonl")
     limits = BudgetLimits(
         token_budget=a.token_budget,
@@ -1730,10 +2195,11 @@ def run_cycle_command(args: argparse.Namespace) -> int:
     )
     pricing = {model: Pricing(i, o) for model, (i, o) in a.pricing.items()}
     metered: dict[str, MeteredCompleter] = {}
+    window = RateWindow()
 
     def completer_for(role: str) -> MeteredCompleter:
-        # One budget for the whole cycle, one client per role: a role may run on a cheaper model
-        # without the others paying for it.
+        # One budget and one rate window for the whole desk, one client per role: a role may run
+        # on a cheaper model without the others paying for it.
         if role not in metered:
             settings = a.for_role(role)
             metered[role] = MeteredCompleter(
@@ -1743,6 +2209,7 @@ def run_cycle_command(args: argparse.Namespace) -> int:
                 limits=limits,
                 ledger=usage,
                 pricing=pricing,
+                window=window,
             )
         return metered[role]
 
@@ -1756,6 +2223,7 @@ def run_cycle_command(args: argparse.Namespace) -> int:
         root=out,
         mechanism=a.mechanism,
         size=cfg.run.size,
+        size_quote=cfg.run.size_quote,
         magnitude_bps=magnitude,
         bar_interval_s=cfg.run.bar_interval_s,
         lookback_bars=a.lookback_bars,
@@ -1770,9 +2238,19 @@ def run_cycle_command(args: argparse.Namespace) -> int:
         conviction=cfg.conviction,
         max_position=cfg.limits.max_position,
         equity=cfg.run.equity,
-        size_step=cfg.run.size_step,
+        size_step=cfg.run.step_for(instrument),
         validators=a.validators,
+        on_missing_validator=a.on_missing_validator,
+        context_intervals=cfg.run.context_intervals,
+        regime=cfg.regime,
         targets=cfg.targets,
+        desk=cfg.desk,
+        held=_held_reader(cfg, out, mode, args, beside),
+        wait_while_open=mode == "venue" and not cfg.execution.adopt_open_position,
+        daily_loss_limit_bps=cfg.limits.daily_loss_limit_bps if mode == "venue" else None,
+        trigger=cfg.trigger,
+        forced=bool(args.now),
+        max_risk_per_trade_bps=cfg.limits.max_risk_per_trade_bps,
         reward_to_risk=reward_risk(
             stop_frac=cfg.exit_rule.stop_sigma_frac,
             take_frac=cfg.exit_rule.take_profit_sigma_frac,
@@ -1783,36 +2261,460 @@ def run_cycle_command(args: argparse.Namespace) -> int:
         series=series,
         news=news,
         analysts=analysts,
-        resume=bool(args.resume),
     )
     schedule = Schedule(every_s=args.every, cycles=args.cycles, kill_switch=cfg.kill_switch)
+    spine = _cycle_steps(cycle_cfg)
+    # The auditors keep their own ledger, so what the desk spent deciding stays separable from what
+    # it spent looking at itself.
+    audits = Auditing(policy=cfg.audit, settings=a, config=args.config, runs=out)
     ran = 0
-    while True:
-        result = run_cycle(cycle_cfg)
-        payload, lines = _cycle_report(result, usage, mode)
-        emit(payload, args.json, lines, partial(_cycle_view, payload))
-        ran += 1
-        cleared = CLEARED if result.stopped_by is None else REFUSED
-        stop = schedule.stop_reason(result, ran)
-        if stop:
-            if schedule.looping:
-                emit(
-                    {"cycles": ran, "stopped_by": stop},
-                    args.json,
-                    [f"scheduler: stopped by {stop}, after {ran} cycle(s)"],
+    cleared = CLEARED
+    # What the models have already cost since this desk last wrote an intent, per instrument. A
+    # refused cycle's tokens are not free: they are carried forward and charged to whatever trade
+    # that instrument eventually produces.
+    carried: dict[str, Decimal] = {}
+    mid_cycle = False
+    passes = 0
+    lock = shutdown.claim(out) if mode == "venue" else None
+    shutdown.journal(
+        out,
+        "started",
+        every_s=args.every,
+        cycles=args.cycles,
+        mode=mode,
+        instruments=list(cfg.universe.instruments) or [instrument],
+    )
+    try:
+        with shutdown.as_interrupt():
+            while True:
+                if keeper is not None:
+                    armed = cfg.kill_switch is not None and cfg.kill_switch.exists()
+                    kept = keeper.run(kill=armed)
+                    if kept and not args.json:
+                        sys.stdout.write("\n".join(kept) + "\n")
+                        sys.stdout.flush()
+                    if armed:
+                        stop = f"the kill switch at {cfg.kill_switch}, after flattening"
+                        emit(
+                            {"cycles": ran, "passes": passes, "stopped_by": stop},
+                            args.json,
+                            [f"scheduler: stopped by {stop}"],
+                        )
+                        shutdown.journal(out, "stopped", stopped_by=stop, cycles=ran)
+                        return cleared
+                chosen, screened = _sweep(
+                    cfg, cycle_cfg, args, chains=chains, out=out, ask=completer_for
                 )
-            return cleared
+                if screened is not None:
+                    found, said = _screen_report(screened)
+                    emit(found, args.json, said, partial(_screen_view, found))
+                result: Any = None
+                stop = ""
+                for instrument in chosen:
+                    before = usage.cost
+                    held = carried.get(instrument, Decimal(0))
+                    sends = (
+                        _venue_hand(args, cfg, beside, instrument, rate)
+                        if mode == "venue"
+                        else None
+                    )
+                    mid_cycle = True
+                    result = _one_cycle(
+                        replace(
+                            cycle_cfg,
+                            instrument=instrument,
+                            size_step=cfg.run.step_for(instrument),
+                            carried_spend=held,
+                            place=sends,
+                            account=None if sends is None else sends.account,
+                        ),
+                        usage,
+                        spine,
+                        args,
+                    )
+                    mid_cycle = False
+                    carried[instrument] = (
+                        Decimal(0) if result.acted else held + (usage.cost - before)
+                    )
+                    payload, lines = _cycle_report(result, usage, mode)
+                    emit(payload, args.json, lines, partial(_cycle_view, payload))
+                    ran += 1
+                    audits.after(payload, ran, as_json=args.json)
+                    cleared = CLEARED if result.stopped_by is None else REFUSED
+                    # Inside a pass only the budget and the kill switch end the run.
+                    stop = schedule.stop_reason(result, 0)
+                    if stop:
+                        break
+                # A pass counts whether or not the trigger let a cycle through: on a quiet market
+                # `--cycles 6` would otherwise run for as long as the market stays quiet.
+                passes += 1
+                if not stop:
+                    stop = schedule.stop_reason(result, passes)
+                if stop:
+                    if keeper is not None and stop.startswith("the kill switch"):
+                        # The switch exists to get flat, not only to stop deciding.
+                        kept = keeper.run(kill=True)
+                        if kept and not args.json:
+                            sys.stdout.write("\n".join(kept) + "\n")
+                    if schedule.looping:
+                        emit(
+                            {"cycles": ran, "passes": passes, "stopped_by": stop},
+                            args.json,
+                            [
+                                f"scheduler: stopped by {stop}, after {passes} pass(es) and "
+                                f"{ran} cycle(s)"
+                            ],
+                        )
+                    shutdown.journal(out, "stopped", stopped_by=stop, cycles=ran, passes=passes)
+                    return cleared
+                # Said before the wait, not after it: an operator looking at the screen in the
+                # meantime needs to know the desk is waiting rather than stuck.
+                left = schedule.left()
+                if not args.json:
+                    sys.stdout.write(f"scheduler: next cycle in {left}s\n")
+                    sys.stdout.flush()
+                if _watching(args.json) and left > 0:
+                    _ui().countdown(left)
+                else:
+                    schedule.rest(left)
+    except KeyboardInterrupt as exc:
+        # Ctrl-C, a service manager's SIGTERM, a dropped SSH session: one way out, said by name and
+        # written down. Whatever a cycle had already put on disk stays there.
+        why = shutdown.stopped_by(exc)
+        if mid_cycle:
+            why = f"{why}, in the middle of a cycle"
+        emit(
+            {"cycles": ran, "stopped_by": why},
+            args.json,
+            [f"scheduler: stopped by {why}, after {ran} cycle(s)"],
+        )
+        shutdown.journal(out, "stopped", stopped_by=why, cycles=ran)
+        # Stopping between cycles is the ordinary way a desk ends; stopping inside one is not.
+        return REFUSED if mid_cycle else cleared
+    finally:
+        if lock is not None:
+            shutdown.release(lock)
+
+
+@dataclass
+class Auditing:
+    """Waking the auditors between cycles: one on an alarm, one on a count.
+
+    Something breaking is an event and belongs to the technical auditor; whether the desk is earning
+    what it costs is a stretch of time and belongs to the quant auditor. Neither can act on what it
+    finds, and neither is allowed to end a run: an auditor that fails is a line in the report.
+    """
+
+    policy: Any
+    settings: Any
+    config: Path
+    runs: Path
+    watch: Any = None
+    clock: Callable[[], float] = wall_clock
+
+    def __post_init__(self) -> None:
+        from trading_research_agents.agents.alarms import Watch
+
+        if self.watch is None:
+            self.watch = Watch(cooldown_s=self.policy.alarm_cooldown_s)
+
+    def due(self, record: Mapping[str, Any], ran: int) -> tuple[tuple[str, ...], tuple[Any, ...]]:
+        """Which auditors to ask after this cycle, and the alarms that asked for one."""
+        from trading_research_agents.agents.alarms import alarms_of
+
+        who: list[str] = []
+        fired: tuple[Any, ...] = ()
+        if self.policy.on_alarm:
+            fired = self.watch.due(alarms_of(record), self.clock())
+            if fired:
+                who.append("tech_auditor")
+        every = self.policy.quant_every_cycles
+        if every is not None and ran % every == 0:
+            who.append("quant_auditor")
+        return tuple(who), fired
+
+    def after(self, record: Mapping[str, Any], ran: int, *, as_json: bool = False) -> list[str]:
+        """Ask whoever is due, and say what they found. Never raises into the run."""
+        who, fired = self.due(record, ran)
+        if not who:
+            return []
+        from trading_research_agents.agents.audit import AuditConfig, run_audit
+        from trading_research_agents.llm.usage import UsageLedger
+
+        out = self.runs.parent / "audits"
+        said = [
+            f"audit: {', '.join(who)} asked"
+            + (f" on {', '.join(a.kind for a in fired)}" if fired else f" after {ran} cycle(s)")
+        ]
+        for alarm in fired:
+            said.append(f"  alarm {alarm.kind}: {alarm.detail}")
         try:
-            waited = schedule.wait()
-        except KeyboardInterrupt:
-            emit(
-                {"cycles": ran, "stopped_by": "a keyboard interrupt"},
-                args.json,
-                [f"scheduler: stopped by a keyboard interrupt, after {ran} cycle(s)"],
+            usage = UsageLedger(out / "usage.jsonl")
+            audit = AuditConfig(
+                runs=self.runs,
+                completer_for=_metered_roles(self.settings, usage, floor=REPORT_HEADROOM),
+                usage=usage,
+                root=out,
+                config=self.config,
+                auditors=who,
             )
-            return cleared
-        if not args.json:
-            sys.stdout.write(f"scheduler: {waited}s to the next cycle\n")
+            if not as_json and _watching():
+                with _ui().console().status(f"asking {', '.join(who)}", spinner="line"):
+                    result = run_audit(audit)
+            else:
+                result = run_audit(audit)
+        except Exception as exc:
+            # A failing auditor is a thing to report, never a thing that ends a run.
+            said.append(f"  the audit could not run: {exc.__class__.__name__}: {exc}")
+            if not as_json:
+                print(plain_text("\n".join(said)), flush=True)
+            return said
+        said.extend(f"  {line}" for line in _audit_lines(result, []))
+        if not as_json:
+            print(plain_text("\n".join(said)), flush=True)
+        return said
+
+
+def _sweep(
+    cfg: Any,
+    cycle_cfg: Any,
+    args: argparse.Namespace,
+    *,
+    chains: Mapping[str, Any],
+    out: Path,
+    ask: Callable[[str], Any],
+) -> tuple[tuple[str, ...], Any]:
+    """Which instruments this pass runs a cycle on, and the screen that chose them.
+
+    A desk that watches one instrument runs it, as it always did. A desk that declared a universe
+    takes the cheap look first - one data pull each, the same trigger applied per instrument - and
+    spends its cycles on what that admitted.
+    """
+    from trading_research_agents.agents.screen import asking, sweep
+    from trading_research_agents.execution.trigger import Trigger
+    from trading_research_agents.store.snapshot import cycle_id
+
+    universe = cfg.universe
+    if args.instrument or universe.idle:
+        return (cycle_cfg.instrument,), None
+    now = cycle_cfg.clock()
+    # --now overrides the trigger for the cycle, so it overrides it for the pass that feeds the
+    # cycle too: an operator who asked anyway should not be told nothing was worth looking at.
+    trigger = Trigger() if args.now else cfg.trigger
+    screener = None
+    if universe.screener:
+        screener = asking(ask("market_screener"), mechanism=cycle_cfg.mechanism, at=cycle_id(now))
+
+    open_now: set[str] = set()
+    if cfg.execution.places_orders and not cfg.execution.adopt_open_position:
+        reader = cycle_cfg.held
+        if reader is not None:
+            try:
+                rows, _source = reader()
+                open_now = {row.instrument for row in rows}
+            except Exception:
+                # The cycle reads the book again and refuses on its own if it cannot; the pass only
+                # uses this to avoid asking the roster about something already open.
+                open_now = set()
+
+    cap = cfg.desk.max_open_positions
+    full = (
+        f"the desk holds {len(open_now)} position(s), its declared [desk].max_open_positions"
+        if cap is not None and open_now and len(open_now) >= cap
+        else ""
+    )
+
+    def look(watch: Any) -> Any:
+        return sweep(
+            universe,
+            chains,
+            trigger=trigger,
+            root=out,
+            now=now,
+            max_round_trips_per_day=cfg.targets.max_round_trips_per_day,
+            options=cycle_cfg.data_options,
+            ask=screener,
+            desk=cfg.desk,
+            held=cycle_cfg.held,
+            watch=watch,
+            open_now=open_now,
+            full=full,
+        )
+
+    if args.json or not _watching():
+        screened = look(lambda _step: None)
+    else:
+        # A pass pulls one snapshot per instrument before any cycle starts; on a slow venue that
+        # is seconds per name, and a blank terminal for that long reads as a hung process.
+        steps = [*universe.instruments, *(["market_screener"] if universe.screener else [])]
+        with _ui().CycleView(cycle_cfg.usage, steps, title="screen") as view:
+            screened = look(view.on_step)
+    where = out.parent / "screens"
+    where.mkdir(parents=True, exist_ok=True)
+    (where / f"{screened.at}.json").write_text(
+        json.dumps(screened.record(), indent=2, sort_keys=True, default=str) + "\n",
+        encoding="utf-8",
+    )
+    return screened.chosen, screened
+
+
+def _screen_report(screened: Any) -> tuple[dict[str, Any], list[str]]:
+    from trading_research_agents.execution.universe import why_no_cycle
+
+    """One pass over the universe as a record and as the lines a person reads."""
+    payload = screened.record()
+    admitted = sum(1 for c in screened.candidates if c.taken)
+    lines = [
+        f"screen {screened.at}: {len(screened.candidates)} instrument(s) looked at, "
+        f"{admitted} admitted, {len(screened.chosen)} taken"
+    ]
+    for candidate in screened.candidates:
+        state = (
+            "taken"
+            if candidate.instrument in screened.chosen
+            else ("admitted" if candidate.taken else "held")
+        )
+        lines.append(
+            f"  {candidate.instrument:<12} {state:<9} "
+            f"moved {candidate.moved_bps if candidate.moved_bps is not None else '-'} bps, "
+            f"spread {candidate.spread_bps if candidate.spread_bps is not None else '-'} bps, "
+            f"pressure {candidate.pressure if candidate.pressure is not None else '-'}"
+        )
+    for refusal in screened.refusals[:8]:
+        lines.append(f"  held {refusal}")
+    if not screened.chosen:
+        lines.append(
+            f"no cycle this pass: {why_no_cycle(payload.get('candidates') or [])}"
+            + (
+                "; only the screener was asked"
+                if screened.asked_screener
+                else "; no model was asked"
+            )
+        )
+    return payload, lines
+
+
+def _screen_view(payload: Mapping[str, Any]) -> Any:
+    return _ui().screen_view(payload)
+
+
+def _keeper(
+    args: argparse.Namespace, cfg: Any, project: Path, out: Path, instrument: str, rate: Any
+) -> Any:
+    """What looks after positions between decisions: time exits, venue exits, the kill switch."""
+    from trading_research_agents.trading.positions import Keeper
+
+    hands: dict[str, Any] = {}
+
+    def hand_for(name: str) -> Any:
+        if name not in hands:
+            hands[name] = _venue_hand(args, cfg, project, name, rate)
+        return hands[name]
+
+    return Keeper(
+        root=out,
+        hand_for=hand_for,
+        instruments=tuple(cfg.universe.instruments) or (instrument,),
+        bar_interval_s=cfg.run.bar_interval_s,
+        timeout_bars=cfg.exit_rule.timeout_bars,
+        hold_limit=cfg.execution.hold_limit,
+    )
+
+
+def _held_reader(cfg: Any, out: Path, mode: str, args: argparse.Namespace, project: Path) -> Any:
+    """Where a cycle looks to find out what this desk is already carrying.
+
+    In venue mode the venue is the book and nothing else is: it knows what filled, and what the
+    attached exits closed while nobody was watching. Everywhere else the intents on disk are all
+    there is, and the verdict says so rather than implying a venue was asked.
+    """
+    from trading_research_agents.execution.desk import Open, filled_from_records, from_records
+
+    if cfg.desk.idle:
+        return None
+    if mode != "venue":
+        return lambda: from_records(out, at=datetime.now(UTC))
+
+    def ask_the_venue() -> tuple[tuple[Open, ...], str]:
+        ours = filled_from_records(out)
+        names = cfg.universe.instruments or (args.instrument or cfg.run.instrument,)
+        held: list[Open] = []
+        for name in names:
+            size = _venue_hand(args, cfg, project, name).position()
+            if not size:
+                continue
+            # The venue says the position is there; this desk's own intent says what it has at
+            # risk, which the venue has no way to know.
+            mine = ours.get(name)
+            side = "buy" if size > 0 else "sell"
+            if mine is not None and mine.side and mine.side != side:
+                # The venue holds the other side from what this desk filled last: not ours to state.
+                mine = None
+            held.append(
+                Open(
+                    instrument=name,
+                    side=side,
+                    risk_bps=None if mine is None else mine.risk_bps,
+                    notional=None if mine is None else mine.notional,
+                )
+            )
+        return tuple(held), "the venue, with what each one risks from this desk's own intents"
+
+    return ask_the_venue
+
+
+def _cycle_steps(cfg: Any) -> list[str]:
+    """The pipeline this project configured, in order, so the live table starts complete.
+
+    An operator watching a cycle should see every step that can happen, including the ones that are
+    not configured - a table that grows as it goes tells you less than one that was there first.
+    """
+    steps = ["data"]
+    if not cfg.trigger.idle:
+        steps.append("trigger")
+    if cfg.size_quote is not None:
+        steps.append("size")
+    steps.extend(["regime", "technical"])
+    steps.extend(role for role in cfg.analysts if role != "technical_analyst")
+    steps.append("cost")
+    steps.extend(f"validator_{stance}" for stance in cfg.validators)
+    if not cfg.matrix.idle:
+        steps.append("confluence")
+    if not cfg.conviction.idle:
+        steps.append("conviction")
+    if cfg.max_risk_per_trade_bps is not None:
+        steps.append("risk")
+    if cfg.desk.bounds_a_trade:
+        steps.append("desk")
+    steps.append("cost gate")
+    if not cfg.targets.idle:
+        steps.append("targets")
+    steps.append("intent")
+    if cfg.mode == "venue":
+        steps.append("venue")
+    return steps
+
+
+def _one_cycle(cfg: Any, usage: Any, spine: list[str], args: argparse.Namespace) -> Any:
+    """One cycle, with the steps drawn as they happen when a person is watching."""
+    from trading_research_agents.agents.cycle import run_cycle
+
+    if args.json or not _watching():
+        return run_cycle(cfg)
+    with _ui().CycleView(usage, spine) as view:
+        return run_cycle(replace(cfg, watch=view.on_step))
+
+
+def order_outcome(placed: Mapping[str, Any]) -> str:
+    """What became of a sent order, in one phrase, from the record the venue hand wrote."""
+    if placed.get("interrupted"):
+        return str(placed.get("note") or "interrupted")
+    filled = placed.get("filled")
+    if placed.get("note"):
+        return str(placed["note"])
+    if filled not in (None, "", "0", "0.0"):
+        return f"filled {filled}" + (f" at {placed['average']}" if placed.get("average") else "")
+    return str(placed.get("status") or "sent; the venue reported no state")
 
 
 def _cycle_view(payload: Mapping[str, Any]) -> Any:
@@ -1838,9 +2740,20 @@ def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], l
         lines.append(f"{role.replace('_analyst', ''):<10} {state}: {said.get('reason', '')}")
     if result.analyst is not None:
         lines.append(
-            f"technical: {result.analyst.target} at {result.analyst.confidence:.2f} "
-            f"over {result.analyst.horizon_bars} bars: {result.analyst.reason}"
+            f"technical: {result.analyst.target} on {result.analyst.setup} at "
+            f"{result.analyst.confidence:.2f} over {result.analyst.horizon_bars} bars: "
+            f"{result.analyst.reason}"
         )
+        if result.cited:
+            read = ", ".join(f"{f['figure']}={f['value']}" for f in result.cited)
+            lines.append(f"read: {read}")
+    if result.wake is not None and not result.wake.ask:
+        lines.append(f"held: {result.wake.reasons[0]}")
+        if result.wake.moved_bps is not None:
+            lines.append(
+                f"the mid moved {result.wake.moved_bps} bps against the "
+                f"{result.wake.required_bps} bps this desk asks for before it looks"
+            )
     for role, said in sorted(result.context.items()):
         if not role.startswith("validator"):
             continue
@@ -1862,19 +2775,35 @@ def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], l
     if result.stake is not None:
         stake = result.stake
         score = stake.score
+        most = dict(score.weights)
         voices = ", ".join(
-            f"{role.replace('_analyst', '')} {value}" for role, value in score.contributions
+            f"{role.replace('_analyst', '')} {value}"
+            + (f" of {most[role]}" if role in most else "")
+            for role, value in score.contributions
         )
         lines.append(f"conviction: {score.score} of 1.0 ({voices})")
         if stake.admitted:
             leverage = "" if stake.leverage is None else f", {stake.leverage}x equity"
             lines.append(f"stake: {stake.size} at {stake.multiple} of the base size{leverage}")
+    if result.risk is not None and result.risk.risk_bps is not None:
+        risk = result.risk
+        lines.append(
+            f"risk: {risk.risk_bps} bps of equity at the stop against the declared "
+            f"{risk.allowed_bps} bps, size {risk.size}"
+        )
     if result.targets is not None:
         met = result.targets
         lines.append(
             f"targets: net {met.net_bps.quantize(Decimal('0.01'))} bps, "
             f"reward-to-risk {met.reward_risk}, {met.round_trips_today} round trip(s) today"
         )
+        if met.edge_multiple is not None:
+            lines.append(f"edge over cost: {met.edge_multiple}x the round trip")
+        if met.research_bps is not None:
+            lines.append(
+                f"research: {met.research_bps} bps of this trade's notional in model calls "
+                "since the last intent"
+            )
     if result.verdict is not None:
         cost = result.verdict.cost
         total = cost.round_trip_bps.quantize(Decimal("0.01"))
@@ -1896,6 +2825,8 @@ def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], l
                 f"placed: {placed.get('side')} {placed.get('size')} on {placed.get('venue')}"
                 f"{at}, stop {placed.get('stop_price')}, take {placed.get('take_price')}"
             )
+            # Sent is not filled. What became of the order is the line an operator acts on.
+            lines.append(f"  outcome: {order_outcome(placed)}")
         elif placed.get("refused"):
             lines.append(f"not placed: {placed['refused']}")
     for refusal in result.refusals[:6]:
@@ -1991,6 +2922,13 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
             else:
                 listed = ", ".join(reading.entries)
                 good.append(f"{where}: {len(reading.entries)} declared ({listed})")
+                one_sided = _one_sided(args.config.resolve().parent / where)
+                if one_sided:
+                    good.append(
+                        f"{where}: {', '.join(one_sided)} declare one side of the threshold "
+                        "only, so they count as a full +1 or -1 whenever crossed; declare a "
+                        "bullish and a bearish line and the score grades how far past it they sit"
+                    )
         if shelf.empty:
             good.append(
                 f"sources: {', '.join(shelf.empty)} on the shelf, nothing declared yet; "
@@ -2002,7 +2940,7 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
             cfg,
             roster,
             project=args.config.resolve().parent,
-            tier=Ladder(args.ladder).tier.name if args.ladder.is_file() else "REPLAY",
+            tier=Ladder(args.ladder).tier.name,
             env=env,
             entry_role=next(
                 (c.entry_role for c in channels if c.key == cfg.run.venue_key), "undeclared"
@@ -2069,19 +3007,20 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
     return good, bad, next_command
 
 
-def _venue_hand(args: argparse.Namespace, cfg: Any, project: Path) -> Any:
+def _venue_hand(
+    args: argparse.Namespace, cfg: Any, project: Path, instrument: str = "", rate: Any = None
+) -> Any:
     """What venue mode sends with, built only after everything standing in the way is cleared."""
     from trading_research_agents.execution.mandate import blocking
-    from trading_research_agents.trading.dispatch import hand_for
+    from trading_research_agents.trading.dispatch import credentials_for, hand_for
 
     mandate = cfg.execution
     env = _environment(getattr(args, "env_file", None))
-    prefix = mandate.venue.strip().upper()
-    keys = (f"{prefix}_API_KEY", f"{prefix}_API_SECRET") if prefix else ()
+    keys = tuple(credentials_for(mandate.venue).values())
     stops = blocking(
         mandate,
         project=project,
-        tier=Ladder(args.ladder).tier.name if args.ladder.is_file() else "REPLAY",
+        tier=Ladder(args.ladder).tier.name,
         missing_keys=[k for k in keys if not env.get(k)],
         canary_declared=cfg.canary is not None,
     )
@@ -2099,7 +3038,8 @@ def _venue_hand(args: argparse.Namespace, cfg: Any, project: Path) -> Any:
         )
     return hand_for(
         venue=mandate.venue,
-        symbol=_symbol_for(cfg, project),
+        symbol=_symbol_for(cfg, project, instrument),
+        instrument=instrument or cfg.run.instrument,
         max_notional=mandate.max_notional,
         role=channel.entry_role,
         exits=mandate.exits,
@@ -2108,19 +3048,27 @@ def _venue_hand(args: argparse.Namespace, cfg: Any, project: Path) -> Any:
         price_offset_bps=mandate.price_offset_bps,
         adopt_open_position=mandate.adopt_open_position,
         params=mandate.params,
+        max_drift_bps=mandate.max_drift_bps,
+        leverage=mandate.leverage,
+        margin_mode=mandate.margin_mode,
+        max_slippage_bps=mandate.max_slippage_bps,
+        max_margin_share=mandate.max_margin_share,
+        liquidation_buffer_bps=mandate.liquidation_buffer_bps,
+        rate=rate,
         env=env,
     )
 
 
-def _symbol_for(cfg: Any, project: Path) -> str:
-    """The venue's own name for the instrument, as data.toml already maps it."""
+def _symbol_for(cfg: Any, project: Path, instrument: str = "") -> str:
+    """The venue's own name for one instrument, as data.toml already maps it."""
+    named = instrument or cfg.run.instrument
     declared = project / "data.toml"
     if declared.is_file():
         raw = tomllib.loads(declared.read_text(encoding="utf-8"))
-        mapped = (raw.get("data", {}).get("symbols") or {}).get(cfg.run.instrument)
+        mapped = (raw.get("data", {}).get("symbols") or {}).get(named)
         if mapped:
             return str(mapped)
-    return str(cfg.run.instrument)
+    return str(named)
 
 
 def _agrees_across_files(cfg: Any, data: Any, bad: list[str]) -> list[str]:
@@ -2229,8 +3177,9 @@ def _gate_lines(
             else "execution: signals; intents are written for your own executor"
         )
     else:
-        prefix = mandate.venue.strip().upper()
-        keys = (f"{prefix}_API_KEY", f"{prefix}_API_SECRET") if prefix else ()
+        from trading_research_agents.trading.dispatch import credentials_for
+
+        keys = tuple(credentials_for(mandate.venue).values())
         stops = blocking(
             mandate,
             project=project,
@@ -2245,6 +3194,11 @@ def _gate_lines(
                 f"execution: venue {mandate.venue}, signed by {mandate.acknowledged_by} on "
                 f"{mandate.acknowledged_on}, at most {mandate.max_notional} per order"
             )
+            # Two declarations that only meet at the last gate, after a cycle has been paid for.
+            # The price where they stop agreeing is arithmetic, and it can be said here instead.
+            if mandate.max_notional is not None:
+                _size_against_cap(cfg, mandate.max_notional, good, bad)
+            good.extend(_capital_notes(cfg))
             if mandate.exits == "attached":
                 good.append(
                     "execution: the stop and the take profit go to the venue with the entry, so a "
@@ -2278,6 +3232,9 @@ def _gate_lines(
                 f"models: fallback {', '.join(cfg.agents.fallback)}; "
                 "tried in order when a provider cannot be reached"
             )
+    if cfg.agents is not None:
+        good.extend(_load_notes(cfg.agents, roster))
+    good.append(_regime_note(cfg))
     rule = cfg.conviction
     if rule.idle:
         good.append("conviction: not declared; every admitted cycle trades the base size")
@@ -2285,7 +3242,18 @@ def _gate_lines(
         rungs = ", ".join(f"{t.at_least}+ -> {t.size_multiple}x" for t in rule.ladder)
         good.append(
             f"conviction: floor {rule.min_score}; ladder {rungs or 'none'}"
-            + (f"; up to {rule.max_leverage}x equity" if rule.max_leverage else "")
+            + (
+                f"; notional at most {rule.max_leverage}x the equity (a cap on exposure, not the "
+                "venue's leverage, which is [execution].leverage)"
+                if rule.max_leverage
+                else ""
+            )
+        )
+        good.append(
+            "conviction: every voice counts as strong as it is - the deciding analyst by its "
+            "confidence, a reading analyst by how far its series sit past your lines - and the "
+            "score is their net over what they expressed; opposition shrinks the size, and only "
+            "opposition that outweighs the case refuses the trade"
         )
         if not rule.ladder:
             bad.append(
@@ -2307,12 +3275,365 @@ def _gate_lines(
         said = []
         if targets.min_net_bps is not None:
             said.append(f"at least {targets.min_net_bps} bps net")
+        if targets.min_edge_multiple is not None:
+            said.append(f"at least {targets.min_edge_multiple}x the round trip")
         if targets.min_reward_risk is not None:
             said.append(f"reward-to-risk {targets.min_reward_risk}")
+        if targets.max_research_bps is not None:
+            said.append(f"at most {targets.max_research_bps} bps of notional in model calls")
         if targets.max_round_trips_per_day is not None:
             said.append(f"at most {targets.max_round_trips_per_day} round trips a day")
         good.append("targets: " + "; ".join(said))
+    if targets.min_edge_multiple is None:
+        good.append(
+            "targets: no edge multiple declared, so a trade worth two basis points more than it "
+            "costs can still pass; [targets].min_edge_multiple is what stops that"
+        )
+    priced = cfg.agents is not None and any(i > 0 or o > 0 for i, o in cfg.agents.pricing.values())
+    if targets.max_research_bps is not None and not priced:
+        bad.append(
+            "[targets].max_research_bps is declared and no model price is, so the research cost "
+            "reads as zero whatever the models spend; put what you were quoted in "
+            "[agents.pricing.<model>] or drop the target"
+        )
+    good.extend(_risk_notes(cfg, bad))
+    good.extend(_trigger_notes(cfg))
+    good.extend(_spend_notes(cfg))
+    good.extend(_audit_notes(cfg))
+    good.extend(_universe_notes(cfg, bad))
+    good.extend(_size_notes(cfg))
+    good.extend(_desk_notes(cfg, bad))
+    good.append(
+        "keys: this check reads which are set, not whether they work; `tra keys --probe` asks each "
+        "provider and the venue itself, sends no prompt and places no order"
+    )
     return good, bad
+
+
+def _one_sided(path: Path) -> list[str]:
+    """Series on a shelf file whose threshold names only bullish or only bearish lines."""
+    try:
+        raw = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return []
+    found = []
+    for entry in raw.get("series") or []:
+        threshold = entry.get("threshold") if isinstance(entry, dict) else None
+        if not isinstance(threshold, dict) or not threshold:
+            continue
+        bull = any(str(k).startswith("bullish_") for k in threshold)
+        bear = any(str(k).startswith("bearish_") for k in threshold)
+        if bull != bear:
+            found.append(str(entry.get("name", "?")))
+    return found
+
+
+def _size_notes(cfg: Any) -> list[str]:
+    """What one unit of base size means on each instrument this desk can trade."""
+    run = cfg.run
+    steps = (
+        ", ".join(f"{name} {step}" for name, step in run.size_steps.items())
+        if run.size_steps
+        else str(run.size_step)
+    )
+    if run.size_quote is not None:
+        return [
+            f"size: {run.size_quote} of quote currency, converted at each cycle's own mid and "
+            f"rounded down to the step ({steps}); a replay still needs [run].size",
+            f"size: [controls].max_position {cfg.limits.max_position} is in base units, so it caps "
+            "each instrument at that many units whatever they are worth",
+        ]
+    said = [f"size: {run.size} in base units, step {steps}"]
+    if not cfg.universe.idle:
+        said.append(
+            f"size: {run.size} is a different amount of money on each of "
+            f"{', '.join(cfg.universe.instruments)}; [run].size_quote says it once, in quote "
+            "currency"
+        )
+    return said
+
+
+def _regime_note(cfg: Any) -> str:
+    from trading_research_agents.agents.briefs import interval_name
+
+    rule = cfg.regime
+    frames = ", ".join(interval_name(s) for s in cfg.run.context_intervals)
+    return (
+        f"regime: measured on {interval_name(cfg.run.bar_interval_s)}"
+        + (f" with {frames} as context" if frames else ", no higher timeframe declared")
+        + f"; trending at {rule.trend_above}+, ranging at {rule.range_below} or less; "
+        + (
+            "a setup that does not fit is refused"
+            if rule.setups_must_fit
+            else "a setup that does not fit is noted and allowed"
+        )
+    )
+
+
+def _load_notes(a: Any, roster: tuple[str, ...]) -> list[str]:
+    """How a cycle's calls land on providers, and what happens when one of them says no."""
+    asked = list(a.analysts or roster or ("technical_analyst",))
+    roles = [*asked, *(["validator"] if a.validators else [])]
+    calls = len(asked) + len(a.validators)
+    on = sorted({a.for_role(role).provider for role in roles})
+    said = [
+        f"models: a full cycle makes about {calls} call(s) within a minute, on {', '.join(on)}; "
+        f"a provider that says wait up to {a.max_retry_wait_s:.0f}s is waited for once, then the "
+        "next link is tried"
+    ]
+    if len(on) == 1 and calls >= 4:
+        said.append(
+            f"models: every role is on {on[0]}; if your tier limits tokens per minute, give the "
+            'validators their own provider with [agents.roles.validator] provider = "..."'
+        )
+    if a.validators:
+        said.append(
+            "models: a declared validator that no model answers "
+            + (
+                "refuses the trade"
+                if a.on_missing_validator == "refuse"
+                else "is left out and the trade goes on"
+            )
+            + " ([agents].on_missing_validator)"
+        )
+    return said
+
+
+def _capital_notes(cfg: Any) -> list[str]:
+    """What venue mode does with capital, said in the order it happens."""
+    mandate = cfg.execution
+    hold = {
+        "timeout": f"after [exit].timeout_bars ({cfg.exit_rule.timeout_bars} bars)",
+        "horizon": "after the analyst's own horizon, capped by [exit].timeout_bars",
+        "none": "never by time; only its stop or take profit closes it",
+    }[mandate.hold_limit]
+    said = [
+        f"capital: {mandate.leverage}x {mandate.margin_mode}, applied at the venue before the "
+        "first order and read back; an order whose estimated liquidation sits inside the stop "
+        f"plus {mandate.liquidation_buffer_bps} bps is refused",
+        "capital: sizing uses the smaller of the account's equity and [run].equity; an order "
+        f"may use at most {mandate.max_margin_share} of the free margin",
+        f"capital: no new entry once equity is down {cfg.limits.daily_loss_limit_bps} bps on the "
+        f"day; at most {cfg.limits.max_orders_per_minute} orders a minute",
+        f"orders: a taker entry is a limit IOC at most {mandate.max_slippage_bps} bps through the "
+        "touch, never a naked market order",
+        f"positions: an open position is closed with a reduce-only order {hold}; the kill switch "
+        "flattens every position before the run stops",
+    ]
+    if mandate.hold_limit == "none":
+        said.append(
+            "positions: hold_limit is none, so a position the market never takes to its stop or "
+            "target stays open, and holds back new entries on correlated instruments"
+        )
+    return said
+
+
+def _size_against_cap(cfg: Any, cap: Decimal, good: list[str], bad: list[str]) -> None:
+    """Two declarations that only meet at the last gate, after a cycle has been paid for.
+
+    Where they stop agreeing is arithmetic, so it is said here instead of at the venue.
+    """
+    run = cfg.run
+    top = max((rung.size_multiple for rung in cfg.conviction.ladder), default=Decimal(1))
+    if run.size_quote is None:
+        if run.size > 0:
+            ceiling = (cap / run.size).quantize(Decimal("0.01"))
+            good.append(
+                f"execution: {run.size} at a price above {ceiling} is more than {cap} of "
+                "notional, and every order would be refused at the venue gate; that is the size "
+                "and the cap talking to each other"
+            )
+        return
+    if run.size_quote > cap:
+        bad.append(
+            f"[run].size_quote {run.size_quote} is above [execution].max_notional {cap}, so every "
+            "order would be refused at the venue gate after the cycle had been paid for"
+        )
+    elif run.size_quote * top > cap:
+        good.append(
+            f"execution: the top rung of the ladder asks for {run.size_quote * top} of notional "
+            f"and the cap is {cap}; orders at that rung are refused at the venue gate"
+        )
+    else:
+        good.append(
+            f"execution: at most {run.size_quote * top} of notional per order on any instrument, "
+            f"inside the cap of {cap}"
+        )
+
+
+def _desk_notes(cfg: Any, bad: list[str]) -> list[str]:
+    """What the whole book may carry at once, and whether that can actually be measured."""
+    desk = cfg.desk
+    if desk.idle:
+        return [
+            "desk: not declared, so nothing bounds the book as a whole; [desk].max_open_risk_bps "
+            "is the sum of what every open position loses at its own stop"
+        ]
+    said = []
+    if desk.max_open_risk_bps is not None:
+        said.append(f"at most {desk.max_open_risk_bps} bps of equity at risk across the book")
+    if desk.max_open_positions is not None:
+        said.append(f"at most {desk.max_open_positions} position(s) open at once")
+    if desk.correlation_above is not None:
+        said.append(
+            f"a candidate moving with an open position at {desk.correlation_above} or above is "
+            "refused by the screen"
+        )
+    if desk.max_open_risk_bps is not None and cfg.limits.max_risk_per_trade_bps is None:
+        bad.append(
+            "[desk].max_open_risk_bps sums what each position risks, and "
+            "[controls].max_risk_per_trade_bps is what puts that figure on a trade; declare it, or "
+            "the sum has nothing to add up"
+        )
+    if desk.correlation_above is not None and cfg.universe.idle:
+        bad.append(
+            "[desk].correlation_above compares one instrument with another and [universe] names "
+            "only one; declare the instruments this desk watches or drop the threshold"
+        )
+    return ["desk: " + "; ".join(said)]
+
+
+def _universe_notes(cfg: Any, bad: list[str]) -> list[str]:
+    """What this desk watches, and what a pass over it will do."""
+    universe = cfg.universe
+    if universe.idle:
+        return [
+            f"universe: not declared, so every cycle is {cfg.run.instrument} from [run]; "
+            "[universe].instruments is where a desk names what else it watches"
+        ]
+    said = [
+        f"universe: {', '.join(universe.instruments)}; a pass looks at each for the price of a "
+        f"data pull and runs {universe.max_per_cycle} of them"
+    ]
+    if universe.max_intents_per_day is not None:
+        said.append(
+            f"universe: at most {universe.max_intents_per_day} intent(s) a day across every "
+            "instrument, counted from what is on disk"
+        )
+    if universe.screener:
+        said.append(
+            "universe: the screener is asked to narrow what the trigger admitted; it cannot add an "
+            "instrument or change the order"
+        )
+    if cfg.trigger.idle:
+        bad.append(
+            "[universe] is declared and [trigger] is not, so every pass would ask the whole roster "
+            "about every instrument; [trigger].min_move_bps is what makes a pass cheap"
+        )
+    return said
+
+
+def _audit_notes(cfg: Any) -> list[str]:
+    """When the auditors are asked without anyone typing the command."""
+    policy = cfg.audit
+    if policy.idle:
+        return [
+            "auditors: asked only by hand (`tra audit`); a provider that stops answering halfway "
+            "through a run will not be looked at until you look"
+        ]
+    said = []
+    if policy.on_alarm:
+        said.append(
+            f"the technical auditor wakes on an alarm, at most once per kind every "
+            f"{policy.alarm_cooldown_s}s"
+        )
+    if policy.quant_every_cycles is not None:
+        said.append(f"the quant auditor runs every {policy.quant_every_cycles} cycles")
+    return ["auditors: " + "; ".join(said) + "; neither one can act on what it finds"]
+
+
+def _spend_notes(cfg: Any) -> list[str]:
+    """What the models may spend, what they are asked to spend it on, and who is counting."""
+    a = cfg.agents
+    if a is None:
+        return []
+    out: list[str] = []
+    ceilings = []
+    if a.token_budget is not None:
+        ceilings.append(f"{a.token_budget} tokens for the whole process")
+    if a.max_calls_per_hour is not None:
+        ceilings.append(f"{a.max_calls_per_hour} calls an hour per role")
+    if a.max_output_tokens is not None:
+        ceilings.append(f"{a.max_output_tokens} output tokens a call")
+    if ceilings:
+        out.append(
+            "spend: capped at " + "; ".join(ceilings) + "; a cycle that reaches a ceiling stops"
+        )
+    else:
+        out.append(
+            "spend: nothing is capped; every call is counted in usage.jsonl, each cycle reports "
+            "what it cost, and the auditors read those records"
+        )
+    if a.effort is None:
+        out.append(
+            "effort: not declared, so each vendor's own default applies; [agents].effort sets it "
+            "for every role and [agents.roles.<role>].effort overrides one"
+        )
+    else:
+        said = [f"{a.effort} for every role"]
+        said += [
+            f"{role} {table['effort']}"
+            for role, table in sorted(a.roles.items())
+            if table.get("effort")
+        ]
+        out.append("effort: " + "; ".join(said))
+    quoted = sorted(m for m, (i, o) in a.pricing.items() if i > 0 or o > 0)
+    if quoted:
+        out.append(
+            f"prices: declared for {', '.join(quoted)}, so the spend is counted in money as well"
+        )
+    else:
+        out.append(
+            "prices: none quoted, so spend is counted in tokens only; put what you were quoted in "
+            "[agents.pricing.<model>] for the money column"
+        )
+    return out
+
+
+def _risk_notes(cfg: Any, bad: list[str]) -> list[str]:
+    """Whether the risk per trade the operator declared can actually be applied to a size."""
+    allowed = cfg.limits.max_risk_per_trade_bps
+    if allowed is None:
+        return [
+            "risk per trade: not declared; the conviction ladder and [controls].max_position are "
+            "all that bound a size"
+        ]
+    if cfg.exit_rule.stop_sigma_frac is None:
+        bad.append(
+            f"[controls].max_risk_per_trade_bps is {allowed} and no stop is declared, so the loss "
+            "at the stop cannot be computed; declare [exit].stop_sigma_frac"
+        )
+        return []
+    if cfg.run.equity is None:
+        bad.append(
+            f"[controls].max_risk_per_trade_bps is {allowed} and [run].equity is not set, so there "
+            "is nothing to measure the loss against"
+        )
+        return []
+    return [
+        f"risk per trade: {allowed} bps of equity at the stop, applied to every size the ladder "
+        "produces and cut to fit rather than sent"
+    ]
+
+
+def _trigger_notes(cfg: Any) -> list[str]:
+    """What a quiet market costs this desk, which is the whole point of the trigger."""
+    trigger = cfg.trigger
+    if trigger.idle:
+        return [
+            "trigger: not declared, so every scheduled cycle pays the whole roster whether or not "
+            "anything moved; [trigger].min_move_bps is what makes a quiet hour cheap"
+        ]
+    said = []
+    if trigger.min_move_bps is not None:
+        said.append(f"{trigger.min_move_bps} bps of movement since the last look")
+    if trigger.max_spread_bps is not None:
+        said.append(f"a book no wider than {trigger.max_spread_bps} bps")
+    if trigger.cooldown_s is not None:
+        said.append(f"{trigger.cooldown_s}s since the last intent")
+    if trigger.widen_after is not None:
+        said.append(f"more movement after {trigger.widen_after} straight refusals")
+    return ["trigger: asks the roster only on " + "; ".join(said)]
 
 
 def data_get(args: argparse.Namespace) -> int:
@@ -2380,7 +3701,7 @@ def data_get(args: argparse.Namespace) -> int:
 def data_pull(args: argparse.Namespace) -> int:
     """One snapshot: walk each declared chain once, write what answered and what did not."""
     from trading_research_agents.data.sources import load_data_config
-    from trading_research_agents.store import CycleDir, cycle_id, take_snapshot
+    from trading_research_agents.store import cycle_id, take_snapshot
 
     _load_env(args)
     cfg = load_data_config(args.data_config)
@@ -2396,7 +3717,10 @@ def data_pull(args: argparse.Namespace) -> int:
     snapshot = take_snapshot(instrument, chains, cycle=cycle, kinds=kinds, options=options)
     out = args.out
     if out is None:
-        out = CycleDir(root=Path("runs") / "cycles", cycle=cycle).make().snapshot
+        # Beside the cycles, not among them: a pull decided nothing, and everything that walks
+        # runs/cycles - the trigger, the desk, the auditors, tra watch - reads only cycles.
+        out = Path("runs") / "pulls" / cycle / "snapshot.json"
+        out.parent.mkdir(parents=True, exist_ok=True)
     snapshot.write(out)
     payload = snapshot.record()
     lines = [f"snapshot {cycle} {instrument}: {len(snapshot.values)} of {len(kinds)} kinds"]
@@ -2653,7 +3977,7 @@ def signals_export(args: argparse.Namespace) -> int:
 def mcp_serve(args: argparse.Namespace) -> int:
     from trading_research_agents.mcp import serve
 
-    serve()
+    serve(getattr(args, "root", None))
     return CLEARED
 
 
@@ -2662,7 +3986,8 @@ def ladder_show(args: argparse.Namespace) -> int:
     lines = [f"tier {ladder.tier.value} {ladder.tier.name}"]
     for h in ladder.history:
         detail = h.get("evidence") or h.get("reason")
-        lines.append(f"  {h['at']} {h['kind']} {h['from']} -> {h['to']}: {detail}")
+        when = str(h["at"])[:19].replace("T", " ")
+        lines.append(f"  {when} UTC  {h['kind']} {h['from']} -> {h['to']}: {detail}")
     emit(
         {"tier": ladder.tier.name, "history": list(ladder.history)},
         args.json,
@@ -2806,6 +4131,8 @@ HANDLERS = {
     ("mandate", "mandate"): show_mandate,
     ("venues", "venues"): show_venues,
     ("audit", "audit"): run_audit_command,
+    ("keys", "keys"): show_keys,
+    ("watch", "watch"): watch_desk,
     ("run", "run"): run_cycle_command,
     ("chain", "floor"): chain_floor,
     ("chain", "observe"): chain_observe,
