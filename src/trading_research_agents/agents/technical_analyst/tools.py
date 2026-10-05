@@ -14,6 +14,7 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
+from itertools import pairwise
 from typing import Any
 
 from trading_research_agents.strategy.core import Bar
@@ -31,6 +32,8 @@ class Features:
     volume_ratio: float | None
     range_ratio: float | None
     position_in_range: float | None
+    net_bps: float | None = None
+    trend_strength: float | None = None
 
     def record(self) -> dict[str, Any]:
         r = {
@@ -46,6 +49,10 @@ class Features:
             "range_ratio": None if self.range_ratio is None else round(self.range_ratio, 3),
             "position_in_range": (
                 None if self.position_in_range is None else round(self.position_in_range, 3)
+            ),
+            "net_bps": None if self.net_bps is None else round(self.net_bps, 2),
+            "trend_strength": (
+                None if self.trend_strength is None else round(self.trend_strength, 3)
             ),
         }
 
@@ -92,4 +99,19 @@ def features(window: Sequence[Bar]) -> Features | None:
         volume_ratio=volume_ratio,
         range_ratio=range_ratio,
         position_in_range=position,
+        net_bps=(last / closes[0] - 1) * 1e4 if closes[0] > 0 else None,
+        trend_strength=trend_strength(closes),
     )
+
+
+def trend_strength(closes: Sequence[float]) -> float | None:
+    """Net move against the path walked, scaled by the square root of the steps.
+
+    The efficiency ratio alone shrinks as a window grows, so a fixed threshold would mean one thing
+    on 20 bars and another on 240. Times sqrt(steps), a random walk sits near 1 on any window.
+    """
+    steps = [b - a for a, b in pairwise(closes)]
+    walked = sum(abs(x) for x in steps)
+    if len(steps) < 2 or walked <= 0:
+        return None
+    return abs(closes[-1] - closes[0]) / walked * math.sqrt(len(steps))
