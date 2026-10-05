@@ -16,10 +16,10 @@ code, tested and failing closed, and a role acts through them, not around them.
 |---|---|---|---|
 | `market_screener` | in a cycle, one live snapshot per instrument in the universe; in a session, the data gate, the envelope and the cost floor | nothing; it may only take an instrument out of a list code already admitted | once per pass, or once per session |
 | `technical_analyst` | the recorded trades and bars, the registered mechanism | a `Signal`, as the decision core of a run: a direction, a setup named from a closed list, and the figures it read | once per closed bar, within its budget |
-| `macro_analyst` | series the operator mapped in (events, cross-venue funding, sentiment) | nothing | once per session, when series are given |
-| `onchain_analyst` | on-chain series the operator mapped in | nothing | once per session, when series are given |
+| `macro_analyst` | series the operator mapped in (events, cross-venue funding, sentiment) | nothing | every cycle in `tra run`; once per session in a session, when series are given |
+| `onchain_analyst` | on-chain series the operator mapped in | nothing | every cycle in `tra run`; once per session in a session, when series are given |
 | `sentiment_analyst` | dated scores and dated notes the operator curates, through the same series engine | `negative`, `neutral`, `positive`, or `not declared` when nothing was mapped in | reads only; nothing is scraped |
-| `validator` | `figures_of`, `checked` over the brief the deciding analyst was given | one stance (pro, contra, neutral): the proposal, the figures it was built from, the declared states, and what the round trip costs; every claim it makes has to cite one of those figures with its value, and code discards the ones that do not |
+| `validator` | `figures_of`, `checked` over the brief the deciding analyst was given | one stance (pro, contra, neutral): the proposal, the figures it was built from, the declared states, and what the round trip costs; every claim it makes has to cite one of those figures with its value, and code discards the ones that do not | once per cycle, when `[agents].validators` is set |
 | `risk_manager` | the limits, the canary caps, the ladder, measured against declared latency, net against the registration | `tighten_limits`, `demote`, `arm_kill_switch` | after the runs, never inside one |
 | `executor` | the venue, the rate limits, the allocation across instruments | an allocation, fractions summing to at most one | after the risk decision |
 | `auditor` | the ledger, every run, `usage.jsonl`, the ladder | `audit.json` | last |
@@ -117,7 +117,7 @@ A role does not start from a blank prompt. Code computes the figures first and t
 a brief with the basis of every number in it: measured on the operator's data with a sample
 size, or declared by the operator and labelled as such.
 
-| Role | Tools (`agent/<role>/tools.py`) | What the brief carries |
+| Role | Tools (`agents/<role>/tools.py`) | What the brief carries |
 |---|---|---|
 | `market_screener` | `screen_figures` | per instrument: rows, print rate, realised volatility, first-lag autocorrelation, the 1:10 variance ratio, largest gap, last-hour volume against the average, turnover, the cost floor for the claimed edge, and a regime the code proposes from a written rule (`[agents.screen]` sets the two thresholds: `min_prints_per_minute`, `volatile_above_bps`) |
 | `technical_analyst` | `features` | on each closed bar: returns over 1, 5 and 20 bars, the close as a z-score of the window, the gap to VWAP, the last bar's volume and range against the window's, the position between the window's high and low, the net move and trend strength with the regime they give; the same on each higher timeframe in `[run].context_intervals`; the book imbalance, the open interest change since the last snapshot, and the declared state of the other series (see [the cycle](cycle.md#the-market-around-the-decision)) |
@@ -287,7 +287,7 @@ The short version for anyone reviewing this before putting money behind it:
 | Tools | None in a cycle. In a session the auditor gets five read tools in a loop capped at six steps; every path a model writes has to resolve inside the project, the session or the ladder's directory, and hidden files (`.env`, `.git`, `.tra-history`) are never readable. The MCP server applies the same fence to whatever host calls it (`tra mcp serve --root`). | `agents/react.py`, `surface/confine.py` |
 | Orchestration | A fixed pipeline with one parallel round (analysts) and one optional second round (validators). No graph to configure, no role calling another, no loop that a model controls. | `agents/cycle.py`, `agents/parallel.py` |
 | Spend | Every call is a line in `usage.jsonl`. Declared ceilings (`token_budget`, `max_calls_per_hour`, `min_interval_s`) apply to the whole desk in one run, not to each role. | `llm/usage.py` |
-| Credentials | Keys come from the environment only. A vendor or venue error is scrubbed of any credential this process holds before it goes into a record or a brief. | `llm/completer.py`, `trading/dispatch.py` |
+| Credentials | Keys come from the environment: the shell, an `--env-file` you name, or the `.env` beside `strategy.toml`; never from a config file. A vendor or venue error is scrubbed of any credential this process holds before it goes into a record or a brief. | `llm/completer.py`, `trading/dispatch.py` |
 | Text from outside | Headlines, notes, vendor messages and another role's reason reach some briefs as material to read. The prompts say so, and more to the point, none of those roles decides: the gates read the operator's declared states and measured figures. The role that proposes a direction reads numbers only. | `agents/prompts/` |
 | Orders | No role can place, cancel or modify one. Only the venue hand sends, after every gate, under a signed mandate. | `trading/dispatch.py`, `docs/cycle.md` |
 

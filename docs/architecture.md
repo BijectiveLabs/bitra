@@ -22,10 +22,12 @@ trading_research_agents/
   trading/     feeds (live plugins in trading/feeds), simulated venue, live
                venue plugins in trading/venues, controls, canary caps, ladder,
                the runtime                                                     -> everything above
-  surface/     the gates as callable tools: seven reads, three tightening
-               actions; shared by mcp and agent                                 -> everything above
-  agent/       the research roles at layers 0, 2 and 3; the seven session roles;
-               the technical analyst as a decision core; providers; usage       -> everything above, surface
+  llm/         language-model providers, fallback chains, usage ledger        depends on nothing
+  store/       snapshots and cycle directories                                  -> everything above, llm
+  surface/     the gates as callable tools, read tools and tightening actions
+               (listed in docs/mcp.md); shared by mcp and agents                -> everything above
+  agents/      the research roles at layers 0, 2 and 3; the session roles; the
+               cycle and its analysts, validators and screener                  -> everything above, llm, store, surface
   mcp/         the gates as MCP tools                                            -> everything except agent
   cli/         the `tra` command                                                 -> everything
 ```
@@ -35,7 +37,7 @@ Rules, each enforced by a test in `tests/test_boundaries.py`:
 1. `ledger` and `envelope` import nothing else from this project. They are vocabulary.
 2. Arrows point only downward through the list. `chain` does not know `execution` exists; layer 5
    takes the cost of a trade as a function argument, and `execution` supplies one.
-3. Only `agent` imports a language-model client. Layers 0, 1, 4, 5 and 7 are arithmetic and
+3. Only `llm/providers` imports a vendor SDK. Layers 0, 1, 4, 5 and 7 are arithmetic and
    statistics and have no path to a model.
 4. Source files are ASCII.
 5. No class in the package implements `Strategy` or `FittedCore`. Decision cores live in

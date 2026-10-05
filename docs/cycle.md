@@ -290,10 +290,9 @@ A role can run on its own model. `[agents.roles.<role>]` overrides the provider,
 output cap, the timeout and the retries for that role alone, and anything it does not override it
 inherits. That is how a cheap model labels a regime while a stronger one reasons over the bars.
 
-In this build the context is recorded and reported; it does not yet gate anything, so a reading
-analyst that fails leaves a line in `cycle.json` and the cycle carries on. The confluence matrix
-that makes the context binding is the next unit, and when it lands a missing state will refuse
-rather than be treated as neutral: a state nobody produced is not a neutral state.
+A reading analyst whose model fails leaves a line in `cycle.json` and the cycle carries on. Its
+declared state is code over your thresholds, so it still counts in the confluence matrix and in
+conviction; only the model's label is lost.
 
 ## Where a direction came from
 
@@ -732,9 +731,10 @@ Venue mode does not start until all of this is true, and `tra check` names whate
 3. `[execution].max_notional` caps one order. There is no default.
 4. The ladder stands at `CANARY`, promoted with evidence and a signature.
 5. `[canary]` limits are declared.
-6. The venue's keys are in the environment. They are read by the execution layer alone, never from
-   a file, and they never appear in a brief, a prompt, a record or a log.
-7. `[live].environment` says which of the venue's environments an order goes to: `demo`, `testnet`
+6. The venue's keys are in the environment: the shell, an `--env-file` you name, or the `.env`
+   beside `strategy.toml`, never `strategy.toml` itself. They are read by the execution layer alone,
+   and they never appear in a brief, a prompt, a record or a log.
+7. `[live].environment` (`demo` when `[live]` is absent) says which of the venue's environments an order goes to: `demo`, `testnet`
    or `mainnet`. These are three different places with three different accounts, and a key for one
    is rejected by the others. A cycle that cannot route to the environment it was told refuses
    rather than sending somewhere close.
@@ -764,12 +764,12 @@ is `<entry>-<exit>`, each `maker` or `taker`:
 
 | Channel entry | What is sent | If it does not fill |
 |---|---|---|
-| `taker` | a market order, crossing the book at once | it does |
+| `taker` | a limit IOC at most `[execution].max_slippage_bps` through the touch, crossing the book at once | what did not fill inside the band is cancelled, never chased |
 | `maker` | a post-only limit at this snapshot's own touch, offset by `price_offset_bps` | cancelled after `limit_timeout_s`; nothing is chased across the spread |
 | anything else | nothing | venue mode refuses: the fee you priced depends on the answer |
 
 That is not a style preference. A channel named `maker-taker` was priced at the maker fee, and
-sending a market order under it would pay a fee the gate never priced.
+sending a taker order under it would pay a fee the gate never priced.
 
 Three habits make this auditable after a failure, which is the only time it matters. Every order
 carries a client id derived from the cycle and the instrument, so the same cycle run twice cannot
@@ -824,9 +824,7 @@ open two.
 |---|---|
 | `sandbox` (default) | the intent is written into the cycle; nothing leaves the machine |
 | `signals` | the intent is written for your own executor to act on |
-
-Sending orders to a venue is a separate mode with its own requirements: a signed mandate, keys in
-your environment, a promoted ladder, and an acknowledged disclaimer. It is not in this build.
+| `venue` | the intent is sent to the venue through ccxt, after the checks in [the execution mandate](#the-execution-mandate) |
 
 ## When a cycle refuses
 
@@ -846,5 +844,5 @@ your environment, a promoted ladder, and an acknowledged disclaimer. It is not i
 | `cost: no book in the snapshot` | nothing can be priced without a book, so nothing is |
 | `cost gate: ... is below ... required` | the claim did not clear the cost plus the margin |
 
-The first five stop before any order could exist. The last one is the gate doing the job the
-research programme this package came from was built to do.
+Every refusal on this list stops the cycle before an order exists. The last one is the gate doing
+the job the research programme this package came from was built to do.

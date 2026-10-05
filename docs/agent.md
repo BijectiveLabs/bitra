@@ -1,6 +1,6 @@
 # The agent
 
-An idea in plain language goes in. One of four recorded outcomes comes out. Language models
+An idea in plain language goes in. One of five recorded outcomes comes out. Language models
 are used at exactly three points, and every decision between them is made by code against the
 gates that already exist.
 
@@ -52,8 +52,8 @@ is skipped and the basis is recorded as `declared`.
 
 ## What the models never do
 
-- They do not measure anything. Layers 1, 4, 5, 6 and 7 are data and statistics, and they
-  arrive in later releases as code.
+- They do not measure anything. Layers 1, 4, 5, 6 and 7 are data and statistics, and they are
+  code, not models.
 - They do not change the mechanism after the critic accepted it. The registration draft is
   built around the accepted memo, which is passed in and not re-asked.
 - They do not see a return, a win rate, or a profit target anywhere in a prompt. The prompts
@@ -73,6 +73,7 @@ model providers both share.
 ```
 pip install 'trading-research-agents[anthropic]'   # ANTHROPIC_API_KEY, default model claude-opus-5-5
 pip install 'trading-research-agents[openai]'      # OPENAI_API_KEY, --model required
+pip install 'trading-research-agents[google]'      # GEMINI_API_KEY
 ```
 
 Any server that speaks the OpenAI API (a local model server, a relay, another vendor's
@@ -80,7 +81,7 @@ compatible endpoint) is reached through the openai adapter with `--base-url` or
 `TRA_OPENAI_BASE_URL`; a local server that needs no key gets a placeholder. The URL is https,
 or http on localhost only.
 
-Both adapters request structured output against the role's JSON schema and both results are
+All adapters request structured output against the role's JSON schema and both results are
 still validated by the caller. The Anthropic adapter marks the system prompt for prompt
 caching, since it is the frozen doctrine and never changes between calls. Tests use a
 `FakeCompleter` with scripted responses and never touch the network.

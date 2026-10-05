@@ -16,7 +16,8 @@ Everything a run needs is in `strategy.toml`, commented line by line. `strategie
 trailing_zscore.py` is an example core, not a recommendation; replace it with your own (a
 class with `name` and `on_bar(bar) -> Signal | None`), or make a model the core with
 `agent = "technical_analyst"` and an `[agents]` table (`tra init --agent PROVIDER --model M`
-writes one). Keys go in `.env` (copy `.env.example`) and are read only with `--env-file .env`.
+writes one). Keys go in `.env` (copy `.env.example`); the `.env` beside `strategy.toml` is read on its own, and
+`--env-file` names another one.
 
 The live tier needs `[live]` and `[canary]` in `strategy.toml`, keys in `.env`, and a ladder
 promoted to canary with evidence and your signature:

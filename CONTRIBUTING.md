@@ -54,8 +54,8 @@ should be clearer. Detail belongs in `docs/`.
 **ASCII in source.** Non-ASCII characters are not used in `.py` files. A test checks.
 
 **Direction of dependency.** `ledger` and `envelope` import nothing else from this project.
-Arrows point only downward through the list in `docs/architecture.md`. Only `agent` may talk
-to a language model. A test checks that too.
+Arrows point only downward through the list in `docs/architecture.md`. Only `llm/providers`
+imports a vendor SDK. A test checks that too.
 
 **English, professional register.** Identifiers, docstrings, docs and commit messages.
 

@@ -69,7 +69,8 @@ the venue behaves the way the simulation assumed.
 ## Secrets
 
 Keys come from the environment. `--env-file .env` reads `KEY=VALUE` lines explicitly (the
-environment wins on conflict); nothing is ever read from a file the operator did not name. The
+environment wins on conflict), and the `.env` beside `strategy.toml` is read the same way; keys are
+never read from `strategy.toml` or any other config. The
 adapter's `repr` shows the last four characters of the key and never the secret; no header, no
 signature and no secret appear in any log, in `intents.jsonl`, or in an error message. A trade
 key on the venue should carry ContractTrade Order and Position and nothing else, bound to the
@@ -90,6 +91,6 @@ the cycle refuses rather than sending somewhere close.
 
 ## What is not here
 
-Limit orders and maker channels, the private WebSocket for execution reports, a second live
+In `tra live`: limit orders and maker channels (venue mode in `tra run` has both), the private WebSocket for execution reports, a second live
 venue, and production. Each is a deliberate omission recorded in the changelog; none is a
 missing line of code.

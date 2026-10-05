@@ -6,10 +6,10 @@ operator wrote a mandate, the ladder stands at its canary tier, and every gate i
 first.
 
 The order obeys the channel. A channel named `taker-taker` was priced at the venue's taker fee, so
-its entry crosses the book with a market order; a channel named `maker-taker` was priced at the
-maker fee, so its entry rests on the book as a post-only limit and is cancelled if it has not filled
-by the operator's timeout. A channel whose name does not say is refused rather than guessed, because
-guessing here means paying a fee the gate did not price.
+its entry crosses the book with a limit IOC inside the slippage band; a channel named
+`maker-taker` was priced at the maker fee, so its entry rests on the book as a post-only limit and
+is cancelled if it has not filled by the operator's timeout. A channel whose name does not say is
+refused rather than guessed, because guessing here means paying a fee the gate did not price.
 
 Three habits make this auditable after a failure, which is the only time it matters: every order
 carries a client id derived from the cycle, so the same cycle cannot open two positions; the account

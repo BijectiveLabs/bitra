@@ -34,7 +34,9 @@ from a cycle, and in the mandate that has to clear before it runs at all (`docs/
 The venue hand reads the account before it sends - a position pointing the other way refuses, and an
 account it cannot read refuses too - and that is the whole of its relationship with your account.
 
-Not here: transfers between wallets or sub-accounts, changing leverage or margin mode, creating or
+Leverage and margin mode are applied only as declared in `[execution]`, and read back.
+
+Not here: transfers between wallets or sub-accounts, creating or
 managing sub-accounts, closing positions this project did not open, funding withdrawals, balance
 reconciliation over time, P&L accounting, tax lots, statements. Those are decisions about your
 account rather than about a trade, and software that decides once should not be the thing holding
@@ -86,7 +88,7 @@ has not survived anything. A walk-forward harness ships; a walk-forward *optimis
 ## Scale and shape
 
 Files are the record: cycles, snapshots, briefs, answers, intents, audits. There is no database, no
-message bus and no scheduler in this project. One process runs one instrument's cycle at a time, and
+message bus and no external scheduler or daemon; `tra run --every` is one in-process loop. One process runs one instrument's cycle at a time, and
 the model calls inside it go out together on a small pool of threads. That is a deliberate size: it
 keeps the failure modes countable and the record replayable by anyone with a text editor.
 
