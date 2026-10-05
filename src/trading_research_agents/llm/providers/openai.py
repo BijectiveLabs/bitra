@@ -17,6 +17,16 @@ from typing import Any
 from trading_research_agents.llm.completer import Completion, ProviderError
 
 BASE_URL_ENV = "TRA_OPENAI_BASE_URL"
+# reasoning_effort, as the Chat Completions API takes it. The two levels above high in our own
+# vocabulary have nowhere to go on this API, so they land on high.
+REASONING = {
+    "minimal": "minimal",
+    "low": "low",
+    "medium": "medium",
+    "high": "high",
+    "xhigh": "high",
+    "max": "high",
+}
 
 
 class OpenAICompleter:
@@ -25,10 +35,11 @@ class OpenAICompleter:
         model: str,
         *,
         client: Any = None,
-        max_tokens: int = 4096,
+        max_tokens: int | None = None,
         base_url: str | None = None,
         key_env: str | None = "OPENAI_API_KEY",
         structured: str = "json_schema",
+        effort: str | None = None,
         timeout_s: float = 60.0,
         max_retries: int = 2,
     ) -> None:
@@ -67,6 +78,7 @@ class OpenAICompleter:
         self.base_url = base_url
         self.structured = structured
         self.max_tokens = max_tokens
+        self.effort = None if effort is None else REASONING.get(effort)
         self._client = client
 
     def request(self, *, system: str, user: str, schema: Mapping[str, Any]) -> dict[str, Any]:
@@ -84,15 +96,21 @@ class OpenAICompleter:
                 + "\n\nAnswer with one JSON object matching this schema exactly:\n"
                 + schema_text
             )
-        return {
+        body: dict[str, Any] = {
             "model": self.model,
-            "max_completion_tokens": self.max_tokens,
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
             "response_format": response_format,
         }
+        if self.max_tokens is not None:
+            body["max_completion_tokens"] = self.max_tokens
+        if self.effort is not None:
+            # Only when the operator asked for it: a model with no reasoning to configure rejects
+            # the field outright, and most of the servers behind base_url are those models.
+            body["reasoning_effort"] = self.effort
+        return body
 
     def complete(self, *, system: str, user: str, schema: Mapping[str, Any]) -> Completion:
         try:
@@ -101,7 +119,7 @@ class OpenAICompleter:
             )
         except Exception as exc:
             # A connection drop or a vendor-side error is a failed call, never a crash.
-            raise ProviderError(f"{exc.__class__.__name__}: {exc}") from exc
+            raise ProviderError.from_vendor(exc) from exc
         choice = response.choices[0]
         if getattr(choice.message, "refusal", None):
             raise ProviderError("the model declined the request")

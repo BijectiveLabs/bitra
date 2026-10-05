@@ -12,7 +12,22 @@ from typing import Any
 
 from trading_research_agents.llm.completer import Completion, ProviderError
 
-DEFAULT_MODEL = "claude-opus-5"
+DEFAULT_MODEL = "claude-opus-5-5"
+DEFAULT_EFFORT = "high"
+# This vendor requires max_tokens on every request, so an undeclared cap becomes this number rather
+# than nothing. It is a field the API insists on, not a budget this software is imposing.
+DEFAULT_MAX_TOKENS = 8192
+# Read from the SDK's OutputConfigParam on 2026-09-29: low, medium, high, xhigh, max. Our own
+# vocabulary carries one level this vendor does not take, so it is mapped rather than refused - a
+# fallback chain that dies on a spelling is a chain that does not help on the day it is needed.
+EFFORTS = {
+    "minimal": "low",
+    "low": "low",
+    "medium": "medium",
+    "high": "high",
+    "xhigh": "xhigh",
+    "max": "max",
+}
 
 
 class AnthropicCompleter:
@@ -21,8 +36,8 @@ class AnthropicCompleter:
         model: str = DEFAULT_MODEL,
         *,
         client: Any = None,
-        max_tokens: int = 4096,
-        effort: str = "high",
+        max_tokens: int | None = None,
+        effort: str | None = None,
         timeout_s: float = 60.0,
         max_retries: int = 2,
     ) -> None:
@@ -38,8 +53,8 @@ class AnthropicCompleter:
                 ) from exc
             client = anthropic.Anthropic(timeout=timeout_s, max_retries=max_retries)
         self.model = model
-        self.max_tokens = max_tokens
-        self.effort = effort
+        self.max_tokens = DEFAULT_MAX_TOKENS if max_tokens is None else max_tokens
+        self.effort = DEFAULT_EFFORT if effort is None else EFFORTS.get(effort, DEFAULT_EFFORT)
         self._client = client
 
     def request(self, *, system: str, user: str, schema: Mapping[str, Any]) -> dict[str, Any]:
@@ -60,7 +75,7 @@ class AnthropicCompleter:
                 **self.request(system=system, user=user, schema=schema)
             )
         except Exception as exc:
-            raise ProviderError(f"{exc.__class__.__name__}: {exc}") from exc
+            raise ProviderError.from_vendor(exc) from exc
         if getattr(response, "stop_reason", None) == "refusal":
             raise ProviderError("the model declined the request")
         text = next((b.text for b in response.content if getattr(b, "type", "") == "text"), None)

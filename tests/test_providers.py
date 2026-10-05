@@ -24,7 +24,7 @@ class FakeMessages:
 
 def anthropic_response(text: str, *, stop_reason: str = "end_turn") -> Any:
     return SimpleNamespace(
-        model="claude-opus-5",
+        model="claude-opus-5-5",
         stop_reason=stop_reason,
         content=[SimpleNamespace(type="text", text=text)],
         usage=SimpleNamespace(
@@ -41,7 +41,7 @@ def test_anthropic_request_caches_the_doctrine_and_asks_for_the_schema() -> None
     completer = AnthropicCompleter(client=SimpleNamespace(messages=messages))
     completion = completer.complete(system="DOCTRINE", user="Idea: x", schema=BOUND_SCHEMA)
     sent = messages.kwargs
-    assert sent["model"] == "claude-opus-5"
+    assert sent["model"] == "claude-opus-5-5"
     assert sent["system"][0]["cache_control"] == {"type": "ephemeral"}
     assert sent["system"][0]["text"] == "DOCTRINE"
     assert sent["messages"] == [{"role": "user", "content": "Idea: x"}]
@@ -49,7 +49,7 @@ def test_anthropic_request_caches_the_doctrine_and_asks_for_the_schema() -> None
     assert sent["output_config"]["effort"] == "high"
     assert "thinking" not in sent
     assert completion.text == '{"magnitude_bps": "3.0"}'
-    assert completion.model == "claude-opus-5"
+    assert completion.model == "claude-opus-5-5"
     assert completion.input_tokens == 1000 and completion.output_tokens == 20
 
 
@@ -118,3 +118,42 @@ def test_openai_base_url_reaches_a_compatible_server(monkeypatch: pytest.MonkeyP
     with pytest.raises(ProviderError, match="https"):
         OpenAICompleter("m", client=Client(), base_url="http://example.com/v1")
     assert OpenAICompleter("m", client=Client()).base_url is None
+
+
+def test_effort_is_one_vocabulary_mapped_onto_what_each_vendor_takes() -> None:
+    from trading_research_agents.llm.providers import CallOptions
+    from trading_research_agents.llm.providers.google import GoogleCompleter
+
+    # Anthropic takes low through max, so the one level below that lands on low.
+    request = AnthropicCompleter(client=object(), effort="minimal").request(
+        system="s", user="u", schema=BOUND_SCHEMA
+    )
+    assert request["output_config"]["effort"] == "low"
+    kept = AnthropicCompleter(client=object(), effort="xhigh").request(
+        system="s", user="u", schema=BOUND_SCHEMA
+    )
+    assert kept["output_config"]["effort"] == "xhigh"
+
+    # Gemini takes a thinking level, and only when the operator asked for one.
+    thinking = GoogleCompleter("gemini-x", client=object(), effort="max").request(
+        system="s", user="u", schema=BOUND_SCHEMA
+    )
+    assert thinking["config"]["thinking_config"] == {"thinking_level": "HIGH"}
+    plain = GoogleCompleter("gemini-x", client=object()).request(
+        system="s", user="u", schema=BOUND_SCHEMA
+    )
+    assert "thinking_config" not in plain["config"]
+
+    # Most servers behind base_url reject reasoning_effort outright, so it is sent only on request.
+    asked = OpenAICompleter("gpt-x", client=object(), effort="xhigh").request(
+        system="s", user="u", schema=BOUND_SCHEMA
+    )
+    assert asked["reasoning_effort"] == "high"
+    quiet = OpenAICompleter("gpt-x", client=object()).request(
+        system="s", user="u", schema=BOUND_SCHEMA
+    )
+    assert "reasoning_effort" not in quiet
+
+    assert CallOptions(effort="medium").effort == "medium"
+    with pytest.raises(ValueError, match="effort is one of"):
+        CallOptions(effort="ludicrous")

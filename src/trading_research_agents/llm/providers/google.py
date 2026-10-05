@@ -14,6 +14,17 @@ from typing import Any
 
 from trading_research_agents.llm.completer import Completion, ProviderError
 
+# Read from google-genai 2.23 types.ThinkingLevel on 2026-09-29: MINIMAL, LOW, MEDIUM, HIGH. The two
+# levels above HIGH in our vocabulary have nowhere to go here, so they land on HIGH.
+THINKING = {
+    "minimal": "MINIMAL",
+    "low": "LOW",
+    "medium": "MEDIUM",
+    "high": "HIGH",
+    "xhigh": "HIGH",
+    "max": "HIGH",
+}
+
 
 class GoogleCompleter:
     def __init__(
@@ -21,7 +32,8 @@ class GoogleCompleter:
         model: str,
         *,
         client: Any = None,
-        max_tokens: int = 4096,
+        max_tokens: int | None = None,
+        effort: str | None = None,
         timeout_s: float = 60.0,
         max_retries: int = 2,
     ) -> None:
@@ -44,19 +56,25 @@ class GoogleCompleter:
             )
         self.model = model
         self.max_tokens = max_tokens
+        self.thinking = None if effort is None else THINKING.get(effort)
         self._client = client
 
     def request(self, *, system: str, user: str, schema: Mapping[str, Any]) -> dict[str, Any]:
-        return {
-            "model": self.model,
-            "contents": user,
-            "config": {
-                "system_instruction": system,
-                "max_output_tokens": self.max_tokens,
-                "response_mime_type": "application/json",
-                "response_json_schema": dict(schema),
-            },
+        config: dict[str, Any] = {
+            "system_instruction": system,
+            "response_mime_type": "application/json",
+            "response_json_schema": dict(schema),
+            # No tools are ever handed to a role, and leaving the SDK's automatic function calling
+            # on prints a warning into the operator's terminal on every call.
+            "automatic_function_calling": {"disable": True},
         }
+        if self.max_tokens is not None:
+            config["max_output_tokens"] = self.max_tokens
+        if self.thinking is not None:
+            # Only sent when the operator asked for it: a model that does not think refuses the
+            # field, and inventing a default here would break the models that are fine as they are.
+            config["thinking_config"] = {"thinking_level": self.thinking}
+        return {"model": self.model, "contents": user, "config": config}
 
     def complete(self, *, system: str, user: str, schema: Mapping[str, Any]) -> Completion:
         try:
@@ -64,7 +82,7 @@ class GoogleCompleter:
                 **self.request(system=system, user=user, schema=schema)
             )
         except Exception as exc:
-            raise ProviderError(f"{exc.__class__.__name__}: {exc}") from exc
+            raise ProviderError.from_vendor(exc) from exc
         text = getattr(response, "text", None)
         if not text:
             raise ProviderError("no text in the response")

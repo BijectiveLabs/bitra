@@ -8,32 +8,49 @@ or by calling `register`, and is then a name like any other.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from importlib.metadata import entry_points
 from importlib.util import find_spec
+from typing import Any
 
 from trading_research_agents.llm.completer import Completer
 from trading_research_agents.llm.providers.presets import PRESETS
 
 ENTRY_POINT_GROUP = "trading_research_agents.providers"
+# A readiness check waits a few seconds for an answer, not a minute: it is run by a person.
+PROBE_TIMEOUT_S = 10.0
 
 
 class UnknownProviderError(KeyError):
     """No provider with that name is registered."""
 
 
+# How hard a model is asked to think, in one vocabulary the three vendors are mapped onto. A role
+# that only labels a series does not need what a role reasoning over sixty bars needs, and on a
+# reasoning model that difference is most of the latency and most of the bill.
+EFFORTS = ("minimal", "low", "medium", "high", "xhigh", "max")
+
+
 @dataclass(frozen=True)
 class CallOptions:
-    """What a run declares about each call: the output cap, the timeout, how often to retry."""
+    """What a run declares about each call: the output cap, the timeout, retries, and effort."""
 
-    max_output_tokens: int = 4096
+    # None is the default and means no cap: the vendor's own maximum for the model. A cap that
+    # cuts an answer off halfway costs the call and returns something unusable.
+    max_output_tokens: int | None = None
     timeout_s: float = 60.0
     max_retries: int = 2
+    effort: str | None = None
 
     def __post_init__(self) -> None:
-        if self.max_output_tokens < 1 or self.timeout_s <= 0 or self.max_retries < 0:
-            raise ValueError("call options: a positive output cap and timeout, retries >= 0")
+        if self.max_output_tokens is not None and self.max_output_tokens < 1:
+            raise ValueError("call options: an output cap is positive when it is declared")
+        if self.timeout_s <= 0 or self.max_retries < 0:
+            raise ValueError("call options: a positive timeout, retries >= 0")
+        if self.effort is not None and self.effort not in EFFORTS:
+            raise ValueError(f"effort is one of {list(EFFORTS)}")
 
 
 DEFAULT_OPTIONS = CallOptions()
@@ -53,6 +70,9 @@ class Provider:
     # The SDK this provider talks through, and the extra that installs it. A missing SDK is a
     # thing to say at `tra check`, before a cycle has paid for data and briefs to find out.
     needs: tuple[str, str] = ("", "")
+    # One authenticated call that costs nothing and sends no prompt: the vendor's own model list.
+    # Empty means the key was accepted; anything else is what the vendor said, as it said it.
+    verify: Callable[[str | None, str | None], str] | None = None
 
     @property
     def installed(self) -> bool:
@@ -81,6 +101,7 @@ def _anthropic(
     return AnthropicCompleter(
         model or DEFAULT_MODEL,
         max_tokens=options.max_output_tokens,
+        effort=options.effort,
         timeout_s=options.timeout_s,
         max_retries=options.max_retries,
     )
@@ -98,9 +119,57 @@ def _google(
     return GoogleCompleter(
         model,
         max_tokens=options.max_output_tokens,
+        effort=options.effort,
         timeout_s=options.timeout_s,
         max_retries=options.max_retries,
     )
+
+
+def _verified(build: Callable[[], Any]) -> str:
+    """Run one free authenticated call and say what the vendor said. Never raises."""
+    try:
+        build()
+    except Exception as exc:  # the vendor's own error is the answer, whatever kind it is
+        return f"{exc.__class__.__name__}: {exc}"[:240]
+    return ""
+
+
+def _verify_anthropic(model: str | None, base_url: str | None) -> str:
+    def call() -> Any:
+        import anthropic
+
+        return anthropic.Anthropic(timeout=PROBE_TIMEOUT_S, max_retries=0).models.list(limit=1)
+
+    return _verified(call)
+
+
+def _verify_google(model: str | None, base_url: str | None) -> str:
+    def call() -> Any:
+        from google import genai
+
+        client = genai.Client(http_options={"timeout": int(PROBE_TIMEOUT_S * 1000)})
+        return next(iter(client.models.list()), None)
+
+    return _verified(call)
+
+
+def _verify_compatible(name: str) -> Callable[[str | None, str | None], str]:
+    def verify(model: str | None, base_url: str | None) -> str:
+        def call() -> Any:
+            import openai
+
+            p = PRESETS[name]
+            url = base_url or p.base_url
+            options: dict[str, Any] = {"timeout": PROBE_TIMEOUT_S, "max_retries": 0}
+            if url is not None:
+                options["base_url"] = url
+            key = os.environ.get(p.key_env) if p.key_env else None
+            options["api_key"] = key or "not-needed"
+            return openai.OpenAI(**options).models.list()
+
+        return _verified(call)
+
+    return verify
 
 
 def _compatible(name: str) -> Callable[[str | None, str | None, CallOptions], Completer]:
@@ -121,6 +190,7 @@ def _compatible(name: str) -> Callable[[str | None, str | None, CallOptions], Co
             key_env=p.key_env,
             structured=p.structured,
             max_tokens=options.max_output_tokens,
+            effort=options.effort,
             timeout_s=options.timeout_s,
             max_retries=options.max_retries,
         )
@@ -150,6 +220,7 @@ def _bundled() -> None:
             "",
             _anthropic,
             ("anthropic", "anthropic"),
+            _verify_anthropic,
         )
     )
     register(
@@ -162,6 +233,7 @@ def _bundled() -> None:
             "or GOOGLE_API_KEY",
             _google,
             ("google.genai", "google"),
+            _verify_google,
         )
     )
     for name, p in PRESETS.items():
@@ -175,6 +247,7 @@ def _bundled() -> None:
                 p.note,
                 _compatible(name),
                 ("openai", "openai"),
+                _verify_compatible(name),
             )
         )
 

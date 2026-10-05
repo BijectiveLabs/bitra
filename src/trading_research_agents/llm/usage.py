@@ -1,18 +1,27 @@
-"""Every model call written down, and a budget that ends the session when it is spent.
+"""Every model call written down, and the ceilings an operator may put on top of that.
 
-Token cost is the number that decides whether an agent is worth running on an instrument at
-all, so it is recorded the way fills are: one line per call, appended as it happens, with the
-role, the provider, the model, the tokens, the latency and the price the operator declared.
-The budget refuses before the call, never after: a call that would overrun is not made.
+Token cost is the number that decides whether an agent is worth running on an instrument at all, so
+it is recorded the way fills are: one line per call, appended as it happens, with the role, the
+provider, the model, the tokens, the latency and the price the operator declared.
+
+Counting is the default and capping is not. A role is never cut off mid-thought by a ceiling this
+software chose for it: an answer truncated halfway is a wasted call and a worse decision, not a
+saving. What a desk spends is measured, reported per cycle and read by the auditors, and an operator
+who wants a hard ceiling declares one - `token_budget`, `max_calls_per_hour`, `min_interval_s` -
+knowing that it stops the desk rather than slows it. A budget is checked before each call: once
+the tokens recorded reach it, the next call is not made. What a call will cost is not known until
+it returns, so the last admitted call - or the calls a cycle has in flight at once - can carry the
+total past the figure. The rate ceilings are counted across every role in one run, not per role.
 """
 
 from __future__ import annotations
 
 import json
+import threading
 import time
 from collections import deque
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -44,17 +53,26 @@ class Pricing:
 
 @dataclass(frozen=True)
 class BudgetLimits:
-    token_budget: int
-    max_calls_per_hour: int
-    min_interval_s: int
+    """The ceilings, each one optional. Undeclared means counted and never refused."""
+
+    token_budget: int | None = None
+    max_calls_per_hour: int | None = None
+    min_interval_s: int = 0
     call_timeout_s: int = 60
 
     def __post_init__(self) -> None:
-        for label in ("token_budget", "max_calls_per_hour", "call_timeout_s"):
-            if getattr(self, label) <= 0:
-                raise BudgetError(f"{label} must be positive")
+        for label in ("token_budget", "max_calls_per_hour"):
+            declared = getattr(self, label)
+            if declared is not None and declared <= 0:
+                raise BudgetError(f"{label} is positive when it is declared at all")
+        if self.call_timeout_s <= 0:
+            raise BudgetError("call_timeout_s must be positive")
         if self.min_interval_s < 0:
             raise BudgetError("min_interval_s cannot be negative")
+
+    @property
+    def capped(self) -> bool:
+        return self.token_budget is not None or self.max_calls_per_hour is not None
 
 
 @dataclass(frozen=True)
@@ -94,11 +112,16 @@ class UsageLedger:
         self.path = path
         path.parent.mkdir(parents=True, exist_ok=True)
         self.records: list[UsageRecord] = []
+        # Analysts and validators answer on several threads at once, and an append-mode file on
+        # Windows is not safe against two writers: lines could land inside each other.
+        self._lock = threading.Lock()
 
     def append(self, record: UsageRecord) -> None:
-        self.records.append(record)
-        with self.path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(record.record(), sort_keys=True) + "\n")
+        line = json.dumps(record.record(), sort_keys=True) + "\n"
+        with self._lock:
+            self.records.append(record)
+            with self.path.open("a", encoding="utf-8") as fh:
+                fh.write(line)
 
     @property
     def tokens(self) -> int:
@@ -127,6 +150,19 @@ class UsageLedger:
         return [json.loads(line) for line in path.read_text("utf-8").splitlines() if line.strip()]
 
 
+@dataclass
+class RateWindow:
+    """The calls one run has made, shared by every role in it.
+
+    `max_calls_per_hour` and `min_interval_s` are what the operator allows the desk, not each role:
+    a run with six roles each holding its own window would make six times the calls declared.
+    """
+
+    recent: deque[float] = field(default_factory=deque)
+    last: float | None = None
+    lock: threading.Lock = field(default_factory=threading.Lock)
+
+
 class MeteredCompleter:
     """Wraps any completer: admits by budget, times the call, writes the usage line."""
 
@@ -140,6 +176,7 @@ class MeteredCompleter:
         ledger: UsageLedger,
         pricing: Mapping[str, Pricing] | None = None,
         clock: Callable[[], float] = time.time,
+        window: RateWindow | None = None,
     ) -> None:
         self.inner = inner
         self.role = role
@@ -148,28 +185,33 @@ class MeteredCompleter:
         self.ledger = ledger
         self.pricing = dict(pricing or {})
         self.clock = clock
-        self._recent: deque[float] = deque()
-        self._last: float | None = None
+        self.window = window if window is not None else RateWindow()
 
     def refuse(self, now: float) -> str | None:
-        """Why the next call would not be admitted, or None."""
-        if self.ledger.tokens >= self.limits.token_budget:
-            return f"token budget spent: {self.ledger.tokens} of {self.limits.token_budget}"
-        if self._last is not None and now - self._last < self.limits.min_interval_s:
-            return f"last call {now - self._last:.0f}s ago; minimum {self.limits.min_interval_s}s"
-        while self._recent and now - self._recent[0] >= 3600:
-            self._recent.popleft()
-        if len(self._recent) >= self.limits.max_calls_per_hour:
-            return f"{len(self._recent)} calls this hour; cap {self.limits.max_calls_per_hour}"
+        """Why the next call would not be admitted, or None. Only what the operator declared."""
+        budget = self.limits.token_budget
+        if budget is not None and self.ledger.tokens >= budget:
+            return f"token budget spent: {self.ledger.tokens} of {budget}"
+        seen = self.window
+        if seen.last is not None and now - seen.last < self.limits.min_interval_s:
+            return f"last call {now - seen.last:.0f}s ago; minimum {self.limits.min_interval_s}s"
+        while seen.recent and now - seen.recent[0] >= 3600:
+            seen.recent.popleft()
+        hourly = self.limits.max_calls_per_hour
+        if hourly is not None and len(seen.recent) >= hourly:
+            return f"{len(seen.recent)} calls this hour; cap {hourly}"
         return None
 
     def complete(self, *, system: str, user: str, schema: Mapping[str, Any]) -> Completion:
         now = self.clock()
-        why = self.refuse(now)
-        if why is not None:
-            raise BudgetSpentError(f"{self.role}: {why}")
-        self._recent.append(now)
-        self._last = now
+        # Admitting is one step under the window's lock, so two roles asking at the same instant
+        # cannot both take the last call the hour allows.
+        with self.window.lock:
+            why = self.refuse(now)
+            if why is not None:
+                raise BudgetSpentError(f"{self.role}: {why}")
+            self.window.recent.append(now)
+            self.window.last = now
         started = time.perf_counter()
         try:
             completion = self.inner.complete(system=system, user=user, schema=schema)
