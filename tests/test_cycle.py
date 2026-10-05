@@ -615,6 +615,8 @@ def series_for(tmp_path: Path, name: str, value: str, threshold: str = "") -> Pa
         'unit = "percent"',
         'publish_lag = "0s"',
         'source = "operator export"',
+        # The fixture's dates sit months before the test clock; freshness has its own tests.
+        'max_age = "365d"',
     ]
     if threshold:
         body.append(f"threshold = {threshold}")

@@ -240,4 +240,6 @@ def test_the_example_shelf_is_a_form_nobody_has_filled_in_yet() -> None:
     for path in shelf.glob("*.toml"):
         text = path.read_text(encoding="utf-8")
         assert "[[" not in text.replace("# [[", ""), f"{path.name} declares an entry out of the box"
-        assert "http" not in text, f"{path.name} names an endpoint; the shelf reads files only"
+        # A fetch is shown as a commented example; out of the box nothing reaches a network.
+        live = [line for line in text.splitlines() if line.strip().startswith("fetch")]
+        assert not live, f"{path.name} switches a fetch on out of the box"

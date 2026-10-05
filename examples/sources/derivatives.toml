@@ -6,6 +6,8 @@
 # decides on come through data.toml, from the venue, with their age attached. Keeping them apart is
 # what stops a stale daily file from standing in for a number that has to be fresh.
 
+# A paid derivatives feed is one fetch line, declared as in onchain.toml; macro.toml lists the fields.
+
 # Nothing is switched on yet. Uncomment an entry and put the file where it points; the on-chain
 # analyst reads this class beside onchain.toml.
 

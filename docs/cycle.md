@@ -275,13 +275,19 @@ live numbers a cycle decides on are a different thing, and they come from `data.
 age attached. Keeping them apart is what stops a daily file from standing in for a number that has
 to be fresh.
 
+A file can keep itself current: a `fetch` line refreshes it from FRED, the Crypto Fear & Greed
+Index or any vendor that answers JSON over https, and `tra run` does that before each pass once the
+series' `refresh` interval has passed. Every series also has a `max_age`; a value older than that is
+shown as `stale` and never counted. [Sources](sources.md) covers both.
+
 The three reading analysts go out together with the technical analyst, so the cycle waits for the
 slowest of them and not for the sum of all four. Each one reads through the same series engine as
 `tra agent session`, with the same as-of rule: a value is never used before the moment it was
 published, and the operator's `publish_lag` is what decides that moment.
 
 Two habits are enforced rather than encouraged. Nothing is scraped: an analyst reads the files its
-operator declared, and there is no code path from an agent to the internet. And a role with no
+operator declared, and there is no code path from an agent to the internet; the engine refreshes a
+fetched file, never the model. And a role with no
 source says so; the sentiment analyst answers `not declared` rather than `neutral`, because those
 are different facts and an operator has to be able to tell them apart. A role whose files are all
 unreadable is not asked at all, and the cycle records which files it could not read.
@@ -613,6 +619,20 @@ the price is not - including when the declared price is zero.
 The round trips are counted from the intents the cycles actually wrote today, not from a counter in
 memory: a process that restarts must not forget what it has already done. Every refusal names its
 figure, so "targets: net 4 bps is below the declared minimum 10 bps" is the whole explanation.
+
+The targets panel starts with the trade as most traders read one:
+
+```
+entry              long at about 120.815
+take profit        123.231  (+200.00 bps)
+stop loss          119.607  (-100.00 bps)
+net                +12.81 bps  (edge 25.0000 less cost 12.1900)
+```
+
+The take profit and the stop come from `[exit]`; net is the edge the desk claims (`magnitude_bps`,
+or the measured one) less the round trip the cost gate priced. They are different numbers on
+purpose: the exits say where the position is closed, the edge says what the desk expects to earn on
+average, and the cost says what it pays either way.
 
 ## The cost gate, and what each number is worth
 

@@ -77,6 +77,20 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- Every series a reading analyst reads now has a `max_age` (default 4 days). A value older than
+  that is shown as `stale` and never counted in the declared state, confluence or conviction; a role
+  whose every series is stale is not asked. Seen on the demo desk: macro and sentiment files that
+  had not been updated for nine days were still being weighed as current.
+- `fetch` on a series refreshes its file from FRED (`from = "fred"`, free key), the Crypto Fear &
+  Greed Index (`from = "alternative.me"`) or any https JSON endpoint (`from = "http"`, for paid
+  on-chain and derivatives vendors), merging into the history already there. `tra run` refreshes due
+  series before each pass; `tra sources pull` does it now; `tra sources show` lists every series with
+  where it came from, its last value and its age. `tra check` names the stale ones.
+- The cycle shows a `series read` table (analyst, series, value, as of, age, state, origin), and
+  `cycle.json` keeps it under `series`.
+- The targets panel shows the entry, the take profit and the stop loss as prices with their distance
+  from the entry in bps, and spells out net as the claimed edge less the round-trip cost. The plain
+  output prints an `exits:` line.
 - The technical analyst now sees the market around its decision: the regime on its own timeframe
   (`regime`, `trend_strength`, `net_bps`), the same on higher timeframes declared in
   `[run].context_intervals`, the order book imbalance near the touch, the open interest change

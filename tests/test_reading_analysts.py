@@ -71,6 +71,8 @@ def series_file(tmp_path: Path, name: str, values: list[tuple[str, str]], **extr
         'publish_lag = "0s"',
         'source = "operator export"',
     ]
+    # The fixtures' dates sit months before the test clock; freshness has its own tests.
+    extra.setdefault("max_age", '"365d"')
     for key, value in extra.items():
         lines.append(f"{key} = {value}")
     path = tmp_path / f"{name}.toml"

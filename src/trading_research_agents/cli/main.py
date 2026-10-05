@@ -31,6 +31,7 @@ from trading_research_agents import __version__
 from trading_research_agents.agents import Outcome, RunConfig, propose
 from trading_research_agents.agents.briefs import BriefError
 from trading_research_agents.agents.context import (
+    TEXT_CLASSES,
     ContextError,
     declared_in,
     inspect_shelf,
@@ -566,6 +567,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     audit_cmd.add_argument("--env-file", type=Path, default=None)
     audit_cmd.add_argument("--json", action="store_true")
+
+    sources = top.add_parser(
+        "sources", help="where the macro, on-chain and sentiment figures come from, and how fresh"
+    ).add_subparsers(dest="command", required=True)
+    for name, said in (
+        ("show", "every declared series: where it comes from, its last value and its age"),
+        ("pull", "refresh every series that declares a fetch, now"),
+    ):
+        sub = sources.add_parser(name, help=said)
+        sub.add_argument("--config", type=Path, default=Path("strategy.toml"))
+        sub.add_argument("--env-file", type=Path, default=None)
+        sub.add_argument("--json", action="store_true")
 
     venues_cmd = top.add_parser(
         "venues", help="what a venue can do through ccxt: data, orders, exits, account reads"
@@ -1766,6 +1779,70 @@ def _venue_preflight(cfg: Any, env: Mapping[str, str]) -> Callable[[], Any]:
     return run
 
 
+def _shelf_series(args: argparse.Namespace) -> list[Path]:
+    shelf = declared_in(args.config.resolve().parent)
+    return [path for name, path in sorted(shelf.classes.items()) if name not in TEXT_CLASSES]
+
+
+def sources_show(args: argparse.Namespace) -> int:
+    """Each declared series, so nobody has to take an analyst's word for what it read."""
+    from trading_research_agents.data.pull import describe
+    from trading_research_agents.data.series import load_series_map
+
+    now = datetime.now(UTC)
+    rows = [
+        {"file": str(path.name), **describe(spec, path.resolve().parent, now)}
+        for path in _shelf_series(args)
+        for spec in load_series_map(path)
+    ]
+    lines = []
+    for row in rows:
+        if "error" in row:
+            state = f"unreadable: {row['error']}"
+        else:
+            state = f"last {row['last'][:16]} = {row['value']}, {row['age_h']}h old" + (
+                "" if row["counted"] else f", past max_age {row['max_age']}: not counted"
+            )
+        lines.append(f"{row['series']:<20} {row['from']}; {row['source'] or '-'}; {state}")
+    if not rows:
+        lines.append("no series declared under sources/; the reading analysts are not asked")
+    emit({"series": rows}, args.json, lines)
+    return 0 if all(r.get("counted") for r in rows) else 1
+
+
+def sources_pull(args: argparse.Namespace) -> int:
+    """Refresh every fetched series now, whatever its refresh interval says."""
+    from trading_research_agents.data.pull import PullError, pull
+    from trading_research_agents.data.series import load_series_map
+
+    _load_env(args)
+    rows: list[dict[str, Any]] = []
+    for path in _shelf_series(args):
+        for spec in load_series_map(path):
+            if spec.fetch is None:
+                rows.append({"series": spec.name, "skipped": "kept by hand; no fetch declared"})
+                continue
+            try:
+                got = pull(spec, path.resolve().parent)
+            except PullError as exc:
+                rows.append({"series": spec.name, "error": str(exc)})
+            else:
+                rows.append(
+                    {"series": got.series, "added": got.added, "rows": got.rows, "last": got.last}
+                )
+    lines = [
+        f"{r['series']:<20} "
+        + (
+            f"{r['added']} new, {r['rows']} rows, last {r['last']}"
+            if "added" in r
+            else r.get("skipped") or f"failed: {r['error']}"
+        )
+        for r in rows
+    ]
+    emit({"pulled": rows}, args.json, lines or ["no series declared under sources/"])
+    return 1 if any("error" in r for r in rows) else 0
+
+
 def show_venues(args: argparse.Namespace) -> int:
     """What a venue can actually do, asked of ccxt rather than promised in a README."""
     from trading_research_agents.data.sources.capability import CapabilityError, capability_of
@@ -2302,6 +2379,10 @@ def run_cycle_command(args: argparse.Namespace) -> int:
                         )
                         shutdown.journal(out, "stopped", stopped_by=stop, cycles=ran)
                         return cleared
+                refreshed = _refresh_sources(declared.classes.values())
+                if refreshed and not args.json:
+                    sys.stdout.write("\n".join(refreshed) + "\n")
+                    sys.stdout.flush()
                 chosen, screened = _sweep(
                     cfg, cycle_cfg, args, chains=chains, out=out, ask=completer_for
                 )
@@ -2735,6 +2816,11 @@ def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], l
     data = result.briefs.get("data") or {}
     for kind, value in sorted((data.get("values") or {}).items()):
         lines.append(f"  {kind:<14} {value['source']:<18} age {value['age_s']}s")
+    for row in result.briefs.get("series") or []:
+        lines.append(
+            f"  {row['series']:<14} {row['value']} as of {str(row['observed_at'])[:16]}, "
+            f"{row['age_h']}h old, {row['state']}; {row['origin']}"
+        )
     for role, said in sorted(result.context.items()):
         if role.startswith("validator"):
             continue
@@ -2793,6 +2879,13 @@ def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], l
             f"risk: {risk.risk_bps} bps of equity at the stop against the declared "
             f"{risk.allowed_bps} bps, size {risk.size}"
         )
+    if result.exits:
+        shown = result.exits
+        said = [f"exits: {shown['side']} at about {shown['entry']}"]
+        for label, name in (("take profit", "take"), ("stop loss", "stop")):
+            if f"{name}_price" in shown:
+                said.append(f"{label} {shown[f'{name}_price']} ({shown[f'{name}_bps']} bps)")
+        lines.append(", ".join(said))
     if result.targets is not None:
         met = result.targets
         lines.append(
@@ -2931,6 +3024,11 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
                         "only, so they count as a full +1 or -1 whenever crossed; declare a "
                         "bullish and a bearish line and the score grades how far past it they sit"
                     )
+        fresh, stale = _source_lines(
+            path for name, path in shelf.classes.items() if name not in TEXT_CLASSES
+        )
+        good.extend(fresh)
+        bad.extend(stale)
         if shelf.empty:
             good.append(
                 f"sources: {', '.join(shelf.empty)} on the shelf, nothing declared yet; "
@@ -3310,6 +3408,63 @@ def _gate_lines(
         "provider and the venue itself, sends no prompt and places no order"
     )
     return good, bad
+
+
+def _refresh_sources(declarations: Iterable[Path]) -> list[str]:
+    """Pull every fetched series that is due, before the pass reads it. Never stops the desk."""
+    from trading_research_agents.data.pull import PullError, due, pull
+    from trading_research_agents.data.series import SeriesError, load_series_map
+
+    said: list[str] = []
+    now = datetime.now(UTC)
+    for path in declarations:
+        try:
+            specs = load_series_map(path)
+        except SeriesError:
+            continue
+        base = path.resolve().parent
+        for spec in specs:
+            if not due(spec, base, now):
+                continue
+            try:
+                got = pull(spec, base)
+            except PullError as exc:
+                said.append(
+                    f"sources: {exc}; the file on disk is read as it is, and a value past its "
+                    "max_age is not counted"
+                )
+            else:
+                said.append(f"sources: {got.series} refreshed, {got.added} new, last {got.last}")
+    return said
+
+
+def _source_lines(declarations: Iterable[Path]) -> tuple[list[str], list[str]]:
+    """Per series: where it comes from, the last value, its age, and whether a cycle counts it."""
+    from trading_research_agents.data.pull import describe
+    from trading_research_agents.data.series import SeriesError, load_series_map
+
+    good: list[str] = []
+    stale: list[str] = []
+    now = datetime.now(UTC)
+    for path in declarations:
+        try:
+            specs = load_series_map(path)
+        except SeriesError:
+            continue
+        for spec in specs:
+            seen = describe(spec, path.resolve().parent, now)
+            named = seen["source"] or "no source named"
+            head = f"series {seen['series']}: {seen['from']} ({named})"
+            if "error" in seen:
+                stale.append(f"{head}; {seen['error']}")
+            elif seen["counted"]:
+                good.append(f"{head}; last {seen['last'][:16]}, {seen['age_h']}h old")
+            else:
+                stale.append(
+                    f"{head}; last {seen['last'][:16]}, {seen['age_h']}h old, past max_age "
+                    f"{seen['max_age']}: not counted until it is refreshed"
+                )
+    return good, stale
 
 
 def _one_sided(path: Path) -> list[str]:
@@ -4132,6 +4287,8 @@ HANDLERS = {
     ("check", "check"): check_project,
     ("mandate", "mandate"): show_mandate,
     ("venues", "venues"): show_venues,
+    ("sources", "show"): sources_show,
+    ("sources", "pull"): sources_pull,
     ("audit", "audit"): run_audit_command,
     ("keys", "keys"): show_keys,
     ("watch", "watch"): watch_desk,

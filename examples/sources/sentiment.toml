@@ -8,6 +8,8 @@
 # With nothing declared here, the sentiment analyst answers "not declared" rather than "neutral".
 # Those are different facts and the reports keep them apart.
 
+# Each entry takes the same fields as macro.toml, including max_age, fetch and refresh; see there.
+
 # Nothing is switched on yet. Uncomment an entry, put the file where it points, and the
 # sentiment analyst joins the roster on the next run.
 
@@ -19,5 +21,7 @@
 # value = "value"
 # unit = "index"
 # publish_lag = "0s"
-# source = "your export"
+# source = "alternative.me Crypto Fear & Greed Index"
+# max_age = "2d"                        # a daily index; two days without one is a broken feed
+# fetch = { from = "alternative.me" }
 # threshold = { bullish_above = 60, bearish_below = 25 }

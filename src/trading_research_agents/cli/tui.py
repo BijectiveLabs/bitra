@@ -759,6 +759,23 @@ def cycle_view(record: Mapping[str, Any]) -> Group:
             )
         parts.append(table)
 
+    if record.get("series"):
+        read = Table(box=box.SIMPLE_HEAD, show_edge=False, pad_edge=False, title="series read")
+        for name in ("analyst", "series", "value", "as of", "age h", "state", "from"):
+            read.add_column(name)
+        for row in record["series"]:
+            state = str(row.get("state"))
+            read.add_row(
+                str(row.get("role", "")).removesuffix("_analyst"),
+                str(row.get("series")),
+                str(row.get("value")),
+                str(row.get("observed_at") or "")[:16],
+                str(row.get("age_h")),
+                Text(state, style="yellow" if state in ("stale", "unknown") else ""),
+                f"{row.get('origin')}; {row.get('source') or 'no source named'}",
+            )
+        parts.append(read)
+
     cost = record.get("cost") or {}
     if cost:
         costs = Table(box=box.SIMPLE_HEAD, show_edge=False, pad_edge=False)
@@ -852,20 +869,24 @@ def cycle_view(record: Mapping[str, Any]) -> Group:
         )
 
     met = record.get("targets") or {}
-    if met:
-        style = "green" if met.get("admitted") else "yellow"
+    exits = record.get("exits") or {}
+    if met or exits:
+        style = "green" if met.get("admitted", True) else "yellow"
+        shown: list[tuple[str, Any]] = _exit_rows(exits)
+        if met:
+            shown.extend(
+                [
+                    ("net", _net(met.get("net_bps"), record.get("cost") or {})),
+                    ("edge over cost", _multiple(met.get("edge_multiple"))),
+                    ("reward to risk", met.get("reward_risk")),
+                    ("research", _research(met.get("research_bps"))),
+                    ("round trips today", met.get("round_trips_today")),
+                ]
+            )
         parts.append(
             Panel(
-                _kv(
-                    [
-                        ("net", None if met.get("net_bps") is None else _bps(met["net_bps"])),
-                        ("edge over cost", _multiple(met.get("edge_multiple"))),
-                        ("reward to risk", met.get("reward_risk")),
-                        ("research", _research(met.get("research_bps"))),
-                        ("round trips today", met.get("round_trips_today")),
-                    ]
-                ),
-                title=Text("targets", style=style),
+                _kv(shown),
+                title=Text("targets" if met else "exits", style=style),
                 box=box.ROUNDED,
                 expand=False,
             )
@@ -883,6 +904,28 @@ def cycle_view(record: Mapping[str, Any]) -> Group:
             who.add_row(str(row.get("agent")), Text(state, style=style), str(row.get("seconds")))
         parts.append(who)
     return Group(*parts)
+
+
+def _exit_rows(exits: dict[str, Any]) -> list[tuple[str, Any]]:
+    """Entry, take profit and stop loss as prices, each with its distance from the entry."""
+    if not exits:
+        return []
+    rows: list[tuple[str, Any]] = [("entry", f"{exits.get('side')} at about {exits.get('entry')}")]
+    for label, name in (("take profit", "take"), ("stop loss", "stop")):
+        if exits.get(f"{name}_price") is not None:
+            moved = _bps(exits[f"{name}_bps"])
+            rows.append((label, Text.assemble(f"{exits[f'{name}_price']}  (", moved, ")")))
+    return rows
+
+
+def _net(net: Any, cost: dict[str, Any]) -> Any:
+    """Net with the arithmetic behind it: the claimed edge less the round trip."""
+    if net is None:
+        return None
+    edge, trip = cost.get("edge_bps"), (cost.get("cost") or {}).get("round_trip_bps")
+    if edge is None or trip is None:
+        return _bps(net)
+    return Text.assemble(_bps(net), f"  (edge {edge} less cost {trip})")
 
 
 def _multiple(value: Any) -> Any:

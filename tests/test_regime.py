@@ -234,3 +234,27 @@ def test_the_live_table_lists_capital_and_regime_where_they_happen(
     assert steps.index("regime") < steps.index("technical")
     plain, _, _ = cycle_config(tmp_path / "plain", envelope, [analyst_answer()])
     assert "capital" not in _cycle_steps(plain)
+
+
+def test_the_exits_travel_as_prices_and_distances_for_the_panel(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    from rich.console import Console
+
+    from trading_research_agents.cli.tui import cycle_view
+
+    cfg, _, _ = cycle_config(
+        tmp_path,
+        envelope,
+        [analyst_answer()],
+        stop_frac=Decimal("0.01"),
+        take_frac=Decimal("0.02"),
+    )
+    result = run_cycle(cfg)
+    exits = result.record()["exits"]
+    assert exits["side"] == "long"
+    assert exits["stop_bps"] == "-100.00" and exits["take_bps"] == "200.00"
+    console = Console(record=True, width=160)
+    console.print(cycle_view(result.record()))
+    shown = console.export_text()
+    assert "take profit" in shown and "stop loss" in shown and "+200.00 bps" in shown

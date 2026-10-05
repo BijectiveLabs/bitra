@@ -234,6 +234,8 @@ tra agent session --macro series.toml --events events.json --onchain onchain.tom
 A session takes its maps as paths, one flag at a time. A cycle (`tra run`) reads the shelf instead:
 `sources/<class>.toml` beside the config, one file per class of data, described in
 [the cycle](cycle.md). Same engine, same as-of rule, different way of saying what the desk has.
+Fetching those files, and the `max_age` that keeps an old value from counting, are in
+[sources](sources.md).
 
 ## Cost and latency as numbers
 

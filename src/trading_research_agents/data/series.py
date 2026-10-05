@@ -16,7 +16,7 @@ import json
 import math
 import tomllib
 from bisect import bisect_right
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 NS_PER_S = 1_000_000_000
+DEFAULT_MAX_AGE = timedelta(days=4)
 TIME_UNITS = {"s": 1_000_000_000, "ms": 1_000_000, "us": 1_000, "ns": 1}
 
 
@@ -128,6 +129,12 @@ class SeriesSpec:
     threshold: Threshold
     has_header: bool = True
     delimiter: str = ","
+    # A value older than this, measured from the moment it describes, is reported and not counted.
+    max_age: timedelta = DEFAULT_MAX_AGE
+    # Where `tra sources pull` and `tra run` refresh the file from, and how often. None: the
+    # operator keeps the file up to date by hand, and max_age is what keeps them honest.
+    fetch: Mapping[str, Any] | None = None
+    refresh: timedelta = timedelta(hours=1)
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -136,6 +143,8 @@ class SeriesSpec:
             raise SeriesError(f"{self.name}: ts_unit is s, ms, us, ns or iso8601")
         if self.publish_lag < timedelta(0):
             raise SeriesError(f"{self.name}: publish_lag cannot be negative")
+        if self.max_age <= timedelta(0) or self.refresh <= timedelta(0):
+            raise SeriesError(f"{self.name}: max_age and refresh are positive")
 
 
 @dataclass(frozen=True)
@@ -185,11 +194,11 @@ class Measurement:
 # ---------------------------------------------------------------- loading
 
 
-def _duration(text: str) -> timedelta:
+def _duration(text: str, key: str = "publish_lag") -> timedelta:
     text = text.strip()
     units = {"s": "seconds", "m": "minutes", "h": "hours", "d": "days"}
     if not text or text[-1] not in units or not text[:-1].isdigit():
-        raise SeriesError(f"publish_lag {text!r} is a number followed by s, m, h or d")
+        raise SeriesError(f"{key} {text!r} is a number followed by s, m, h or d")
     return timedelta(**{units[text[-1]]: int(text[:-1])})
 
 
@@ -235,6 +244,13 @@ def load_series_map(path: Path) -> tuple[SeriesSpec, ...]:
                     threshold=_threshold(entry.get("threshold") or {}, name),
                     has_header=bool(entry.get("has_header", True)),
                     delimiter=str(entry.get("delimiter", ",")),
+                    max_age=(
+                        _duration(str(entry["max_age"]), "max_age")
+                        if "max_age" in entry
+                        else DEFAULT_MAX_AGE
+                    ),
+                    fetch=_fetch(entry.get("fetch"), name),
+                    refresh=_duration(str(entry.get("refresh", "1h")), "refresh"),
                 )
             )
         except (TypeError, ValueError) as exc:
@@ -242,6 +258,16 @@ def load_series_map(path: Path) -> tuple[SeriesSpec, ...]:
     if not all(s.file for s in specs):
         raise SeriesError(f"{path}: every series names its file")
     return tuple(specs)
+
+
+def _fetch(raw: Any, name: str) -> Mapping[str, Any] | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict) or not str(raw.get("from", "")).strip():
+        raise SeriesError(
+            f'{name}: fetch is a table naming where from, such as {{ from = "fred" }}'
+        )
+    return dict(raw)
 
 
 def _ts_ns(text: str, unit: str) -> int:
@@ -379,13 +405,32 @@ def threshold_state(series: Series, at_ns: int) -> dict[str, Any]:
     spec = series.spec
     if point is None:
         return {"series": spec.name, "state": "unknown", "value": None, "known_since": None}
+    age = timedelta(seconds=(at_ns - point.observed_ns) / NS_PER_S)
+    origin = f"fetched from {spec.fetch['from']}" if spec.fetch else "a file kept by hand"
+    observed = datetime.fromtimestamp(point.observed_ns / NS_PER_S, tz=UTC).isoformat()
+    if age > spec.max_age:
+        # An old reading counted as today's is a made-up reading. It is shown, so the operator
+        # sees the file has gone stale, and it is never a state anyone weighs.
+        return {
+            "series": spec.name,
+            "unit": spec.unit,
+            "value": str(point.value),
+            "observed_at": observed,
+            "origin": origin,
+            "age_h": round(age.total_seconds() / 3600, 1),
+            "max_age": _span(spec.max_age),
+            "state": "stale",
+            "stale": True,
+        }
     state = spec.threshold.state(point.value) if spec.threshold.declared else "undeclared"
     return {
         "series": spec.name,
         "unit": spec.unit,
         "value": str(point.value),
-        "observed_at": datetime.fromtimestamp(point.observed_ns / NS_PER_S, tz=UTC).isoformat(),
+        "observed_at": observed,
         "known_since": datetime.fromtimestamp(point.published_ns / NS_PER_S, tz=UTC).isoformat(),
+        "origin": origin,
+        "age_h": round(age.total_seconds() / 3600, 1),
         "state": state,
         "basis": "operator-declared threshold"
         if spec.threshold.declared
@@ -406,6 +451,14 @@ def threshold_state(series: Series, at_ns: int) -> dict[str, Any]:
             else {}
         ),
     }
+
+
+def _span(delta: timedelta) -> str:
+    seconds = int(delta.total_seconds())
+    for size, unit in ((86_400, "d"), (3_600, "h"), (60, "m")):
+        if seconds % size == 0:
+            return f"{seconds // size}{unit}"
+    return f"{seconds}s"
 
 
 def zscore(series: Series, at_ns: int, *, window_points: int) -> Measurement:

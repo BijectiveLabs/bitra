@@ -9,6 +9,10 @@
 # publish_lag matters more here than anywhere else: chain aggregates are usually published hours
 # after the blocks they describe, and a figure used before it was knowable is a look-ahead.
 
+# A paid subscription is one fetch line: { from = "http", url = "https://...", ... } with the path,
+# the field names and the key's place taken from your vendor's docs (macro.toml lists the fields).
+# Set max_age to what the vendor actually delivers, so a feed that stops is noticed, not trusted.
+
 # Nothing is switched on yet. Uncomment an entry, put the file where it points, and the on-chain
 # analyst joins the roster on the next run. Left as it is, that role is not asked at all.
 

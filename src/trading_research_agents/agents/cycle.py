@@ -286,6 +286,8 @@ class CycleResult:
     # What this cycle saw for free, and what the trigger made of it. The mid is written down even on
     # a cycle that asked nobody, because the next cycle measures its move against it.
     seen: dict[str, Any] = field(default_factory=dict)
+    # Where the entry, the stop and the take profit sit, as prices and as distances from the entry.
+    exits: dict[str, str] = field(default_factory=dict)
     wake: Wake | None = None
     held: bool = False
 
@@ -318,6 +320,9 @@ class CycleResult:
             "refusals": self.refusals,
             "stopped_by": self.stopped_by,
             "seen": self.seen,
+            # Every series a reading analyst was handed: where from, the value, and how old.
+            "series": self.briefs.get("series"),
+            "exits": self.exits or None,
             "trigger": None if self.wake is None else self.wake.record(),
             "held": self.held,
             "mode": self.briefs.get("mode"),
@@ -686,6 +691,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         size = stake.size
 
     exits = _exits(cfg, costs.cost.mid, analyst.target)
+    result.exits = _exit_view(costs.cost.mid, analyst.target, exits)
     stop_at = exits.get("stop_price")
     if cfg.max_risk_per_trade_bps is not None and stop_at is None:
         # A declared risk limit that cannot be computed is not a limit. Fail closed and say which
@@ -975,10 +981,36 @@ def _reading_brief(
         result.refusals.append(f"{role}: nothing readable in {[p.name for p in files]}; not asked")
         return None
     try:
-        return context_brief(role, snapshot, series=series, events=calendar)
+        brief = context_brief(role, snapshot, series=series, events=calendar)
     except BriefError as exc:
         result.refusals.append(f"{role}: {exc}")
         return None
+    rows = list(brief.get("series") or [])
+    result.briefs.setdefault("series", []).extend(
+        {
+            "role": role,
+            "series": row.get("series"),
+            "source": row.get("source"),
+            "origin": row.get("origin"),
+            "value": row.get("value"),
+            "observed_at": row.get("observed_at"),
+            "age_h": row.get("age_h"),
+            "state": row.get("state"),
+        }
+        for row in rows
+    )
+    old = [row for row in rows if row.get("stale")]
+    for row in old:
+        result.refusals.append(
+            f"{role} {row['series']}: last value {str(row['observed_at'])[:16]}, "
+            f"{row['age_h']}h old, past max_age {row['max_age']}; shown, not counted"
+        )
+    if rows and len(old) == len(rows) and not (brief.get("events") or brief.get("notes")):
+        # Every figure this role would read is out of date; paying a model to read them would buy
+        # a label nothing can count.
+        result.refusals.append(f"{role}: every series is past its max_age; not asked")
+        return None
+    return brief
 
 
 def _reading_task(cfg: CycleConfig, module: Any, brief: dict[str, Any]) -> Callable[[], str]:
@@ -1194,6 +1226,18 @@ def _exits(cfg: CycleConfig, mid: Decimal, target: str) -> dict[str, str]:
         out["stop_price"] = str((mid * (Decimal(1) - away * cfg.stop_frac)).quantize(mid))
     if cfg.take_frac is not None:
         out["take_price"] = str((mid * (Decimal(1) + away * cfg.take_frac)).quantize(mid))
+    return out
+
+
+def _exit_view(mid: Decimal, target: str, exits: Mapping[str, str]) -> dict[str, str]:
+    """The exits as a person reads them: a price and how far it is from the entry, signed."""
+    out = {"side": target, "entry": str(mid)}
+    for name in ("stop", "take"):
+        price = exits.get(f"{name}_price")
+        if price is None or mid <= 0:
+            continue
+        out[f"{name}_price"] = price
+        out[f"{name}_bps"] = str(((Decimal(price) / mid - 1) * 10_000).quantize(Decimal("0.01")))
     return out
 
 

@@ -192,6 +192,12 @@ Who does what:
 | validators (pro, contra, neutral) | the proposal and the figures behind it | support, oppose or abstain, with cited claims | cite a figure it wasn't given |
 | technology and quant auditors | the cycles this desk recorded | findings and proposed changes | change anything |
 
+The macro, on-chain and sentiment analysts read dated series you declare under `sources/`. Each one
+is either a file you keep or a feed the desk refreshes itself (FRED, the Crypto Fear & Greed Index,
+or any paid vendor that answers JSON over https). `tra sources show` lists every series with where it
+came from and how old its last value is, and a value older than its `max_age` is shown as stale and
+never counted. [docs/sources.md](docs/sources.md) has the details.
+
 Analysts are allowed to disagree. Each one's view becomes a score between -1 and 1, computed from
 its own figures against the lines you drew, so a macro reading barely past its line counts as a small
 voice and one far past it counts as a big one. Conviction adds them up: agreement grows the size,
@@ -432,6 +438,7 @@ instead:
 |---|---|
 | `docs/cycle.md` | the cycle step by step, and every setting that shapes it |
 | `docs/agents.md` | each role, what it reads, and what an agent can and cannot reach |
+| `docs/sources.md` | where the macro, on-chain and sentiment figures come from, fetching them, and freshness |
 | `docs/capital.md` | equity, margin, leverage, liquidation, daily loss, time exits, the kill switch, and the records they leave |
 | `docs/venues.md` | which venues work, and adding yours |
 | `docs/llm.md`, `docs/providers.md` | how models are used: fallback, spend, adding a provider |
