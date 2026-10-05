@@ -15,6 +15,8 @@ import sys
 from collections.abc import Callable, Mapping, Sequence
 from decimal import Decimal
 from importlib.resources import files
+from threading import Lock
+from time import monotonic, sleep
 from types import TracebackType
 from typing import Any
 
@@ -22,6 +24,7 @@ from rich import box
 from rich.console import Console, Group
 from rich.live import Live
 from rich.panel import Panel
+from rich.spinner import Spinner
 from rich.table import Table
 from rich.text import Text
 
@@ -58,7 +61,9 @@ def console(safe: bool = False) -> Console:
     if safe:
         return _safe_console()
     if _console is None:
-        _console = Console(highlight=False)
+        # No markup: config names such as [run].size_step appear in refusals and would be read as
+        # style tags and silently dropped from the line.
+        _console = Console(highlight=False, markup=False)
     return _console
 
 
@@ -161,7 +166,12 @@ class RunView:
 
     def __enter__(self) -> RunView:
         # Transient: the final panel is printed by the command once the run is over.
-        self.live = Live(Text("starting"), console=console(), refresh_per_second=4, transient=True)
+        self.live = Live(
+            Text("connected; waiting for the first closed bar", style="dim"),
+            console=console(),
+            refresh_per_second=4,
+            transient=True,
+        )
         self.live.__enter__()
         return self
 
@@ -235,6 +245,136 @@ class SessionView:
             table.add_row(step, Text(status, style=styles.get(status, "")), summary)
         table.caption = f"{self.usage.tokens} tokens, cost {self.usage.cost}"
         return table
+
+
+class CycleView:
+    """The steps of a cycle, or of a pass over the universe, as a live table.
+
+    The whole pipeline the operator configured is laid out before anything starts, every step
+    pending, so a terminal is never blank while models think. A running step shows a spinner and
+    its own clock ticking; a finished one shows how it ended and how long it took. The analysts run
+    on threads, so updates arrive from several at once: state changes and redraws share one lock.
+    """
+
+    def __init__(
+        self,
+        usage: Any,
+        steps: Sequence[str],
+        title: str = "cycle",
+        clock: Callable[[], float] = monotonic,
+    ) -> None:
+        self.usage = usage
+        self.title = title
+        self.clock = clock
+        self.order: list[str] = list(steps)
+        self.state: dict[str, tuple[str, str]] = {s: ("pending", "") for s in self.order}
+        self.began = clock()
+        self.since: dict[str, float] = {}
+        self.spinners: dict[str, Spinner] = {}
+        self.live: Live | None = None
+        self._lock = Lock()
+
+    def __enter__(self) -> CycleView:
+        # Redrawn from `table` on every refresh, so a running step's clock moves on its own.
+        # Transient: the command prints the cycle's own panels once it is over.
+        self.live = Live(
+            console=console(),
+            refresh_per_second=8,
+            transient=True,
+            get_renderable=self.frame,
+        )
+        self.live.__enter__()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        if self.live is not None:
+            self.live.__exit__(exc_type, exc, tb)
+
+    def on_step(self, step: Any) -> None:
+        detail = step.detail
+        if step.seconds is not None:
+            detail = f"{detail} ({step.seconds:.1f}s)" if detail else f"{step.seconds:.1f}s"
+        with self._lock:
+            if step.name not in self.state:
+                self.order.append(step.name)
+            self.state[step.name] = (step.state, detail)
+            if step.state == "running":
+                self.since[step.name] = self.clock()
+                self.spinners[step.name] = Spinner("line", style="cyan")
+
+    def table(self) -> Table:
+        with self._lock:
+            rows = [(name, *self.state.get(name, ("pending", ""))) for name in self.order]
+            since = dict(self.since)
+            spinners = dict(self.spinners)
+        now = self.clock()
+        table = Table(
+            box=box.SIMPLE_HEAD,
+            show_edge=False,
+            pad_edge=False,
+            title=self.title,
+        )
+        table.add_column("step")
+        table.add_column("state", width=10)
+        table.add_column("detail")
+        styles = {
+            "done": "green",
+            "refused": "yellow",
+            "failed": "red",
+            "held": "yellow",
+            "skipped": "dim",
+        }
+        for name, state, detail in rows:
+            label = _step_label(name)
+            if state == "running":
+                ticking = f"{now - since.get(name, now):.0f}s"
+                spinner = spinners.get(name) or Spinner("line", style="cyan")
+                spinner.text = Text("running", style="cyan")
+                table.add_row(label, spinner, f"{detail} {ticking}".strip())
+            else:
+                table.add_row(label, Text(state, style=styles.get(state, "dim")), detail)
+        return table
+
+    def status(self) -> str:
+        """One line under the table: how long, who is working right now, what it has cost."""
+        with self._lock:
+            working = [_step_label(n) for n in self.order if self.state[n][0] == "running"]
+        said = [f"{self.clock() - self.began:.0f}s"]
+        if working:
+            said.append(f"working: {', '.join(working)}")
+        said.append(f"{self.usage.tokens} tokens")
+        if self.usage.cost:
+            # Only a declared price makes a cost; without one, a zero would read as free.
+            said.append(f"cost {self.usage.cost}")
+        return " | ".join(said)
+
+    def frame(self) -> Group:
+        return Group(self.table(), Text(self.status(), style="dim"))
+
+
+def _step_label(name: str) -> str:
+    return name.replace("_analyst", "").replace("validator_", "validator ").replace("_", " ")
+
+
+def countdown(seconds: float, *, until: str = "the next cycle") -> None:
+    """Wait, with the time left on screen, so a desk between cycles does not look hung."""
+    deadline = monotonic() + max(0.0, seconds)
+    with Live(console=console(), refresh_per_second=2, transient=True) as live:
+        while True:
+            left = deadline - monotonic()
+            if left <= 0:
+                return
+            minutes, secs = divmod(int(left + 0.999), 60)
+            shown = f"{minutes}m {secs:02d}s" if minutes else f"{secs}s"
+            live.update(
+                Text(f"{until} in {shown}; Ctrl-C stops the desk", style="dim"), refresh=True
+            )
+            sleep(min(1.0, left))
 
 
 def session_report(result: Any, usage: Any, out: str) -> Group:
@@ -385,9 +525,192 @@ def ladder_table(tier: str, history: Sequence[Mapping[str, Any]]) -> Group:
         if h.get("signed_by"):
             detail += f" (signed by {h['signed_by']})"
         table.add_row(
-            str(h.get("at")), str(h.get("kind")), str(h.get("from")), str(h.get("to")), detail
+            str(h.get("at"))[:19].replace("T", " "),
+            str(h.get("kind")),
+            str(h.get("from")),
+            str(h.get("to")),
+            detail,
         )
     return Group(Text(f"tier {tier}", style="bold"), table)
+
+
+def watch_view(record: Mapping[str, Any]) -> Group:
+    """A desk as its own records describe it. Read-only, and it says so."""
+    from trading_research_agents.cli.watch import short_time
+
+    parts: list[Any] = []
+    decisions = Table(box=box.SIMPLE_HEAD, show_edge=False, pad_edge=False, title="decisions")
+    for name, justify in (
+        ("when", "left"),
+        ("instrument", "left"),
+        ("setup", "left"),
+        ("conviction", "right"),
+        ("risk bps", "right"),
+        ("net bps", "right"),
+        ("outcome", "left"),
+        ("detail", "left"),
+    ):
+        decisions.add_column(name, justify=justify)  # type: ignore[arg-type]
+    styles = {
+        "placed": "green",
+        "intent": "green",
+        "refused": "yellow",
+        "held": "dim",
+        "not placed": "red",
+        "stopped": "red",
+    }
+    for row in record.get("decisions") or []:
+        outcome = str(row.get("outcome") or "")
+        decisions.add_row(
+            short_time(str(row.get("at") or "")),
+            str(row.get("instrument") or ""),
+            f"{row.get('target') or ''} {row.get('setup') or ''}".strip(),
+            str(row.get("conviction") or ""),
+            str(row.get("risk_bps") or ""),
+            str(row.get("net_bps") or ""),
+            Text(outcome, style=styles.get(outcome, "")),
+            str(row.get("detail") or "")[:54],
+        )
+    parts.append(decisions)
+
+    screen = record.get("screen") or {}
+    if screen.get("candidates"):
+        chosen = set(screen.get("chosen") or ())
+        row = ", ".join(
+            f"{c['instrument']}{' *' if c['instrument'] in chosen else ''}"
+            for c in screen["candidates"]
+        )
+        parts.append(
+            Text(f"last pass {short_time(str(screen.get('at') or ''))}: {row}", style="dim")
+        )
+
+    book = record.get("book") or []
+    if book:
+        held = Table(box=box.SIMPLE_HEAD, show_edge=False, pad_edge=False, title="the book")
+        for name in ("instrument", "side", "risk bps", "notional"):
+            held.add_column(name)
+        for row in book:
+            held.add_row(
+                str(row.get("instrument") or ""),
+                str(row.get("side") or ""),
+                str(row.get("risk_bps") or "-"),
+                str(row.get("notional") or "-"),
+            )
+        parts.append(held)
+
+    for line in record.get("alarms") or []:
+        parts.append(Text(f"alarm  {line}"[:160], style="yellow"))
+
+    spend = record.get("spend") or {}
+    audits = ", ".join(record.get("audits") or []) or "none"
+    parts.append(
+        Text(
+            f"{spend.get('cycles_read', 0)} cycle(s) in view, {spend.get('tokens_in_view', 0)} "
+            f"tokens; audits: {audits}",
+            style="dim",
+        )
+    )
+    parts.append(
+        Text(
+            f"{record.get('at', '')}  reading {record.get('root', '')} - this view only reads",
+            style="dim",
+        )
+    )
+    return Group(*parts)
+
+
+class WatchView:
+    """The desk redrawn on a timer, from files. It holds nothing a desk could notice."""
+
+    def __init__(self, look: Callable[[], Mapping[str, Any]], every_s: float = 5.0) -> None:
+        self.look = look
+        self.every_s = max(0.5, every_s)
+        self.live: Live | None = None
+
+    def __enter__(self) -> WatchView:
+        self.live = Live(watch_view(self.look()), console=console(), refresh_per_second=2)
+        self.live.__enter__()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        if self.live is not None:
+            self.live.__exit__(exc_type, exc, tb)
+
+    def draw(self) -> None:
+        if self.live is not None:
+            self.live.update(watch_view(self.look()))
+
+
+def keys_table(record: Mapping[str, Any]) -> Table:
+    """Every credential a run would reach. The values are never here; the fingerprints are."""
+    table = Table(box=box.SIMPLE_HEAD, show_edge=False, pad_edge=False, title="credentials")
+    table.add_column("state", width=5)
+    table.add_column("what")
+    table.add_column("held")
+    table.add_column("verdict")
+    for row in record.get("credentials") or []:
+        ready = bool(row.get("ready"))
+        held = ", ".join(
+            f"{name} {fp}"
+            for name, fp in zip(
+                row.get("present") or [], row.get("fingerprints") or [], strict=False
+            )
+        )
+        table.add_row(
+            Text("ok" if ready else "todo", style="green" if ready else "yellow"),
+            str(row.get("what")),
+            held,
+            str(row.get("verdict")),
+        )
+    table.caption = "fingerprints are one-way; no key is printed, logged or returned"
+    return table
+
+
+def screen_view(record: Mapping[str, Any]) -> Group:
+    """One pass over the universe: what was looked at, and what it cost to look (nothing)."""
+    from trading_research_agents.execution.universe import why_no_cycle
+
+    table = Table(box=box.SIMPLE_HEAD, show_edge=False, pad_edge=False, title="the universe")
+    for name, justify in (
+        ("instrument", "left"),
+        ("moved bps", "right"),
+        ("spread bps", "right"),
+        ("range bps", "right"),
+        ("pressure", "right"),
+        ("state", "left"),
+        ("why", "left"),
+    ):
+        table.add_column(name, justify=justify)  # type: ignore[arg-type]
+    chosen = set(record.get("chosen") or ())
+    styles = {"taken": "green", "admitted": "cyan", "held": "yellow"}
+    for row in record.get("candidates") or []:
+        state = (
+            "taken"
+            if row["instrument"] in chosen
+            else ("admitted" if row["admitted"] and row["kept_by_screener"] else "held")
+        )
+        why = row.get("screener_said") or (row.get("reasons") or [""])[0]
+        table.add_row(
+            str(row["instrument"]),
+            _fmt(row.get("moved_bps")),
+            _fmt(row.get("spread_bps")),
+            _fmt(row.get("range_bps")),
+            _fmt(row.get("pressure")),
+            Text(state, style=styles.get(state, "")),
+            str(why)[:60],
+        )
+    table.caption = (
+        f"{len(chosen)} taken; one data pull each and no tokens spent on the rest"
+        if chosen
+        else f"no cycle this pass: {why_no_cycle(record.get('candidates') or [])}; "
+        "no model was asked"
+    )
+    return Group(table)
 
 
 def cycle_view(record: Mapping[str, Any]) -> Group:
@@ -404,10 +727,19 @@ def cycle_view(record: Mapping[str, Any]) -> Group:
         head.append(
             (
                 "technical",
-                f"{analyst.get('target')} at {analyst.get('confidence')} over "
-                f"{analyst.get('horizon_bars')} bars: {analyst.get('reason')}",
+                f"{analyst.get('target')} on {analyst.get('setup')} at "
+                f"{analyst.get('confidence')} over {analyst.get('horizon_bars')} bars: "
+                f"{analyst.get('reason')}",
             )
         )
+    cited = record.get("cited") or []
+    if cited:
+        head.append(
+            ("read", ", ".join(f"{f['figure']}={f['value']}" for f in cited)),
+        )
+    wake = record.get("trigger") or {}
+    if wake and not wake.get("ask"):
+        head.append(("held", Text("; ".join(wake.get("reasons") or []), style="yellow")))
     intent = record.get("intent")
     if intent:
         head.append(("intent", Text(f"{intent['target']} {intent['size']}", style="bold")))
@@ -489,8 +821,10 @@ def cycle_view(record: Mapping[str, Any]) -> Group:
     if stake:
         score = stake.get("score") or {}
         voices: list[tuple[str, Any]] = [("score", f"{score.get('score')} of 1.0")]
+        most = score.get("weights") or {}
         for role, value in (score.get("contributions") or {}).items():
-            voices.append((role.replace("_analyst", ""), value))
+            of = f" of {most[role]}" if role in most else ""
+            voices.append((role.replace("_analyst", ""), f"{value}{of}"))
         voices.append(("size", f"{stake.get('size')} at {stake.get('multiple')}x base"))
         if stake.get("leverage") is not None:
             voices.append(("leverage", f"{stake.get('leverage')}x equity"))
@@ -501,6 +835,22 @@ def cycle_view(record: Mapping[str, Any]) -> Group:
             Panel(_kv(voices), title=Text("conviction", style=style), box=box.ROUNDED, expand=False)
         )
 
+    risk = record.get("risk") or {}
+    if risk and risk.get("risk_bps") is not None:
+        style = "green" if risk.get("admitted") else "yellow"
+        sized: list[tuple[str, Any]] = [
+            ("at the stop", f"{risk.get('risk_bps')} bps of equity"),
+            ("allowed", f"{risk.get('allowed_bps')} bps"),
+            ("size", risk.get("size")),
+        ]
+        for reason in risk.get("reasons") or []:
+            sized.append(("cut", Text(str(reason), style="yellow")))
+        parts.append(
+            Panel(
+                _kv(sized), title=Text("risk per trade", style=style), box=box.ROUNDED, expand=False
+            )
+        )
+
     met = record.get("targets") or {}
     if met:
         style = "green" if met.get("admitted") else "yellow"
@@ -508,8 +858,10 @@ def cycle_view(record: Mapping[str, Any]) -> Group:
             Panel(
                 _kv(
                     [
-                        ("net bps", met.get("net_bps")),
+                        ("net", None if met.get("net_bps") is None else _bps(met["net_bps"])),
+                        ("edge over cost", _multiple(met.get("edge_multiple"))),
                         ("reward to risk", met.get("reward_risk")),
+                        ("research", _research(met.get("research_bps"))),
                         ("round trips today", met.get("round_trips_today")),
                     ]
                 ),
@@ -531,6 +883,14 @@ def cycle_view(record: Mapping[str, Any]) -> Group:
             who.add_row(str(row.get("agent")), Text(state, style=style), str(row.get("seconds")))
         parts.append(who)
     return Group(*parts)
+
+
+def _multiple(value: Any) -> Any:
+    return "-" if value in (None, "") else f"{value}x the round trip"
+
+
+def _research(value: Any) -> Any:
+    return "-" if value in (None, "") else f"{value} bps of this notional"
 
 
 def audit_view(record: Mapping[str, Any]) -> Group:
@@ -676,7 +1036,7 @@ def _safe_console() -> Console:
         if stream is not None
         else sys.stdout
     )
-    return Console(highlight=False, file=file)
+    return Console(highlight=False, markup=False, file=file)
 
 
 Renderer = Callable[[], Any]
