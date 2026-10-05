@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -39,6 +39,7 @@ from trading_research_agents.agents.briefs import (
     cost_brief,
     data_brief,
     declared_state,
+    interval_name,
     technical_brief,
 )
 from trading_research_agents.agents.cited import survived
@@ -67,7 +68,8 @@ from trading_research_agents.data.series import (
     load_news,
     read_events,
 )
-from trading_research_agents.data.sources.chain import SourceChain
+from trading_research_agents.data.sources.base import Fetched
+from trading_research_agents.data.sources.chain import ChainExhaustedError, SourceChain
 from trading_research_agents.envelope.model import Channel, Envelope
 from trading_research_agents.execution.confluence import STANCES, Confluence, Matrix, confluent
 from trading_research_agents.execution.conviction import (
@@ -79,6 +81,7 @@ from trading_research_agents.execution.conviction import (
 from trading_research_agents.execution.desk import Desk, DeskVerdict, Open, within_desk
 from trading_research_agents.execution.mandate import MODES as MANDATE_MODES
 from trading_research_agents.execution.pretrade import PreTradeVerdict, admit
+from trading_research_agents.execution.regime import RegimeRule, misfit
 from trading_research_agents.execution.risk import RiskVerdict, within_risk
 from trading_research_agents.execution.targets import (
     Targets,
@@ -99,11 +102,14 @@ from trading_research_agents.llm.completer import Completer
 from trading_research_agents.llm.usage import BudgetSpentError, UsageLedger
 from trading_research_agents.store.cycles import CycleDir
 from trading_research_agents.store.snapshot import Snapshot, cycle_id, take_snapshot
+from trading_research_agents.trading.capital import day_loss_bps, sizing_equity
 
 # The third mode sends orders, and it only exists when the caller hands the cycle something to
 # send them with. That hand is built by the CLI, and only after the mandate has cleared.
 MODES = MANDATE_MODES
 TARGETS = {"long": Direction.LONG, "short": Direction.SHORT}
+# Snapshots looked through for the last open interest; a desk that slept longer starts afresh.
+OPEN_INTEREST_LOOK_BACK = 12
 # The analysts that only read and label. They run beside the technical analyst, they never place
 # anything, and each one's answer is recorded whether or not the operator gave it a source.
 READING: dict[str, Any] = {
@@ -165,6 +171,13 @@ class CycleConfig:
     # intents on disk everywhere else.
     desk: Desk = field(default_factory=Desk)
     held: Callable[[], tuple[tuple[Open, ...], str]] | None = None
+    # Venue mode without adopt_open_position: an instrument already open at the venue waits for its
+    # exits rather than being decided on again, since the venue hand would refuse the entry.
+    wait_while_open: bool = False
+    # Venue mode: what the account actually holds, read before anyone is asked. Sizing and risk use
+    # the smaller of this and [run].equity, and the day's loss is measured from it.
+    account: Callable[[], Any] | None = None
+    daily_loss_limit_bps: Decimal | None = None
     # What the models have already cost since this desk last wrote an intent. A day of refusals is
     # paid for by whatever trade the day produces, so the caller carries the figure across cycles.
     carried_spend: Decimal = Decimal(0)
@@ -178,6 +191,12 @@ class CycleConfig:
     # [agents].validators: the stances to ask once there is a proposal worth arguing about. Each
     # stance is one more call, so an operator turns them on deliberately.
     validators: tuple[str, ...] = ()
+    # refuse: a declared stance that no model answered stops the trade. continue: trade on the votes
+    # that came back. A lost check never adds size either way.
+    on_missing_validator: str = "refuse"
+    # Higher timeframes read as context, in seconds; the decision stays on interval_s.
+    context_intervals: tuple[int, ...] = ()
+    regime: RegimeRule = field(default_factory=RegimeRule)
     # What actually sends an order, when the operator is in venue mode and the mandate cleared.
     place: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None
     # A reading analyst is asked only when the roster names it. `tra run` names the ones with a
@@ -187,7 +206,6 @@ class CycleConfig:
     series: Mapping[str, tuple[Path, ...]] = field(default_factory=dict)
     news: tuple[Path, ...] = ()
     analysts: tuple[str, ...] = (technical_analyst.ROLE,)
-    resume: bool = False
     max_workers: int = 4
     # Progress, on its own wire. A watcher sees the steps as they happen and can change none of
     # them; the default is nobody watching.
@@ -282,6 +300,8 @@ class CycleResult:
             "data": self.briefs.get("data"),
             # Present only when the size was declared in quote currency: what it was converted at.
             "size": self.briefs.get("size"),
+            # Venue mode only: the account as read before the cycle, and the equity sizing used.
+            "equity": self.briefs.get("equity"),
             "agents": self.fan.record(),
             "validators": None if self.debate is None else self.debate.record(),
             "analyst": None if self.analyst is None else _said(self.analyst),
@@ -338,7 +358,8 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         result.refusals.append(f"data {kind}: {reason}")
     for kind in snapshot.stale:
         result.refusals.append(f"data {kind}: used while stale, because the config allows it")
-    announce(cfg.watch, "data", DONE, f"{len(snapshot.refused)} refused")
+    answered = len(kinds) - len(snapshot.refused)
+    announce(cfg.watch, "data", DONE, f"{answered} of {len(kinds)} kind(s) answered")
 
     bid, ask = _prices(snapshot)
     mid_now, spread_now = spread_of(bid, ask)
@@ -400,12 +421,66 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
             return _stop_before_asking(cfg, where, result, why)
         announce(cfg.watch, "size", DONE, f"{cfg.size_quote} of quote is {base} at {mid_now}")
 
+    equity = cfg.equity
+    if cfg.account is not None:
+        try:
+            held_now = cfg.account()
+        except Exception as exc:
+            return _stop_before_asking(cfg, where, result, f"capital: {exc}", step="capital")
+        equity = sizing_equity(cfg.equity, held_now.equity)
+        result.briefs["equity"] = {
+            "declared": None if cfg.equity is None else str(cfg.equity),
+            "venue": str(held_now.equity),
+            "free": str(held_now.free),
+            "used": None if equity is None else str(equity),
+        }
+        if cfg.daily_loss_limit_bps is not None:
+            down = day_loss_bps(cfg.root, cfg.clock(), held_now.equity)
+            result.briefs["equity"]["day_loss_bps"] = str(down)
+            if down >= cfg.daily_loss_limit_bps:
+                why = (
+                    f"capital: equity is down {down} bps since the day began, at or past "
+                    f"[controls].daily_loss_limit_bps {cfg.daily_loss_limit_bps}; no new entry "
+                    "today, and open positions keep their exits"
+                )
+                return _stop_before_asking(cfg, where, result, why, step="capital")
+        announce(cfg.watch, "capital", DONE, f"equity {held_now.equity:.2f}, used {equity}")
+
+    if cfg.wait_while_open and cfg.held is not None:
+        rows, _source = _held(cfg, result)
+        if any(row.instrument == cfg.instrument for row in rows):
+            why = (
+                f"open: a position on {cfg.instrument} is open at the venue, so the next entry "
+                "waits for its exits; nothing was asked"
+            )
+            result.refusals.append(why)
+            result.held = True
+            announce(cfg.watch, "desk", HELD, "a position is already open")
+            _finish(cfg, where, result)
+            return result
+
+    # The reading briefs come first: what the operator's thresholds say on them is code, known
+    # before any model is asked, and the technical analyst decides with it in front of it.
+    calendar = _calendar(cfg, result)
+    reading_briefs: dict[str, dict[str, Any]] = {}
+    for role in cfg.analysts:
+        if role not in READING:
+            continue
+        built = _reading_brief(cfg, role, snapshot, calendar, result)
+        if built is None:
+            continue
+        reading_briefs[role] = _within_scope(role, built, result)
+    context = _context_frames(cfg, result)
     try:
         technical = technical_brief(
             snapshot,
             mechanism=cfg.mechanism,
             interval_s=cfg.interval_s,
             lookback_bars=cfg.lookback_bars,
+            rule=cfg.regime,
+            context=context,
+            previous_open_interest=_previous_open_interest(cfg.root, cfg.instrument, cycle),
+            readings={role: _reading_state(role, brief) for role, brief in reading_briefs.items()},
         )
     except BriefError as exc:
         result.stopped_by = f"no technical brief: {exc}"
@@ -416,6 +491,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         json.dumps(asked, indent=2, sort_keys=True, default=str) + "\n",
         encoding="utf-8",
     )
+    announce(cfg.watch, "regime", DONE, _regime_line(cfg, technical))
 
     tasks = [
         Task(
@@ -428,16 +504,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
             path=where.answer("technical"),
         )
     ]
-    calendar = _calendar(cfg, result)
-    reading_briefs: dict[str, dict[str, Any]] = {}
-    for role in cfg.analysts:
-        if role not in READING:
-            continue
-        built = _reading_brief(cfg, role, snapshot, calendar, result)
-        if built is None:
-            continue
-        brief = _within_scope(role, built, result)
-        reading_briefs[role] = brief
+    for role, brief in reading_briefs.items():
         where.brief(role).write_text(
             json.dumps(brief, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
         )
@@ -450,7 +517,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
             )
         )
 
-    fan = run_tasks(tasks, max_workers=cfg.max_workers, resume=cfg.resume)
+    fan = run_tasks(tasks, max_workers=cfg.max_workers)
     result.fan = fan
     result.context = _context_of(fan, reading_briefs, result)
     for name, error in fan.failed.items():
@@ -499,6 +566,14 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         announce(cfg.watch, "technical", REFUSED, "no setup")
         _finish(cfg, where, result)
         return result
+    misfit_why = misfit(analyst.setup, analyst.target, technical.regime)
+    if misfit_why and cfg.regime.setups_must_fit:
+        result.refusals.append(f"regime: {misfit_why} ([regime].setups_must_fit)")
+        announce(cfg.watch, "technical", REFUSED, "the setup does not fit the regime")
+        _finish(cfg, where, result)
+        return result
+    if misfit_why:
+        result.refusals.append(f"regime: {misfit_why}; allowed, setups_must_fit is false")
     if analyst.confidence < cfg.min_confidence:
         result.refusals.append(
             f"technical: confidence {analyst.confidence} below the declared {cfg.min_confidence}"
@@ -528,10 +603,28 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
     where.brief("cost").write_text(
         json.dumps(costs.record(), indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
     )
-    announce(cfg.watch, "cost", DONE, f"round trip {costs.cost.round_trip_bps} bps")
+    announce(cfg.watch, "cost", DONE, f"round trip {costs.cost.round_trip_bps:.2f} bps")
 
     if cfg.validators:
         _run_validators(cfg, where, result, asked=asked, analyst=analyst, costs=costs)
+        silent = [
+            name
+            for name in (f"validator_{stance}" for stance in cfg.validators)
+            if "error" in (result.context.get(name) or {"error": "not asked"})
+        ]
+        if silent and cfg.on_missing_validator == "refuse" and result.stopped_by is None:
+            why = (
+                f"validators: {', '.join(silent)} did not answer, and "
+                "[agents].on_missing_validator is refuse; a check you declared did not happen"
+            )
+            result.refusals.append(why)
+            result.stopped_by = why
+            announce(cfg.watch, "validators", REFUSED, f"{', '.join(silent)} did not answer")
+            _finish(cfg, where, result)
+            return result
+        if result.stopped_by is not None:
+            _finish(cfg, where, result)
+            return result
 
     if not cfg.matrix.idle:
         agreement = confluent(
@@ -575,7 +668,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
             base_size=base,
             price=costs.cost.mid,
             max_position=cfg.max_position if cfg.max_position is not None else base,
-            equity=cfg.equity,
+            equity=equity,
             step=cfg.size_step,
         )
         result.stake = stake
@@ -608,7 +701,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         size=size,
         entry=costs.cost.mid,
         stop=None if stop_at is None else Decimal(stop_at),
-        equity=cfg.equity,
+        equity=equity,
         allowed_bps=cfg.max_risk_per_trade_bps,
         step=cfg.size_step,
     )
@@ -684,7 +777,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         cfg.watch,
         "cost gate",
         DONE if verdict.admitted else REFUSED,
-        f"net {verdict.net_bps} bps",
+        f"net {verdict.net_bps:.2f} bps",
     )
     if not verdict.admitted:
         result.refusals.append(f"cost gate: {verdict.reason}")
@@ -708,7 +801,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
             cfg.watch,
             "targets",
             DONE if met.admitted else REFUSED,
-            met.reasons[0] if met.reasons else "",
+            met.reasons[0] if met.reasons else "every declared target met",
         )
         if not met.admitted:
             _finish(cfg, where, result)
@@ -732,7 +825,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         "cited": result.cited,
         "edge_bps": str(cfg.magnitude_bps),
         "edge_source": verdict.edge_source,
-        "net_bps": str(verdict.net_bps),
+        "net_bps": str(verdict.net_bps.quantize(Decimal("0.0001"))),
         "edge_multiple": (
             None
             if result.targets is None or result.targets.edge_multiple is None
@@ -768,7 +861,12 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
             result.refusals.append(f"venue: {exc.__class__.__name__}: {exc}")
             announce(cfg.watch, "venue", FAILED, exc.__class__.__name__)
         else:
-            announce(cfg.watch, "venue", DONE, str(result.placed.get("id", "sent")))
+            if result.placed.get("sent"):
+                announce(
+                    cfg.watch, "venue", DONE, f"order {result.placed.get('order_id') or 'sent'}"
+                )
+            else:
+                announce(cfg.watch, "venue", REFUSED, str(result.placed.get("refused", "not sent")))
             where.path.joinpath("placed.json").write_text(
                 json.dumps(result.placed, indent=2, sort_keys=True, default=str) + "\n",
                 encoding="utf-8",
@@ -781,6 +879,67 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
                 raise KeyboardInterrupt(result.stopped_by)
     _finish(cfg, where, result)
     return result
+
+
+def _context_frames(cfg: CycleConfig, result: CycleResult) -> dict[int, Fetched]:
+    """The higher timeframes' closed candles. One that cannot be had is named and left out."""
+    chain = cfg.chains.get("ohlcv")
+    if chain is None or not cfg.context_intervals:
+        return {}
+    out: dict[int, Fetched] = {}
+    for seconds in cfg.context_intervals:
+        # A closed candle on this timeframe is up to one interval old by construction, so the
+        # decision chain's freshness bar would refuse every one of them.
+        wider = replace(chain, ttl_s=chain.ttl_s + seconds)
+        options = dict(cfg.data_options.get("ohlcv", {}))
+        options.update({"interval_s": seconds, "limit": max(cfg.lookback_bars, 2)})
+        try:
+            got = wider.fetch(cfg.instrument, **options)
+        except ChainExhaustedError as exc:
+            result.refusals.append(f"context {interval_name(seconds)}: {exc}")
+            continue
+        if got.fetched is not None:
+            out[seconds] = got.fetched
+    if out:
+        result.briefs["context"] = {
+            interval_name(seconds): fetched.record() for seconds, fetched in out.items()
+        }
+    return out
+
+
+def _previous_open_interest(root: Path, instrument: str, cycle: str) -> dict[str, Any] | None:
+    """The open interest the latest earlier snapshot of this instrument recorded."""
+    if not root.is_dir():
+        return None
+    safe = "".join(c for c in instrument if c.isalnum() or c in "-_")
+    mine = sorted(
+        (p for p in root.glob(f"*-{safe}") if p.is_dir() and p.name < cycle),
+        reverse=True,
+    )
+    for path in mine[:OPEN_INTEREST_LOOK_BACK]:
+        try:
+            values = json.loads((path / "snapshot.json").read_text("utf-8")).get("values", {})
+        except (OSError, ValueError, AttributeError):
+            continue
+        found = values.get("open_interest")
+        if isinstance(found, dict):
+            return found
+    return None
+
+
+def _reading_state(role: str, brief: Mapping[str, Any]) -> dict[str, Any]:
+    declared = declared_state(role, brief)
+    return {
+        "declared": declared.get("as_role_says_it") or declared.get("declared"),
+        "score": declared.get("score", "0"),
+    }
+
+
+def _regime_line(cfg: CycleConfig, brief: Any) -> str:
+    said = [f"{brief.regime} on {interval_name(cfg.interval_s)}"]
+    said.extend(f"{name} {frame['regime']}" for name, frame in (brief.timeframes or {}).items())
+    said.extend(f"{role} {state['declared']}" for role, state in (brief.readings or {}).items())
+    return ", ".join(said)
 
 
 def _calendar(cfg: CycleConfig, result: CycleResult) -> tuple[Event, ...]:
@@ -839,14 +998,19 @@ def _context_of(
     """
     out: dict[str, Any] = {}
     for role, module in READING.items():
+        if role not in briefs:
+            continue
+        # The declared state is code over the operator's thresholds, so it stands whether or not
+        # the model answered: a rate limit on the analyst must not erase what the figures say.
+        declared = declared_state(role, briefs.get(role, {}))
         if role not in fan.answers:
+            out[role] = {"declared_state": declared, "error": "the model did not answer"}
             continue
         try:
             said = vars(module.parse(str(fan.answers[role])))
         except RoleError as exc:
-            out[role] = {"error": str(exc)}
+            out[role] = {"declared_state": declared, "error": str(exc)}
             continue
-        declared = declared_state(role, briefs.get(role, {}))
         label = said.get("regime") or said.get("signal") or said.get("state")
         said["declared_state"] = declared
         cited = said.get("figures_used")
@@ -945,10 +1109,11 @@ def _run_validators(
             )
         )
 
-    fan = run_tasks(tasks, max_workers=cfg.max_workers, resume=cfg.resume)
+    fan = run_tasks(tasks, max_workers=cfg.max_workers)
     result.debate = fan
     for name, error in fan.failed.items():
         result.refusals.append(f"{name}: {error}")
+        result.context[name] = {"stance": name.partition("_")[2], "error": error}
         if budget_spent(error):
             result.stopped_by = f"{name}: {error}"
     for name, answer in fan.answers.items():
@@ -1067,11 +1232,11 @@ def _channel(cfg: CycleConfig) -> Channel:
 
 
 def _stop_before_asking(
-    cfg: CycleConfig, where: CycleDir, result: CycleResult, why: str
+    cfg: CycleConfig, where: CycleDir, result: CycleResult, why: str, step: str = "size"
 ) -> CycleResult:
     result.refusals.append(why)
     result.stopped_by = why
-    announce(cfg.watch, "size", REFUSED, why)
+    announce(cfg.watch, step, REFUSED, why)
     _finish(cfg, where, result)
     return result
 

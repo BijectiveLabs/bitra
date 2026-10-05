@@ -7,23 +7,38 @@ import importlib.util
 import json
 import sys
 import tomllib
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from trading_research_agents.data.sources.config import DataConfigError, parse_duration
 from trading_research_agents.execution.confluence import STANCES, ConfluenceError, Matrix
 from trading_research_agents.execution.conviction import Conviction, ConvictionError, Tier
 from trading_research_agents.execution.cost import CostError, FundingSchedule
+from trading_research_agents.execution.desk import Desk, DeskError
 from trading_research_agents.execution.mandate import Mandate, MandateError
+from trading_research_agents.execution.regime import REGIME_KEYS, RegimeError, RegimeRule
 from trading_research_agents.execution.targets import TargetError, Targets
+from trading_research_agents.execution.trigger import Trigger, TriggerError
+from trading_research_agents.execution.universe import Universe, UniverseError
 from trading_research_agents.strategy.core import Strategy
 from trading_research_agents.strategy.exits import ExitRule
 from trading_research_agents.trading.canary import CanaryError, CanaryLimits
 from trading_research_agents.trading.controls import Limits
 
-# Keys never live in a config file. Any of these under [live] is refused by name.
+# Keys never live in a config file. A setting whose name reads like a credential is refused by
+# name - but only after the table's own settings are accounted for, because `key_ip_unbound_ok` is
+# a flag about a key rather than a key.
 SECRET_LIKE = ("api_key", "api_secret", "secret", "key", "token", "password", "passphrase")
+
+
+def _no_secrets(unknown: Sequence[str], where: str) -> None:
+    """Refuse a setting nobody declared that reads like a credential, before anything else."""
+    leaked = [k for k in unknown if any(word in k.lower() for word in SECRET_LIKE)]
+    if leaked:
+        raise ConfigError(f"{where} carries {leaked}; keys come from the environment, never a file")
 
 
 class ConfigError(ValueError):
@@ -43,6 +58,60 @@ class RunSettings:
     settlement_interval_s: int
     # The venue's own size increment. Sizes are always rounded down to it, never up.
     size_step: Decimal = Decimal("0.000001")
+    # The base position said in quote currency instead of base units, for a desk whose instruments
+    # are not worth the same. Exactly one of size and size_quote is declared.
+    size_quote: Decimal | None = None
+    # `size_step` written as a table, one increment per instrument. Venues step BTC and ETH
+    # differently, and a size off the venue's step is either refused there or quietly rounded by
+    # the client library - neither of which the cost gate priced.
+    size_steps: Mapping[str, Decimal] = field(default_factory=dict)
+    # Higher timeframes the technical analyst reads as context, in seconds. The decision, the
+    # trigger and the exits stay on bar_interval_s.
+    context_intervals: tuple[int, ...] = ()
+
+    def step_for(self, instrument: str) -> Decimal:
+        return self.size_steps.get(instrument, self.size_step)
+
+    def fixed_size(self) -> Decimal:
+        """The base size for a path that trades one size throughout: a replay, paper, a session.
+
+        A quote size is converted at each cycle's own mid, and a replay has no cycle to convert it
+        at. Picking a price on the operator's behalf would make the replay trade a size nobody
+        declared, so it is refused by name instead.
+        """
+        if self.size_quote is not None:
+            raise ConfigError(
+                "[run].size_quote is converted at each cycle's mid, which only `tra run` has; "
+                "a replay, paper or live session trades one size in base units, so declare "
+                "[run].size for it"
+            )
+        return self.size
+
+
+@dataclass(frozen=True)
+class AuditPolicy:
+    """[audit]: when the auditors are asked without anyone typing `tra audit`.
+
+    The two of them answer different questions and so they wake differently. Something breaking is
+    an event - a provider that stopped answering halfway through a run is not something an operator
+    should have to notice from a log - so the technical auditor wakes on an alarm. Whether the desk
+    is earning what it costs is a question about a stretch of time, so the quant auditor runs on a
+    count of cycles. Neither one can act on what it finds.
+    """
+
+    on_alarm: bool = True
+    alarm_cooldown_s: int = 1800
+    quant_every_cycles: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.alarm_cooldown_s < 0:
+            raise ConfigError("[audit].alarm_cooldown_s is not negative")
+        if self.quant_every_cycles is not None and self.quant_every_cycles < 1:
+            raise ConfigError("[audit].quant_every_cycles counts cycles, so it is at least 1")
+
+    @property
+    def idle(self) -> bool:
+        return not self.on_alarm and self.quant_every_cycles is None
 
 
 @dataclass(frozen=True)
@@ -53,10 +122,13 @@ class RoleModel:
     provider: str
     model: str | None
     base_url: str | None
-    max_output_tokens: int
+    max_output_tokens: int | None
     call_timeout_s: int
     max_retries: int
     fallback: tuple[str, ...] = ()
+    # How hard this role is asked to think, where the vendor takes such a thing. Undeclared means
+    # the vendor's own default, which is what every run did before this existed.
+    effort: str | None = None
 
 
 @dataclass(frozen=True)
@@ -68,16 +140,20 @@ class AgentSettings:
     model: str | None
     base_url: str | None
     mechanism: str
-    token_budget: int
-    max_calls_per_hour: int
-    min_interval_s: int
-    call_timeout_s: int
-    lookback_bars: int
-    min_confidence: float
-    pricing: dict[str, tuple[Decimal, Decimal]]
+    # Every ceiling below is optional, and undeclared means counted rather than capped. A role cut
+    # off mid-answer costs the call and returns a worse decision, so a ceiling is something an
+    # operator asks for deliberately, not something this software assumes on their behalf.
+    token_budget: int | None = None
+    max_calls_per_hour: int | None = None
+    min_interval_s: int = 0
+    call_timeout_s: int = 60
+    lookback_bars: int = 60
+    min_confidence: float = 0.5
+    pricing: dict[str, tuple[Decimal, Decimal]] = field(default_factory=dict)
     decide_every_bars: int = 1
-    max_output_tokens: int = 1024
+    max_output_tokens: int | None = None
     max_retries: int = 2
+    effort: str | None = None
     magnitude_bps: Decimal | None = None
     screen: dict[str, float] = field(default_factory=dict)
     # [agents.roles.<role>]: a cheaper model for the roles that only read and label, a stronger
@@ -92,6 +168,11 @@ class AgentSettings:
     # [agents].fallback: `provider:model` entries every role inherits, tried in order when the
     # provider above cannot be reached. A rate limit is a dependency failing, not a reason to stop.
     fallback: tuple[str, ...] = ()
+    # A declared validator that no model answered: refuse the trade (a check you asked for did not
+    # happen) or continue on the votes that did come back.
+    on_missing_validator: str = "refuse"
+    # How long a role waits for a provider that said "try again in N seconds" before the next link.
+    max_retry_wait_s: float = 15.0
 
     def for_role(self, role: str) -> RoleModel:
         """What this role is asked with: its own model where declared, otherwise the default."""
@@ -101,10 +182,15 @@ class AgentSettings:
             provider=str(table.get("provider", self.provider)),
             model=(str(table["model"]) if table.get("model") else self.model),
             base_url=(str(table["base_url"]) if table.get("base_url") else self.base_url),
-            max_output_tokens=int(table.get("max_output_tokens", self.max_output_tokens)),
+            max_output_tokens=(
+                int(table["max_output_tokens"])
+                if table.get("max_output_tokens") is not None
+                else self.max_output_tokens
+            ),
             call_timeout_s=int(table.get("call_timeout_s", self.call_timeout_s)),
             max_retries=int(table.get("max_retries", self.max_retries)),
             fallback=tuple(str(name) for name in (table.get("fallback") or self.fallback)),
+            effort=(str(table["effort"]) if table.get("effort") else self.effort),
         )
 
 
@@ -137,8 +223,18 @@ class StrategyConfig:
     targets: Targets = field(default_factory=Targets)
     # How much capital goes behind an idea, from the same declarations the matrix reads.
     conviction: Conviction = field(default_factory=Conviction)
+    # What has to have happened before the roster is paid to have an opinion at all.
+    trigger: Trigger = field(default_factory=Trigger)
+    # When the auditors are asked without anyone typing the command.
+    audit: AuditPolicy = field(default_factory=AuditPolicy)
+    # What this desk watches, when it watches more than [run].instrument.
+    universe: Universe = field(default_factory=Universe)
+    # What it may be carrying across all of them at once.
+    desk: Desk = field(default_factory=Desk)
     # What a cycle may do with an admitted intent: keep it, export it, or send it.
     execution: Mandate = field(default_factory=Mandate)
+    # Where trending and ranging begin, and whether a setup has to fit the regime measured.
+    regime: RegimeRule = field(default_factory=RegimeRule)
 
 
 def load_strategy_config(path: Path) -> StrategyConfig:
@@ -179,16 +275,33 @@ def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> S
         instrument=str(run_raw.get("instrument", "")),
         venue_key=str(run_raw.get("venue_key", "")),
         bar_interval_s=_int(run_raw, "bar_interval_s"),
-        size=_dec(run_raw, "size"),
+        size=_dec(run_raw, "size") if "size" in run_raw else Decimal(0),
+        size_quote=_dec(run_raw, "size_quote") if "size_quote" in run_raw else None,
         spread_cost_bps=_dec(run_raw, "spread_cost_bps"),
         equity=_dec(run_raw, "equity") if "equity" in run_raw else None,
         latency_ms=_dec(run_raw, "latency_ms"),
         slippage_bps=_dec(run_raw, "slippage_bps"),
         settlement_interval_s=_int(run_raw, "settlement_interval_s"),
-        size_step=_dec(run_raw, "size_step") if "size_step" in run_raw else Decimal("0.000001"),
+        **_steps(run_raw.get("size_step")),
+        context_intervals=_context_intervals(
+            run_raw.get("context_intervals"), _int(run_raw, "bar_interval_s")
+        ),
     )
     if not run.instrument or not run.venue_key:
         raise ConfigError("[run] names the instrument and the venue_key (venue/channel)")
+    _sized_once(run)
+    universe = _universe(raw)
+    if run.size_steps:
+        unstepped = [
+            name
+            for name in dict.fromkeys((run.instrument, *universe.instruments))
+            if name not in run.size_steps
+        ]
+        if unstepped:
+            raise ConfigError(
+                f"[run].size_step is a table and has no step for {unstepped}; every instrument "
+                "this desk can trade needs its venue's increment"
+            )
     seal = strategy_raw.get("registration_seal")
     if seal is not None and (not isinstance(seal, str) or len(seal) != 64):
         raise ConfigError("[strategy].registration_seal is the 64-character pre-registration seal")
@@ -209,9 +322,45 @@ def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> S
         agents=agents,
         confluence=_confluence(raw),
         targets=_targets(raw, exit_rule),
+        trigger=_trigger(raw),
+        audit=_audit(raw),
+        universe=universe,
+        desk=_desk(raw),
+        regime=_regime(raw),
         conviction=_conviction(raw),
         execution=_mandate(raw, run.venue_key),
     )
+
+
+def _steps(raw: Any) -> dict[str, Any]:
+    """`size_step` as one number for every instrument, or a table of one per instrument."""
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        step = _dec({"size_step": raw}, "size_step")
+        if step <= 0:
+            raise ConfigError("[run].size_step is positive")
+        return {"size_step": step}
+    steps = {str(name): _dec(raw, name) for name in raw}
+    bad = sorted(name for name, step in steps.items() if step <= 0)
+    if not steps:
+        raise ConfigError("[run].size_step as a table names at least one instrument")
+    if bad:
+        raise ConfigError(f"[run].size_step entries are positive increments; not {bad}")
+    return {"size_steps": steps}
+
+
+def _sized_once(run: RunSettings) -> None:
+    """One way of saying the base size, never two that could disagree."""
+    if run.size < 0 or (run.size_quote is not None and run.size_quote <= 0):
+        raise ConfigError("[run].size and [run].size_quote are positive")
+    declared = [name for name, v in (("size", run.size), ("size_quote", run.size_quote)) if v]
+    if len(declared) != 1:
+        raise ConfigError(
+            "[run] declares the base size once: size in base units, or size_quote in quote "
+            "currency for a desk whose instruments are not worth the same "
+            f"({declared or 'neither'} is declared)"
+        )
 
 
 class _Pending:
@@ -242,6 +391,9 @@ KNOWN_ROLES = (
     # One stance is one call, so a validator may run on its own model like any other role.
     "validator",
 )
+# The llm layer owns this vocabulary; it is repeated here because the gates never import it, and
+# repeated in one place so a bad spelling is refused while reading the file rather than mid-cycle.
+EFFORTS = ("minimal", "low", "medium", "high", "xhigh", "max")
 ROLE_KEYS = (
     "provider",
     "model",
@@ -251,6 +403,8 @@ ROLE_KEYS = (
     "max_retries",
     # `provider:model` entries tried in order when the one above cannot be reached.
     "fallback",
+    # minimal | low | medium | high | xhigh | max, mapped onto whatever the vendor takes.
+    "effort",
 )
 
 
@@ -298,8 +452,27 @@ def _roles(raw: Any) -> dict[str, dict[str, Any]]:
             raise ConfigError(
                 f"[agents.roles.{role}]: {unknown} is not settable; {list(ROLE_KEYS)}"
             )
+        _effort(table.get("effort"))
         out[role] = dict(table)
     return out
+
+
+def _choice(
+    table: dict[str, Any], key: str, allowed: tuple[str, ...], default: str, where: str
+) -> str:
+    value = str(table.get(key, default))
+    if value not in allowed:
+        raise ConfigError(f"{where}.{key} is one of {list(allowed)}")
+    return value
+
+
+def _effort(raw: Any) -> str | None:
+    """`effort`, where a vendor takes one. Undeclared leaves the vendor's own default alone."""
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or raw not in EFFORTS:
+        raise ConfigError(f"effort is one of {list(EFFORTS)}")
+    return raw
 
 
 def _agents(raw: dict[str, Any], strategy_raw: dict[str, Any]) -> AgentSettings | None:
@@ -333,21 +506,30 @@ def _agents(raw: dict[str, Any], strategy_raw: dict[str, Any]) -> AgentSettings 
         model=str(table["model"]) if table.get("model") else None,
         base_url=str(table["base_url"]) if table.get("base_url") else None,
         mechanism=mechanism,
-        token_budget=_int(table, "token_budget"),
-        max_calls_per_hour=_int(table, "max_calls_per_hour"),
-        min_interval_s=_int(table, "min_interval_s"),
+        token_budget=_int(table, "token_budget") if "token_budget" in table else None,
+        max_calls_per_hour=(
+            _int(table, "max_calls_per_hour") if "max_calls_per_hour" in table else None
+        ),
+        min_interval_s=int(table.get("min_interval_s", 0)),
         call_timeout_s=int(table.get("call_timeout_s", 60)),
         lookback_bars=int(table.get("lookback_bars", 60)),
         min_confidence=float(confidence),
         pricing=pricing,
         decide_every_bars=int(table.get("decide_every_bars", 1)),
-        max_output_tokens=int(table.get("max_output_tokens", 1024)),
+        max_output_tokens=(
+            int(table["max_output_tokens"]) if table.get("max_output_tokens") is not None else None
+        ),
         max_retries=int(table.get("max_retries", 2)),
+        effort=_effort(table.get("effort")),
         magnitude_bps=_dec(table, "magnitude_bps") if "magnitude_bps" in table else None,
         screen=_screen(table.get("screen")),
         roles=_roles(table.get("roles")),
         analysts=_analysts(table.get("analysts")),
         validators=_validators(table.get("validators")),
+        on_missing_validator=_choice(
+            table, "on_missing_validator", ("refuse", "continue"), "refuse", "[agents]"
+        ),
+        max_retry_wait_s=float(table.get("max_retry_wait_s", 15.0)),
         fallback=_fallback(table.get("fallback")),
     )
 
@@ -360,7 +542,17 @@ CONFLUENCE_KEYS = (
     "min_support",
     "max_opposition",
 )
-TARGET_KEYS = ("min_net_bps", "min_reward_risk", "max_round_trips_per_day")
+TARGET_KEYS = (
+    "min_net_bps",
+    "min_edge_multiple",
+    "min_reward_risk",
+    "max_research_bps",
+    "max_round_trips_per_day",
+)
+TRIGGER_KEYS = ("min_move_bps", "max_spread_bps", "cooldown_s", "widen_after")
+AUDIT_KEYS = ("on_alarm", "alarm_cooldown_s", "quant_every_cycles")
+UNIVERSE_KEYS = ("instruments", "max_per_cycle", "max_intents_per_day", "screener")
+DESK_KEYS = ("max_open_risk_bps", "max_open_positions", "correlation_above")
 
 
 EXECUTION_KEYS = (
@@ -373,6 +565,13 @@ EXECUTION_KEYS = (
     "exits",
     "limit_timeout_s",
     "price_offset_bps",
+    "max_drift_bps",
+    "leverage",
+    "margin_mode",
+    "max_slippage_bps",
+    "max_margin_share",
+    "liquidation_buffer_bps",
+    "hold_limit",
     "adopt_open_position",
     "params",
 )
@@ -386,13 +585,9 @@ def _mandate(raw: dict[str, Any], venue_key: str) -> Mandate:
     if not isinstance(table, dict):
         raise ConfigError("[execution] must be a table")
     unknown = sorted(set(table) - set(EXECUTION_KEYS))
+    _no_secrets(unknown, "[execution]")
     if unknown:
         raise ConfigError(f"[execution]: unknown {unknown}; have {list(EXECUTION_KEYS)}")
-    leaked = [k for k in table if any(word in k.lower() for word in SECRET_LIKE)]
-    if leaked:
-        raise ConfigError(
-            f"[execution] carries {leaked}; keys come from the environment, never from a file"
-        )
     try:
         return Mandate(
             mode=str(table.get("mode", "sandbox")),
@@ -408,6 +603,21 @@ def _mandate(raw: dict[str, Any], venue_key: str) -> Mandate:
             ),
             adopt_open_position=_flag(table, "adopt_open_position"),
             params=dict(table.get("params") or {}),
+            max_drift_bps=_dec(table, "max_drift_bps") if "max_drift_bps" in table else None,
+            leverage=_dec(table, "leverage") if "leverage" in table else None,
+            margin_mode=str(table.get("margin_mode", "isolated")),
+            max_slippage_bps=(
+                _dec(table, "max_slippage_bps") if "max_slippage_bps" in table else Decimal(20)
+            ),
+            max_margin_share=(
+                _dec(table, "max_margin_share") if "max_margin_share" in table else Decimal("0.5")
+            ),
+            liquidation_buffer_bps=(
+                _dec(table, "liquidation_buffer_bps")
+                if "liquidation_buffer_bps" in table
+                else Decimal(50)
+            ),
+            hold_limit=str(table.get("hold_limit", "timeout")),
         )
     except MandateError as exc:
         raise ConfigError(str(exc)) from exc
@@ -537,8 +747,14 @@ def _targets(raw: dict[str, Any], exit_rule: ExitRule) -> Targets:
     try:
         return Targets(
             min_net_bps=_dec(table, "min_net_bps") if "min_net_bps" in table else None,
+            min_edge_multiple=(
+                _dec(table, "min_edge_multiple") if "min_edge_multiple" in table else None
+            ),
             min_reward_risk=(
                 _dec(table, "min_reward_risk") if "min_reward_risk" in table else None
+            ),
+            max_research_bps=(
+                _dec(table, "max_research_bps") if "max_research_bps" in table else None
             ),
             max_round_trips_per_day=(
                 _count(table, "max_round_trips_per_day")
@@ -550,12 +766,162 @@ def _targets(raw: dict[str, Any], exit_rule: ExitRule) -> Targets:
         raise ConfigError(str(exc)) from exc
 
 
+def _desk(raw: dict[str, Any]) -> Desk:
+    """[desk]: what this desk may be carrying across every instrument at once."""
+    table = raw.get("desk")
+    if table is None:
+        return Desk()
+    if not isinstance(table, dict):
+        raise ConfigError("[desk] must be a table")
+    unknown = sorted(set(table) - set(DESK_KEYS))
+    if unknown:
+        raise ConfigError(f"[desk]: unknown {unknown}; have {list(DESK_KEYS)}")
+    try:
+        return Desk(
+            max_open_risk_bps=(
+                _dec(table, "max_open_risk_bps") if "max_open_risk_bps" in table else None
+            ),
+            max_open_positions=(
+                _count(table, "max_open_positions") if "max_open_positions" in table else None
+            ),
+            correlation_above=(
+                _dec(table, "correlation_above") if "correlation_above" in table else None
+            ),
+        )
+    except DeskError as exc:
+        raise ConfigError(str(exc)) from exc
+
+
+def _universe(raw: dict[str, Any]) -> Universe:
+    """[universe]: the instruments a pass looks at before it spends a cycle on one of them."""
+    table = raw.get("universe")
+    if table is None:
+        return Universe()
+    if not isinstance(table, dict):
+        raise ConfigError("[universe] must be a table")
+    unknown = sorted(set(table) - set(UNIVERSE_KEYS))
+    if unknown:
+        raise ConfigError(f"[universe]: unknown {unknown}; have {list(UNIVERSE_KEYS)}")
+    names = table.get("instruments") or []
+    if not isinstance(names, list) or not all(isinstance(n, str) and n.strip() for n in names):
+        raise ConfigError("[universe].instruments is a list of instrument names")
+    screener = table.get("screener", False)
+    if not isinstance(screener, bool):
+        raise ConfigError("[universe].screener is true or false")
+    try:
+        return Universe(
+            instruments=tuple(str(n).strip() for n in names),
+            max_per_cycle=int(table.get("max_per_cycle", 1)),
+            max_intents_per_day=(
+                _count(table, "max_intents_per_day") if "max_intents_per_day" in table else None
+            ),
+            screener=screener,
+        )
+    except UniverseError as exc:
+        raise ConfigError(str(exc)) from exc
+
+
+def _audit(raw: dict[str, Any]) -> AuditPolicy:
+    """[audit]: when each auditor is asked, and how often an alarm may wake one."""
+    table = raw.get("audit")
+    if table is None:
+        return AuditPolicy()
+    if not isinstance(table, dict):
+        raise ConfigError("[audit] must be a table")
+    unknown = sorted(set(table) - set(AUDIT_KEYS))
+    if unknown:
+        raise ConfigError(f"[audit]: unknown {unknown}; have {list(AUDIT_KEYS)}")
+    on_alarm = table.get("on_alarm", True)
+    if not isinstance(on_alarm, bool):
+        raise ConfigError("[audit].on_alarm is true or false")
+    return AuditPolicy(
+        on_alarm=on_alarm,
+        alarm_cooldown_s=int(table.get("alarm_cooldown_s", 1800)),
+        quant_every_cycles=(
+            _count(table, "quant_every_cycles") if "quant_every_cycles" in table else None
+        ),
+    )
+
+
+def _trigger(raw: dict[str, Any]) -> Trigger:
+    """[trigger]: what has to be true before a cycle pays anyone to look at the instrument."""
+    table = raw.get("trigger")
+    if table is None:
+        return Trigger()
+    if not isinstance(table, dict):
+        raise ConfigError("[trigger] must be a table")
+    unknown = sorted(set(table) - set(TRIGGER_KEYS))
+    if unknown:
+        raise ConfigError(f"[trigger]: unknown {unknown}; have {list(TRIGGER_KEYS)}")
+    try:
+        return Trigger(
+            min_move_bps=_dec(table, "min_move_bps") if "min_move_bps" in table else None,
+            max_spread_bps=(_dec(table, "max_spread_bps") if "max_spread_bps" in table else None),
+            cooldown_s=_count(table, "cooldown_s") if "cooldown_s" in table else None,
+            widen_after=_count(table, "widen_after") if "widen_after" in table else None,
+        )
+    except TriggerError as exc:
+        raise ConfigError(str(exc)) from exc
+
+
 def _names(raw: Any, key: str) -> tuple[str, ...]:
     if raw is None:
         return ()
     if not isinstance(raw, list) or not all(isinstance(name, str) for name in raw):
         raise ConfigError(f"[confluence].{key} is a list of names")
     return tuple(str(name) for name in raw)
+
+
+MAX_CONTEXT_INTERVALS = 3
+
+
+def _context_intervals(raw: Any, decision_s: int) -> tuple[int, ...]:
+    """[run].context_intervals: "15m", "1h" or seconds, each above the decision timeframe."""
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ConfigError('[run].context_intervals is a list, such as ["15m", "1h"]')
+    out: list[int] = []
+    for item in raw:
+        try:
+            seconds = int(parse_duration(str(item)))
+        except DataConfigError as exc:
+            raise ConfigError(f"[run].context_intervals: {exc}") from exc
+        if seconds <= decision_s or seconds % decision_s:
+            raise ConfigError(
+                f"[run].context_intervals: {item} is not a whole multiple above "
+                f"bar_interval_s {decision_s}; context is read on a higher timeframe"
+            )
+        if seconds in out:
+            raise ConfigError(f"[run].context_intervals names {item} twice")
+        out.append(seconds)
+    if len(out) > MAX_CONTEXT_INTERVALS:
+        # Each one is a venue call and a section of the brief on every cycle.
+        raise ConfigError(f"[run].context_intervals takes at most {MAX_CONTEXT_INTERVALS}")
+    return tuple(sorted(out))
+
+
+def _regime(raw: dict[str, Any]) -> RegimeRule:
+    """[regime]: the trend-strength lines between ranging, mixed and trending."""
+    table = raw.get("regime")
+    if table is None:
+        return RegimeRule()
+    if not isinstance(table, dict):
+        raise ConfigError("[regime] must be a table")
+    unknown = sorted(set(table) - set(REGIME_KEYS))
+    if unknown:
+        raise ConfigError(f"[regime]: unknown {unknown}; have {list(REGIME_KEYS)}")
+    fit = table.get("setups_must_fit", True)
+    if not isinstance(fit, bool):
+        raise ConfigError("[regime].setups_must_fit is true or false")
+    try:
+        return RegimeRule(
+            trend_above=_dec(table, "trend_above") if "trend_above" in table else Decimal("2.0"),
+            range_below=_dec(table, "range_below") if "range_below" in table else Decimal("1.0"),
+            setups_must_fit=fit,
+        )
+    except RegimeError as exc:
+        raise ConfigError(str(exc)) from exc
 
 
 def _count(table: dict[str, Any], key: str) -> int:
@@ -581,17 +947,26 @@ def _screen(raw: Any) -> dict[str, float]:
     return out
 
 
+LIVE_KEYS = (
+    "venue",
+    "environment",
+    # A flag about how a key must be bound, which is not a key.
+    "key_ip_unbound_ok",
+    "adopt_open_position",
+    "poll_interval_ms",
+)
+
+
 def _live(raw: dict[str, Any], venue_key: str) -> LiveSettings | None:
     table = raw.get("live")
     if table is None:
         return None
     if not isinstance(table, dict):
         raise ConfigError("[live] must be a table")
-    leaked = [k for k in table if any(word in k.lower() for word in SECRET_LIKE)]
-    if leaked:
-        raise ConfigError(
-            f"[live] carries {leaked}; keys come from the environment, never from a file"
-        )
+    unknown = sorted(set(table) - set(LIVE_KEYS))
+    _no_secrets(unknown, "[live]")
+    if unknown:
+        raise ConfigError(f"[live]: unknown {unknown}; have {list(LIVE_KEYS)}")
     environment = str(table.get("environment", "demo"))
     poll = table.get("poll_interval_ms", 250)
     if isinstance(poll, bool) or not isinstance(poll, int) or poll < 0:
