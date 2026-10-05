@@ -77,6 +77,18 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- Every cycle keeps its raw inputs in `inputs.json.gz` (candles on every timeframe, book levels,
+  funding, open interest, the settings used), and `cycle.json` carries a sha256 of every file in
+  the cycle. `tra runs verify` checks the hashes and recomputes the technical figures from the
+  inputs. Before this, a snapshot recorded where values came from but not the values, so a brief
+  could not be checked.
+- A per-day cycle index (`runs/cycles/index/<day>.jsonl`). The trigger, the targets, the desk
+  limits, the position keeper and the open interest change read it instead of every cycle
+  directory: measured on a month of three instruments every five minutes (26,000 cycles), a read
+  went from 2.3 to 3.6 s to under 0.6 s. Built from the directories on a desk's first cycle; a cycle
+  that never finished is still read from its directory.
+- `tra runs prune --keep 90d [--archive] [--yes]`: removes old cycle directories and screens, keeps
+  the index and the logs.
 - Every series a reading analyst reads now has a `max_age` (default 4 days). A value older than
   that is shown as `stale` and never counted in the declared state, confluence or conviction; a role
   whose every series is stale is not asked. Seen on the demo desk: macro and sentiment files that
@@ -479,6 +491,10 @@ All notable changes to this project are recorded here. The format follows
 
 ### Fixed
 
+- Appends to order, position, equity, scheduler, usage and ledger records now guard against a torn
+  last line (a crash mid-write no longer glues the next record onto it) and wait for the disk where
+  money is involved; whole JSON files are written atomically; every lines reader skips a torn line
+  instead of failing (the auditor and `tra agent trace` used to).
 - A pass reported instruments with an open position, or held by a full desk, as "not moved enough
   for [trigger]" whenever the trigger had also held them. The book is now checked first, and every
   instrument is named once, under the first cause that holds it.

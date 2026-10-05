@@ -167,18 +167,39 @@ the cycle, so a reader can tell a forced cycle from a natural one.
 ## What a cycle leaves behind
 
 ```
-runs/cycles/2026-09-27T14-51-23Z/
+runs/cycles/2026-09-27T14-51-23Z-BTCUSDT/
   snapshot.json          every value the engine fetched, with source, tier and age
+  inputs.json.gz         the raw inputs: candles on every timeframe, the book levels, funding,
+                         open interest, and the settings the briefs were computed with
   briefs/technical.json  the figures the analyst was given, computed here, not by the model
   briefs/cost.json       what a round trip would cost, per component
   briefs/validator_pro.json   the proposal and the figures a validator was given
   answers/technical.json what the model answered, as it answered it
   intents.jsonl          the intent, if the gate admitted one
-  cycle.json             the whole cycle in one file: data, agents, cost, verdict, refusals
+  placed.json            what the venue did with it, in venue mode
+  cycle.json             the whole cycle in one file, with a sha256 of every file above
+runs/cycles/index/2026-09-27.jsonl   one line per cycle that day, with the hash of its cycle.json
 ```
 
 A cycle that refuses writes the same files minus the intent. That is the point: a refusal is a
 result, and it is as readable as a trade.
+
+### Keeping the record honest
+
+Everything is files: JSON, JSON lines, gzip and Parquet. There is no database and no cache server
+to run, and every record can be read with a text editor.
+
+| Concern | What the desk does |
+|---|---|
+| a crash in the middle of a write | appends end with a newline guard, so a torn line costs only itself; order, position and equity records wait for the disk; whole files are written beside and renamed into place |
+| a brief nobody can check | `inputs.json.gz` keeps what the brief was computed from; `tra runs verify` computes the technical figures again and compares them |
+| a record changed after the fact | `cycle.json` holds a sha256 of every file in the cycle, and the day's index line holds the hash of `cycle.json`; `tra runs verify` checks both |
+| a desk that has run for months | the trigger, the targets, the desk limits and the position keeper read the day index, not every directory, so a cycle costs the same on day 300 as on day 1 |
+| disk use | `tra runs prune --keep 90d` says what it would remove; `--yes` removes it, `--archive` zips each month first; the index and the logs are kept, so the desk's memory of its own past does not change |
+
+A desk that ran before the index existed builds it from its cycle directories on its first cycle.
+A cycle that stopped before writing its index line, a crash or an interrupt at the venue, is still
+read from its directory, so an order it sent is never missing from what the desk knows.
 
 ## Briefs: the model does no arithmetic
 

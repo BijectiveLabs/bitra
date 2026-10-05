@@ -10,6 +10,8 @@ contract.
 
 ```
 trading_research_agents/
+  records/     how every record reaches the disk: crash-safe appends, atomic
+               writes, hashes, the per-day cycle index                          depends on nothing
   ledger/      verdict vocabulary, axes, transferability, kill-ledger rows      depends on nothing
   envelope/    operator parameters: fees per channel, latency, venue access     depends on nothing
   data/        any trade data to Parquet, dataset audit, manifest; venue
@@ -142,6 +144,9 @@ confident about it.
 | `funding.json` | JSON | settlement timestamps (epoch ns) to rates as fractions, the measured interval, the venue and the range; written by `tra data funding`, read by `[run].funding` |
 | `preflight.json` | JSON | what a live venue checked before the first print: clock skew, key permissions, position adopted |
 | `usage.jsonl` | JSON Lines | one model call per line: role, provider, model, tokens, latency, declared cost, outcome |
+| `cycle.json` | JSON | one cycle: data, agents, gates, intent, placement, refusals, and `files`, a sha256 per file in the cycle directory |
+| `inputs.json.gz` | gzip JSON, schema 1 | a cycle's raw inputs as fetched (candles per timeframe, book levels, funding, open interest) and the settings its briefs used |
+| `index/<day>.jsonl` | JSON Lines | one line per cycle: id, instrument, mid, held, intent, placement, open interest, and the sha256 of `cycle.json`; the last line for a cycle wins |
 | `session.json`, `audit.json` | JSON | a session of the seven roles: what was kept and why, the runs, the risk decision and the limits after it, the allocation, the auditor's verdict |
 
 ## Numbers

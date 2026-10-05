@@ -407,6 +407,9 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | `tra data get BTCUSDT 2025-01-01` | download a day, verify its checksum, audit it, write Parquet and funding |
 | `tra data audit export.csv --mapping mapping.toml` | your own CSV, through the same audit |
 | `tra data pull BTCUSDT` | one live snapshot through the chains in `data.toml` |
+| `tra sources show`, `tra sources pull` | where the reading analysts' series come from and how old they are; refresh them now |
+| `tra runs verify` | every cycle's files against their hashes, and its briefs against its raw inputs |
+| `tra runs prune --keep 90d` | what old cycle directories would be removed; add `--yes` (and `--archive`) to do it |
 
 **The ladder, research and hosts**
 
