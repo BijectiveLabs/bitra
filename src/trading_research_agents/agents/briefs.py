@@ -22,7 +22,7 @@ from trading_research_agents.agents.sentiment_analyst.tools import sentiment_bri
 from trading_research_agents.agents.technical_analyst.tools import Features, features
 from trading_research_agents.data.schema import Candle, Direction
 from trading_research_agents.data.series import Event, Series
-from trading_research_agents.data.sources.base import OrderBook
+from trading_research_agents.data.sources.base import Fetched, OrderBook
 from trading_research_agents.envelope.model import Channel
 from trading_research_agents.execution.pretrade import (
     PreTradeCost,
@@ -30,10 +30,14 @@ from trading_research_agents.execution.pretrade import (
     horizon_seconds,
     pre_trade_cost,
 )
+from trading_research_agents.execution.regime import RegimeRule, label
 from trading_research_agents.store.snapshot import Snapshot
 from trading_research_agents.strategy.core import Bar
 
 NS_PER_S = 1_000_000_000
+# Depth beyond the first levels is mostly orders nobody expects to fill; the imbalance that moves a
+# short-horizon price sits near the touch.
+IMBALANCE_LEVELS = 10
 
 
 class BriefError(ValueError):
@@ -107,9 +111,14 @@ class TechnicalBrief:
     funding_rate: str | None
     age_s: float
     mechanism: str
+    regime: str = "mixed"
+    book_imbalance: str | None = None
+    timeframes: Mapping[str, Mapping[str, Any]] | None = None
+    open_interest: Mapping[str, Any] | None = None
+    readings: Mapping[str, Mapping[str, Any]] | None = None
 
     def record(self) -> dict[str, Any]:
-        return {
+        out = {
             "instrument": self.instrument,
             "interval_s": self.interval_s,
             "bars": self.bars,
@@ -118,7 +127,17 @@ class TechnicalBrief:
             "spread_bps": self.spread_bps,
             "funding_rate": self.funding_rate,
             **self.features.record(),
+            "regime": self.regime,
         }
+        if self.book_imbalance is not None:
+            out["book_imbalance"] = self.book_imbalance
+        if self.timeframes:
+            out["timeframes"] = {k: dict(v) for k, v in self.timeframes.items()}
+        if self.open_interest:
+            out["open_interest"] = dict(self.open_interest)
+        if self.readings:
+            out["readings"] = {k: dict(v) for k, v in self.readings.items()}
+        return out
 
 
 def technical_brief(
@@ -128,8 +147,18 @@ def technical_brief(
     interval_s: int = 60,
     lookback_bars: int = 60,
     now: float | None = None,
+    rule: RegimeRule | None = None,
+    context: Mapping[int, Fetched] | None = None,
+    previous_open_interest: Mapping[str, Any] | None = None,
+    readings: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> TechnicalBrief:
-    """Features from the closed candles in the snapshot, with the spread and funding beside them."""
+    """Features from the closed candles in the snapshot, with the market state around them.
+
+    `context` is the higher timeframes' candles, `previous_open_interest` the open interest the last
+    snapshot of this instrument recorded, and `readings` what the operator's thresholds say on each
+    reading analyst's series. All of it is optional; a missing piece is left out, never estimated.
+    """
+    rule = rule or RegimeRule()
     if lookback_bars < 2:
         raise BriefError("lookback_bars is at least 2")
     try:
@@ -144,12 +173,22 @@ def technical_brief(
     if computed is None:
         raise BriefError(f"{snapshot.instrument}: the candles carry no usable features")
     spread = None
+    imbalance = None
     if "orderbook" in snapshot.values:
         book = snapshot.get("orderbook").value
         spread = str(book.spread_bps.quantize(Decimal("0.01")))
+        imbalance = book_imbalance(book)
     funding = None
     if "funding" in snapshot.values:
         funding = str(snapshot.get("funding").value)
+    frames = {
+        interval_name(seconds): frame
+        for seconds, candles in sorted((context or {}).items())
+        if (frame := timeframe_figures(candles, seconds, rule, lookback_bars, now)) is not None
+    }
+    held = None
+    if "open_interest" in snapshot.values and previous_open_interest:
+        held = open_interest_change(snapshot.get("open_interest"), previous_open_interest)
     return TechnicalBrief(
         instrument=snapshot.instrument,
         interval_s=interval_s,
@@ -159,7 +198,80 @@ def technical_brief(
         funding_rate=funding,
         age_s=fetched.age_s(now),
         mechanism=mechanism,
+        regime=label(computed.trend_strength, computed.net_bps, rule),
+        book_imbalance=imbalance,
+        timeframes=frames or None,
+        open_interest=held,
+        readings=dict(readings) if readings else None,
     )
+
+
+def interval_name(seconds: int) -> str:
+    for size, unit in ((86_400, "d"), (3_600, "h"), (60, "m")):
+        if seconds % size == 0:
+            return f"{seconds // size}{unit}"
+    return f"{seconds}s"
+
+
+def timeframe_figures(
+    fetched: Fetched, seconds: int, rule: RegimeRule, lookback_bars: int, now: float | None
+) -> dict[str, Any] | None:
+    """One higher timeframe, reduced to where it is going and where the close sits in it."""
+    candles = list(fetched.value)[-lookback_bars:]
+    computed = features(bars_of(candles, seconds)) if len(candles) >= 2 else None
+    if computed is None:
+        return None
+    shown = computed.record()
+    return {
+        "bars": computed.bars,
+        "net_bps": shown["net_bps"],
+        "zscore": shown["zscore"],
+        "position_in_range": shown["position_in_range"],
+        "trend_strength": shown["trend_strength"],
+        "regime": label(computed.trend_strength, computed.net_bps, rule),
+        "age_s": fetched.age_s(now),
+    }
+
+
+def book_imbalance(book: OrderBook, levels: int = IMBALANCE_LEVELS) -> str | None:
+    """Resting bids against resting asks near the touch, in [-1, 1]; positive leans to the bid."""
+    bids = sum((level.size for level in book.bids[:levels]), Decimal(0))
+    asks = sum((level.size for level in book.asks[:levels]), Decimal(0))
+    total = bids + asks
+    if total <= 0:
+        return None
+    return str(((bids - asks) / total).quantize(Decimal("0.001")))
+
+
+def open_interest_change(current: Fetched, previous: Mapping[str, Any]) -> dict[str, Any] | None:
+    """The change since the last snapshot that recorded it, on the same field, or nothing.
+
+    A venue that answered the same bucket twice has said nothing new, so that is left out rather
+    than reported as a flat zero.
+    """
+    try:
+        then_ns = int(previous.get("as_of") or 0)
+    except (TypeError, ValueError):
+        return None
+    if then_ns <= 0 or current.as_of_ns <= then_ns:
+        return None
+    for name in ("amount", "value"):
+        now_raw, then_raw = current.detail.get(name), previous.get(name)
+        if now_raw is None or then_raw is None:
+            continue
+        try:
+            before, after = Decimal(str(then_raw)), Decimal(str(now_raw))
+        except ArithmeticError:
+            # A record on disk is read back, not trusted; one that does not parse says nothing.
+            return None
+        if not before.is_finite() or not after.is_finite() or before <= 0:
+            return None
+        return {
+            "change_pct": str(((after / before - 1) * 100).quantize(Decimal("0.01"))),
+            "since_s": round((current.as_of_ns - then_ns) / NS_PER_S),
+            "measured_in": "contracts" if name == "amount" else "quote",
+        }
+    return None
 
 
 def reference_returns(snapshot: Snapshot) -> tuple[list[int], list[float]]:
@@ -220,21 +332,52 @@ def declared_state(role: str, brief: Mapping[str, Any]) -> dict[str, Any]:
     declared state. It is recorded beside what the model said, so an operator can see the two agree
     or not, and so the gate that comes next can rest on the declaration rather than on a sentence.
     """
-    states = [
-        str(row.get("state"))
-        for row in brief.get("series", [])
-        if row.get("basis") == "operator-declared threshold"
+    rows = [
+        row for row in brief.get("series", []) if row.get("basis") == "operator-declared threshold"
     ]
+    states = [str(row.get("state")) for row in rows]
     named = sorted({s for s in states if s in ("bullish", "bearish")})
+    score = _net_strength(rows)
+    graded = bool(rows) and all(bool(row.get("graded")) for row in rows)
     if not named:
-        return {"declared": "undeclared", "series_declared": len(states)}
+        return {"declared": "undeclared", "series_declared": len(states), "score": "0"}
     if len(named) > 1:
-        return {"declared": "mixed", "states": named, "series_declared": len(states)}
+        # The gate still reads `mixed` and fails closed on it; conviction weighs the net.
+        return {
+            "declared": "mixed",
+            "states": named,
+            "series_declared": len(states),
+            "score": str(score),
+            "graded": graded,
+        }
     return {
         "declared": named[0],
         "as_role_says_it": DECLARED_AS.get(role, {}).get(named[0]),
         "series_declared": len(states),
+        "score": str(score),
+        "graded": graded,
     }
+
+
+def _net_strength(rows: Sequence[Mapping[str, Any]]) -> Decimal:
+    """The mean signed strength of a role's declared series, between -1 and 1.
+
+    A row written before strengths existed carries only its word, and is read as the full +1 or
+    -1 it always meant. A series whose value is unknown says nothing and is left out.
+    """
+    found: list[Decimal] = []
+    for row in rows:
+        state = str(row.get("state"))
+        if state not in ("bullish", "bearish", "neutral"):
+            continue
+        raw = row.get("strength")
+        if raw is not None:
+            found.append(Decimal(str(raw)))
+        else:
+            found.append({"bullish": Decimal(1), "bearish": Decimal(-1)}.get(state, Decimal(0)))
+    if not found:
+        return Decimal(0)
+    return (sum(found, Decimal(0)) / len(found)).quantize(Decimal("0.001"))
 
 
 def _snapshot_time(snapshot: Snapshot) -> int:
