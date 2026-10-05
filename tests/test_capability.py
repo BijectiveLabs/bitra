@@ -19,12 +19,21 @@ from trading_research_agents.data.sources.capability import (
 
 
 class Exchange:
-    """A venue as ccxt describes one: a `has` map, and a sandbox switch if it has a test net."""
+    """ccxt's base class: every switch is defined here, and here they only refuse."""
 
-    def __init__(self, has: dict[str, bool], *, sandbox: bool = True) -> None:
+    def __init__(self, has: dict[str, bool], *, testnet: bool = True) -> None:
         self.has = has
-        if sandbox:
-            self.set_sandbox_mode = lambda on: None
+        self.urls = {"test": {"public": "https://testnet"}} if testnet else {}
+
+    def enable_demo_trading(self, on: bool) -> None:
+        raise NotImplementedError("NotSupported")
+
+
+class DemoVenue(Exchange):
+    """A venue that implements its demo switch itself, as Bybit does."""
+
+    def enable_demo_trading(self, on: bool) -> None:
+        return None
 
 
 PERPETUAL = {
@@ -41,11 +50,12 @@ PERPETUAL = {
 
 
 def test_a_full_perpetual_venue_can_do_everything_a_cycle_needs() -> None:
-    able = capability_of("bybit", client=Exchange(PERPETUAL))
+    able = capability_of("bybit", client=DemoVenue(PERPETUAL))
 
     assert able.serves_data == ("funding", "ohlcv", "open_interest", "orderbook")
-    assert able.can_send and able.can_attach_exits and able.guards and able.sandbox
-    assert "data and venue execution" in able.verdict()
+    assert able.can_send and able.can_attach_exits and able.guards
+    assert able.demo and able.testnet and able.practice == "demo and testnet"
+    assert able.level == "full" and "venue mode ready" in able.verdict()
 
 
 def test_a_venue_that_cannot_attach_exits_is_told_what_that_costs() -> None:
@@ -88,12 +98,13 @@ def test_missing_account_reads_are_named_rather_than_discovered_live() -> None:
     )
 
     assert able.can_send and able.can_attach_exits and not able.guards
-    assert "refuse a second position" in able.verdict()
+    assert able.level == "data" and "the position or the open orders" in able.verdict()
 
 
 def test_a_venue_with_no_test_environment_says_so() -> None:
-    able = capability_of("nodemo", client=Exchange(PERPETUAL, sandbox=False))
-    assert able.sandbox is False
+    able = capability_of("nodemo", client=Exchange(PERPETUAL, testnet=False))
+    # The inherited demo switch only refuses, so it does not count as a demo environment.
+    assert able.demo is False and able.testnet is False and able.practice == "none"
 
 
 def test_a_venue_the_library_does_not_know_is_refused_by_name() -> None:
@@ -103,5 +114,5 @@ def test_a_venue_the_library_does_not_know_is_refused_by_name() -> None:
 
 def test_the_record_is_what_the_json_output_carries() -> None:
     record: dict[str, Any] = capability_of("bybit", client=Exchange(PERPETUAL)).record()
-    assert set(record) == {"venue", "data", "execution", "sandbox", "verdict"}
+    assert set(record) == {"venue", "data", "execution", "demo", "testnet", "level", "verdict"}
     assert record["execution"]["attached_exits"] is True

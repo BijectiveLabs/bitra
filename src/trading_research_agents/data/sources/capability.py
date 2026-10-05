@@ -35,6 +35,10 @@ EXECUTION_METHODS = {
 }
 
 
+# What ccxt calls its base class; it has been both names across 4.x releases.
+BASE_CLASSES = ("Exchange", "BaseExchange")
+
+
 class CapabilityError(ValueError):
     """The venue cannot be inspected: ccxt does not know it, or is not installed."""
 
@@ -46,7 +50,11 @@ class Capability:
     venue: str
     data: dict[str, bool] = field(default_factory=dict)
     execution: dict[str, bool] = field(default_factory=dict)
-    sandbox: bool = False
+    # The two practice environments a venue may have, which are different places with different
+    # accounts: a demo (Bybit, Binance, Bitget) and a testnet. Venue mode reaches each one through
+    # its own switch and refuses an environment the venue does not have.
+    demo: bool = False
+    testnet: bool = False
     kinds_missing: tuple[str, ...] = ()
 
     @property
@@ -66,27 +74,46 @@ class Capability:
         """Whether the two reads that stop a second position are both available."""
         return bool(self.execution.get("position")) and bool(self.execution.get("open_orders"))
 
+    @property
+    def level(self) -> str:
+        """How far a cycle can go on this venue: full, exits-none, data."""
+        if not self.can_send or not self.guards:
+            return "data"
+        return "full" if self.can_attach_exits else "exits-none"
+
     def verdict(self) -> str:
         if not self.can_send:
             return "data only; this venue does not take orders through ccxt"
+        if not self.guards:
+            unread = " or ".join(
+                what
+                for key, what in (("position", "the position"), ("open_orders", "the open orders"))
+                if not self.execution.get(key)
+            )
+            return (
+                f"data only for a cycle; it cannot report {unread}, and the venue hand refuses "
+                "to send without reading the account"
+            )
         if not self.can_attach_exits:
             return (
-                'data, and orders only with [execution].exits = "none"; it cannot take a stop '
-                "and a take profit with the entry"
+                'venue mode only with [execution].exits = "none": it cannot take a stop and a '
+                "take profit with the entry, so you carry them yourself"
             )
-        if not self.guards:
-            return (
-                "data and orders, but the reads a cycle uses to refuse a second position "
-                "are missing"
-            )
-        return "data and venue execution, with the exits attached and the account readable"
+        return "venue mode ready: orders with the stop and take profit attached, account readable"
+
+    @property
+    def practice(self) -> str:
+        found = [name for name, ok in (("demo", self.demo), ("testnet", self.testnet)) if ok]
+        return " and ".join(found) or "none"
 
     def record(self) -> dict[str, Any]:
         return {
             "venue": self.venue,
             "data": dict(sorted(self.data.items())),
             "execution": dict(sorted(self.execution.items())),
-            "sandbox": self.sandbox,
+            "demo": self.demo,
+            "testnet": self.testnet,
+            "level": self.level,
             "verdict": self.verdict(),
         }
 
@@ -116,6 +143,20 @@ def capability_of(
         venue=name,
         data=data,
         execution=execution,
-        sandbox=hasattr(client, "set_sandbox_mode"),
+        demo=_overrides(client, "enable_demo_trading"),
+        testnet=bool((getattr(client, "urls", None) or {}).get("test")),
         kinds_missing=missing,
     )
+
+
+def _overrides(client: Any, method: str) -> bool:
+    """Whether this venue implements `method` itself rather than inheriting ccxt's refusal.
+
+    ccxt's base class defines every switch and raises NotSupported from the ones a venue lacks, so
+    the method being present says nothing. Who defines it does.
+    """
+    for cls in type(client).__mro__:
+        if method in cls.__dict__:
+            inherited = cls.__module__.startswith("ccxt.base") or cls.__name__ in BASE_CLASSES
+            return not inherited
+    return False

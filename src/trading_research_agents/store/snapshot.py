@@ -24,12 +24,19 @@ from trading_research_agents.data.sources.chain import Attempt, ChainExhaustedEr
 CYCLE_FORMAT = "%Y-%m-%dT%H-%M-%SZ"
 
 
-def cycle_id(at: datetime | None = None) -> str:
-    """The id of a cycle: its own start, to the second, in UTC, safe as a directory name."""
+def cycle_id(at: datetime | None = None, label: str = "") -> str:
+    """The id of a cycle: its own start, to the second, in UTC, safe as a directory name.
+
+    A desk that watches more than one instrument runs more than one cycle in the same second, so the
+    id carries what it was about as well as when it started. The moment is always the first twenty
+    characters, whatever follows it.
+    """
     moment = at or datetime.now(UTC)
     if moment.tzinfo is None:
         raise ValueError("a cycle id comes from a timezone-aware moment")
-    return moment.astimezone(UTC).strftime(CYCLE_FORMAT)
+    stamp = moment.astimezone(UTC).strftime(CYCLE_FORMAT)
+    safe = "".join(c for c in label if c.isalnum() or c in "-_")
+    return f"{stamp}-{safe}" if safe else stamp
 
 
 @dataclass

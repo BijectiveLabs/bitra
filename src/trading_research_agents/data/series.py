@@ -53,6 +53,56 @@ class Threshold:
         return "neutral"
 
     @property
+    def band(self) -> Decimal | None:
+        """The width of the neutral zone, when both a bullish and a bearish bound are declared."""
+        bull = self.bullish_below if self.bullish_below is not None else self.bullish_above
+        bear = self.bearish_above if self.bearish_above is not None else self.bearish_below
+        if bull is None or bear is None or bull == bear:
+            return None
+        return abs(bear - bull)
+
+    @property
+    def graded(self) -> bool:
+        return self.band is not None
+
+    def strength(self, value: Decimal) -> Decimal:
+        """How far past the operator's line the value sits, signed, between -1 and 1.
+
+        Measured in widths of the neutral band the operator drew: a yield 0.03 under a bullish
+        line with a 0.20 band is +0.15, not the same "bullish" as a yield a full band under it.
+        A threshold with only one side declared has no band to measure against, so it stays the
+        plain +1, -1 or 0 it always was, and the record says it is not graded.
+        """
+        band = self.band
+        # The same order `state` reads the lines in, so the line crossed is the one that decided.
+        for bound, under, sign in (
+            (self.bullish_below, True, Decimal(1)),
+            (self.bullish_above, False, Decimal(1)),
+            (self.bearish_below, True, Decimal(-1)),
+            (self.bearish_above, False, Decimal(-1)),
+        ):
+            if bound is not None and (value < bound if under else value > bound):
+                if band is None:
+                    return sign
+                past = min(Decimal(1), abs(value - bound) / band)
+                return sign * past.quantize(Decimal("0.001"))
+        return Decimal(0)
+
+    def describe(self) -> str:
+        """The rule in words, so a reader sees which side of the series is good for the trade."""
+        said = [
+            f"{state} {side} {value}"
+            for state, side, value in (
+                ("bullish", "below", self.bullish_below),
+                ("bullish", "above", self.bullish_above),
+                ("bearish", "below", self.bearish_below),
+                ("bearish", "above", self.bearish_above),
+            )
+            if value is not None
+        ]
+        return ", ".join(said) + ", neutral between" if said else ""
+
+    @property
     def declared(self) -> bool:
         return any(
             v is not None
@@ -340,6 +390,21 @@ def threshold_state(series: Series, at_ns: int) -> dict[str, Any]:
         "basis": "operator-declared threshold"
         if spec.threshold.declared
         else "no threshold declared",
+        # Seen live on 2026-10-04: a model read "bullish" on a yield series as yields rising, and
+        # called it risk-off. The state is the operator's call for the traded instrument, and the
+        # rule beside it shows which side of the series that call sits on.
+        **(
+            {
+                "state_for": "the traded instrument, as the operator declared it",
+                "threshold": spec.threshold.describe(),
+                # How far past the line, in widths of the neutral band: +0.15 is barely bullish,
+                # +1.0 is a full band beyond it. This is the figure conviction weighs.
+                "strength": str(spec.threshold.strength(point.value)),
+                "graded": spec.threshold.graded,
+            }
+            if spec.threshold.declared
+            else {}
+        ),
     }
 
 
