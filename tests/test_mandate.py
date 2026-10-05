@@ -38,6 +38,8 @@ LONG: dict[str, Any] = {
     "take_price": "102000",
     "at": "2026-09-28T02-55-40Z",
     "instrument": "BTCUSDT",
+    "bid": "99999",
+    "ask": "100001",
 }
 
 SIGNED = Mandate(
@@ -46,6 +48,7 @@ SIGNED = Mandate(
     acknowledged_by="the operator",
     acknowledged_on="2026-09-28",
     max_notional=Decimal(200),
+    leverage=Decimal(3),
 )
 
 
@@ -216,7 +219,9 @@ def test_the_hand_sends_one_order_and_records_what_came_back() -> None:
     assert placed["sent"] is True and placed["order_id"] == "order-1"
     assert placed["side"] == "buy" and placed["notional"] == "1000.00" and placed["role"] == "taker"
     sent = venue.orders[0]
-    assert sent["type"] == "market" and sent["side"] == "buy" and sent["price"] is None
+    # A taker entry is a limit IOC 20 bps through the ask, never a naked market order.
+    assert sent["type"] == "limit" and sent["side"] == "buy" and sent["price"] == 100201.002
+    assert sent["params"]["timeInForce"] == "IOC"
     # The exits go out with the entry, so a fill is never left unattended.
     assert sent["params"]["stopLoss"] == {"triggerPrice": 99000.0}
     assert sent["params"]["takeProfit"] == {"triggerPrice": 102000.0}
@@ -225,7 +230,17 @@ def test_the_hand_sends_one_order_and_records_what_came_back() -> None:
     assert sent["params"]["clientOrderId"] == "tra-2026-09-28T02-55-40Z-BTCUSDT"
     assert placed["client_order_id"] == sent["params"]["clientOrderId"]
 
+    # One decision, one order: the same hand asked again refuses.
+    assert "already sent" in hand(LONG)["refused"]
+
     # A short's exits sit the other way round, and the hand checks that they do.
+    hand = VenueHand(
+        venue="bybit",
+        symbol="BTC/USDT:USDT",
+        max_notional=Decimal(2000),
+        keys=("BYBIT_API_KEY", "BYBIT_API_SECRET"),
+        client=venue,
+    )
     short = hand({**LONG, "target": "short", "stop_price": "101000", "take_price": "98000"})
     assert short["side"] == "sell"
     assert venue.orders[-1]["params"]["stopLoss"] == {"triggerPrice": 101000.0}
@@ -281,7 +296,7 @@ def test_a_maker_order_with_no_book_side_is_not_sent() -> None:
         role="maker",
         client=venue,
     )
-    refused = hand(LONG)
+    refused = hand({k: v for k, v in LONG.items() if k not in ("bid", "ask")})
 
     assert refused["sent"] is False and "no book side" in refused["refused"]
     assert venue.orders == []
@@ -505,3 +520,169 @@ def test_the_hand_uses_the_venues_test_environment_unless_told_otherwise() -> No
     )
     # A client handed in is the caller's own; the sandbox switch belongs to the one this builds.
     assert venue.sandbox is None
+
+
+class SteppedExchange(FakeExchange):
+    """ccxt's own rounding: amount_to_precision truncates to the market's step."""
+
+    def __init__(self, step: str, least: str | None = None, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.step, self.least = Decimal(step), least
+        self.loaded = False
+
+    def load_markets(self) -> dict[str, Any]:
+        self.loaded = True
+        return {}
+
+    def amount_to_precision(self, symbol: str, amount: float) -> str:
+        steps = (Decimal(str(amount)) / self.step).to_integral_value(rounding="ROUND_DOWN")
+        return str(steps * self.step)
+
+    def market(self, symbol: str) -> dict[str, Any]:
+        return {"limits": {"amount": {"min": self.least}}}
+
+
+def _stepped_hand(venue: FakeExchange) -> VenueHand:
+    return VenueHand(
+        venue="bybit",
+        symbol="ETH/USDT:USDT",
+        instrument="ETHUSDT",
+        max_notional=Decimal(2000),
+        keys=("BYBIT_API_KEY", "BYBIT_API_SECRET"),
+        client=venue,
+    )
+
+
+def test_a_size_off_the_venues_step_is_refused_rather_than_quietly_rounded() -> None:
+    venue = SteppedExchange("0.01")
+    placed = _stepped_hand(venue)({**LONG, "instrument": "ETHUSDT", "size": "0.036", "mid": "2700"})
+    # ccxt would have sent 0.03: a different trade from the one priced and written down.
+    assert placed["sent"] is False and "would send 0.03" in placed["refused"]
+    assert venue.loaded and venue.orders == []
+
+
+def test_a_size_under_the_venues_minimum_is_refused() -> None:
+    venue = SteppedExchange("0.001", least="0.01")
+    placed = _stepped_hand(venue)({**LONG, "instrument": "ETHUSDT", "size": "0.005", "mid": "2700"})
+    assert placed["sent"] is False and "minimum of 0.01" in placed["refused"]
+    assert venue.orders == []
+
+
+def test_a_size_on_the_venues_step_goes_out_as_it_is() -> None:
+    venue = SteppedExchange("0.01", least="0.01")
+    placed = _stepped_hand(venue)({**LONG, "instrument": "ETHUSDT", "size": "0.04", "mid": "2700"})
+    assert placed["sent"] is True and venue.orders[0]["amount"] == 0.04
+
+
+def test_an_interrupt_while_an_order_rests_takes_it_off_the_book_first() -> None:
+    venue = FakeExchange()
+
+    def interrupted(_s: float) -> None:
+        raise KeyboardInterrupt
+
+    hand = VenueHand(
+        venue="bybit",
+        symbol="BTC/USDT:USDT",
+        max_notional=Decimal(2000),
+        keys=("BYBIT_API_KEY", "BYBIT_API_SECRET"),
+        role="maker",
+        client=venue,
+        clock=lambda: 0.0,
+        sleep=interrupted,
+    )
+    placed = hand({**LONG, "bid": "99999"})
+    assert placed["interrupted"] is True and placed["cancelled"] is True
+    assert venue.cancelled == ["order-1"] and "cancelled before the process left" in placed["note"]
+
+
+def test_a_clock_out_of_step_with_the_venue_refuses_before_the_first_order() -> None:
+    class Skewed(FakeExchange):
+        def fetch_time(self) -> int:
+            return 1_000_000_000_000 - 2_600
+
+    venue = Skewed()
+    hand = VenueHand(
+        venue="bybit",
+        symbol="BTC/USDT:USDT",
+        max_notional=Decimal(2000),
+        keys=("BYBIT_API_KEY", "BYBIT_API_SECRET"),
+        client=venue,
+        clock=lambda: 1_000_000_000.0,
+    )
+    placed = hand(LONG)
+    assert placed["sent"] is False and "+2600 ms" in placed["refused"] and venue.orders == []
+    assert "+2600 ms" in hand.ready()
+
+
+def test_an_order_is_found_by_state_when_the_plain_lookup_refuses() -> None:
+    class PerState(FakeExchange):
+        def __init__(self) -> None:
+            super().__init__()
+            self.has = {**self.has, "fetchOpenOrder": True, "fetchClosedOrder": True}
+
+        def fetch_order(self, order_id: str, symbol: str) -> dict[str, Any]:
+            raise RuntimeError("can only access an order if it is in last 500 orders")
+
+        def fetch_open_order(self, order_id: str, symbol: str) -> dict[str, Any]:
+            raise RuntimeError("order not found among open orders")
+
+        def fetch_closed_order(self, order_id: str, symbol: str) -> dict[str, Any]:
+            return {"status": "closed", "filled": 0.01, "average": 99999.0}
+
+    venue = PerState()
+    hand = VenueHand(
+        venue="bybit",
+        symbol="BTC/USDT:USDT",
+        max_notional=Decimal(2000),
+        keys=("BYBIT_API_KEY", "BYBIT_API_SECRET"),
+        role="maker",
+        client=venue,
+        clock=lambda: 0.0,
+        sleep=lambda _s: None,
+    )
+    placed = hand({**LONG, "bid": "99999"})
+    assert placed["filled"] == "0.01" and placed["cancelled"] is False and venue.cancelled == []
+
+
+class Moved(FakeExchange):
+    """The book half a minute after the snapshot the cycle priced on."""
+
+    def __init__(self, bid: str, ask: str) -> None:
+        super().__init__(statuses=[{"status": "closed", "filled": 0.01, "average": float(bid)}])
+        self.book = {"bids": [[float(bid), 1.0]], "asks": [[float(ask), 1.0]]}
+
+    def fetch_order_book(self, symbol: str) -> dict[str, Any]:
+        return self.book
+
+
+def _maker(venue: FakeExchange, **overrides: Any) -> VenueHand:
+    settings: dict[str, Any] = {
+        "venue": "bybit",
+        "symbol": "BTC/USDT:USDT",
+        "max_notional": Decimal(2000),
+        "keys": ("BYBIT_API_KEY", "BYBIT_API_SECRET"),
+        "role": "maker",
+        "client": venue,
+        "clock": lambda: 0.0,
+        "sleep": lambda _s: None,
+    }
+    settings.update(overrides)
+    return VenueHand(**settings)
+
+
+def test_a_resting_order_sits_at_the_book_as_it_is_now_not_as_it_was() -> None:
+    venue = Moved("100040", "100042")
+    placed = _maker(venue)({**LONG, "bid": "99999", "ask": "100001"})
+    # It rests at today's bid, and the record says how far the mid moved and where it rested.
+    assert venue.orders[0]["price"] == 100040.0
+    assert placed["rested_at"] == "the book at send time" and placed["drift_bps"] == "4.10"
+
+
+def test_a_decision_the_market_has_left_behind_is_refused() -> None:
+    venue = Moved("100150", "100152")
+    placed = _maker(venue, max_drift_bps=Decimal(10))({**LONG, "bid": "99999", "ask": "100001"})
+    assert placed["sent"] is False and "moved 15.10 bps against the trade" in placed["refused"]
+    assert venue.orders == []
+    # A move in the trade's favour is not drift against it.
+    kinder = Moved("99850", "99852")
+    assert _maker(kinder, max_drift_bps=Decimal(10))({**LONG, "bid": "99999"})["sent"] is True

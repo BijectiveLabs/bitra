@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any
 
 import pytest
 
@@ -330,3 +331,138 @@ def test_markout_table_sits_beside_the_half_spread_it_is_measured_against() -> N
         markout_table(fills, mids, horizons_ns=[3600 * S], half_spread_bps=Decimal("0.14"))
     with pytest.raises(FillError, match="horizons must be positive"):
         markout_table(fills, mids, horizons_ns=[0], half_spread_bps=Decimal("0.14"))
+
+
+def test_a_hand_refuses_an_intent_about_another_instrument() -> None:
+    """A desk that watches several instruments builds a hand per instrument; the guard is here."""
+    from trading_research_agents.trading.dispatch import hand_for
+
+    sent: list[dict[str, Any]] = []
+
+    class Client:
+        def create_order(self, **kwargs: object) -> dict[str, Any]:
+            sent.append(dict(kwargs))
+            return {"id": "1", "status": "closed", "filled": 0.01, "average": 4600.0}
+
+    hand = hand_for(
+        venue="somevenue",
+        symbol="ETH/USDT:USDT",
+        instrument="ETHUSDT",
+        max_notional=Decimal("200"),
+        environment="mainnet",
+        env={"SOMEVENUE_API_KEY": "k", "SOMEVENUE_API_SECRET": "s"},
+        client=Client(),
+    )
+    wrong = hand({"instrument": "BTCUSDT", "target": "long", "size": "0.01", "mid": "60000"})
+    assert not wrong["sent"] and "the intent is about BTCUSDT" in wrong["refused"]
+    assert not sent
+
+
+def test_a_hand_reaches_the_environment_it_was_told_and_refuses_to_guess() -> None:
+    """Demo and testnet are two places with two accounts; a key for one is rejected by the other."""
+    from trading_research_agents.trading.dispatch import DispatchError, VenueHand, hand_for
+
+    class Client:
+        def __init__(self) -> None:
+            self.demo = False
+            self.sandbox = False
+
+        def enable_demo_trading(self, on: bool) -> None:
+            self.demo = on
+
+        def set_sandbox_mode(self, on: bool) -> None:
+            self.sandbox = on
+
+    def built(environment: str, client: object) -> object:
+        hand = hand_for(
+            venue="somevenue",
+            symbol="ETH/USDT:USDT",
+            instrument="ETHUSDT",
+            max_notional=Decimal("200"),
+            environment=environment,
+            env={"SOMEVENUE_API_KEY": "k", "SOMEVENUE_API_SECRET": "s"},
+            client=client,
+        )
+        assert isinstance(hand, VenueHand)
+        hand.to_environment(client)
+        return client
+
+    demo = Client()
+    built("demo", demo)
+    assert demo.demo and not demo.sandbox
+
+    testnet = Client()
+    built("testnet", testnet)
+    assert testnet.sandbox and not testnet.demo
+
+    live = Client()
+    built("mainnet", live)
+    assert not live.demo and not live.sandbox
+
+    class OnlySandbox:
+        def set_sandbox_mode(self, on: bool) -> None:
+            pass
+
+    # A client with no way into the environment asked for is refused, never sent somewhere close.
+    with pytest.raises(DispatchError, match="has no demo environment"):
+        built("demo", OnlySandbox())
+    with pytest.raises(DispatchError, match="is not one of"):
+        built("paper", Client())
+
+
+def test_a_cancel_the_venue_refuses_is_recorded_as_what_it_is() -> None:
+    """A note that says "cancelled" beside a flag that says otherwise is the worst of both."""
+    from trading_research_agents.trading.dispatch import hand_for
+
+    class Client:
+        has = {"createOrderWithTakeProfitAndStopLoss": True}
+
+        def __init__(self, state: str) -> None:
+            self.state = state
+
+        def create_order(self, *args: object, **kwargs: object) -> dict[str, Any]:
+            return {"id": "1", "status": "open"}
+
+        def fetch_order(self, order_id: str, symbol: str) -> dict[str, Any]:
+            return {"status": self.state, "filled": 0}
+
+        def cancel_order(self, order_id: str, symbol: str) -> dict[str, Any]:
+            raise RuntimeError("order not exists or too late to cancel")
+
+    def send(state: str) -> dict[str, Any]:
+        hand = hand_for(
+            venue="somevenue",
+            symbol="ETH/USDT:USDT",
+            instrument="ETHUSDT",
+            max_notional=Decimal("200"),
+            role="maker",
+            environment="mainnet",
+            limit_timeout_s=0.01,
+            env={"SOMEVENUE_API_KEY": "k", "SOMEVENUE_API_SECRET": "s"},
+            client=Client(state),
+        )
+        return dict(
+            hand(
+                {
+                    "instrument": "ETHUSDT",
+                    "target": "long",
+                    "size": "0.01",
+                    "mid": "2700",
+                    "bid": "2699",
+                    "ask": "2701",
+                    "stop_price": "2650",
+                    "take_price": "2800",
+                }
+            )
+        )
+
+    # The venue had already ended it: ordinary for a post-only limit, seen while waiting, and said
+    # as such - nothing to cancel, and nothing held from it.
+    gone = send("canceled")
+    assert gone["sent"] and not gone["cancelled"] and gone["status"] == "canceled"
+    assert "ended the order itself (canceled) with 0 filled" in gone["note"]
+    assert "cancel_refused" not in gone
+
+    # Still open and the cancel was refused: that is an order resting at a venue, said loudly.
+    resting = send("open")
+    assert not resting["cancelled"] and "may still be resting" in resting["note"]

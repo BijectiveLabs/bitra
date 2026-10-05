@@ -49,6 +49,10 @@ I accept that the losses are mine.
 """
 
 
+MARGIN_MODES = ("isolated", "cross")
+HOLD_LIMITS = ("timeout", "horizon", "none")
+
+
 class MandateError(ValueError):
     """The mandate as written does not authorise what was asked for."""
 
@@ -75,6 +79,22 @@ class Mandate:
     price_offset_bps: Decimal = Decimal(0)
     adopt_open_position: bool = False
     params: Mapping[str, Any] = field(default_factory=dict)
+    # How far the mid may have moved against the trade between the snapshot it was priced on and
+    # the moment it is sent. Undeclared means no bound, and the move is still recorded.
+    max_drift_bps: Decimal | None = None
+    # The capital side of an order. Leverage is the operator's to declare and code's to apply and
+    # verify; it never decides the size, only the margin a size ties up and where liquidation sits.
+    leverage: Decimal | None = None
+    margin_mode: str = "isolated"
+    # A taker entry goes out as a limit IOC this far through the touch, never as a naked market
+    # order. Exits are never price-limited: a close that fails is worse than one that slips.
+    max_slippage_bps: Decimal = Decimal(20)
+    # At most this share of the free margin goes into any one order.
+    max_margin_share: Decimal = Decimal("0.5")
+    # Liquidation, estimated conservatively, must sit at least this far beyond the stop.
+    liquidation_buffer_bps: Decimal = Decimal(50)
+    # When an open position is closed by time: [exit].timeout_bars, the analyst's horizon, or never.
+    hold_limit: str = "timeout"
 
     def __post_init__(self) -> None:
         if self.mode not in MODES:
@@ -89,6 +109,20 @@ class Mandate:
             raise MandateError("[execution].limit_timeout_s is positive")
         if self.price_offset_bps < 0:
             raise MandateError("[execution].price_offset_bps is not negative")
+        if self.max_drift_bps is not None and self.max_drift_bps < 0:
+            raise MandateError("[execution].max_drift_bps is not negative")
+        if self.leverage is not None and self.leverage < 1:
+            raise MandateError("[execution].leverage is at least 1")
+        if self.margin_mode not in MARGIN_MODES:
+            raise MandateError(f"[execution].margin_mode is one of {list(MARGIN_MODES)}")
+        if self.max_slippage_bps <= 0:
+            raise MandateError("[execution].max_slippage_bps is positive")
+        if not Decimal(0) < self.max_margin_share <= Decimal(1):
+            raise MandateError("[execution].max_margin_share is above 0 and at most 1")
+        if self.liquidation_buffer_bps < 0:
+            raise MandateError("[execution].liquidation_buffer_bps is not negative")
+        if self.hold_limit not in HOLD_LIMITS:
+            raise MandateError(f"[execution].hold_limit is one of {list(HOLD_LIMITS)}")
         if self.acknowledged_on:
             try:
                 signed = date.fromisoformat(self.acknowledged_on)
@@ -112,6 +146,13 @@ class Mandate:
             "exits": self.exits,
             "limit_timeout_s": self.limit_timeout_s,
             "price_offset_bps": str(self.price_offset_bps),
+            "max_drift_bps": None if self.max_drift_bps is None else str(self.max_drift_bps),
+            "leverage": None if self.leverage is None else str(self.leverage),
+            "margin_mode": self.margin_mode,
+            "max_slippage_bps": str(self.max_slippage_bps),
+            "max_margin_share": str(self.max_margin_share),
+            "liquidation_buffer_bps": str(self.liquidation_buffer_bps),
+            "hold_limit": self.hold_limit,
             "adopt_open_position": self.adopt_open_position,
             "params": {str(k): str(v) for k, v in sorted(self.params.items())},
         }
@@ -158,6 +199,11 @@ def blocking(
         stops.append("[execution].venue names the live venue plugin to send through")
     if mandate.max_notional is None:
         stops.append("[execution].max_notional caps one order; venue mode will not run without it")
+    if mandate.leverage is None:
+        stops.append(
+            "[execution].leverage is yours to declare (3 is a common start); it is applied at the "
+            "venue before the first order and checked against the stop on every order"
+        )
     if tier != LIVE_TIER:
         stops.append(
             f"the ladder is at {tier}; venue mode needs {LIVE_TIER}, promoted with evidence"

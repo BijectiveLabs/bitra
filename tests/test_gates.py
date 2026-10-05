@@ -158,7 +158,7 @@ def test_every_target_refusal_names_its_figure() -> None:
         targets, net_bps=Decimal("11"), reward_to_risk=Decimal("2"), round_trips_today=1
     )
     assert good.admitted and good.reasons == ()
-    assert good.record()["net_bps"] == "11"
+    assert Decimal(good.record()["net_bps"]) == Decimal("11")
 
 
 def test_a_ratio_target_without_a_take_profit_cannot_be_met() -> None:

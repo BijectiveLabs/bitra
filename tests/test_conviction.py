@@ -1,9 +1,10 @@
 """How much capital goes behind an idea, from a rule the operator wrote.
 
 The case that matters is the one a desk actually meets: macro and sentiment say one thing, on-chain
-says the other, and the deciding analyst wants to trade anyway. Conflicting context has to cost
-size, silence has to count as neither agreement nor disagreement, and nothing here may ever produce
-a size larger than the operator already allowed.
+says the other, and the deciding analyst wants to trade anyway. Each voice counts as strong as it
+actually is, conflicting context costs size in proportion, only opposition that outweighs the case
+stops the trade, silence counts as neither agreement nor disagreement, and nothing here may ever
+produce a size larger than the operator already allowed.
 """
 
 from __future__ import annotations
@@ -70,7 +71,7 @@ def test_everything_agreeing_trades_the_whole_base_size() -> None:
         confidence=0.9,
         votes=("support", "support", "abstain"),
     )
-    assert score.score == Decimal("0.850") and score.against == ()
+    assert score.score == Decimal("0.971") and score.against == ()
 
     put = stake(score)
     assert put.admitted and put.size == BASE and put.multiple == Decimal(1)
@@ -91,7 +92,8 @@ def test_one_leg_pointing_the_other_way_costs_size() -> None:
 
     assert score.agreed == ("macro_analyst", "sentiment_analyst", "technical_analyst")
     assert score.against == ("onchain_analyst",)
-    assert score.score == Decimal("0.175")
+    # A full band of opposition from the heaviest reading voice, and a validator against: 0.2.
+    assert score.score == Decimal("0.200")
 
     put = stake(score)
     assert not put.admitted and put.size == Decimal(0)
@@ -108,18 +110,21 @@ def test_the_middle_of_the_ladder_trades_a_fraction() -> None:
     )
     # Sentiment declared nothing, so it is silence rather than a vote either way.
     assert score.silent == ("sentiment_analyst",)
-    assert score.score == Decimal("0.740")
+    # Two voices agreeing in full lift a 0.6 confidence to 3.7 of 4.5.
+    assert score.score == Decimal("0.822")
 
     put = stake(score)
-    assert put.admitted and put.multiple == Decimal("0.5") and put.size == Decimal("0.005")
+    assert put.admitted and put.multiple == Decimal(1) and put.size == BASE
 
 
 def test_silence_is_never_counted_as_agreement() -> None:
     quiet = score_of(RULE, target="long", states={}, confidence=0.8, votes=())
     assert quiet.silent == ("macro_analyst", "onchain_analyst", "sentiment_analyst")
-    # Only the deciding analyst spoke: 2 * 0.8 out of a possible 5.
-    assert quiet.score == Decimal("0.320")
-    assert not stake(quiet).admitted
+    # Only the deciding analyst spoke, so the score is its own confidence: silence neither raised it
+    # nor diluted it. A reading barely past its line moves it barely, and silence is the limit of
+    # that, so the two cannot be treated differently without a jump at zero.
+    assert quiet.score == Decimal("0.800")
+    assert quiet.agreed == ("technical_analyst",)
 
 
 def test_a_short_reads_the_declarations_the_other_way_round() -> None:
@@ -226,3 +231,56 @@ def test_the_caps_are_arithmetic_anyone_can_check() -> None:
         notional_cap(equity=Decimal(0), max_leverage=Decimal(2))
     assert leverage_of(size=Decimal(1), price=Decimal(100), equity=Decimal(50)) == Decimal("2.000")
     assert leverage_of(size=Decimal(1), price=Decimal(100), equity=None) is None
+
+
+def graded(**scores: str) -> dict[str, dict[str, str]]:
+    """Declared states with their graded scores, as a brief now carries them."""
+    return {
+        role: {"declared": "bullish" if Decimal(value) > 0 else "bearish", "score": value}
+        for role, value in scores.items()
+    }
+
+
+def test_weak_opposition_costs_a_little_size_and_the_trade_goes_ahead() -> None:
+    # Seen live on 2026-10-04: a short at 0.70 against macro barely past its bullish line (+0.15)
+    # and sentiment barely past its own (+0.057). As words that read as two full voices against;
+    # as figures it is a small dent in a clear case.
+    score = score_of(
+        RULE,
+        target="short",
+        states=graded(macro_analyst="0.15", sentiment_analyst="0.057"),
+        confidence=0.7,
+    )
+    assert score.against == ("macro_analyst", "sentiment_analyst")
+    assert score.score == Decimal("0.561")
+    put = stake(score)
+    assert put.admitted and put.multiple == Decimal("0.5")
+
+
+def test_mostly_agreeing_with_one_dissent_trades_a_middle_size() -> None:
+    score = score_of(
+        RULE,
+        target="long",
+        states=graded(macro_analyst="0.6", onchain_analyst="0.5", sentiment_analyst="-0.4"),
+        confidence=0.7,
+    )
+    assert score.score == Decimal("0.718")
+    assert stake(score).multiple == Decimal("0.5")
+
+
+def test_opposition_that_outweighs_the_case_stops_the_trade() -> None:
+    score = score_of(
+        RULE,
+        target="short",
+        states=graded(macro_analyst="1", onchain_analyst="1", sentiment_analyst="1"),
+        confidence=0.7,
+    )
+    assert score.score == Decimal("0.000")
+    assert not stake(score).admitted
+
+
+def test_a_stronger_reading_moves_the_score_further() -> None:
+    weak = score_of(RULE, target="long", states=graded(macro_analyst="0.2"), confidence=0.6)
+    strong = score_of(RULE, target="long", states=graded(macro_analyst="0.9"), confidence=0.6)
+    against = score_of(RULE, target="long", states=graded(macro_analyst="-0.9"), confidence=0.6)
+    assert against.score < Decimal("0.600") < weak.score < strong.score

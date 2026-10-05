@@ -116,9 +116,12 @@ class Score:
     support: int = 0
     opposition: int = 0
     contributions: tuple[tuple[str, str], ...] = ()
+    # What each voice could have brought at most, so a contribution reads as "-0.150 of 1".
+    weights: tuple[tuple[str, str], ...] = ()
 
     def record(self) -> dict[str, Any]:
         return {
+            "weights": {name: value for name, value in self.weights},
             "score": str(self.score),
             "raw": str(self.raw),
             "possible": str(self.possible),
@@ -155,6 +158,20 @@ class Stake:
         }
 
 
+def strength_of(state: Mapping[str, Any] | None) -> Decimal:
+    """A role's graded score, signed for the instrument; the plain word when no score is there."""
+    if not state:
+        return Decimal(0)
+    raw = state.get("score")
+    if raw is not None:
+        try:
+            return max(Decimal(-1), min(Decimal(1), Decimal(str(raw))))
+        except ArithmeticError:
+            return Decimal(0)
+    word = declared_of(state)
+    return {"bullish": Decimal(1), "bearish": Decimal(-1)}.get(word, Decimal(0))
+
+
 def score_of(
     rule: Conviction,
     *,
@@ -163,11 +180,15 @@ def score_of(
     confidence: float,
     votes: Sequence[str] = (),
 ) -> Score:
-    """Add up the desk's voices for this direction.
+    """Add up the desk's voices for this direction, each one as strong as it actually is.
 
-    A role that declared nothing contributes nothing: it is neither agreement nor disagreement, and
-    counting silence as either is how a desk talks itself into a trade. The deciding analyst's own
-    weight is scaled by the confidence it gave, because that is the one number it is asked for.
+    Every voice is a signed figure. The deciding analyst brings its weight times its confidence. A
+    reading analyst brings its weight times its graded score - how far its series sit past the
+    operator's lines, between -1 and 1 - pointed with or against the direction. A validator brings
+    its weight for or against. The score is what they add up to, over the weight they actually
+    expressed: a macro reading barely past its line moves the score a little either way, a reading
+    a full band past it moves it a lot, and a role that said nothing neither helps nor dilutes.
+    Opposition reduces size; only opposition strong enough to outweigh the case stops the trade.
     """
     if target not in AGREES:
         raise ConvictionError(f"target is long or short, not {target!r}")
@@ -177,39 +198,42 @@ def score_of(
     parts: list[tuple[str, str]] = []
     raw = Decimal(0)
     possible = Decimal(0)
+    way = Decimal(1) if target == "long" else Decimal(-1)
 
     for role, weight in sorted(rule.weights.items()):
-        possible += weight
         if role == DECIDING:
             share = (weight * Decimal(str(confidence))).quantize(Decimal("0.001"))
             raw += share
+            possible += weight
             agreed.append(role)
             parts.append((role, str(share)))
             continue
-        word = declared_of(states.get(role))
-        if word == AGREES[target]:
-            raw += weight
-            agreed.append(role)
-            parts.append((role, str(weight)))
-        elif word == OPPOSES[target]:
-            raw -= weight
-            against.append(role)
-            parts.append((role, str(-weight)))
-        else:
+        strength = strength_of(states.get(role))
+        voice = (weight * strength * way).quantize(Decimal("0.001"))
+        if voice == 0:
             silent.append(role)
             parts.append((role, "0"))
+            continue
+        raw += voice
+        possible += abs(voice)
+        (agreed if voice > 0 else against).append(role)
+        parts.append((role, str(voice)))
 
     support = sum(1 for vote in votes if vote == "support")
     opposition = sum(1 for vote in votes if vote == "oppose")
     if rule.validator_weight > 0 and votes:
-        possible += rule.validator_weight * len(votes)
+        possible += rule.validator_weight * (support + opposition)
         raw += rule.validator_weight * (support - opposition)
         parts.append(("validators", str(rule.validator_weight * (support - opposition))))
 
+    full = [(role, str(weight)) for role, weight in sorted(rule.weights.items())]
+    if rule.validator_weight > 0 and votes:
+        full.append(("validators", str(rule.validator_weight * len(votes))))
     if possible <= 0:
-        return Score(score=Decimal(0), raw=raw, possible=Decimal(0))
+        return Score(score=Decimal(0), raw=raw, possible=Decimal(0), weights=tuple(full))
     share = max(raw, Decimal(0)) / possible
     return Score(
+        weights=tuple(full),
         score=share.quantize(Decimal("0.001")),
         raw=raw,
         possible=possible,
@@ -235,7 +259,7 @@ def stake_for(
     """The size the ladder allows, after every cap the operator already declared."""
     reasons: list[str] = []
     if score.score < rule.min_score:
-        reasons.append(f"conviction {score.score} is below the declared floor {rule.min_score}")
+        reasons.append(f"score {score.score} is below the declared floor {rule.min_score}")
         return Stake(
             admitted=False,
             size=Decimal(0),
