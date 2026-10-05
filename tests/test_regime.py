@@ -220,3 +220,17 @@ def test_the_project_declares_context_timeframes_and_the_regime_lines() -> None:
         parse_strategy_config(agent_raw(regime={"trend": 1}))
     with pytest.raises(ConfigError, match="range_below < trend_above"):
         parse_strategy_config(agent_raw(regime={"range_below": Decimal("3")}))
+
+
+def test_the_live_table_lists_capital_and_regime_where_they_happen(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    from trading_research_agents.cli.main import _cycle_steps
+
+    cfg, _, _ = cycle_config(tmp_path, envelope, [analyst_answer()], account=lambda: None)
+    steps = _cycle_steps(cfg)
+    # Seen live: capital was announced but missing from the table, so it was drawn last.
+    assert steps.index("data") < steps.index("capital") < steps.index("regime")
+    assert steps.index("regime") < steps.index("technical")
+    plain, _, _ = cycle_config(tmp_path / "plain", envelope, [analyst_answer()])
+    assert "capital" not in _cycle_steps(plain)

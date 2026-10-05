@@ -2674,6 +2674,8 @@ def _cycle_steps(cfg: Any) -> list[str]:
         steps.append("trigger")
     if cfg.size_quote is not None:
         steps.append("size")
+    if cfg.account is not None:
+        steps.append("capital")
     steps.extend(["regime", "technical"])
     steps.extend(role for role in cfg.analysts if role != "technical_analyst")
     steps.append("cost")
