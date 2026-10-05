@@ -106,8 +106,11 @@ def snapshot_with(
 class Stub:
     """A source that answers from a prepared snapshot, so a cycle runs without a network."""
 
-    def __init__(self, kind: str, value: Any, *, fail: str = "") -> None:
+    def __init__(
+        self, kind: str, value: Any, *, fail: str = "", closes: list[str] | None = None
+    ) -> None:
         self.kind = kind
+        self.closes = closes
         self.value = value
         self.fail = fail
         self.seen: list[dict[str, Any]] = []
@@ -127,7 +130,7 @@ class Stub:
         self.seen.append(dict(options))
         if self.fail:
             raise SourceError(self.fail)
-        prepared = snapshot_with().get(kind)
+        prepared = snapshot_with(closes=self.closes).get(kind)
         return Fetched(
             kind=kind,
             instrument=instrument,
@@ -140,22 +143,32 @@ class Stub:
         )
 
 
-def chains(*, without: str = "") -> dict[str, SourceChain]:
+def chains(*, without: str = "", closes: list[str] | None = None) -> dict[str, SourceChain]:
     out = {}
     for kind in ("ohlcv", "orderbook", "funding"):
         if kind == without:
             continue
         out[kind] = SourceChain(
-            kind=kind, sources=(Stub(kind, None),), ttl_s=600, clock=lambda: NOW
+            kind=kind, sources=(Stub(kind, None, closes=closes),), ttl_s=600, clock=lambda: NOW
         )
     return out
 
 
-def analyst_answer(target: str = "long", confidence: float = 0.9, horizon: int = 30) -> str:
+def analyst_answer(
+    target: str = "long",
+    confidence: float = 0.9,
+    horizon: int = 30,
+    setup: str = "range_reversion",
+    cited: list[dict[str, str]] | None = None,
+) -> str:
     return json.dumps(
         {
             "target": target,
+            "setup": "no_setup" if target == "flat" else setup,
             "reason": "the close sits two standard deviations below its window",
+            # interval_s is in this role's brief on every cycle, so a fixture can cite it and the
+            # check has something real to check.
+            "figures_used": [{"figure": "interval_s", "value": "60"}] if cited is None else cited,
             "confidence": confidence,
             "horizon_bars": horizon,
         }
@@ -468,7 +481,9 @@ def test_a_cycle_refuses_to_be_configured_wrong(tmp_path: Path, envelope: Envelo
         ({"mode": "nowhere"}, "mode is one of"),
         # Venue mode is refused unless the caller hands the cycle something to send with.
         ({"mode": "venue"}, "needs something to send with"),
-        ({"size": Decimal(0)}, "size is a positive"),
+        ({"size": Decimal(0)}, "exactly one of them"),
+        ({"size": Decimal("-1")}, "positive when declared"),
+        ({"size_quote": Decimal(100)}, "exactly one of them"),
         ({"magnitude_bps": Decimal(0)}, "edge the operator claims"),
         ({"venue_key": "nowhere/taker"}, "is not a channel"),
     ):
@@ -496,7 +511,9 @@ def test_the_cli_runs_one_cycle(
             None,
             None,
             True,
-            lambda model, base_url: FakeCompleter([analyst_answer()]),
+            # The fixture's prints climb one tick a minute, which measures as a trend; a range
+            # setup on it would be refused by the regime rule before the cost brief is reached.
+            lambda model, base_url: FakeCompleter([analyst_answer(setup="trend_continuation")]),
         )
     )
     config = project / "strategy.toml"
@@ -562,6 +579,7 @@ def reading_answer(role: str) -> str:
                 "regime": "risk-off",
                 "events": [],
                 "reason": "us10y at 4.4 is above the operator's declared 4.25",
+                "figures_used": [],
                 "data_as_of": "2026-09-27T10:00:00+00:00",
             }
         )
@@ -570,6 +588,7 @@ def reading_answer(role: str) -> str:
             {
                 "signal": "distribution",
                 "reason": "net flow to venues over the window is positive",
+                "figures_used": [],
                 "data_as_of": "2026-09-27T10:00:00+00:00",
             }
         )
@@ -697,6 +716,7 @@ def test_the_matrix_refuses_a_direction_the_declarations_do_not_support(
                     "regime": "risk-off",
                     "events": [],
                     "reason": "the declared threshold points the other way",
+                    "figures_used": [],
                     "data_as_of": "2026-09-27T00:00:00+00:00",
                 }
             ),
@@ -881,6 +901,7 @@ def test_a_reading_analyst_reaching_into_a_later_step_is_recorded_and_ignored(
                     "regime": "neutral",
                     "events": [],
                     "reason": "nothing declared, but I would go long with a tight stop loss",
+                    "figures_used": [],
                     "data_as_of": "2026-09-27T00:00:00+00:00",
                 }
             ),
@@ -918,19 +939,19 @@ def test_conviction_sizes_the_trade_and_the_cost_is_priced_at_that_size(
     cfg, _, _ = cycle_config(
         tmp_path,
         envelope,
-        [analyst_answer(confidence=0.8)],
+        [analyst_answer(confidence=0.6)],
         conviction=conviction_rule(),
         size_step=Decimal("0.1"),
     )
     result = run_cycle(cfg)
 
-    # The macro analyst was not asked, so it is silence: half of what could have agreed did.
-    assert result.stake is not None and result.stake.score.score == Decimal("0.400")
-    assert result.stake.multiple == Decimal("0.25") and result.stake.size == Decimal("1.2")
+    # The macro analyst was not asked, so it is silence: the score is the deciding confidence.
+    assert result.stake is not None and result.stake.score.score == Decimal("0.600")
+    assert result.stake.multiple == Decimal("0.5") and result.stake.size == Decimal("2.5")
     assert result.acted and result.intent is not None
-    assert result.intent["size"] == "1.2" and result.intent["base_size"] == "5"
+    assert result.intent["size"] == "2.5" and result.intent["base_size"] == "5"
     # The gate priced the trade it admitted, not the base the operator declared.
-    assert result.briefs["cost"]["size"] == "1.2"
+    assert result.briefs["cost"]["size"] == "2.5"
     summary = json.loads((Path(str(result.path)) / "cycle.json").read_text("utf-8"))
     assert summary["conviction"]["score"]["contributions"]["macro_analyst"] == "0"
 
@@ -942,7 +963,7 @@ def test_conviction_below_the_floor_refuses_after_everything_else_passed(
         tmp_path,
         envelope,
         [analyst_answer(confidence=0.7)],
-        conviction=conviction_rule(min_score=Decimal("0.6")),
+        conviction=conviction_rule(min_score=Decimal("0.75")),
     )
     result = run_cycle(cfg)
 
@@ -973,10 +994,10 @@ def test_a_context_that_disagrees_costs_size_rather_than_being_averaged_away(
         conviction=conviction_rule(),
     )
     # Nothing is declared for the macro analyst in this fixture, so it stays silent either way; what
-    # this pins is that the deciding analyst alone cannot reach the top of the ladder.
+    # this pins is that silence neither lifts nor dilutes the deciding analyst's confidence.
     result = run_cycle(agreeing)
-    assert result.stake is not None and result.stake.multiple == Decimal("0.5")
-    assert result.stake.score.score == Decimal("0.500")
+    assert result.stake is not None and result.stake.score.score == Decimal("1.000")
+    assert result.stake.score.silent == ("macro_analyst",)
 
 
 def test_venue_mode_sends_the_intent_and_keeps_what_came_back(
@@ -1054,7 +1075,7 @@ def test_a_loop_ends_on_the_budget_the_kill_switch_or_the_count(tmp_path: Path) 
     # A stop that is not the budget does not end the loop: the next cycle decides again.
     assert plan.stop_reason(Stopped("no technical brief: ohlcv is not in the snapshot"), 1) == ""
 
-    assert plan.stop_reason(Stopped(), 3) == "the 3 cycle(s) asked for"
+    assert plan.stop_reason(Stopped(), 3) == "the 3 pass(es) asked for"
 
     kill.write_text("stop", encoding="utf-8")
     assert "kill switch" in plan.stop_reason(Stopped(), 1)
@@ -1093,3 +1114,153 @@ def test_an_intent_without_declared_exits_carries_none(tmp_path: Path, envelope:
 
     assert result.intent is not None
     assert "stop_price" not in result.intent and "take_price" not in result.intent
+
+
+def test_a_quote_size_is_converted_at_the_cycles_own_mid(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    cfg, _, _ = cycle_config(
+        tmp_path,
+        envelope,
+        [analyst_answer()],
+        size=Decimal(0),
+        size_quote=Decimal("510"),
+        size_step=Decimal("0.1"),
+    )
+    result = run_cycle(cfg)
+
+    # The book in the fixture is 101.95 / 102.05, so 510 of quote is 5.0 of base.
+    assert result.intent is not None and Decimal(result.intent["base_size"]) == Decimal("5.0")
+    summary = json.loads((Path(str(result.path)) / "cycle.json").read_text("utf-8"))
+    said = summary["size"]
+    assert (said["mid"], said["size_quote"], said["step"]) == ("102.00", "510", "0.1")
+    assert Decimal(said["size"]) == Decimal(5)
+
+
+def test_a_quote_size_below_one_step_stops_before_anyone_is_asked(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    cfg, _, usage = cycle_config(
+        tmp_path,
+        envelope,
+        [analyst_answer()],
+        size=Decimal(0),
+        size_quote=Decimal("50"),
+        size_step=Decimal("1"),
+    )
+    result = run_cycle(cfg)
+    assert not result.acted and result.stopped_by is not None
+    assert "less than one step" in result.stopped_by and usage.tokens == 0
+
+
+def test_an_interrupt_at_the_venue_is_written_down_before_it_stops_the_run(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    def hand(intent: Any) -> dict[str, Any]:
+        return {
+            "sent": True,
+            "order_id": "order-1",
+            "interrupted": True,
+            "cancelled": True,
+            "note": "interrupted while the order rested; it was cancelled",
+        }
+
+    cfg, _, _ = cycle_config(tmp_path, envelope, [analyst_answer()], mode="venue", place=hand)
+    with pytest.raises(KeyboardInterrupt, match="interrupted at the venue"):
+        run_cycle(cfg)
+    [where] = [p for p in (tmp_path / "cycles").iterdir() if p.is_dir()]
+    assert json.loads((where / "placed.json").read_text("utf-8"))["cancelled"] is True
+    summary = json.loads((where / "cycle.json").read_text("utf-8"))
+    assert summary["stopped_by"].startswith("interrupted at the venue")
+
+
+def test_a_reading_model_that_fails_still_leaves_its_declared_state(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    cfg, _, _ = cycle_config(
+        tmp_path,
+        envelope,
+        {"technical_analyst": analyst_answer()},
+        analysts=("technical_analyst", "macro_analyst"),
+    )
+    result = run_cycle(cfg)
+    said = result.context["macro_analyst"]
+    # The model never answered, and the code over the operator's thresholds still stands.
+    assert said["error"] == "the model did not answer"
+    assert said["declared_state"]["declared"] == "undeclared"
+
+
+def test_an_instrument_already_open_at_the_venue_waits_without_asking_anyone(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    from trading_research_agents.execution.desk import Open
+
+    cfg, _, usage = cycle_config(
+        tmp_path,
+        envelope,
+        [analyst_answer()],
+        held=lambda: ((Open(instrument="BTCUSDT", side="long"),), "the venue"),
+        wait_while_open=True,
+    )
+    result = run_cycle(cfg)
+    assert result.held and not result.acted and usage.tokens == 0
+    assert any("waits for its exits" in r for r in result.refusals)
+
+
+def test_the_account_sets_the_equity_and_a_day_of_losses_stops_new_entries(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    from trading_research_agents.trading.capital import Account
+
+    readings = iter([Decimal(10000), Decimal(9600)])
+
+    def account() -> Account:
+        return Account("USDT", next(readings), Decimal(9000), Decimal(0))
+
+    first, _, _ = cycle_config(
+        tmp_path,
+        envelope,
+        [analyst_answer()],
+        equity=Decimal(50000),
+        account=account,
+        daily_loss_limit_bps=Decimal(300),
+    )
+    done = run_cycle(first)
+    # Sizing uses the smaller of what is declared and what is there.
+    assert done.briefs["equity"]["used"] == "10000"
+
+    later, _, usage = cycle_config(
+        tmp_path,
+        envelope,
+        [analyst_answer()],
+        equity=Decimal(50000),
+        account=account,
+        daily_loss_limit_bps=Decimal(300),
+    )
+    stopped = run_cycle(later)
+    assert stopped.stopped_by is not None and "down 400.00 bps" in stopped.stopped_by
+    assert not stopped.acted and usage.tokens == 0
+
+
+def test_a_declared_validator_that_never_answers_refuses_the_trade_by_default(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    # The validator role is scripted once, so one of the two stances gets no answer at all.
+    answers = {
+        "technical_analyst": analyst_answer(),
+        "validator": validator_answer("pro", "support"),
+    }
+    cfg, _, _ = cycle_config(tmp_path, envelope, answers, validators=("pro", "contra"))
+    refused = run_cycle(cfg)
+    assert not refused.acted and refused.stopped_by is not None
+    assert "did not answer" in refused.stopped_by and "on_missing_validator" in refused.stopped_by
+
+    cfg, _, _ = cycle_config(
+        tmp_path / "continue",
+        envelope,
+        dict(answers),
+        validators=("pro", "contra"),
+        on_missing_validator="continue",
+    )
+    carried_on = run_cycle(cfg)
+    assert carried_on.acted

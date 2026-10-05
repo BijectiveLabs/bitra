@@ -184,6 +184,67 @@ def test_targets_are_read_and_a_ratio_needs_a_take_profit() -> None:
         parse_strategy_config(agent_raw(targets={"min_net": Decimal("5")}))
 
 
+def test_the_edge_multiple_and_the_research_cost_are_read_like_any_other_target() -> None:
+    cfg = parse_strategy_config(
+        agent_raw(
+            targets={
+                "min_net_bps": Decimal("5"),
+                "min_edge_multiple": Decimal("2.0"),
+                "max_research_bps": Decimal("25"),
+            }
+        )
+    )
+    assert cfg.targets.min_edge_multiple == Decimal("2.0")
+    assert cfg.targets.max_research_bps == Decimal("25")
+    with pytest.raises(ConfigError, match="at least 1"):
+        parse_strategy_config(agent_raw(targets={"min_edge_multiple": Decimal("0.5")}))
+
+
+def test_the_trigger_is_read_and_widening_needs_something_to_widen() -> None:
+    cfg = parse_strategy_config(agent_raw())
+    assert cfg.trigger.idle
+
+    declared = parse_strategy_config(
+        agent_raw(
+            trigger={
+                "min_move_bps": Decimal("15"),
+                "max_spread_bps": Decimal("8"),
+                "cooldown_s": 900,
+                "widen_after": 6,
+            }
+        )
+    )
+    assert declared.trigger.min_move_bps == Decimal("15")
+    assert declared.trigger.cooldown_s == 900 and declared.trigger.widen_after == 6
+    with pytest.raises(ConfigError, match="min_move_bps comes with it"):
+        parse_strategy_config(agent_raw(trigger={"widen_after": 3}))
+    with pytest.raises(ConfigError, match="unknown"):
+        parse_strategy_config(agent_raw(trigger={"min_move": Decimal("15")}))
+
+
+def test_effort_is_declared_once_and_overridden_per_role() -> None:
+    cfg = parse_strategy_config(
+        agent_raw(
+            agents={
+                **AGENTS,
+                "effort": "high",
+                "roles": {"sentiment_analyst": {"effort": "low"}},
+            }
+        )
+    )
+    assert cfg.agents is not None
+    assert cfg.agents.for_role("technical_analyst").effort == "high"
+    assert cfg.agents.for_role("sentiment_analyst").effort == "low"
+    plain = parse_strategy_config(agent_raw()).agents
+    assert plain is not None and plain.for_role("technical_analyst").effort is None
+    with pytest.raises(ConfigError, match="effort is one of"):
+        parse_strategy_config(agent_raw(agents={**AGENTS, "effort": "ludicrous"}))
+    with pytest.raises(ConfigError, match="effort is one of"):
+        parse_strategy_config(
+            agent_raw(agents={**AGENTS, "roles": {"validator": {"effort": "ludicrous"}}})
+        )
+
+
 def test_the_stances_are_named_and_asked_once() -> None:
     cfg = parse_strategy_config(agent_raw(agents={**AGENTS, "validators": ["pro", "contra"]}))
     assert cfg.agents is not None and cfg.agents.validators == ("pro", "contra")
@@ -235,3 +296,68 @@ def test_the_venue_size_step_is_declared_beside_the_size() -> None:
     declared = agent_raw()
     declared["run"]["size_step"] = Decimal("0.001")
     assert parse_strategy_config(declared).run.size_step == Decimal("0.001")
+
+
+def test_a_flag_about_a_key_is_not_a_key() -> None:
+    """[live].key_ip_unbound_ok is a documented setting; the secret guard used to refuse it."""
+    raw = agent_raw(live={"venue": "bybit", "environment": "demo", "key_ip_unbound_ok": True})
+    cfg = parse_strategy_config(raw)
+    assert cfg.live is not None and cfg.live.key_ip_unbound_ok and cfg.live.environment == "demo"
+
+    with pytest.raises(ConfigError, match="never a file"):
+        parse_strategy_config(agent_raw(live={"venue": "bybit", "api_secret": "x"}))
+    with pytest.raises(ConfigError, match="never a file"):
+        parse_strategy_config(agent_raw(execution={"mode": "venue", "api_key": "x"}))
+    with pytest.raises(ConfigError, match=r"\[live\]: unknown"):
+        parse_strategy_config(agent_raw(live={"venue": "bybit", "environmnet": "demo"}))
+
+
+def _quiet(tmp_path: Path, **run: Any) -> dict[str, Any]:
+    (tmp_path / "quiet.py").write_text(CORE, encoding="utf-8")
+    config = raw({"file": "quiet.py", "class": "Quiet"})
+    config["run"].update(run)
+    return config
+
+
+def test_the_base_size_is_declared_once_in_one_unit(tmp_path: Path) -> None:
+    quoted = _quiet(tmp_path, size_quote=Decimal("100"))
+    del quoted["run"]["size"]
+    cfg = parse_strategy_config(quoted, base=tmp_path)
+    assert cfg.run.size_quote == Decimal("100") and cfg.run.size == Decimal(0)
+
+    with pytest.raises(ConfigError, match="declares the base size once"):
+        parse_strategy_config(_quiet(tmp_path, size_quote=Decimal("100")), base=tmp_path)
+    neither = _quiet(tmp_path)
+    del neither["run"]["size"]
+    with pytest.raises(ConfigError, match="neither"):
+        parse_strategy_config(neither, base=tmp_path)
+    with pytest.raises(ConfigError, match="positive"):
+        parse_strategy_config(_quiet(tmp_path, size=Decimal("-1")), base=tmp_path)
+
+
+def test_a_replay_refuses_a_quote_size_rather_than_picking_a_price(tmp_path: Path) -> None:
+    quoted = _quiet(tmp_path, size_quote=Decimal("100"))
+    del quoted["run"]["size"]
+    cfg = parse_strategy_config(quoted, base=tmp_path)
+    with pytest.raises(ConfigError, match="only `tra run` has"):
+        cfg.run.fixed_size()
+    plain = parse_strategy_config(_quiet(tmp_path), base=tmp_path)
+    assert plain.run.fixed_size() == Decimal("0.01")
+
+
+def test_each_instrument_may_carry_its_own_step(tmp_path: Path) -> None:
+    steps = {"BTCUSDT": Decimal("0.001"), "ETHUSDT": Decimal("0.01")}
+    config = _quiet(tmp_path, size_step=steps)
+    config["universe"] = {"instruments": ["BTCUSDT", "ETHUSDT"]}
+    cfg = parse_strategy_config(config, base=tmp_path)
+    assert cfg.run.step_for("ETHUSDT") == Decimal("0.01")
+    assert cfg.run.step_for("BTCUSDT") == Decimal("0.001")
+
+    # A desk that can trade an instrument it has no step for would round it to a guess.
+    config["universe"] = {"instruments": ["BTCUSDT", "ETHUSDT", "SOLUSDT"]}
+    with pytest.raises(ConfigError, match="SOLUSDT"):
+        parse_strategy_config(config, base=tmp_path)
+    with pytest.raises(ConfigError, match="positive"):
+        parse_strategy_config(_quiet(tmp_path, size_step={"BTCUSDT": 0}), base=tmp_path)
+    one = parse_strategy_config(_quiet(tmp_path, size_step=Decimal("0.001")), base=tmp_path)
+    assert one.run.step_for("anything") == Decimal("0.001")
