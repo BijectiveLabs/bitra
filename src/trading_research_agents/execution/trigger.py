@@ -24,8 +24,11 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
+from itertools import islice
 from pathlib import Path
 from typing import Any
+
+from trading_research_agents.records import has_index, recent
 
 BPS = Decimal(10_000)
 # The cycle store owns this name; execution reads the file without importing upward for it.
@@ -248,6 +251,9 @@ def _summaries(
     """The newest cycle summaries for one instrument, newest first."""
     if not root.is_dir():
         return []
+    if has_index(root):
+        rows = islice(recent(root, instrument=instrument), max(look_back, 1))
+        return [(row, at_of(str(row.get("cycle_id", "")))) for row in rows]
     out: list[tuple[dict[str, Any], datetime | None]] = []
     for path in sorted(root.glob(f"*/{SUMMARY}"), reverse=True)[: max(look_back, 1)]:
         try:

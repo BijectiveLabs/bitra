@@ -569,6 +569,27 @@ def build_parser() -> argparse.ArgumentParser:
     audit_cmd.add_argument("--env-file", type=Path, default=None)
     audit_cmd.add_argument("--json", action="store_true")
 
+    runs = top.add_parser(
+        "runs", help="check a desk's records against their hashes and inputs, or prune old ones"
+    ).add_subparsers(dest="command", required=True)
+    verify_cmd = runs.add_parser(
+        "verify", help="every cycle: files against their hashes, briefs against their inputs"
+    )
+    verify_cmd.add_argument("--days", type=int, default=None, help="only the last N days")
+    prune_cmd = runs.add_parser(
+        "prune", help="remove cycle directories older than --keep; the index and logs stay"
+    )
+    prune_cmd.add_argument("--keep", type=parse_duration, required=True, help="such as 90d")
+    prune_cmd.add_argument(
+        "--archive", action="store_true", help="zip each month under runs/archive first"
+    )
+    prune_cmd.add_argument(
+        "--yes", action="store_true", help="do it; without this, only say what would go"
+    )
+    for sub in (verify_cmd, prune_cmd):
+        sub.add_argument("--out", type=Path, default=None, help="default: runs/cycles")
+        sub.add_argument("--json", action="store_true")
+
     sources = top.add_parser(
         "sources", help="where the macro, on-chain and sentiment figures come from, and how fresh"
     ).add_subparsers(dest="command", required=True)
@@ -1778,6 +1799,49 @@ def _venue_preflight(cfg: Any, env: Mapping[str, str]) -> Callable[[], Any]:
         return live_venue(cfg.live.venue)(settings, env).preflight()
 
     return run
+
+
+def runs_verify(args: argparse.Namespace) -> int:
+    """Whether the desk's records are what it wrote, and its briefs what its inputs give."""
+    from trading_research_agents.agents.verify import verify_runs
+
+    found = verify_runs(args.out or Path("runs") / "cycles", days=args.days)
+    lines = [
+        f"{found['checked']} of {found['cycles']} cycle(s) checked: {found['hashed']} against "
+        f"their hashes, {found['recomputed']} recomputed from their inputs; "
+        f"{found['pruned']} pruned (their index lines remain)"
+    ]
+    for failed in found["failed"]:
+        lines.extend(f"FAILED {failed['cycle']}: {problem}" for problem in failed["problems"])
+    if not found["failed"]:
+        lines.append("no record differs from what the desk wrote")
+    emit(found, args.json, lines)
+    return 1 if found["failed"] else 0
+
+
+def runs_prune(args: argparse.Namespace) -> int:
+    """Old cycle directories out, only when asked twice: once to see, once with --yes."""
+    from trading_research_agents.store.prune import apply, plan
+
+    root = args.out or Path("runs") / "cycles"
+    chosen = plan(root, args.keep)
+    found = chosen.record()
+    megabytes = chosen.size / 1_000_000
+    said = (
+        f"{len(chosen.folders)} cycle director(ies) and {len(chosen.screens)} screen(s) older than "
+        f"{chosen.cutoff}, {megabytes:.1f} MB"
+    )
+    if not args.yes:
+        emit({**found, "applied": False}, args.json, [f"would remove {said}; add --yes to do it"])
+        return 0
+    kept = apply(root, chosen, archive=args.archive)
+    where = f"; archived under {kept}" if kept else ""
+    emit(
+        {**found, "applied": True, "archive": str(kept) if kept else None},
+        args.json,
+        [f"removed {said}{where}; the index and the logs are kept"],
+    )
+    return 0
 
 
 def _shelf_series(args: argparse.Namespace) -> list[Path]:
@@ -4286,6 +4350,8 @@ HANDLERS = {
     ("mandate", "mandate"): show_mandate,
     ("venues", "venues"): show_venues,
     ("sources", "show"): sources_show,
+    ("runs", "verify"): runs_verify,
+    ("runs", "prune"): runs_prune,
     ("sources", "pull"): sources_pull,
     ("audit", "audit"): run_audit_command,
     ("keys", "keys"): show_keys,

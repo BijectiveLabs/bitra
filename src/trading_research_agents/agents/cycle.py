@@ -23,6 +23,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from decimal import Decimal
+from itertools import islice
 from pathlib import Path
 from typing import Any
 
@@ -100,9 +101,25 @@ from trading_research_agents.execution.trigger import (
 )
 from trading_research_agents.llm.completer import Completer
 from trading_research_agents.llm.usage import BudgetSpentError, UsageLedger
-from trading_research_agents.records import append_line, write_json
-from trading_research_agents.store.cycles import CycleDir
-from trading_research_agents.store.snapshot import Snapshot, cycle_id, take_snapshot
+from trading_research_agents.records import (
+    append_index,
+    append_line,
+    build_index,
+    has_index,
+    index_row,
+    recent,
+    sha256_of,
+    write_gzip_json,
+    write_json,
+)
+from trading_research_agents.store.cycles import SUMMARY, CycleDir
+from trading_research_agents.store.snapshot import (
+    INPUTS,
+    Snapshot,
+    cycle_id,
+    inputs_record,
+    take_snapshot,
+)
 from trading_research_agents.trading.capital import day_loss_bps, sizing_equity
 
 # The third mode sends orders, and it only exists when the caller hands the cycle something to
@@ -289,6 +306,8 @@ class CycleResult:
     seen: dict[str, Any] = field(default_factory=dict)
     # Where the entry, the stop and the take profit sit, as prices and as distances from the entry.
     exits: dict[str, str] = field(default_factory=dict)
+    # The higher timeframes' candles, kept with the snapshot as this cycle's raw inputs.
+    frames: dict[int, Fetched] = field(default_factory=dict)
     wake: Wake | None = None
     held: bool = False
 
@@ -477,6 +496,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
             continue
         reading_briefs[role] = _within_scope(role, built, result)
     context = _context_frames(cfg, result)
+    result.frames = context
     try:
         technical = technical_brief(
             snapshot,
@@ -904,6 +924,12 @@ def _previous_open_interest(root: Path, instrument: str, cycle: str) -> dict[str
     """The open interest the latest earlier snapshot of this instrument recorded."""
     if not root.is_dir():
         return None
+    if has_index(root):
+        earlier = (r for r in recent(root, instrument=instrument) if str(r["cycle_id"]) < cycle)
+        for row in islice(earlier, OPEN_INTEREST_LOOK_BACK):
+            if isinstance(row.get("open_interest"), dict):
+                return dict(row["open_interest"])
+        return None
     safe = "".join(c for c in instrument if c.isalnum() or c in "-_")
     mine = sorted(
         (p for p in root.glob(f"*-{safe}") if p.is_dir() and p.name < cycle),
@@ -1271,11 +1297,54 @@ def _stop_before_asking(
 
 
 def _finish(cfg: CycleConfig, where: CycleDir, result: CycleResult) -> None:
+    """Write the cycle down: raw inputs, a hash of every file, the summary, then its index line.
+
+    In that order, so a summary never names a file that is not there yet and an index line never
+    points at a summary that was not finished.
+    """
+    write_gzip_json(
+        where.path / INPUTS,
+        inputs_record(
+            result.snapshot,
+            result.frames,
+            {
+                "interval_s": cfg.interval_s,
+                "lookback_bars": cfg.lookback_bars,
+                "context_intervals": list(cfg.context_intervals),
+                "regime": cfg.regime.record(),
+                "mechanism": cfg.mechanism,
+            },
+        ),
+    )
     payload = result.record()
     payload["tokens"] = cfg.usage.tokens
     payload["cost_declared"] = str(cfg.usage.cost)
     payload["finished_at"] = cfg.clock().isoformat()
-    where.write_summary(payload)
+    payload["files"] = manifest(where.path)
+    summary = where.write_summary(payload)
+    if not has_index(cfg.root):
+        # A desk that ran before the index existed gets one built from its history first, so
+        # the counts that read it never start from zero.
+        build_index(cfg.root)
+    oi = result.snapshot.values.get("open_interest")
+    append_index(
+        cfg.root,
+        index_row(
+            payload,
+            open_interest=None if oi is None else oi.record(),
+            summary_sha256=sha256_of(summary),
+        ),
+    )
+
+
+def manifest(folder: Path) -> dict[str, str]:
+    """A sha256 per file a cycle wrote, by its path inside the cycle; the summary hashes itself
+    into the index instead."""
+    return {
+        path.relative_to(folder).as_posix(): sha256_of(path)
+        for path in sorted(folder.rglob("*"))
+        if path.is_file() and path.name != SUMMARY and not path.name.startswith(".")
+    }
 
 
 def budget_spent(error: str) -> bool:

@@ -1170,7 +1170,7 @@ def test_an_interrupt_at_the_venue_is_written_down_before_it_stops_the_run(
     cfg, _, _ = cycle_config(tmp_path, envelope, [analyst_answer()], mode="venue", place=hand)
     with pytest.raises(KeyboardInterrupt, match="interrupted at the venue"):
         run_cycle(cfg)
-    [where] = [p for p in (tmp_path / "cycles").iterdir() if p.is_dir()]
+    [where] = [p for p in (tmp_path / "cycles").iterdir() if (p / "cycle.json").is_file()]
     assert json.loads((where / "placed.json").read_text("utf-8"))["cancelled"] is True
     summary = json.loads((where / "cycle.json").read_text("utf-8"))
     assert summary["stopped_by"].startswith("interrupted at the venue")

@@ -33,6 +33,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from trading_research_agents.records import has_index, recent
+
 
 class TargetError(ValueError):
     """The targets as written cannot be applied."""
@@ -147,11 +149,16 @@ def intents_today(root: Path, *, at: datetime, instrument: str | None) -> int:
     gate is stricter the more it finds, never looser.
     """
     day = at.astimezone(tz=at.tzinfo).date().isoformat()
-    return sum(1 for row in _rows(root) if _is_today(row, day=day, instrument=instrument))
+    return sum(1 for row in _rows(root, day) if _is_today(row, day=day, instrument=instrument))
 
 
-def _rows(root: Path) -> Iterator[dict[str, Any]]:
+def _rows(root: Path, day: str) -> Iterator[dict[str, Any]]:
     if not root.is_dir():
+        return
+    if has_index(root):
+        for row in recent(root, day=day):
+            if isinstance(row.get("intent"), dict):
+                yield row["intent"]
         return
     for path in sorted(root.glob("*/intents.jsonl")):
         try:

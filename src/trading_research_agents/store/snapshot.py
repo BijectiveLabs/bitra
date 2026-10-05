@@ -14,10 +14,12 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from trading_research_agents.data.sources.base import Fetched
+from trading_research_agents.data.schema import Candle
+from trading_research_agents.data.sources.base import BookLevel, Fetched, OrderBook
 from trading_research_agents.data.sources.chain import Attempt, ChainExhaustedError, SourceChain
 from trading_research_agents.records import write_json
 
@@ -113,3 +115,106 @@ def take_snapshot(
         if result.fetched is not None:
             snapshot.put(result.fetched, stale=result.stale)
     return snapshot
+
+
+INPUTS = "inputs.json.gz"
+INPUTS_SCHEMA = 1
+
+
+def inputs_record(
+    snapshot: Snapshot,
+    context: Mapping[int, Fetched] | None = None,
+    settings: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Everything a cycle's briefs were computed from, as fetched, so they can be computed again."""
+    return {
+        "schema": INPUTS_SCHEMA,
+        "cycle_id": snapshot.cycle,
+        "instrument": snapshot.instrument,
+        "values": {kind: _fetched(f) for kind, f in sorted(snapshot.values.items())},
+        "context": {str(s): _fetched(f) for s, f in sorted((context or {}).items())},
+        "settings": dict(settings or {}),
+    }
+
+
+def read_inputs(raw: Mapping[str, Any]) -> tuple[Snapshot, dict[int, Fetched], dict[str, Any]]:
+    """The snapshot, the higher timeframes and the settings an inputs record was written from."""
+    if raw.get("schema") != INPUTS_SCHEMA:
+        raise ValueError(f"inputs schema {raw.get('schema')!r} is not {INPUTS_SCHEMA}")
+    snapshot = Snapshot(cycle=str(raw["cycle_id"]), instrument=str(raw["instrument"]))
+    for row in raw.get("values", {}).values():
+        snapshot.put(_unfetched(row))
+    context = {int(s): _unfetched(row) for s, row in raw.get("context", {}).items()}
+    return snapshot, context, dict(raw.get("settings") or {})
+
+
+def _fetched(f: Fetched) -> dict[str, Any]:
+    return {
+        "kind": f.kind,
+        "instrument": f.instrument,
+        "source": f.source,
+        "tier": f.tier,
+        "fetched_at": f.fetched_at,
+        "as_of_ns": f.as_of_ns,
+        "detail": dict(f.detail),
+        "value": _value(f.value),
+    }
+
+
+def _value(value: Any) -> Any:
+    if isinstance(value, OrderBook):
+        return {
+            "bids": [[str(level.price), str(level.size)] for level in value.bids],
+            "asks": [[str(level.price), str(level.size)] for level in value.asks],
+        }
+    if isinstance(value, list | tuple) and all(isinstance(c, Candle) for c in value):
+        return [
+            [
+                c.start_ns,
+                str(c.open),
+                str(c.high),
+                str(c.low),
+                str(c.close),
+                str(c.volume),
+                c.trades,
+            ]
+            for c in value
+        ]
+    if isinstance(value, Decimal):
+        return str(value)
+    raise TypeError(f"no record form for a {type(value).__name__}")
+
+
+def _unfetched(row: Mapping[str, Any]) -> Fetched:
+    kind, raw = str(row["kind"]), row["value"]
+    value: Any
+    if kind == "ohlcv":
+        value = [
+            Candle(
+                start_ns=int(c[0]),
+                open=Decimal(c[1]),
+                high=Decimal(c[2]),
+                low=Decimal(c[3]),
+                close=Decimal(c[4]),
+                volume=Decimal(c[5]),
+                trades=int(c[6]),
+            )
+            for c in raw
+        ]
+    elif kind == "orderbook":
+        value = OrderBook(
+            bids=tuple(BookLevel(Decimal(p), Decimal(s)) for p, s in raw["bids"]),
+            asks=tuple(BookLevel(Decimal(p), Decimal(s)) for p, s in raw["asks"]),
+        )
+    else:
+        value = Decimal(str(raw))
+    return Fetched(
+        kind=kind,
+        instrument=str(row["instrument"]),
+        value=value,
+        source=str(row["source"]),
+        tier=str(row["tier"]),
+        fetched_at=float(row["fetched_at"]),
+        as_of_ns=int(row["as_of_ns"]),
+        detail=dict(row.get("detail") or {}),
+    )

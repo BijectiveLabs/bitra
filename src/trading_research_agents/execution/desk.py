@@ -21,12 +21,14 @@ record, so nobody has to guess how the figure was reached.
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
+
+from trading_research_agents.records import has_index, read_lines, recent
 
 SIDES = {"long": "buy", "short": "sell"}
 
@@ -166,22 +168,7 @@ def filled_from_records(root: Path) -> dict[str, Open]:
     the desk could no longer state its own book).
     """
     found: dict[str, Open] = {}
-    root = Path(root)
-    for cycle in sorted(root.iterdir(), reverse=True) if root.is_dir() else []:
-        placed_path, intents_path = cycle / "placed.json", cycle / "intents.jsonl"
-        if not placed_path.is_file() or not intents_path.is_file():
-            continue
-        try:
-            placed = json.loads(placed_path.read_text(encoding="utf-8"))
-            rows = [
-                json.loads(line)
-                for line in intents_path.read_text(encoding="utf-8").splitlines()
-                if line.strip()
-            ]
-        except (OSError, json.JSONDecodeError):
-            continue
-        if not isinstance(placed, dict) or not rows:
-            continue
+    for placed, rows in _sent(Path(root)):
         filled = _decimal(placed.get("filled"))
         ended = placed.get("cancelled") or placed.get("status") in (
             "canceled",
@@ -208,6 +195,28 @@ def filled_from_records(root: Path) -> dict[str, Open]:
                 notional=None if notional is None else notional * min(share, Decimal(1)),
             )
     return found
+
+
+def _sent(root: Path) -> Iterator[tuple[dict[str, Any], list[dict[str, Any]]]]:
+    """Newest first: what each cycle that reached the venue sent, and the intents behind it."""
+    if not root.is_dir():
+        return
+    if has_index(root):
+        for row in recent(root, sent=True):
+            if isinstance(row.get("placed"), dict) and isinstance(row.get("intent"), dict):
+                yield row["placed"], [row["intent"]]
+        return
+    for cycle in sorted(root.iterdir(), reverse=True):
+        placed_path, intents_path = cycle / "placed.json", cycle / "intents.jsonl"
+        if not placed_path.is_file() or not intents_path.is_file():
+            continue
+        try:
+            placed = json.loads(placed_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        rows = read_lines(intents_path)
+        if isinstance(placed, dict) and rows:
+            yield placed, rows
 
 
 def _decimal(value: Any) -> Decimal | None:

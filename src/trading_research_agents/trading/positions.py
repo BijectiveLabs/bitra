@@ -11,7 +11,7 @@ Every action is a line in `positions.jsonl`, and every finished round trip a lin
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -19,7 +19,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from trading_research_agents.records import append_line
+from trading_research_agents.records import append_line, has_index, read_lines, recent
 
 JOURNAL = "positions.jsonl"
 ROUND_TRIPS = "round_trips.jsonl"
@@ -68,22 +68,35 @@ def filled_of(placed: Mapping[str, Any], intent: Mapping[str, Any]) -> Decimal:
     return Decimal(0)
 
 
-def filled_entries(root: Path) -> dict[str, Entry]:
-    """Per instrument, the newest entry this desk sent that the venue filled."""
-    found: dict[str, Entry] = {}
-    root = Path(root)
-    for cycle in sorted(root.iterdir(), reverse=True) if root.is_dir() else []:
+def _sent(root: Path) -> Iterator[tuple[str, dict[str, Any], dict[str, Any]]]:
+    """Newest first: each cycle that reached the venue, what it sent, and its intent."""
+    if not root.is_dir():
+        return
+    if has_index(root):
+        for row in recent(root, sent=True):
+            placed, intent = row.get("placed"), row.get("intent")
+            if isinstance(placed, dict) and isinstance(intent, dict):
+                yield str(row.get("cycle_id")), placed, intent
+        return
+    for cycle in sorted(root.iterdir(), reverse=True):
         placed_path, intents_path = cycle / "placed.json", cycle / "intents.jsonl"
         if not placed_path.is_file() or not intents_path.is_file():
             continue
         try:
             placed = json.loads(placed_path.read_text(encoding="utf-8"))
-            lines = intents_path.read_text(encoding="utf-8").splitlines()
-            intent = json.loads([line for line in lines if line.strip()][-1])
-        except (OSError, json.JSONDecodeError, IndexError):
+        except (OSError, json.JSONDecodeError):
             continue
+        rows = read_lines(intents_path)
+        if isinstance(placed, dict) and rows:
+            yield cycle.name, placed, rows[-1]
+
+
+def filled_entries(root: Path) -> dict[str, Entry]:
+    """Per instrument, the newest entry this desk sent that the venue filled."""
+    found: dict[str, Entry] = {}
+    for cycle, placed, intent in _sent(Path(root)):
         filled = filled_of(placed, intent)
-        opened = _opened(cycle.name)
+        opened = _opened(cycle)
         name = str(intent.get("instrument", ""))
         if not placed.get("sent") or filled <= 0 or opened is None or not name or name in found:
             continue
@@ -95,7 +108,7 @@ def filled_entries(root: Path) -> dict[str, Entry]:
             price=Decimal(str(price)),
             opened_at=opened,
             order_id=str(placed.get("order_id", "")),
-            cycle=cycle.name,
+            cycle=cycle,
             horizon_bars=int(intent["horizon_bars"]) if intent.get("horizon_bars") else None,
             stop_price=placed.get("stop_price"),
             take_price=placed.get("take_price"),

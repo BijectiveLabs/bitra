@@ -35,13 +35,16 @@ def append_line(path: Path, row: Mapping[str, Any], *, durable: bool = False) ->
             os.fsync(fh.fileno())
 
 
-def read_lines(path: Path) -> list[dict[str, Any]]:
-    """Every whole JSON object in a lines file. A torn or foreign line is skipped, never fatal."""
+def read_lines(path: Path, *, having: bytes = b"") -> list[dict[str, Any]]:
+    """Every whole JSON object in a lines file. A torn or foreign line is skipped, never fatal.
+
+    `having` skips, before parsing, a line that does not contain those bytes.
+    """
     if not path.is_file():
         return []
     out: list[dict[str, Any]] = []
     for raw in path.read_bytes().splitlines():
-        if not raw.strip():
+        if not raw.strip() or having not in raw:
             continue
         try:
             row = json.loads(raw)
