@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from trading_research_agents.llm.form import _enum, _list, _text, parse_object
+from trading_research_agents.agents.cited import FIGURES_SCHEMA, Figure, figures_used
+from trading_research_agents.llm.form import _enum, _text, parse_object
 
 ROLE = "sentiment_analyst"
 STATES = ("negative", "neutral", "positive", "not declared")
@@ -14,7 +15,7 @@ SCHEMA: dict[str, Any] = {
     "properties": {
         "state": {"type": "string", "enum": list(STATES)},
         "reason": {"type": "string"},
-        "figures_used": {"type": "array", "items": {"type": "string"}},
+        "figures_used": FIGURES_SCHEMA,
         "data_as_of": {"type": "string"},
     },
     "required": ["state", "reason", "figures_used", "data_as_of"],
@@ -26,7 +27,7 @@ SCHEMA: dict[str, Any] = {
 class SentimentAnalyst:
     state: str
     reason: str
-    figures_used: list[str]
+    figures_used: tuple[Figure, ...]
     data_as_of: str
 
     @property
@@ -39,8 +40,6 @@ def parse(text: str) -> SentimentAnalyst:
     data = parse_object(text, SCHEMA)
     state = _enum(data.get("state"), "state", STATES)
     reason = _text(data.get("reason"), "reason")
-    figures = [
-        _text(item, "figures_used") for item in _list(data.get("figures_used"), "figures_used")
-    ]
+    cited = figures_used(data.get("figures_used"))
     data_as_of = _text(data.get("data_as_of"), "data_as_of")
-    return SentimentAnalyst(state=state, reason=reason, figures_used=figures, data_as_of=data_as_of)
+    return SentimentAnalyst(state=state, reason=reason, figures_used=cited, data_as_of=data_as_of)

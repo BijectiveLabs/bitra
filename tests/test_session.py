@@ -60,7 +60,9 @@ def config(tmp_path: Path) -> Path:
 def analyst(target: str, confidence: float = 0.9) -> dict[str, Any]:
     return {
         "target": target,
+        "setup": "no_setup" if target == "flat" else "range_reversion",
         "reason": f"says {target}",
+        "figures_used": [{"figure": "volume_ratio", "value": "1.0"}],
         "confidence": confidence,
         "horizon_bars": 3,
     }

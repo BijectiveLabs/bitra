@@ -392,9 +392,17 @@ def test_a_session_hands_the_roles_measured_briefs(tmp_path: Path, envelope: Env
         "regime": "neutral",
         "events": [{"when": "1970-01-01T00:05:00Z", "what": "release", "expected_impact": "none"}],
         "reason": "declared bullish, n small",
+        "figures_used": [],
         "data_as_of": "1970-01-01T00:00:00Z",
     }
-    analyst = {"target": "flat", "reason": "r", "confidence": 0.9, "horizon_bars": 2}
+    analyst = {
+        "target": "flat",
+        "setup": "no_setup",
+        "reason": "r",
+        "figures_used": [],
+        "confidence": 0.9,
+        "horizon_bars": 2,
+    }
     risk = {"decision": "continue", "limits": {}, "reason": "fine", "triggers": []}
     alloc = {"size": "0.01", "reason": "r", "allocations": []}
     audit = {

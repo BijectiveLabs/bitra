@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from trading_research_agents.execution.confluence import STANCES, VOTES
-from trading_research_agents.llm.form import _enum, _text, parse_object
+from trading_research_agents.llm.form import FormError, _enum, _text, parse_object
 
 ROLE = "validator"
 SCHEMA: dict[str, Any] = {
@@ -58,7 +58,7 @@ def parse(text: str) -> Validator:
     data = parse_object(text, SCHEMA)
     claims = data.get("claims")
     if not isinstance(claims, list):
-        raise ValueError("claims must be a list")
+        raise FormError("claims must be a list")
     return Validator(
         stance=_enum(data.get("stance"), "stance", STANCES),
         claims=tuple(_claim(row, number) for number, row in enumerate(claims, start=1)),
@@ -69,7 +69,7 @@ def parse(text: str) -> Validator:
 
 def _claim(row: Any, number: int) -> Claim:
     if not isinstance(row, dict):
-        raise ValueError(f"claim {number} must be an object")
+        raise FormError(f"claim {number} must be an object")
     return Claim(
         figure=_text(row.get("figure"), f"claim {number} figure"),
         value=_text(row.get("value"), f"claim {number} value"),

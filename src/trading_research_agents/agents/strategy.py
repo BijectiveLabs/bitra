@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 
+from trading_research_agents.agents.cited import figures_of, survived
 from trading_research_agents.agents.roles import RoleError, prompt
 from trading_research_agents.agents.technical_analyst import ROLE, SCHEMA, parse
 from trading_research_agents.agents.technical_analyst.tools import features
@@ -73,7 +74,10 @@ class AgentStrategy:
         self.calls = 0
         self.failures = 0
         self.below_confidence = 0
+        self.no_setup = 0
+        self.uncited = 0
         self.last_reason: str | None = None
+        self._figures: dict[str, str] = {}
 
     def on_bar(self, bar: Bar) -> Signal | None:
         self._bars.append(bar)
@@ -105,13 +109,25 @@ class AgentStrategy:
             self.below_confidence += 1
             return None
         wanted = Target(answer.target)
+        if wanted is not Target.FLAT:
+            # The same two rules the cycle applies, for the same reason: a direction has to have a
+            # named shape behind it, and it has to point at a figure this bar actually carried.
+            if answer.setup == "no_setup":
+                self.no_setup += 1
+                return None
+            kept, _ = survived(answer.figures_used, self._figures)
+            if not kept:
+                self.uncited += 1
+                return None
         if wanted is self._held.target:
             return None
         if wanted is Target.FLAT:
             self._held = Held(Target.FLAT, None, 0)
         else:
             self._held = Held(wanted, bar.close, 0)
-        return Signal(wanted, f"{answer.reason} (confidence {answer.confidence:.2f})")
+        return Signal(
+            wanted, f"{answer.setup}: {answer.reason} (confidence {answer.confidence:.2f})"
+        )
 
     def _failed(self, exc: Exception) -> None:
         self.failures += 1
@@ -128,6 +144,7 @@ class AgentStrategy:
     def _user(self) -> str:
         # Compact rows, not JSON: the bars are most of every call, and a call is paid per token.
         computed = features(list(self._bars))
+        self._figures = {} if computed is None else figures_of(computed.record())
         lines = [
             f"mechanism: {self.mechanism}",
             f"position: target={self._held.target.value} "

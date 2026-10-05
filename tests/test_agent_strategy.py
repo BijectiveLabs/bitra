@@ -37,10 +37,12 @@ def bar(i: int, close: str = "100") -> Bar:
     return Bar(i * MINUTE, (i + 1) * MINUTE, c, c, c, c, Decimal("1"), 1)
 
 
-def answer(target: str, confidence: float = 0.9) -> dict[str, Any]:
+def answer(target: str, confidence: float = 0.9, setup: str = "range_reversion") -> dict[str, Any]:
     return {
         "target": target,
+        "setup": "no_setup" if target == "flat" else setup,
         "reason": f"the mechanism says {target}",
+        "figures_used": [{"figure": "volume_ratio", "value": "1.0"}],
         "confidence": confidence,
         "horizon_bars": 5,
     }
@@ -55,7 +57,14 @@ def test_the_analyst_signals_only_on_change_and_only_above_its_confidence() -> N
             answer("long"),
             answer("flat"),
             "not json",
-            {"target": "short", "reason": "x", "confidence": 0.9, "horizon_bars": 0},
+            {
+                "target": "short",
+                "setup": "range_reversion",
+                "reason": "x",
+                "figures_used": [],
+                "confidence": 0.9,
+                "horizon_bars": 0,
+            },
         ]
     )
     core = AgentStrategy(scripted, mechanism="funding settlement flow", lookback_bars=5)
@@ -254,7 +263,9 @@ def test_the_analyst_is_asked_on_a_cadence_and_the_output_cap_reaches_the_provid
     # The declared timeout and retry count reach the SDK client, per request.
     client = built._client  # type: ignore[attr-defined]
     assert client.timeout == 7 and client.max_retries == 1
-    assert getattr(p.build("m", None), "max_tokens", None) == 4096
+    # Undeclared is no cap at all: the vendor's own maximum for the model, and the field is left
+    # out of the request rather than guessed at.
+    assert getattr(p.build("m", None), "max_tokens", "missing") is None
     with pytest.raises(ValueError, match="call options"):
         CallOptions(timeout_s=0)
 

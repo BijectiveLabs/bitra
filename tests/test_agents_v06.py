@@ -170,14 +170,42 @@ def test_every_role_has_a_prompt_a_schema_and_a_parser() -> None:
     [
         (
             technical_analyst,
-            {"target": "long", "reason": "z below entry", "confidence": 0.7, "horizon_bars": 12},
-            {"target": "buy", "reason": "x", "confidence": 0.7, "horizon_bars": 12},
+            {
+                "target": "long",
+                "setup": "range_reversion",
+                "reason": "z below entry",
+                "figures_used": [{"figure": "zscore", "value": "-2.1"}],
+                "confidence": 0.7,
+                "horizon_bars": 12,
+            },
+            {
+                "target": "buy",
+                "setup": "range_reversion",
+                "reason": "x",
+                "figures_used": [],
+                "confidence": 0.7,
+                "horizon_bars": 12,
+            },
             "target must be one of",
         ),
         (
             technical_analyst,
-            {"target": "flat", "reason": "nothing", "confidence": 0.0, "horizon_bars": 1},
-            {"target": "flat", "reason": "x", "confidence": 1.5, "horizon_bars": 1},
+            {
+                "target": "flat",
+                "setup": "no_setup",
+                "reason": "nothing",
+                "figures_used": [],
+                "confidence": 0.0,
+                "horizon_bars": 1,
+            },
+            {
+                "target": "flat",
+                "setup": "no_setup",
+                "reason": "x",
+                "figures_used": [],
+                "confidence": 1.5,
+                "horizon_bars": 1,
+            },
             "in \\[0, 1\\]",
         ),
         (
@@ -215,15 +243,33 @@ def test_every_role_has_a_prompt_a_schema_and_a_parser() -> None:
                 "regime": "neutral",
                 "events": [],
                 "reason": "r",
+                "figures_used": [],
                 "data_as_of": "2026-09-13T00:00:00Z",
             },
-            {"regime": "neutral", "events": [], "reason": "", "data_as_of": "x"},
+            {
+                "regime": "neutral",
+                "events": [],
+                "reason": "",
+                "figures_used": [],
+                "data_as_of": "x",
+            },
             "reason must be a non-empty",
         ),
         (
             onchain_analyst,
-            {"signal": "neutral", "reason": "no series", "data_as_of": "2026-09-13T00:00:00Z"},
-            {"signal": "neutral", "reason": "r", "data_as_of": "x", "extra": 1},
+            {
+                "signal": "neutral",
+                "reason": "no series",
+                "figures_used": [],
+                "data_as_of": "2026-09-13T00:00:00Z",
+            },
+            {
+                "signal": "neutral",
+                "reason": "r",
+                "figures_used": [],
+                "data_as_of": "x",
+                "extra": 1,
+            },
             "outside the schema",
         ),
     ],
@@ -331,5 +377,8 @@ def test_a_failing_call_is_written_down_too(tmp_path: Path) -> None:
     with pytest.raises(TimeoutError):
         metered.complete(system="s", user="u", schema={})
     assert UsageLedger.read(tmp_path / "usage.jsonl")[0]["outcome"] == "error: TimeoutError"
-    with pytest.raises(ValueError, match="token_budget must be positive"):
+    with pytest.raises(ValueError, match="token_budget is positive when it is declared"):
         BudgetLimits(token_budget=0, max_calls_per_hour=1, min_interval_s=0)
+    # Nothing declared is the default: every call is counted and none is refused.
+    open_ended = BudgetLimits()
+    assert not open_ended.capped and open_ended.call_timeout_s == 60

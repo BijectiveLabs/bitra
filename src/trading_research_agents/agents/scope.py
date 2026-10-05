@@ -32,6 +32,7 @@ from trading_research_agents.agents import (
 )
 
 VALIDATOR = "validator"
+SCREENER = "market_screener"
 TECH_AUDITOR = "tech_auditor"
 QUANT_AUDITOR = "quant_auditor"
 
@@ -85,14 +86,14 @@ SCOPES: dict[str, Scope] = {
     macro_analyst.ROLE: Scope(
         role=macro_analyst.ROLE,
         reads=(*_CONTEXT, "events", "horizon"),
-        answers=("regime", "events", "reason", "data_as_of"),
+        answers=("regime", "events", "reason", "figures_used", "data_as_of"),
         decides="nothing on its own; recorded beside the operator's declared state",
         prose=("reason",),
     ),
     onchain_analyst.ROLE: Scope(
         role=onchain_analyst.ROLE,
         reads=(*_CONTEXT, "flow_window"),
-        answers=("signal", "reason", "data_as_of"),
+        answers=("signal", "reason", "figures_used", "data_as_of"),
         decides="nothing on its own; recorded beside the operator's declared state",
         prose=("reason",),
     ),
@@ -119,11 +120,27 @@ SCOPES: dict[str, Scope] = {
             "volume_ratio",
             "range_ratio",
             "position_in_range",
+            "net_bps",
+            "trend_strength",
+            "regime",
+            "timeframes",
+            "book_imbalance",
+            "open_interest",
+            "readings",
         ),
-        answers=("target", "confidence", "horizon_bars", "reason"),
+        answers=("target", "setup", "confidence", "horizon_bars", "reason", "figures_used"),
         decides="the direction and the horizon; the size, the cost and the limits are not its own",
         prose=("reason",),
         families=("ret_",),
+    ),
+    SCREENER: Scope(
+        role=SCREENER,
+        reads=("as_of", "basis", "mechanism", "candidates"),
+        answers=("kept", "excluded"),
+        decides=(
+            "which of the instruments code already admitted are worth a cycle; it cannot add one, "
+            "order them, or say anything about a direction or a size"
+        ),
     ),
     TECH_AUDITOR: Scope(
         role=TECH_AUDITOR,

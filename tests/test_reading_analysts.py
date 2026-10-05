@@ -160,12 +160,13 @@ def test_the_sentiment_role_keeps_not_declared_apart_from_neutral() -> None:
             {
                 "state": "positive",
                 "reason": "fear_greed at 70 is above the declared 60",
-                "figures_used": ["fear_greed"],
+                "figures_used": [{"figure": "fear_greed", "value": "70"}],
                 "data_as_of": "2026-09-27T10:00:00+00:00",
             }
         )
     )
-    assert positive.declared and positive.figures_used == ["fear_greed"]
+    assert positive.declared
+    assert [f.record() for f in positive.figures_used] == [{"figure": "fear_greed", "value": "70"}]
     with pytest.raises(FormError, match="state"):
         sentiment_analyst.parse(
             json.dumps(
@@ -292,3 +293,52 @@ def test_code_reads_the_declared_state_beside_whatever_the_model_says(tmp_path: 
         ]
     }
     assert declared_state(onchain_analyst.ROLE, both)["declared"] == "mixed"
+
+
+def test_a_threshold_grades_how_far_past_its_line_a_value_sits() -> None:
+    from trading_research_agents.data.series import Threshold
+
+    yields = Threshold(bullish_below=Decimal("4.05"), bearish_above=Decimal("4.25"))
+    assert yields.graded and yields.band == Decimal("0.20")
+    assert yields.strength(Decimal("4.02")) == Decimal("0.150")
+    assert yields.strength(Decimal("3.80")) == Decimal("1.000")
+    assert yields.strength(Decimal("4.10")) == Decimal(0)
+    assert yields.strength(Decimal("4.30")) == Decimal("-0.250")
+
+    # One line only has no band to measure in, so it stays the plain word it always was.
+    one = Threshold(bullish_above=Decimal(60))
+    assert not one.graded and one.strength(Decimal(62)) == Decimal(1)
+    assert one.strength(Decimal(50)) == Decimal(0)
+
+
+def test_the_declared_state_carries_the_net_graded_score() -> None:
+    from trading_research_agents.agents.briefs import declared_state
+
+    rows = {
+        "series": [
+            {
+                "state": "bullish",
+                "strength": "0.150",
+                "graded": True,
+                "basis": "operator-declared threshold",
+            },
+            {
+                "state": "bullish",
+                "strength": "0.057",
+                "graded": True,
+                "basis": "operator-declared threshold",
+            },
+        ]
+    }
+    said = declared_state(macro_analyst.ROLE, rows)
+    assert said["declared"] == "bullish" and said["score"] == "0.104" and said["graded"] is True
+
+    # Opposite words stay `mixed` for the gate, and the net is what conviction weighs.
+    both = {
+        "series": [
+            {"state": "bullish", "strength": "0.8", "basis": "operator-declared threshold"},
+            {"state": "bearish", "strength": "-0.2", "basis": "operator-declared threshold"},
+        ]
+    }
+    mixed = declared_state(onchain_analyst.ROLE, both)
+    assert mixed["declared"] == "mixed" and mixed["score"] == "0.300"

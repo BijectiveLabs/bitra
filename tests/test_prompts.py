@@ -11,6 +11,9 @@ ROLES = ("bound", "memo", "critique", "registration")
 # the same rule as the doctrine: it names what to read and never promises an outcome.
 AGENTS = (
     "market_screener",
+    # The screener answers the same schema over two different briefs - recorded trades in a
+    # session, one live snapshot per instrument in a cycle - so it carries a prompt for each.
+    "market_screener_live",
     "technical_analyst",
     "macro_analyst",
     "onchain_analyst",

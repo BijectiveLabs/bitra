@@ -57,6 +57,7 @@ from trading_research_agents.surface.actions import (
     demote,
     tighten_limits,
 )
+from trading_research_agents.surface.confine import confine_all, roots_of
 from trading_research_agents.trading import (
     Controls,
     KillSwitch,
@@ -454,7 +455,7 @@ class _Session:
         user = {
             "instruments": [k["instrument"] for k in kept],
             "max_position": str(limits.max_position),
-            "declared_size": str(self.cfg.strategy.run.size),
+            "declared_size": str(self.cfg.strategy.run.fixed_size()),
             "gross_exposure_cap": "1.0",
         }
         text = self.ask(executor.ROLE, user, executor.SCHEMA)
@@ -537,13 +538,18 @@ class _Session:
                 return auditor.parse(recorded)
             except RoleError:
                 return None
-        tools: dict[str, Callable[..., Any]] = {
-            "run_report": run_report,
-            "ledger_show": ledger_show,
-            "ledger_search": ledger_search,
-            "runs_index": runs_index,
-            "ladder_show": ladder_show,
-        }
+        # The model writes the paths these tools open, so they are held to the project, the
+        # session and the ladder's own directory, and never to a hidden file inside any of them.
+        tools = confine_all(
+            {
+                "run_report": run_report,
+                "ledger_show": ledger_show,
+                "ledger_search": ledger_search,
+                "runs_index": runs_index,
+                "ladder_show": ladder_show,
+            },
+            roots_of((Path.cwd(), self.out, self.cfg.ladder_path.parent)),
+        )
         try:
             loop = run_tool_loop(
                 completer=self.cfg.completer_for(auditor.ROLE),
@@ -614,7 +620,7 @@ def replay_instrument(
         controls=Controls(limits, KillSwitch(kill_file)),
         out_dir=out,
         bar_interval_ns=s.run.bar_interval_s * 1_000_000_000,
-        size=s.run.size,
+        size=s.run.fixed_size(),
         spread_cost_bps=s.run.spread_cost_bps,
         equity=s.run.equity,
         label=label,
