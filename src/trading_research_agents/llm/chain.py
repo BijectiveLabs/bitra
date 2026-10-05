@@ -18,6 +18,7 @@ answer" - the cycle's record already holds the last answer, and the next call st
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -61,6 +62,10 @@ class CompleterChain:
     role: str
     links: Sequence[Link]
     on_attempt: Callable[[str, Attempt], None] | None = None
+    # A link that says "try again in N seconds" with N inside this is waited for once, instead of
+    # being abandoned for the next link straight away. Zero never waits.
+    max_wait_s: float = 0.0
+    sleep: Callable[[float], None] = time.sleep
     attempts: list[Attempt] = field(default_factory=list)
     _built: dict[str, Completer] = field(default_factory=dict)
 
@@ -87,6 +92,17 @@ class CompleterChain:
             try:
                 answer = completer.complete(system=system, user=user, schema=schema)
             except ProviderError as exc:
+                wait = exc.retry_after
+                if wait is not None and 0 < wait <= self.max_wait_s:
+                    self._note(Attempt(link.name, "waited", f"{wait:.1f}s, as the vendor asked"))
+                    self.sleep(wait + 0.5)
+                    try:
+                        answer = completer.complete(system=system, user=user, schema=schema)
+                    except ProviderError as again:
+                        exc = again
+                    else:
+                        self._note(Attempt(link.name, "answered", answer.model))
+                        return answer
                 self._note(Attempt(link.name, "failed", f"{exc.__class__.__name__}: {exc}"))
                 failures.append(f"{link.name}: {exc}")
                 continue
