@@ -1,4 +1,5 @@
 .env
+.tra-history
 KILL
 runs/
 data/

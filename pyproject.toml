@@ -25,6 +25,7 @@ classifiers = [
 ]
 dependencies = [
     "numpy>=1.26",
+    "prompt-toolkit>=3.0",
     "rich>=13",
 ]
 
