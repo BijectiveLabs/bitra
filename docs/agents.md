@@ -1,24 +1,26 @@
 # Agents
 
-Agents in this project have full access: every role holds the whole tool surface, the raw and
-audited data, every gate, the ledger, the ladder and the run reports, and the technical
-analyst decides trades as the core of a run. What no role holds is the authority to loosen a
-control. Limits can be tightened, never widened; the ladder can be stepped down, never up; the
-kill switch can be armed, never disarmed. Those are code, tested and failing closed, and a
-role acts through them, not around them. That is the difference between an agent with full
-access and an agent that can empty an account.
+Agents here read a lot and decide very little. In a cycle each role gets the part of the brief
+its job needs and nothing else, answers once inside a closed schema, and holds no tools. The
+technical analyst proposes a direction; code prices it, sizes it, checks it against the book and
+decides whether it goes out. In a session the auditor also gets a small set of read tools, and the
+files those tools can open are fenced to the project.
 
-## Seven roles
+What no role holds is the authority to loosen a control. Limits can be tightened, never widened;
+the ladder can be stepped down, never up; the kill switch can be armed, never disarmed. Those are
+code, tested and failing closed, and a role acts through them, not around them.
+
+## The roster
 
 | Role | Holds | May write | Cadence |
 |---|---|---|---|
-| `market_screener` | the data gate, the envelope, the cost floor | nothing | once per session |
-| `technical_analyst` | the recorded trades and bars, the registered mechanism | a `Signal`, as the decision core of a run | once per closed bar, within its budget |
+| `market_screener` | in a cycle, one live snapshot per instrument in the universe; in a session, the data gate, the envelope and the cost floor | nothing; it may only take an instrument out of a list code already admitted | once per pass, or once per session |
+| `technical_analyst` | the recorded trades and bars, the registered mechanism | a `Signal`, as the decision core of a run: a direction, a setup named from a closed list, and the figures it read | once per closed bar, within its budget |
 | `macro_analyst` | series the operator mapped in (events, cross-venue funding, sentiment) | nothing | once per session, when series are given |
 | `onchain_analyst` | on-chain series the operator mapped in | nothing | once per session, when series are given |
 | `sentiment_analyst` | dated scores and dated notes the operator curates, through the same series engine | `negative`, `neutral`, `positive`, or `not declared` when nothing was mapped in | reads only; nothing is scraped |
 | `validator` | `figures_of`, `checked` over the brief the deciding analyst was given | one stance (pro, contra, neutral): the proposal, the figures it was built from, the declared states, and what the round trip costs; every claim it makes has to cite one of those figures with its value, and code discards the ones that do not |
-| `risk_manager` | the limits, the canary caps, the ladder, measured against declared latency, net against the registration | `tighten_limits`, `demote`, `arm_kill_switch` | after the runs |
+| `risk_manager` | the limits, the canary caps, the ladder, measured against declared latency, net against the registration | `tighten_limits`, `demote`, `arm_kill_switch` | after the runs, never inside one |
 | `executor` | the venue, the rate limits, the allocation across instruments | an allocation, fractions summing to at most one | after the risk decision |
 | `auditor` | the ledger, every run, `usage.jsonl`, the ladder | `audit.json` | last |
 
@@ -118,12 +120,32 @@ size, or declared by the operator and labelled as such.
 | Role | Tools (`agent/<role>/tools.py`) | What the brief carries |
 |---|---|---|
 | `market_screener` | `screen_figures` | per instrument: rows, print rate, realised volatility, first-lag autocorrelation, the 1:10 variance ratio, largest gap, last-hour volume against the average, turnover, the cost floor for the claimed edge, and a regime the code proposes from a written rule (`[agents.screen]` sets the two thresholds: `min_prints_per_minute`, `volatile_above_bps`) |
-| `technical_analyst` | `features` | on each closed bar: returns over 1, 5 and 20 bars, the close as a z-score of the window, the gap to VWAP, the last bar's volume and range against the window's, the position between the window's high and low; then the bars themselves |
+| `technical_analyst` | `features` | on each closed bar: returns over 1, 5 and 20 bars, the close as a z-score of the window, the gap to VWAP, the last bar's volume and range against the window's, the position between the window's high and low, the net move and trend strength with the regime they give; the same on each higher timeframe in `[run].context_intervals`; the book imbalance, the open interest change since the last snapshot, and the declared state of the other series (see [the cycle](cycle.md#the-market-around-the-decision)) |
 | `macro_analyst` | `macro_brief` over `data/series.py` | per series in `series.toml`: the value known at the time and when it became known (publication lag honoured), the state against the operator's declared threshold, the correlation and strongest lead-lag with the instrument's returns measured on the operator's data with n, the calendar events inside the horizon |
 | `onchain_analyst` | `onchain_brief` | the same engine, plus the net over a window and the last value as a z-score of its own history |
 | `risk_manager` | `risk_brief` | per run: latency from intent to fill (median, max, n, ratio to the declared), net per round trip overall and over the last window against the claimed magnitude, maximum drawdown, the favourable and adverse excursions of the closed round trips with what the winners gave back, which control refused and how often |
 | `executor` | `size_for`, `rate_budget`, `export_signals` | a size that never exceeds a cap, rounded down to the venue's step; what the minute still allows; the run's admitted intents as `signals.jsonl` or CSV for execution elsewhere (`tra signals export RUN`) |
 | `auditor` | `audit_brief`, then a tool loop over `run_report`, `ledger_show`, `ledger_search`, `runs_index`, `ladder_show` | usage per role with tokens per closed round trip, each promotion with whether its evidence names a gate, and a run against its replay trade by trade; then whatever it chooses to read, up to six calls |
+
+### Risk: one role after the runs, one step inside each decision
+
+Two different jobs share the word, and keeping them apart is deliberate.
+
+**The step.** How much this trade may lose, and the size that follows, is arithmetic over the
+operator's own declarations: the distance to the stop times the size, against equity, against
+`[controls].max_risk_per_trade_bps`. It runs inside every cycle, between the conviction ladder and
+the cost gate, and it cuts the size to fit or refuses. No model is asked, because a model asked how
+much to risk answers differently on Tuesday than on Monday from the same figures, and a size that
+depends on which sentence was written last cannot be backtested or audited. See `docs/cycle.md`.
+
+**The role.** Whether the limits themselves are still the right limits is a judgement over a
+completed run: latency against what was declared, net per round trip against what was claimed,
+drawdown, which control keeps refusing. That is what `risk_manager` reads, once, after the runs -
+and all it may do is tighten a limit, step the ladder down, or arm the kill switch. It cannot widen
+anything, and it is not in the path of a decision.
+
+So "where is the risk manager" has two answers: the decision it owns is code in every cycle, and the
+judgement it owns happens after the fact where a wrong answer costs a review rather than a position.
 
 ### The two auditors
 
@@ -146,17 +168,46 @@ so rather than implying a finding.
 as they came back, `audit.json` with what was discarded and why, and `proposals.md` for a person to
 read. Applying a proposal is that person editing their own configuration.
 
+### When they wake, and why it is not the same answer for both
+
+An operator running this on a server is not watching it. The failure that matters to them is the one
+that stops the desk quietly - a provider rate limits the roster halfway through, the run keeps going
+through the motions, and nobody finds out until someone reads a log. So the two auditors wake
+differently, because they answer different questions:
+
+```toml
+[audit]
+on_alarm = true                  # the technical auditor, when a cycle reports something broken
+alarm_cooldown_s = 1800          # per kind of alarm, not overall
+quant_every_cycles = 20          # the quant auditor, on a count of cycles
+```
+
+Something breaking is an event. `agents/alarms.py` reads a cycle's own record for four kinds -
+`stopped` (the cycle did not finish), `provider` (a model call never came back), `data` (a chain ran
+out or was used stale) and `venue` (the order was refused) - and the technical auditor is asked once
+per kind, no more often than the cooldown. A gate refusing is **not** an alarm: a cost gate saying no
+is the software working, and waking an auditor for it would be paying to be told the desk is fine.
+
+Whether the desk is earning what it costs is a question about a stretch of time, so the quant auditor
+runs on a count of cycles instead.
+
+Neither one gains anything by waking this way. They read the same records, answer in the same shape,
+cite the same way, and change nothing; the only difference is that a person no longer has to be the
+one who notices. An auditor that fails - the same rate limit, most likely - is a line in the run's
+output, never the end of the run. Their calls are counted in their own `audits/usage.jsonl`, so what
+the desk spent deciding stays separable from what it spent looking at itself.
+
 ### Who weighs whom
 
 A question worth answering plainly, because it decides where the token bill goes:
 
 | Step | Who does it | What it may do |
 |---|---|---|
-| read one class of data and label it | a reading analyst | say what it sees, in its own vocabulary; it decides nothing |
+| read one class of data and label it | a reading analyst | say what it sees, in its own vocabulary; the score it is weighed by is graded by code from the same figures against the operator's lines |
 | propose a direction and a horizon | the technical analyst | one target, one confidence, one reason |
 | argue for or against that proposal | the validators | claims that cite figures from the brief; code discards the rest |
 | decide whether the context agrees | the confluence matrix, in code | admit or refuse, from declared states and vote counts |
-| decide how much goes behind it | the conviction rule, in code | pick a size multiple off the operator's ladder; it may only shrink the base size |
+| decide how much goes behind it | the conviction rule, in code | weigh every voice by its strength (confidence, graded scores, votes) and pick a size multiple off the operator's ladder; it may only shrink the base size |
 | price the round trip | the cost gate, in code | refuse a claim that does not clear its own cost |
 | hold the desk's shape | the targets, in code | refuse a trade that is not worth what the operator said it must be worth |
 | watch what actually happened | the risk manager | continue, tighten, demote or halt from measured behaviour; it never enlarges anything |
@@ -222,6 +273,26 @@ auditor's tool steps with what each returned or refused, every model call on the
 with running tokens and cost, and the intents, fills and round trips on the bar clock. The
 two clocks are never mixed; a replay of last January runs today. `--json` returns the same
 events for anything that wants to draw them.
+
+## What an agent can reach
+
+The short version for anyone reviewing this before putting money behind it:
+
+| Concern | How it is handled | Where |
+|---|---|---|
+| Memory | None between calls. Each call is one system prompt plus one brief built by code. Earlier cycles are files on disk, and only the auditors read them. | `docs/llm.md`, `store/cycles.py` |
+| What a role sees | Its own sections of the brief. Anything else is removed and the removal is recorded. | `agents/scope.py` |
+| What a role may say | A closed JSON schema per role. Extra fields, a wrong enum, or a number out of range are refused before anyone reads the answer. | `agents/<role>/role.py`, `llm/form.py` |
+| Whether its figures are real | Every cited figure is checked against the brief, value included. Citations that do not hold are discarded, and a deciding answer with nothing left is refused. | `agents/cited.py` |
+| Tools | None in a cycle. In a session the auditor gets five read tools in a loop capped at six steps; every path a model writes has to resolve inside the project, the session or the ladder's directory, and hidden files (`.env`, `.git`, `.tra-history`) are never readable. The MCP server applies the same fence to whatever host calls it (`tra mcp serve --root`). | `agents/react.py`, `surface/confine.py` |
+| Orchestration | A fixed pipeline with one parallel round (analysts) and one optional second round (validators). No graph to configure, no role calling another, no loop that a model controls. | `agents/cycle.py`, `agents/parallel.py` |
+| Spend | Every call is a line in `usage.jsonl`. Declared ceilings (`token_budget`, `max_calls_per_hour`, `min_interval_s`) apply to the whole desk in one run, not to each role. | `llm/usage.py` |
+| Credentials | Keys come from the environment only. A vendor or venue error is scrubbed of any credential this process holds before it goes into a record or a brief. | `llm/completer.py`, `trading/dispatch.py` |
+| Text from outside | Headlines, notes, vendor messages and another role's reason reach some briefs as material to read. The prompts say so, and more to the point, none of those roles decides: the gates read the operator's declared states and measured figures. The role that proposes a direction reads numbers only. | `agents/prompts/` |
+| Orders | No role can place, cancel or modify one. Only the venue hand sends, after every gate, under a signed mandate. | `trading/dispatch.py`, `docs/cycle.md` |
+
+A cycle is never resumed. Its answers belong to the snapshot it took, and reusing them against a
+newer book would mix two moments in one decision. The next cycle takes its own snapshot.
 
 ## What a role cannot do
 

@@ -92,7 +92,7 @@ down. That is `data/sources/` and `tra data pull`.
 
 ```bash
 pip install 'trading-research-agents[ccxt]'
-tra data pull BTCUSDT                       # chains from data.toml, snapshot into runs/cycles/
+tra data pull BTCUSDT                       # chains from data.toml, snapshot into runs/pulls/
 ```
 
 ```toml

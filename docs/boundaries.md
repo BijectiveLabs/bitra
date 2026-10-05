@@ -69,6 +69,7 @@ session uses, not in the cycle's own pricing.
 | Argue for or against a proposal, citing figures it was given | Promote a ladder tier |
 | Write an audit finding with a proposed change for a person to apply | Loosen a control, a cap or a gate |
 | | Place, cancel or modify an order |
+| | Open a file outside the project, or any hidden file, through a tool |
 
 The size comes from the operator's conviction ladder, the gates read declared states and measured
 figures rather than sentences, and a claim that cites a figure the brief did not carry is discarded

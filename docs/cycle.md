@@ -20,13 +20,36 @@ same command, and everything that should end it ends it by name.
 |---|---|
 | the budget | a cycle that stopped because the token budget is spent will not be followed by one that costs more |
 | the kill switch | the file named in `[controls].kill_switch` exists |
-| `--cycles N` | the count asked for |
+| `--cycles N` | N scheduled passes, whether or not the trigger let a cycle through |
 | a keyboard interrupt | the operator stopped it; the cycle that was running is already on disk |
+| SIGTERM, SIGHUP, SIGBREAK | a service manager stopping the desk, or an SSH session dropping; handled exactly like Ctrl-C |
 
 A refusal is not a reason to stop. A cycle that refused because a gate said no is a cycle that did
 its job, and the next one decides again with fresh figures. The frequency cap in `[targets]` still
 applies across the whole day, so an interval shorter than the desk's own limit simply produces more
 refusals, each one named.
+
+Every start and stop of `tra run` is one line in `runs/cycles/scheduler.jsonl`: when it started,
+what it watched, in which mode, and what stopped it after how many cycles. Each cycle already keeps
+its own directory; this file is what says when the desk was running at all, which matters on a
+server whose terminal output nobody kept.
+
+```json
+{"at": "2026-10-04T06:56:38+00:00", "event": "started", "every_s": 300.0, "mode": "venue", ...}
+{"at": "2026-10-04T09:12:04+00:00", "event": "stopped", "stopped_by": "SIGTERM from outside the process", "cycles": 27}
+```
+
+**Stopping while an order rests on the book.** A maker entry waits up to
+`[execution].limit_timeout_s` for a fill. If the process is told to stop during that wait, the
+order is cancelled first, `placed.json` and `cycle.json` say so (`"interrupted": true`, and whether
+the cancel went through), and only then does the run end. Stopping between cycles exits with the last
+cycle's outcome; stopping inside one always exits as a refusal, so a supervisor can tell the two apart.
+
+One case nothing in a process can cover: closing a Windows console window. Windows gives the
+process a few seconds and ends it whatever it is doing. What protects capital then is what was
+already at the venue - the stop and take profit travel with the entry, and the next cycle refuses
+while any order still works on the instrument. A desk that has to survive its terminal belongs under
+a supervisor, not in a window.
 
 
 
@@ -48,15 +71,20 @@ changing the size; name it in `required` and its disagreement starts refusing th
 in that order, each one visible in `tra check` before it costs a token.
 
 ```
-snapshot (engine)
+the universe (code: one data pull each, the trigger per instrument, ordered by movement over cost)
+  -> the instrument this pass takes
+  -> snapshot (engine)
+  -> trigger             (code: has anything moved? nothing below here runs if not)
   -> briefs (code, each role's own sections only)
   -> technical analyst + reading analysts   (parallel)
   -> the round trip priced (code)
   -> validators                             (parallel, when configured)
   -> confluence matrix   (code: declared states and votes)   -> whether to trade at all
-  -> conviction          (code: the same voices, weighted)    -> how much to trade
+  -> conviction          (code: the same voices, weighted)    -> how much the desk wants on
+  -> risk per trade      (code: the loss at the stop, against equity) -> how much it can afford
+  -> the desk            (code: what the whole book is already carrying) -> whether it fits
   -> cost gate           (code: the claim against the cost)
-  -> targets             (code: net bps, reward-to-risk, round trips today)
+  -> targets             (code: net bps, the edge over the cost, reward-to-risk, research, count)
   -> intent, or a refusal that names the figure that refused it
 ```
 
@@ -64,6 +92,77 @@ Nothing in that line is optional and nothing in it is reordered. The engine fetc
 computes; models read figures and answer inside a schema; code prices the round trip and decides
 whether the claim clears it. In the default mode the intent is written to the cycle's own
 directory and no order leaves the machine.
+
+## Which instrument, before any of this
+
+A desk that watches one instrument runs it. A desk that declares a universe takes the cheap look
+first, and only then spends a cycle:
+
+```toml
+[universe]
+instruments = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+max_per_cycle = 1                # how many of them one pass runs a full cycle on
+max_intents_per_day = 6          # across every instrument, not per one
+screener = true                  # ask the screener to narrow what the trigger admitted
+```
+
+A pass takes one data pull per instrument - the book and the recent bars, no tokens at all -
+applies the **same `[trigger]`** to each of them, and orders what survives by how far the mid has
+moved against that instrument's own spread. No new thresholds are declared for this: screening
+across a row is the same question the trigger asks down one, so it is the same declaration.
+
+The order is code, because it decides where capital gets to be considered at all. An instrument
+nobody has looked at before has no move to compare and keeps the place the operator gave it in the
+list, which is how a new instrument enters a running desk rather than being ranked out of it
+forever.
+
+`[universe].screener` adds the market screener as a second opinion over what code admitted, from the
+same figures. It can only take an instrument out: it cannot add one, change the order, or say
+anything about a direction or a size, and code records what it dropped and why. A screener that
+cannot answer leaves the pass exactly as code left it.
+
+Each instrument keeps its own history: its own trigger streak, its own carried research spend, its
+own daily round trips. `[universe].max_intents_per_day` is the one figure that counts the whole
+desk, and it is read from the intents on disk like the per-instrument count. The cycle directory
+carries the instrument in its name (`2026-09-29T07-44-43Z-ETHUSDT`), and the pass itself is written
+to `runs/screens/<time>.json` whether or not anything was chosen.
+
+```
+screen 2026-09-29T07-44-23Z: 3 instrument(s) looked at, 2 admitted, 1 taken
+  BTCUSDT      held      moved 3.74 bps, spread 0.01 bps, pressure 374.00
+  ETHUSDT      taken     moved - bps, spread 0.04 bps, pressure -
+  SOLUSDT      admitted  moved - bps, spread 0.84 bps, pressure -
+  held BTCUSDT: the mid has moved 3.74 bps since the last cycle and the declared minimum is 120 bps
+```
+
+## Before anyone is asked: the trigger
+
+A five minute schedule is two hundred and eighty cycles a day. Most of them should refuse, and
+refusing is the right answer - but the tokens were spent finding that out, and a desk that spends
+more on research than it can win on a trade is not a desk. The answer is not to abandon the
+schedule. It is to put a check in front of it that costs nothing.
+
+```toml
+[trigger]
+min_move_bps = 15                # the mid has to have moved this far since the last cycle
+max_spread_bps = 8               # a book wider than this cannot be traded through
+cooldown_s = 900                 # one decision per instrument in this window
+widen_after = 6                  # after this many straight refusals, ask for more movement
+```
+
+Every figure it reads is free: the touch of the snapshot the cycle has already taken, the cycle
+summaries on disk, the clock, and the count of intents already written today. A cycle that holds
+costs one data pull and no tokens, and the hold is written down with its arithmetic - what the mid
+moved, what the desk asked for, and why.
+
+`widen_after` is the part that answers a whole quiet day. After a run of refusals with nothing
+changing, the movement required grows with the streak, to a hard ceiling of eight times the
+declared minimum so a desk can never be talked into going blind. One real move brings it straight
+back to the baseline. A cycle the trigger itself held does not count towards the streak: that is
+the desk deciding not to look, not the desk looking and finding nothing.
+
+`tra run --now` asks the roster whatever the trigger would have said. The override is written into
+the cycle, so a reader can tell a forced cycle from a natural one.
 
 ## What a cycle leaves behind
 
@@ -90,11 +189,52 @@ The model receives those numbers and answers with a target, a confidence, a hori
 reason. It never adds anything up, so a wrong sum is a bug in code with a test, not a sentence in
 a prompt.
 
+### The market around the decision
+
+A desk decides on one timeframe and reads the bigger picture before it does. The brief carries
+that picture too, all of it computed by code from the snapshot:
+
+| Figure | What it says | Where it comes from |
+|---|---|---|
+| `regime` | trending up, trending down, ranging or mixed, on the decision timeframe | `trend_strength` against the lines in `[regime]` |
+| `trend_strength` | net move over the path walked, times the square root of the steps; a random walk sits near 1 on any window | the window's closes |
+| `net_bps` | the move from the first close of the window to the last | the window's closes |
+| `timeframes.<tf>` | the same regime, net move, z-score and position in range on each higher timeframe | `[run].context_intervals`, one candle pull each |
+| `book_imbalance` | resting bids against resting asks over the first 10 levels, from -1 to 1; positive leans to the bid | the order book already in the snapshot |
+| `open_interest` | the change in percent since the previous snapshot of this instrument, and how long ago that was | the open interest already pulled, and the last snapshot on disk |
+| `readings.<role>` | what your own thresholds say on the macro, on-chain or sentiment series this cycle | the same declared state conviction reads, known before any model is asked |
+
+Nothing here is required. A higher timeframe the venue cannot serve is named in the refusals and
+left out, and so is an open interest with nothing earlier to compare it to.
+
+```toml
+[run]
+bar_interval_s = 60
+context_intervals = ["15m", "1h"]  # up to three, each a whole multiple of bar_interval_s
+
+[regime]
+trend_above = 2.0                  # trend_strength at or above this is a trend
+range_below = 1.0                  # at or below this is a range; between the two is mixed
+setups_must_fit = true             # false: a misfit is written down and the trade goes on
+```
+
+**A setup has to fit the regime.** On the decision timeframe, code refuses a trend setup
+(`trend_continuation`, `pullback_in_trend`) in a market measured as ranging, a `range_reversion`
+against a trend, a trend setup pointing against the trend, and a `momentum_exhaustion` that goes
+with the move it says is exhausted. A breakout and a volatility expansion are allowed anywhere,
+since they are about a regime changing. A short setup against a higher timeframe's trend is left
+to the analyst to weigh, because fading the hourly on the minute chart is sometimes the whole
+trade; the reason has to say so. `tra check` prints the lines and the timeframes in use.
+
+The macro analyst's regime is a different thing: risk-on or risk-off is about the world outside the
+chart, and it can disagree with what price is doing. Both are kept. The analyst sees the declared
+macro state in `readings`, and conviction weighs the macro analyst's graded score as before.
+
 ## Who is asked, and what each one reads
 
 | Agent | Reads | Answers | Asked when |
 |---|---|---|---|
-| `technical_analyst` | the closed candles of the snapshot, the spread, the funding rate | a target, a confidence, a horizon, a reason | every cycle; it is the role that decides |
+| `technical_analyst` | the closed candles of the snapshot, the spread, the funding rate, the regime on each timeframe, the book imbalance, the open interest change, and your thresholds' reading of the other series | a target, a named setup, a confidence, a horizon, a reason, and the figures it read | every cycle; it is the role that decides |
 | `macro_analyst` | macro series and the dated text of `news.toml` | a regime, the events it saw, a reason | when `sources/macro.toml` or `sources/news.toml` declares something, or `--macro` / `--news` names a file |
 | `onchain_analyst` | chain figures and derivative figures, read side by side | accumulation, distribution or neutral, and why | when `sources/onchain.toml` or `sources/derivatives.toml` declares something, or `--onchain` / `--derivatives` |
 | `sentiment_analyst` | dated scores, plus the same dated text as notes | negative, neutral, positive, or not declared | when `sources/sentiment.toml` declares something, or `--sentiment` |
@@ -155,6 +295,32 @@ analyst that fails leaves a line in `cycle.json` and the cycle carries on. The c
 that makes the context binding is the next unit, and when it lands a missing state will refuse
 rather than be treated as neutral: a state nobody produced is not a neutral state.
 
+## Where a direction came from
+
+Two fields make the deciding analyst's answer reviewable a month later, and both are checked by
+code before anything downstream sees them.
+
+**The setup.** One name from a closed list - `trend_continuation`, `pullback_in_trend`,
+`range_reversion`, `range_breakout`, `momentum_exhaustion`, `volatility_expansion`, `no_setup`. A
+direction with `no_setup` is refused: a desk cannot review, count or compare a trade whose shape
+nobody named, and a paragraph is not a shape. The name travels into the intent, so "which setups
+have paid for themselves this month" is a question the records can answer.
+
+**The figures.** Every role that says something about numbers answers with `figures_used` - each
+figure by the brief's own name, with the value it read - and code checks each one against the brief
+it was handed. A figure that is not there, or a value that does not match, is discarded and the
+discard is recorded. For the reading analysts that is a mark on the record; the label was never what
+decides. For the analyst that does decide it has teeth: if not one citation survives, the cycle
+refuses, because a direction that cannot point at a figure in its own brief came from somewhere
+this cycle cannot see.
+
+The check is fair about names. A brief carries a row per series, so one number's full name is
+`series.us10y.correlation_measured.value`, and no model writes that when it means "the correlation".
+A citation resolves when its words are the tail of exactly one figure's name; where several share a
+tail, the shallowest wins; and a block measured with its own sample size resolves to the number in
+it. Nothing about that loosens the rule - whichever figure a citation lands on, the value still has
+to match, so a citation that resolved to the wrong figure is discarded anyway.
+
 ## Every role inside its own job
 
 A desk works because a job has edges. The analyst that labels a regime does not size the order, the
@@ -207,7 +373,8 @@ validators = ["pro", "contra", "neutral"]
 
 Each one receives the proposal, the figures it was built from, the declared states and what the
 round trip costs. Each must answer with claims that cite a figure by the brief's own name, with that
-figure's value:
+figure's value - and the figures it may cite are every figure in the brief it was handed, the
+proposal's claimed edge and the cost included, rather than a narrower set it never saw:
 
 ```json
 {"stance": "contra",
@@ -227,17 +394,19 @@ Each stance is one more call, which is why they are off until an operator asks f
 ## Conviction: who weighs the analysts, and how much goes behind the idea
 
 The matrix answers whether the context agrees with the direction. `[conviction]` answers the
-question a desk actually has next: how much. It is the same declarations, weighted.
+question a desk actually has next: how much. Analysts are allowed to disagree - crypto doesn't move
+in straight lines, and a macro reading against a technical setup is ordinary. What matters is how
+strong each side is, so every voice counts as strong as it actually is.
 
 ```toml
 [conviction]
 weights = { technical_analyst = 2.0, onchain_analyst = 1.5, macro_analyst = 1.0, sentiment_analyst = 0.5 }
 validator_weight = 1.0
-min_score = 0.4                  # below this the desk does not trade, whatever the matrix said
+min_score = 0.4                  # below this the desk does not trade
 max_leverage = 3.0               # notional against [run].equity; a ceiling, never a target
 
 [[conviction.ladder]]
-at_least = 0.75                  # everything agrees: the whole base size
+at_least = 0.75                  # the case is strong and the context backs it: the whole base size
 size_multiple = 1.0
 [[conviction.ladder]]
 at_least = 0.55
@@ -247,39 +416,172 @@ at_least = 0.4
 size_multiple = 0.25
 ```
 
-The score is arithmetic anyone can check by hand:
+### Each analyst's score
 
-| Voice | Contributes |
-|---|---|
-| a reading analyst whose declared state agrees with the direction | `+weight` |
-| a reading analyst whose declared state points the other way | `-weight` |
-| a reading analyst that declared nothing | `0`, and it is listed as silent |
-| the deciding analyst | `weight * its own confidence` |
-| each validator that supports after its claims were checked | `+validator_weight` |
-| each validator that opposes | `-validator_weight` |
+Each reading analyst's score is computed by code from its own figures against the lines you drew in
+`sources/*.toml`, signed for the instrument and between -1 and 1:
 
-`score = max(0, the sum) / everything that could have agreed`, so it sits between 0 and 1. The first
-rung of the ladder the score reaches gives the size multiple, and then every cap that already
-existed still applies: `[controls].max_position`, the notional ceiling implied by `max_leverage`
-against `[run].equity`, and the venue's `size_step`, rounding down and never up.
+```toml
+threshold = { bullish_below = 4.05, bearish_above = 4.25 }   # US10Y: low yields are good for crypto
+```
 
-The desk's own example, with the weights above: good macro news and a bullish press, while the
-chain figures say whales are sending coins to the venues, and the technical analyst wants a long at
-0.7 confidence. That is `+1 (macro) +0.5 (sentiment) -1.5 (on-chain) +1.4 (technical)` over a
-possible 8, which is 0.175 - below the floor, so the desk does not trade it. Change the on-chain
-declaration to agreement and it becomes 0.85, which is the top rung and the whole base size. The
-analysts are worth their token bill because that number moved, not because they all said yes.
+The two lines make a neutral band 0.20 wide. A yield of 4.02 is 0.03 past the bullish line, which
+is 0.15 of a band: a score of +0.15, barely bullish. A yield of 3.80 is more than a full band past
+it: +1.0. Anything inside the band is 0. With several series, the analyst's score is their average.
+A threshold with only one line declared has no band to measure against, so it counts as a full +1
+or -1 whenever it is crossed, and `tra check` says so.
 
-Two rules behind the design. Silence is never agreement: a role that declared nothing contributes
-nothing, because counting silence as assent is how a desk talks itself into a trade. And the size
-is a rule rather than a judgement: a model asked "how big should this be" answers differently on
-Tuesday than on Monday from the same figures, and a size that depends on which sentence was written
-last cannot be backtested, reproduced or audited. Leverage is not a lever any role pulls either - it
-is what the notional works out to against the equity, and `max_leverage` is the ceiling on that.
+The model still reads the same figures and writes its own label and reason. Both go in the record,
+and when they disagree the record says so. The score code computed is what gets weighed, because it
+comes out the same every time from the same figures.
+
+### Adding them up
+
+| Voice | Brings | Counts toward the total by |
+|---|---|---|
+| the deciding analyst | `weight * confidence` | `weight` |
+| a reading analyst | `weight * score`, plus when it agrees with the direction, minus when against | `weight * abs(score)` |
+| a reading analyst with nothing past its lines | `0` | nothing; it is listed as silent |
+| a validator that supports, after its claims were checked | `+validator_weight` | `validator_weight` |
+| a validator that opposes | `-validator_weight` | `validator_weight` |
+
+`score = max(0, what they bring) / what they count toward`, so it sits between 0 and 1. With nobody
+else speaking it is the deciding analyst's own confidence. Agreement lifts it, opposition lowers it
+in proportion to how strong the opposition is, and only opposition that outweighs the case takes it
+to zero. Silence neither lifts nor dilutes it: a reading barely past its line moves the score
+barely, and silence is the limit of that.
+
+The first rung of the ladder the score reaches gives the size multiple, and then every cap that
+already existed still applies: `[controls].max_position`, the notional ceiling implied by
+`max_leverage` against `[run].equity`, the risk per trade, the desk limit, and the venue's step,
+rounding down and never up.
+
+### Worked through, with the weights above
+
+| What the desk sees | Score | Size |
+|---|---|---|
+| a short at 0.70, macro barely bullish (+0.15), sentiment barely bullish (+0.057) | 1.222 / 2.178 = **0.561** | half the base |
+| a long at 0.70, macro +0.6, on-chain +0.5, sentiment -0.4 | 2.55 / 3.55 = **0.718** | half the base |
+| a long at 0.90, every analyst a full band in agreement, two validators for, one abstaining | 6.8 / 7.0 = **0.971** | the whole base |
+| a short at 0.70, every analyst a full band bullish | below zero, so **0** | no trade |
+
+The first row is a real cycle from 2026-10-04. Before scores were graded it read as two full
+voices against and refused at 0; as figures it is a small dent in a clear case.
+
+The size is still a rule rather than a judgement. A model asked "how big should this be" answers
+differently on Tuesday than on Monday from the same figures, and a size that depends on which
+sentence was written last cannot be backtested, reproduced or audited. Leverage is not a lever any
+role pulls either - it is what the notional works out to against the equity, and `max_leverage` is
+the ceiling on that.
+
+The confluence matrix above is different on purpose: it reads the words, not the scores, and a
+role you list in `required` vetoes when it points the other way however slightly. Use it only for
+the roles you really want to have a veto; leave the rest to conviction.
 
 When the size the ladder chooses is not the base size, the round trip is priced again at the size
 that is actually going out, because impact is a function of size. The cost in the record is the cost
 of the trade that was admitted.
+
+## The base size, said once
+
+`[run].size` is in base units, which is fine for a desk on one instrument and awkward for a desk on
+several: 0.01 is eight hundred dollars of BTC and twenty-seven of ETH. A desk that watches more than
+one instrument says it in quote currency instead:
+
+```toml
+[run]
+size_quote = 100                                        # quote currency, per order, before conviction
+size_step = { BTCUSDT = 0.001, ETHUSDT = 0.01, SOLUSDT = 0.1 }
+```
+
+- Exactly one of `size` and `size_quote` is declared. Two figures that could disagree are refused
+  when the file is read.
+- The cycle converts it at its own mid, after the trigger and before any model is asked, and rounds
+  down to the instrument's step. A size that comes to less than one step stops the cycle there and
+  costs nothing. The conversion is in `cycle.json` under `size`: the quote amount, the mid, the step
+  and the base size it became.
+- `size_step` may be one number or a table with one increment per instrument. Venues step
+  instruments differently (Bybit: BTC 0.001, ETH 0.01, SOL 0.1), and a table must name every
+  instrument the desk can trade.
+- Everything after the conversion is unchanged: the conviction ladder multiplies it, and
+  `[controls].max_position`, the leverage ceiling and the risk per trade cut it. `max_position` is
+  still in base units, so on a quote-sized desk it caps each instrument at that many units whatever
+  they are worth; `tra check` says so.
+- A replay, paper or live session trades one fixed size and has no cycle mid to convert at, so it
+  refuses `size_quote` by name and asks for `[run].size`.
+
+`tra check` puts the size against the venue cap before a cycle is paid for: a `size_quote` above
+`[execution].max_notional` is a refusal, and a ladder whose top rung would cross the cap is named.
+
+In venue mode the hand also checks the size against the venue's own market before sending. ccxt
+rounds an amount to the market's precision on its way out - 0.036 ETH goes out as 0.03 - which is a
+different trade from the one the cycle priced and wrote down. A size off the venue's step, or under
+its minimum, is refused with both figures instead.
+
+## Risk per trade: the size the account can afford
+
+Conviction answers how much of the base size the desk wants behind an idea. That is a different
+question from how much the account can afford to be wrong about, and the second one is what a risk
+manager is paid to ask: with the stop where it is, what does this position lose if it is hit?
+
+```toml
+[controls]
+max_risk_per_trade_bps = 50      # of [run].equity, at the stop from [exit]
+```
+
+The arithmetic is the distance to the stop times the size, against the equity, in basis points. If
+it is over the allowance, **the size is cut until it fits** - never the stop moved, because moving a
+stop to make a trade fit is how a desk learns the wrong lesson from a loss. If the size that would
+fit is below one step of the venue, the cycle refuses. The cut and the figures behind it go into the
+record and into the intent, so `risk_bps` is there beside the size for every trade the desk took.
+
+This is a code step, not a role. A model asked how much to risk answers differently on Tuesday than
+on Monday from the same figures, and the session runtime has always enforced this limit - a cycle
+that can send its own orders has to enforce it too. `tra check` refuses the combination that cannot
+be applied: a declared risk limit with no stop, or with no equity to measure against.
+
+## The desk: what the whole book may carry
+
+Every bound before this one is about one position. A desk that watches three instruments can pass
+all of them three times over and still be carrying more than anyone decided to carry, because
+nothing was ever asked about the total.
+
+```toml
+[desk]
+max_open_risk_bps = 150          # the sum of what every open position loses at its own stop
+max_open_positions = 3           # how many instruments may be open at once
+correlation_above = 0.7          # a candidate moving with something already open is one trade
+```
+
+The first figure is the one that matters. A per-trade limit of fifty basis points is a different
+promise when one position is open and when six are, and only the sum says which promise is being
+kept. It is applied after the per-trade cap, so what it adds is the figure that trade actually
+carries rather than the one it asked for.
+
+**What counts as open** comes from the venue in venue mode - the venue is the book, and it knows
+what filled and what an attached exit closed while nobody was watching - and from the intents on
+disk everywhere else. The cycle records which, in `desk.source`, so nobody has to guess how the
+total was reached. A position whose risk is not on the record **refuses the next trade**: a sum that
+quietly leaves something out is worse than no sum at all.
+
+Expect this on a universe of majors. BTC, ETH and SOL move together on one-minute returns most of
+the time (0.82 to 0.86 on the demo desk on 2026-10-05), so with `correlation_above = 0.8` one open
+position holds the other two back, and the desk carries one position at a time whatever
+`max_open_positions` says. That is the rule doing its job, and a pass that ran no cycle says so in
+those words. If you want more than one position, either raise the threshold (0.9 admits most
+pairs of majors) or watch instruments that do not move together. The hold applies whichever way the
+new trade would point, so a hedge against the open position is held too.
+
+`correlation_above` belongs to the pass rather than the cycle, because it decides which instrument
+is worth a cycle at all. It is measured on the bars the pass already pulled - the correlation of
+bar-to-bar returns over the window, and nothing at all under twenty points, because a correlation on
+ten bars is a number with no claim behind it. A candidate moving with an open position at or above
+the threshold is refused with the figure and the name:
+
+```
+ETHUSDT: has been moving with BTCUSDT at 0.931 over the window, at or above the declared 0.7;
+one trade in two names is not two trades
+```
 
 ## The targets
 
@@ -288,9 +590,26 @@ What the desk is trying to do, in numbers, checked before there is an intent:
 ```toml
 [targets]
 min_net_bps = 5                  # what must be left of the edge after every cost the gate priced
+min_edge_multiple = 2.0          # the claimed edge, as a multiple of the round trip
 min_reward_risk = 1.5            # take profit against stop, both from [exit]
+max_research_bps = 25            # model spend since the last intent, against this notional
 max_round_trips_per_day = 6      # intents already written today for this instrument
 ```
+
+`min_edge_multiple` is the one that keeps a desk honest, and it is the difference between trading
+and collecting tolls for a venue. A round trip costing 18 basis points against a claimed edge of 20
+is not a two basis point trade: the fees are certain, the edge is a probability, and slippage only
+ever moves one of them. Live cost cannot be known exactly in advance either - the spread the cycle
+priced on is the spread it saw, not the one the order gets. Requiring the edge to be a multiple of
+the cost prices that asymmetry before a model is believed rather than after the fills come in. A
+real refusal reads: `the claimed edge is 1.94x the round trip and the desk declared 2.0x; the cost
+is certain and the edge is not`.
+
+`max_research_bps` prices the other real cost. It is every model call since the desk last wrote an
+intent, against the notional of the trade those calls produced, so a day of refusals is paid for by
+whatever the day eventually trades rather than disappearing from the track record. It needs
+`[agents.pricing.<model>]` to mean anything, and `tra check` says so when the target is declared and
+the price is not - including when the declared price is zero.
 
 The round trips are counted from the intents the cycles actually wrote today, not from a counter in
 memory: a process that restarts must not forget what it has already done. Every refusal names its
@@ -338,13 +657,62 @@ Read the fee line again: eleven of the thirteen and a half basis points are the 
 schedule. That is the number most agent frameworks never show, and it is usually the number that
 decides whether the whole idea is worth running.
 
+## Watching a desk you are not running
+
+`tra watch` is the other half of the console, and the answer to "can I look at a running desk
+without disturbing it":
+
+```bash
+tra watch --every 5s --limit 20
+```
+
+It opens the directory a desk writes into, reads the records that are already there, and redraws
+them. It opens no socket, builds no client, holds no key and takes no lock - so opening it, closing
+it and opening it again does nothing at all to the desk. A record caught halfway through being
+written is skipped rather than shown wrong.
+
+What it shows, all of it from files: the last decisions with their setup, conviction, risk and what
+became of them; the last pass over the universe; the book as the newest cycle recorded it; anything
+that broke; and what the models have cost across the cycles in view.
+
+This matters for how a desk is deployed. **The console runs commands in its own process**, so a
+`tra run --every 5m` typed at the prompt ends when the console does. A desk meant to keep running
+belongs under a supervisor, and `tra watch` is how it is looked at from anywhere else.
+
+## Watching it work
+
+A cycle spends most of its wall clock waiting on sockets, so a terminal that prints only the outcome
+looks like a hung process. Every step says when it starts and how it ended, and the console draws
+the pipeline the project configured with each step pending, running, done, refused or held:
+
+```
+step      | state    | detail
+----------+----------+---------------------
+data      | done     | 4 kind(s) (1.2s)
+trigger   | done     | moved 41.20 bps
+technical | done     | 5.3s
+macro     | running  |
+cost      | pending  |
+risk      | pending  |
+targets   | pending  |
+intent    | pending  |
+```
+
+Progress travels on its own wire and can change nothing: a watcher that throws is swallowed, because
+a broken progress bar is not a reason to lose a decision. `--json`, a pipe and `--plain` all give the
+lines instead, unchanged.
+
 ## Agents run together, and one failure is not the end
 
 Analysts go out on a small pool of threads, because a model call is seconds of waiting on a
-socket. Each answer is written the moment it arrives, so a cycle interrupted by a rate limit
-keeps what it already paid for; `--resume` then reuses those answers instead of asking again. A
-failed agent becomes a line in `cycle.json` rather than a traceback, and the results are always
-reported in the same order no matter who finished first.
+socket. Each answer is written the moment it arrives, so what a cycle already paid for is on disk
+even when a later call fails. A failed agent becomes a line in `cycle.json` rather than a
+traceback, and the results are always reported in the same order no matter who finished first.
+
+A cycle is not resumed. Its answers belong to the snapshot it took, and asking the next model on a
+newer book would mix two moments in one decision; the next cycle takes its own snapshot and asks
+again. `tra agent session --resume` is different: a session replays recorded data, so its answers do
+not go stale.
 
 ## The execution mandate
 
@@ -366,6 +734,30 @@ Venue mode does not start until all of this is true, and `tra check` names whate
 5. `[canary]` limits are declared.
 6. The venue's keys are in the environment. They are read by the execution layer alone, never from
    a file, and they never appear in a brief, a prompt, a record or a log.
+7. `[live].environment` says which of the venue's environments an order goes to: `demo`, `testnet`
+   or `mainnet`. These are three different places with three different accounts, and a key for one
+   is rejected by the others. A cycle that cannot route to the environment it was told refuses
+   rather than sending somewhere close.
+
+`tra keys --probe` answers the question `tra check` cannot: not whether a key is set, but whether it
+works - one free authenticated call per provider, and for the venue an account read through the very
+client an order would go through. No prompt is sent and no order is placed. Nothing prints a key:
+each one is shown as eight hex characters of its own SHA-256, which is enough to tell two keys apart
+and cannot be turned back into either.
+
+```
+ok    provider groq ([agents].provider): verified [GROQ_API_KEY 8e4edee0]
+ok    provider google ([agents].fallback): verified [GEMINI_API_KEY d3869001]
+ok    venue bybit (demo), for `tra live`: verified [BYBIT_API_KEY da8c3e5b, BYBIT_API_SECRET 9f9bfb94]
+ok    venue bybit (demo), for `tra run`: verified [BYBIT_API_KEY da8c3e5b, BYBIT_API_SECRET 9f9bfb94]
+```
+
+The last two rows are two different clients reaching the same venue: `tra live` has its own signed
+REST client and `tra run` sends through ccxt. They are listed separately because a readiness check
+that proves one path works proves nothing about the other, and it is the second one a cycle uses.
+
+A desk that watches several instruments builds one hand per instrument, and a hand refuses an intent
+about any other instrument. One symbol, one instrument, one order.
 
 The order follows the channel. `[run].venue_key` names a channel in `envelope.toml`, and the name
 is `<entry>-<exit>`, each `maker` or `taker`:
@@ -389,6 +781,25 @@ because a retry loop around real capital is how one defect becomes ten orders.
 The size is the one the conviction rule chose, capped again by `[execution].max_notional`. What came
 back is written to `placed.json` beside the intent, and the intent is written first: whatever the
 venue does next, the record of what this cycle decided survives it.
+
+### The book at the moment of sending
+
+The snapshot a cycle priced on is as old as its slowest model: half a minute is ordinary. Before an
+order goes out the venue hand reads the book again. A maker order rests at the touch as it is now,
+not as it was, and the record keeps the priced mid, how far the mid moved (`drift_bps`) and where the
+order rested. `[execution].max_drift_bps` refuses the order when the mid has moved further than that
+against the trade, because a decision the market has already left behind is not the decision the
+gates admitted. A move in the trade's favour never refuses.
+
+## Capital, orders and positions in venue mode
+
+Before every order the account's equity and free margin are read, and sizing uses the smaller of
+the account's equity and `[run].equity`. At send time your leverage and margin mode are applied at
+the venue and read back, the estimated liquidation must sit beyond the stop, and a taker entry goes
+out as a limit IOC within a slippage band. At the start of every pass each open position is matched
+to the order that filled it, closed by time past `[execution].hold_limit`, written up when the
+venue's exits closed it, and flattened when the kill switch is armed. `docs/capital.md` has every
+setting, every check in order, the arithmetic and the records.
 
 ### What happens after the order
 
@@ -423,8 +834,15 @@ your environment, a promoted ladder, and an acknowledged disclaimer. It is not i
 |---|---|
 | `data <kind>: ...` | a chain was exhausted; see `docs/data.md`, and give that kind a longer `ttl` or another source |
 | `no technical brief: ...` | there were not enough closed candles in the snapshot to compute features |
+| `trigger: the mid has moved ...` | nothing happened worth paying a model to look at; no tokens were spent |
 | `technical: flat` | the analyst saw nothing worth pricing |
+| `technical: ... with no setup named` | a direction nobody could name the shape of is not a trade |
+| `technical: not one figure ... survived` | the direction could not point at a figure in its own brief |
 | `technical: confidence ... below` | the answer was under `[agents].min_confidence` |
+| `risk: ... bps of equity at the stop` | the smallest size the venue takes still risks more than `[controls].max_risk_per_trade_bps` |
+| `desk: ... bps of equity is already at risk` | what the book already carries plus this trade is over `[desk].max_open_risk_bps` |
+| `desk: ... has at risk is not on the record` | a position is open whose risk nobody can state, so the desk's total cannot be stated either |
+| `targets: the claimed edge is ...x` | the edge was not the multiple of the cost the desk declared |
 | `cost: no book in the snapshot` | nothing can be priced without a book, so nothing is |
 | `cost gate: ... is below ... required` | the claim did not clear the cost plus the margin |
 

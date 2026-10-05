@@ -41,14 +41,16 @@ same answer the data layer gives - a chain:
 [agents]
 provider = "groq"
 model = "openai/gpt-oss-120b"
-fallback = ["google:gemini-flash-latest", "anthropic:claude-opus-5"]
+fallback = ["google:gemini-flash-latest", "anthropic:claude-opus-5-5"]
 
 [agents.roles.sentiment_analyst]
 model = "openai/gpt-oss-20b"
 fallback = ["groq:openai/gpt-oss-120b"]     # this role's own order, instead of the one above
 ```
 
-The first link that answers wins. A link that cannot be reached is recorded with the vendor's own
+The first link that answers wins. A link that answers "try again in N seconds" with N inside
+`[agents].max_retry_wait_s` (15 by default) is waited for once before the next link is tried, so a
+short burst over a per-minute limit does not throw away the model you chose. A link that cannot be reached is recorded with the vendor's own
 error class and the next one is tried **with the same brief** - there is no conversation to carry
 over, because the brief was built by code from the snapshot. A link is built the first time it is
 needed, so naming a spare you have no key for costs nothing until the day you need it.
@@ -59,6 +61,27 @@ stops where it stands and the cycle records why.
 
 `tra check` reads the fallback list against the registered providers, so a typo is a line in the
 check rather than a surprise at the moment the primary provider goes down.
+
+### When every link fails
+
+What happens next depends on the role, and none of it can make a trade larger:
+
+| Role | If no model answers | Why |
+|---|---|---|
+| technical analyst | the cycle stops; no trade | it is the only role that proposes a direction |
+| reading analyst (macro, on-chain, sentiment) | its label is missing; its score still counts | the score is code over your thresholds and never needed the model |
+| validator | the trade is refused (`[agents].on_missing_validator = "refuse"`, the default); with `"continue"` it goes on with the votes that came back | a check you declared that did not happen is not a check |
+| market screener | the instruments code admitted go on unfiltered | the screener can only remove, never add |
+| auditor | a line in the report | auditors never act |
+
+Every failure is a refusal line in `cycle.json` with the vendor's own message, and a provider
+failure wakes the technical auditor (`[audit].on_alarm`). The way to make all of this rarer is
+capacity, not code: a provider tier whose tokens-per-minute covers a whole cycle (the screener,
+three analysts and two validators measured 9,200 to 10,200 tokens inside one minute on the demo
+desk, against a free tier's 8,000), roles split across vendors with `[agents.roles.<role>]`, and a
+fallback from a different vendor.
+A pass also stops asking anyone when the desk is already at `[desk].max_open_positions`, so a full
+book does not spend a provider's rate on cycles that could only be refused.
 
 ## Prompt caching
 
@@ -106,6 +129,51 @@ The levers we use instead: a smaller model per role where the job is labelling r
 reasoning (`[agents.roles.<role>]`), the output cap tuned per role, the brief carrying every figure
 so the model never computes, and `tra agent eval` to measure a model on recorded briefs before it
 decides anything with money behind it.
+
+## What a role may spend
+
+Nothing, by default, is capped. That is a decision rather than an oversight: an answer cut off
+halfway is a wasted call and a worse decision, not a saving, and a role that stops mid-thought
+because of a ceiling this software chose leaves an operator with neither the answer nor the money.
+
+What happens instead is counting. Every call is a line in `usage.jsonl` with its role, provider,
+model, tokens, cached tokens, latency and - when `[agents.pricing.<model>]` says what you were
+quoted - its price. Every cycle reports what it spent. `[targets].max_research_bps` measures that
+spend against the notional of the trade it produced, and the auditors read the same records and
+propose where to spend less. Optimising a bill is a decision with figures behind it, which is an
+operator's job and an auditor's, not a default.
+
+An operator who wants a hard ceiling anyway declares one, and it does what it says:
+
+| Declaration | Effect | Undeclared |
+|---|---|---|
+| `token_budget` | the process stops asking once the ledger passes it | no ceiling |
+| `max_calls_per_hour` | a role refuses its own call past that rate | no ceiling |
+| `min_interval_s` | a role waits that long between its own calls | no wait |
+| `max_output_tokens` | the cap sent to the vendor | the model's own maximum |
+
+Two notes on the last one. The Anthropic API requires `max_tokens` on every request, so an
+undeclared cap becomes a generous default there rather than nothing - a field the vendor insists on,
+not a budget. And an audit needs room a one-line answer does not: when a declared cap is below what
+a report with findings in it takes, the audit raises it for that call and says so.
+
+## How hard a role thinks
+
+A role that labels a series does not need what a role reasoning over sixty bars needs, and on a
+reasoning model that difference is most of the latency and most of the bill. `effort` is one
+vocabulary - `minimal`, `low`, `medium`, `high`, `xhigh`, `max` - declared in `[agents]` and
+overridden per role, and each adapter maps it onto what its own vendor takes:
+
+| Vendor | Field | Takes | Mapping |
+|---|---|---|---|
+| Anthropic | `output_config.effort` | low, medium, high, xhigh, max | `minimal` lands on `low`; the rest pass through |
+| Google | `thinking_config.thinking_level` | MINIMAL, LOW, MEDIUM, HIGH | `xhigh` and `max` land on `HIGH` |
+| OpenAI and compatible | `reasoning_effort` | minimal, low, medium, high | `xhigh` and `max` land on `high` |
+
+Undeclared, the field is left out of the request entirely, which matters: most servers behind a
+`base_url` reject `reasoning_effort` outright, and a model with no reasoning to configure should be
+sent nothing. A level a vendor cannot take is mapped rather than refused, because a fallback chain
+that dies on a spelling is a chain that does not help on the day it is needed.
 
 ## Choosing a model per role
 

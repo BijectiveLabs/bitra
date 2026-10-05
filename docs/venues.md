@@ -1,9 +1,12 @@
-# Venues are plugins
+# Venues
 
-The package knows no venue. Two ship with it as plugins, in their own directories, and are
-found the same way a third-party one is: through a registry. Nothing in the gates, the chain,
-the runtime or the agent names a venue, and a test fails the build if one does. The research
-this project descends from ran on particular venues; the software does not inherit that.
+A cycle reaches any venue ccxt knows. The replay and live-session paths use plugins, and the ones
+that ship (Bybit for history, the live feed and `tra live`; Binance for history) are found the same
+way a third-party one is: through a registry. Nothing in the gates, the chain, the runtime or the
+agents names a venue, and a test fails the build if one does.
+
+Most people want the next two sections: which venues work today, and how to add the one you trade
+on. The plugin contract further down is for a venue ccxt does not know.
 
 There are three plugin kinds: archived data in, live data in, orders out.
 
@@ -17,54 +20,92 @@ Data that comes from somewhere other than a venue's public archive (a vendor exp
 Client's own recorder) does not need a plugin at all: a column map takes it through the same
 gate. See `docs/data.md`, section "Any other source".
 
+## Which venues work today
+
+A cycle reaches a venue through ccxt, so "which venues are supported" has two honest answers: what
+we have run end to end, and what ccxt says a venue can do. The second is read from the library by
+`tra venues`, with no network and no key.
+
+| Venue | What a cycle can do there | Practice environment | Keys in `.env` | Run end to end by us |
+|---|---|---|---|---|
+| Bybit | everything: orders with the stop and take profit attached | demo, testnet | `BYBIT_API_KEY`, `BYBIT_API_SECRET` | yes, on demo: real orders, exits attached, a resting order cancelled |
+| OKX | everything | testnet | `OKX_API_KEY`, `OKX_API_SECRET`, `OKX_API_PASSPHRASE` | not yet |
+| Bitget | everything | demo | `BITGET_API_KEY`, `BITGET_API_SECRET`, `BITGET_API_PASSPHRASE` | not yet |
+| BingX | everything | testnet | `BINGX_API_KEY`, `BINGX_API_SECRET` | not yet |
+| KuCoin Futures | everything | none | `KUCOINFUTURES_API_KEY`, `KUCOINFUTURES_API_SECRET`, `KUCOINFUTURES_API_PASSPHRASE` | not yet |
+| Hyperliquid | everything | testnet | `HYPERLIQUID_WALLET_ADDRESS`, `HYPERLIQUID_PRIVATE_KEY` | not yet |
+| Binance | orders, but you carry the stop yourself (`exits = "none"`) | demo, testnet | `BINANCE_API_KEY`, `BINANCE_API_SECRET` | not yet; it is the data fallback in the default project |
+| Deribit, HTX, Gate, MEXC | orders with `exits = "none"` | varies, see `tra venues` | `<VENUE>_API_KEY`, `<VENUE>_API_SECRET` | not yet |
+| Kraken, Kraken Futures, Phemex | data only for a cycle: they cannot report the position, and the venue hand will not send without it | | | |
+
+"Everything" means ccxt reports the five things the venue hand needs: send an order, attach the
+stop and take profit to it, read the position, read the open orders, and cancel. "Run end to end"
+is the stronger claim, and only Bybit has earned it. Start any other venue on its practice
+environment, watch a few cycles, and read `placed.json` before you point it at money.
+
+The default project (`tra init`) prices Bybit and Hyperliquid channels in `envelope.toml`, reads
+data from Bybit with Binance behind it in `data.toml`, and trades `bybit/taker-taker` in the
+sandbox, where nothing leaves the machine.
+
 ## Adding a venue you trade on
 
-Most operators never write a plugin. A venue that ccxt already knows is three lines of
-configuration, and the first thing to do is ask what that venue can actually do:
+Four steps, and the command writes most of them for you.
+
+**1. Ask what the venue can do.**
 
 ```bash
-tra venues bybit binance kraken
+tra venues okx
 ```
 
 ```
-bybit
+okx
   data        funding, ohlcv, open_interest, orderbook
   execution   create_order: yes, attached_exits: yes, position: yes, open_orders: yes, cancel: yes
-  test env    yes
-  verdict     data and venue execution, with the exits attached and the account readable
-binance
-  execution   create_order: yes, attached_exits: no, position: yes, open_orders: yes, cancel: yes
-  verdict     data, and orders only with [execution].exits = "none"
+  practice    testnet
+  keys        OKX_API_KEY, OKX_API_SECRET, OKX_API_PASSPHRASE
+  verdict     venue mode ready: orders with the stop and take profit attached, account readable
 ```
 
-That is read from the library, not from a promise: no network, no key, no order. "ccxt supports a
-hundred venues" is true and not the question - a spot exchange has no funding rate, some venues
-cannot attach a stop to an entry, and a few will not say what position you hold. Each of those
-decides whether a cycle runs or refuses, so ask before you commit a key.
+That is read from ccxt, not promised here: no network, no key, no order. The `keys` line is what
+this venue signs with, taken from ccxt's own list. Some want a passphrase, and Hyperliquid signs with
+a wallet address and a private key instead of an API key.
 
-Then three places name the venue, and they have to agree:
+**2. Print the blocks to paste.**
 
-```toml
-# data.toml - where the figures come from, in order
-[data.ohlcv]
-chain = ["ccxt:bybit", "ccxt:binance", "file:data"]
-
-# envelope.toml - what it costs, and how you get in and out
-[[channel]]
-venue = "bybit"
-name = "taker-taker"          # <entry>-<exit>: the fee beside it is what this means
-entry_fee_bps = 5.5
-exit_fee_bps = 5.5
-
-# strategy.toml - which channel this desk trades on
-[run]
-venue_key = "bybit/taker-taker"
+```bash
+tra venues okx --setup
 ```
 
-`tra check` reads the three against each other and says so when they disagree - an instrument that
-is not mapped for the sources, data coming from a venue whose fees you are not pricing, or an
-`[execution].venue` that is not the venue in `venue_key` (that last one is a refusal, because the
-order would go to one venue at the other's fee).
+It prints what goes in `envelope.toml` (two channels, taker and maker), the line to change in
+`data.toml`, the `[run]`, `[execution]` and `[live]` tables for `strategy.toml` with the practice
+environment already chosen, and the variable names for `.env`. For a venue that cannot attach exits
+it adds `exits = "none"` and says why; for one that can only feed data it prints the data line and
+nothing else.
+
+The fees are left blank, deliberately. The fee is the biggest number in the cost gate and it depends
+on your account's tier, so a guessed figure would price every trade at a rate nobody checked. The
+file will not load until you write yours in.
+
+**3. Fill in the blanks.** Your two fees, each instrument's size step (`size_step` as a table, one
+per instrument), and the keys in `.env`. If an instrument's ccxt symbol is not the obvious one, add
+it under `[data].symbols`.
+
+**4. Check, then prove the keys.**
+
+```bash
+tra check            # the three files read against each other
+tra keys --probe     # an account read through the same client an order would use; nothing sent
+```
+
+`tra check` refuses a desk whose files disagree: an instrument the sources cannot map, data from a
+venue whose fees you are not pricing, or an `[execution].venue` that is not the venue in
+`venue_key`. `tra keys --probe` names a missing passphrase, a key the venue rejects, and a clock
+more than a second away from the venue's (the venue hand refuses to send in that case too).
+
+What protects you once orders flow, on any venue: a size off the venue's step or under its minimum
+is refused rather than quietly rounded by ccxt; the account is read before every order; an open
+position or a working order refuses a second entry; and a maker order that does not fill is
+cancelled, never chased.
 
 ## Stopping a venue
 
@@ -74,6 +115,9 @@ guessed, and the cycle says which kind and why. If it was the venue you traded o
 points at the old one. Nothing needs uninstalling, and no code changes.
 
 ## A venue ccxt does not know
+
+Write a plugin. The three kinds below are the whole contract: an archive venue for history, a live
+feed for the public tape, a live venue for orders. Each is a small class registered by entry point.
 
 ## An archive venue
 

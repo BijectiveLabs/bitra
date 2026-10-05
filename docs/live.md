@@ -80,6 +80,14 @@ machine's IP, and rotated before the session if it expires within a week.
 `[live].environment` is `demo` (default), `testnet` or `mainnet`. The base URLs are a fixed
 table in the plugin; a URL is never read from configuration. A first canary belongs on demo.
 
+They are three different places with three different accounts, and a key for one is rejected by the
+others - so the environment is not a label, it is where the order goes. `tra live` reaches them
+through the plugin's own table. A cycle in venue mode sends through ccxt and reaches them through
+ccxt's own switches, one per environment; where a venue has no switch for the environment declared,
+the cycle refuses rather than sending somewhere close.
+
+`tra keys --probe` checks both paths by name, and says which is which.
+
 ## What is not here
 
 Limit orders and maker channels, the private WebSocket for execution reports, a second live

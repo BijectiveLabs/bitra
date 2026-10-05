@@ -71,7 +71,7 @@ model providers both share.
 ## Providers
 
 ```
-pip install 'trading-research-agents[anthropic]'   # ANTHROPIC_API_KEY, default model claude-opus-5
+pip install 'trading-research-agents[anthropic]'   # ANTHROPIC_API_KEY, default model claude-opus-5-5
 pip install 'trading-research-agents[openai]'      # OPENAI_API_KEY, --model required
 ```
 
