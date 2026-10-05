@@ -902,6 +902,11 @@ def cycle_view(record: Mapping[str, Any]) -> Group:
             state = "reused" if row.get("reused") else ("ok" if row.get("ok") else "failed")
             style = {"ok": "green", "failed": "red", "reused": "dim"}[state]
             who.add_row(str(row.get("agent")), Text(state, style=style), str(row.get("seconds")))
+        for role, why in sorted((record.get("not_asked") or {}).items()):
+            who.add_row(role, Text("not asked", style="yellow"), "")
+            who.caption = (who.caption + "; " if who.caption else "") + (
+                f"{role}: {str(why).removeprefix(role + ': ')}"
+            )
         parts.append(who)
     return Group(*parts)
 

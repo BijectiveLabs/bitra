@@ -2820,7 +2820,8 @@ def _cycle_steps(cfg: Any) -> list[str]:
     if cfg.account is not None:
         steps.append("capital")
     steps.extend(["regime", "technical"])
-    steps.extend(role for role in cfg.analysts if role != "technical_analyst")
+    # Every reading analyst has a row, asked or not; the row says which.
+    steps.extend(["macro_analyst", "onchain_analyst", "sentiment_analyst"])
     steps.append("cost")
     steps.extend(f"validator_{stance}" for stance in cfg.validators)
     if not cfg.matrix.idle:
@@ -2883,6 +2884,8 @@ def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], l
             f"  {row['series']:<14} {row['value']} as of {str(row['observed_at'])[:16]}, "
             f"{row['age_h']}h old, {row['state']}; {row['origin']}"
         )
+    for role, why in sorted((result.briefs.get("not_asked") or {}).items()):
+        lines.append(f"{role.replace('_analyst', ''):<10} {why.removeprefix(role + ': ')}")
     for role, said in sorted(result.context.items()):
         if role.startswith("validator"):
             continue

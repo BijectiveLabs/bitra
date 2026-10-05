@@ -48,10 +48,35 @@ PRESETS: dict[str, dict[str, Any]] = {
         "key_env": "FRED_API_KEY",
         "key_param": "api_key",
     },
+    # Blockchain.com charts, Bitcoin only, daily, free, no key. `id` is the chart name, such as
+    # n-unique-addresses, n-transactions or hash-rate.
+    "blockchain.info": {
+        "url": "https://api.blockchain.info/charts/{id}?timespan=180days&format=json",
+        "rows": "values",
+        "ts": "x",
+        "ts_unit": "s",
+        "value": "y",
+    },
+    # Coin Metrics community API, daily, free, no key, many assets. `id` is the metric, such as
+    # AdrActCnt or FlowInExNtv; `asset` defaults to btc; `minus` subtracts a second metric, which
+    # is how exchange inflow less outflow becomes one net-flow series.
+    "coinmetrics": {
+        "url": (
+            "https://community-api.coinmetrics.io/v4/timeseries/asset-metrics"
+            "?assets={asset}&metrics={metrics}&frequency=1d&paging_from=end&page_size=180"
+        ),
+        "rows": "data",
+        "ts": "time",
+        "ts_unit": "iso8601",
+        "value": "{id}",
+        "asset": "btc",
+    },
 }
 FETCH_KEYS = (
     "from",
     "id",
+    "asset",
+    "minus",
     "url",
     "rows",
     "ts",
@@ -89,10 +114,21 @@ def plan(fetch: Mapping[str, Any], name: str) -> dict[str, Any]:
     if origin != "http" and origin not in PRESETS:
         raise PullError(f"{name}: fetch.from is 'http' or one of {sorted(PRESETS)}, not {origin!r}")
     out = {**PRESETS.get(origin, {}), **{k: v for k, v in fetch.items() if k != "from"}}
-    if "{id}" in str(out.get("url", "")):
-        if not out.get("id"):
-            raise PullError(f"{name}: fetch from {origin} needs id, the vendor's series id")
-        out["url"] = str(out["url"]).replace("{id}", urllib.parse.quote(str(out["id"]), safe=""))
+    wanted = [str(out["id"])] if out.get("id") else []
+    if out.get("minus"):
+        wanted.append(str(out["minus"]))
+    fills = {
+        "{id}": str(out.get("id", "")),
+        "{asset}": str(out.get("asset", "")),
+        "{metrics}": ",".join(wanted),
+    }
+    for hole, value in fills.items():
+        if hole in str(out.get("url", "")) or hole == out.get("value"):
+            if not value:
+                raise PullError(f"{name}: fetch from {origin} needs {hole.strip('{}')}")
+            out["url"] = str(out["url"]).replace(hole, urllib.parse.quote(value, safe=","))
+            if out.get("value") == hole:
+                out["value"] = value
     url = str(out.get("url", ""))
     if not url.startswith("https://"):
         # A key in the clear, or a figure anyone on the path could change, is not worth reading.
@@ -197,8 +233,10 @@ def _points(body: bytes, how: Mapping[str, Any], name: str) -> dict[int, Decimal
             continue
         try:
             value = Decimal(str(row[how["value"]]).strip())
+            if how.get("minus"):
+                value -= Decimal(str(row[how["minus"]]).strip())
             when = _when(str(row[how["ts"]]).strip(), str(how["ts_unit"]))
-        except (InvalidOperation, ValueError, OverflowError):
+        except (InvalidOperation, ValueError, OverflowError, KeyError):
             # Vendors mark a missing day in their own way (FRED writes "."); a row that is not a
             # number is not a figure, and it is skipped rather than guessed.
             continue
@@ -211,7 +249,12 @@ def _points(body: bytes, how: Mapping[str, Any], name: str) -> dict[int, Decimal
 
 def _when(text: str, unit: str) -> int:
     if unit == "iso8601":
-        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        # Some vendors stamp nanoseconds; Python 3.11 reads at most microseconds.
+        head, dot, rest = text.replace("Z", "+00:00").partition(".")
+        if dot:
+            digits = len(rest) - len(rest.lstrip("0123456789"))
+            rest = rest[:6] + rest[digits:] if digits > 6 else rest
+        parsed = datetime.fromisoformat(head + dot + rest)
         if parsed.tzinfo is None:
             parsed = parsed.replace(tzinfo=UTC)
         return int(parsed.timestamp() * NS_PER_S)
@@ -246,6 +289,8 @@ def where_from(spec: SeriesSpec) -> str:
         return f"kept by hand in {spec.file}"
     origin = str(spec.fetch.get("from"))
     named = f" {spec.fetch['id']}" if spec.fetch.get("id") else ""
+    if spec.fetch.get("minus"):
+        named += f" less {spec.fetch['minus']}"
     if origin == "http":
         host = urllib.parse.urlsplit(str(spec.fetch.get("url", ""))).hostname or "?"
         return f"fetched from {host} every {_every(spec)}"

@@ -48,6 +48,8 @@ threshold = { bullish_above = 60, bearish_below = 25 }
 |---|---|---|
 | `alternative.me` | Crypto Fear & Greed Index, daily | none |
 | `fred` (with `id`, such as `DGS10`) | Federal Reserve Economic Data: yields, the dollar, inflation, thousands more | `FRED_API_KEY`, free from fred.stlouisfed.org |
+| `coinmetrics` (with `id`, optional `asset`, `minus`) | Coin Metrics community API: exchange flows, active addresses, supply, for many assets; `minus` subtracts a second metric, so inflow less outflow is one net-flow series | none |
+| `blockchain.info` (with `id`, such as `n-unique-addresses`) | Blockchain.com charts, Bitcoin only | none |
 | `http` | any endpoint that answers JSON over https, including paid on-chain and derivatives vendors | whatever the vendor asks for |
 
 A paid vendor is one line. Take the path, the field names and where the key goes from the vendor's
@@ -76,6 +78,17 @@ decides whether its last value still counts.
 Text is never fetched. Headlines from a news API or posts from a forum need your own small exporter,
 written under that service's terms, into a `news.toml` file. Scores built from them go in
 `sentiment.toml`, which can fetch.
+
+## When an analyst is not asked
+
+A reading analyst with nothing declared for it is not paid to say it saw nothing. It still has a
+row in the cycle table, marked `not asked`, with the reason: nothing declared in
+`sources/onchain.toml` or `sources/derivatives.toml`, not in `[agents].analysts`, every series past
+its `max_age`, or every file unreadable. A role asked but missing from `[conviction].weights` is
+flagged by `tra check`: it answers, and its answer moves nothing.
+
+On-chain figures for Bitcoin are read as market-wide context for every instrument a desk trades,
+the way a yield is. A desk that wants a chain per instrument declares one series per asset.
 
 ## Freshness
 

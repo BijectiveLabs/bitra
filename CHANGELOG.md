@@ -77,6 +77,13 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- Two free on-chain feeds for `fetch`: `coinmetrics` (Coin Metrics community API; `minus` turns
+  exchange inflow less outflow into one net-flow series) and `blockchain.info` (Blockchain.com
+  charts). The on-chain template shows both.
+- A reading analyst that is not asked now has its own row in the live table and the result,
+  marked `not asked` with the reason (nothing declared under its `sources/` files, not in
+  `[agents].analysts`, every series stale or unreadable). Before this, an on-chain analyst with no
+  data simply did not appear, which read as broken.
 - Every cycle keeps its raw inputs in `inputs.json.gz` (candles on every timeframe, book levels,
   funding, open interest, the settings used), and `cycle.json` carries a sha256 of every file in
   the cycle. `tra runs verify` checks the hashes and recomputes the technical figures from the

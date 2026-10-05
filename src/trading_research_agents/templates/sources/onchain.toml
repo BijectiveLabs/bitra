@@ -13,8 +13,38 @@
 # the field names and the key's place taken from your vendor's docs (macro.toml lists the fields).
 # Set max_age to what the vendor actually delivers, so a feed that stops is noticed, not trusted.
 
+# Two free feeds need no key: Coin Metrics community (many assets; exchange flows, active
+# addresses, supply) and Blockchain.com charts (Bitcoin). The first two entries below use Coin
+# Metrics and fill their own files; set the lines from your own look at the history.
+
 # Nothing is switched on yet. Uncomment an entry, put the file where it points, and the on-chain
 # analyst joins the roster on the next run. Left as it is, that role is not asked at all.
+
+# [[series]]
+# name = "btc_exchange_net_flow"
+# file = "onchain/btc_exchange_net_flow.csv"   # BTC arriving on exchanges, less BTC leaving
+# ts = "date"
+# ts_unit = "iso8601"
+# value = "value"
+# unit = "BTC"
+# publish_lag = "28h"                  # a day is posted about 3 to 4 hours after it closes
+# source = "Coin Metrics community, FlowInExNtv less FlowOutExNtv"
+# max_age = "3d"
+# fetch = { from = "coinmetrics", id = "FlowInExNtv", minus = "FlowOutExNtv" }
+# threshold = { bearish_above = 2800, bullish_below = -6300 }
+
+# [[series]]
+# name = "btc_active_addresses"
+# file = "onchain/btc_active_addresses.csv"
+# ts = "date"
+# ts_unit = "iso8601"
+# value = "value"
+# unit = "addresses"
+# publish_lag = "28h"
+# source = "Coin Metrics community, AdrActCnt"
+# max_age = "3d"
+# fetch = { from = "coinmetrics", id = "AdrActCnt" }
+# threshold = { bullish_above = 711000, bearish_below = 544000 }
 
 # [[series]]
 # name = "venue_net_flow"

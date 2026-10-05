@@ -130,6 +130,12 @@ TARGETS = {"long": Direction.LONG, "short": Direction.SHORT}
 OPEN_INTEREST_LOOK_BACK = 12
 # The analysts that only read and label. They run beside the technical analyst, they never place
 # anything, and each one's answer is recorded whether or not the operator gave it a source.
+# The shelf files that feed each reading analyst, for saying where to declare one.
+CLASSES_OF: dict[str, tuple[str, ...]] = {
+    macro_analyst.ROLE: ("macro",),
+    onchain_analyst.ROLE: ("onchain", "derivatives"),
+    sentiment_analyst.ROLE: ("sentiment",),
+}
 READING: dict[str, Any] = {
     macro_analyst.ROLE: macro_analyst,
     onchain_analyst.ROLE: onchain_analyst,
@@ -342,6 +348,8 @@ class CycleResult:
             "seen": self.seen,
             # Every series a reading analyst was handed: where from, the value, and how old.
             "series": self.briefs.get("series"),
+            # Reading analysts this cycle did not ask, and why.
+            "not_asked": self.briefs.get("not_asked"),
             "exits": self.exits or None,
             "trigger": None if self.wake is None else self.wake.record(),
             "held": self.held,
@@ -488,11 +496,18 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
     # before any model is asked, and the technical analyst decides with it in front of it.
     calendar = _calendar(cfg, result)
     reading_briefs: dict[str, dict[str, Any]] = {}
-    for role in cfg.analysts:
-        if role not in READING:
+    for role in READING:
+        if role not in cfg.analysts:
+            # Shown, not hidden: an analyst missing from the table reads as one that broke.
+            why = _not_on_roster(cfg, role)
+            result.briefs.setdefault("not_asked", {})[role] = why
+            announce(cfg.watch, role, SKIPPED, why)
             continue
         built = _reading_brief(cfg, role, snapshot, calendar, result)
         if built is None:
+            why = next((r for r in reversed(result.refusals) if r.startswith(role)), "not asked")
+            result.briefs.setdefault("not_asked", {})[role] = why
+            announce(cfg.watch, role, SKIPPED, why.removeprefix(f"{role}: "))
             continue
         reading_briefs[role] = _within_scope(role, built, result)
     context = _context_frames(cfg, result)
@@ -959,6 +974,13 @@ def _regime_line(cfg: CycleConfig, brief: Any) -> str:
     said.extend(f"{name} {frame['regime']}" for name, frame in (brief.timeframes or {}).items())
     said.extend(f"{role} {state['declared']}" for role, state in (brief.readings or {}).items())
     return ", ".join(said)
+
+
+def _not_on_roster(cfg: CycleConfig, role: str) -> str:
+    if cfg.series.get(role):
+        return "not in [agents].analysts, so not asked"
+    shelves = " or ".join(f"sources/{name}.toml" for name in CLASSES_OF.get(role, ()))
+    return f"nothing declared in {shelves or 'sources/'}, so not asked"
 
 
 def _calendar(cfg: CycleConfig, result: CycleResult) -> tuple[Event, ...]:

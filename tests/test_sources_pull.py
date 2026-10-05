@@ -169,3 +169,53 @@ def test_the_cycle_names_a_stale_series_and_skips_a_role_with_nothing_current(
     assert any("us10y: last value 2020-01-01" in r for r in result.refusals)
     assert any("every series is past its max_age; not asked" in r for r in result.refusals)
     assert result.record()["series"][0]["state"] == "stale"
+
+
+def test_coin_metrics_nets_two_metrics_into_one_flow(tmp_path: Path) -> None:
+    path = declare(
+        tmp_path, 'fetch = { from = "coinmetrics", id = "FlowInExNtv", minus = "FlowOutExNtv" }'
+    )
+    vendor = Vendor(
+        {
+            "data": [
+                {
+                    "asset": "btc",
+                    "time": "2026-10-03T00:00:00.000000000Z",
+                    "FlowInExNtv": "11665.5",
+                    "FlowOutExNtv": "16605.9",
+                },
+                {"asset": "btc", "time": "2026-10-04T00:00:00.000000000Z", "FlowInExNtv": "9000"},
+            ]
+        }
+    )
+    got = pull(load_series_map(path)[0], tmp_path, get=vendor)
+    assert got.rows == 1 and str(got.last).startswith("2026-10-03")
+    assert "metrics=FlowInExNtv,FlowOutExNtv" in vendor.asked[0][0]
+    assert "assets=btc" in vendor.asked[0][0]
+    assert str(load_all(path)[0].points[0].value) == "-4940.4"
+
+
+def test_blockchain_charts_read_their_x_and_y(tmp_path: Path) -> None:
+    path = declare(tmp_path, 'fetch = { from = "blockchain.info", id = "n-unique-addresses" }')
+    vendor = Vendor({"status": "ok", "values": [{"x": 1790726400, "y": 535674.0}]})
+    assert pull(load_series_map(path)[0], tmp_path, get=vendor).rows == 1
+    assert vendor.asked[0][0].startswith("https://api.blockchain.info/charts/n-unique-addresses?")
+
+
+def test_an_analyst_nobody_declared_data_for_is_shown_as_not_asked(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    from rich.console import Console
+
+    from test_cycle import analyst_answer, cycle_config
+    from trading_research_agents.agents.cycle import run_cycle
+    from trading_research_agents.cli.tui import cycle_view
+
+    cfg, _, _ = cycle_config(tmp_path, envelope, [analyst_answer()])
+    record = run_cycle(cfg).record()
+    assert record["not_asked"]["onchain_analyst"] == (
+        "nothing declared in sources/onchain.toml or sources/derivatives.toml, so not asked"
+    )
+    console = Console(record=True, width=200)
+    console.print(cycle_view(record))
+    assert "not asked" in console.export_text()
