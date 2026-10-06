@@ -2415,6 +2415,7 @@ def run_cycle_command(args: argparse.Namespace) -> int:
         matrix=cfg.confluence,
         conviction=cfg.conviction,
         max_position=cfg.limits.max_position,
+        max_position_quote=cfg.limits.max_position_quote,
         equity=cfg.run.equity,
         size_step=cfg.run.step_for(instrument),
         validators=a.validators,
@@ -2509,6 +2510,14 @@ def run_cycle_command(args: argparse.Namespace) -> int:
                             cycle_cfg,
                             instrument=instrument,
                             size_step=_step_for(cfg, instrument),
+                            # A unit cap was written for [run].instrument; with a quote cap
+                            # declared, other instruments are held to that one alone.
+                            max_position=(
+                                cfg.limits.max_position
+                                if instrument == cfg.run.instrument
+                                or cfg.limits.max_position_quote is None
+                                else None
+                            ),
                             carried_spend=held,
                             place=sends,
                             account=None if sends is None else sends.account,
@@ -3413,7 +3422,12 @@ def _gate_lines(
     matrix = cfg.confluence
     stances = () if cfg.agents is None else cfg.agents.validators
     if stances:
-        good.append(f"validators: {', '.join(stances)}; asked once there is a proposal")
+        weight = cfg.conviction.validator_weight
+        good.append(
+            f"validators: {', '.join(stances)}; asked once there is a proposal and code has not "
+            "already refused it"
+            + (f"; each vote moves conviction by {weight}" if weight > 0 else "")
+        )
     if matrix.idle:
         good.append("confluence: not declared; the context is recorded but gates nothing")
     else:
@@ -3505,7 +3519,7 @@ def _gate_lines(
                 "tried in order when a provider cannot be reached"
             )
     if cfg.agents is not None:
-        good.extend(_load_notes(cfg.agents, roster))
+        good.extend(_load_notes(cfg.agents, roster, screener=cfg.universe.screener))
     good.append(_regime_note(cfg))
     rule = cfg.conviction
     if rule.idle:
@@ -3674,12 +3688,25 @@ def _size_notes(cfg: Any) -> list[str]:
         else str(run.size_step)
     )
     if run.size_quote is not None:
-        return [
+        found = "; discovered instruments use the venue's own step" if cfg.universe.discover else ""
+        said = [
             f"size: {run.size_quote} of quote currency, converted at each cycle's own mid and "
-            f"rounded down to the step ({steps}); a replay still needs [run].size",
-            f"size: [controls].max_position {cfg.limits.max_position} is in base units, so it caps "
-            "each instrument at that many units whatever they are worth",
+            f"rounded down to the step ({steps}){found}; a replay still needs [run].size",
         ]
+        cap = cfg.limits.max_position_quote
+        if cap is not None:
+            said.append(
+                f"size: every position is capped at {cap} of quote currency at its own mid; "
+                f"[controls].max_position {cfg.limits.max_position} units applies to "
+                f"{run.instrument} as well"
+            )
+        else:
+            said.append(
+                f"size: [controls].max_position {cfg.limits.max_position} is in base units, so it "
+                "caps each instrument at that many units whatever they are worth; "
+                "[controls].max_position_quote says it in quote currency"
+            )
+        return said
     said = [f"size: {run.size} in base units, step {steps}"]
     if not cfg.universe.idle:
         said.append(
@@ -3707,17 +3734,43 @@ def _regime_note(cfg: Any) -> str:
     )
 
 
-def _load_notes(a: Any, roster: tuple[str, ...]) -> list[str]:
+def _span_s(seconds: float) -> str:
+    whole = int(seconds)
+    for size, unit in ((86_400, "d"), (3_600, "h"), (60, "m")):
+        if whole and whole % size == 0:
+            return f"{whole // size}{unit}"
+    return f"{whole}s"
+
+
+def _load_notes(a: Any, roster: tuple[str, ...], screener: bool = False) -> list[str]:
     """How a cycle's calls land on providers, and what happens when one of them says no."""
     asked = list(a.analysts or roster or ("technical_analyst",))
-    roles = [*asked, *(["validator"] if a.validators else [])]
-    calls = len(asked) + len(a.validators)
-    on = sorted({a.for_role(role).provider for role in roles})
-    said = [
-        f"models: a full cycle makes about {calls} call(s) within a minute, on {', '.join(on)}; "
-        f"a provider that says wait up to {a.max_retry_wait_s:.0f}s is waited for once, then the "
-        "next link is tried"
+    roles = [
+        *asked,
+        *(["validator"] if a.validators else []),
+        *(["market_screener"] if screener else []),
     ]
+    calls = len(asked) + len(a.validators) + (1 if screener else 0)
+    on = sorted({a.for_role(role).provider for role in roles})
+    reading = [r for r in asked if r != "technical_analyst"]
+    said = [
+        f"models: a full pass makes at most {calls} call(s) within a minute"
+        + (" (the screener, then the cycle)" if screener else "")
+        + f", on {', '.join(on)}; a provider that says wait up to {a.max_retry_wait_s:.0f}s is "
+        "waited for once, a provider whose quota is spent rests 15 minutes, then the next link "
+        "is tried"
+    ]
+    if reading:
+        said.append(
+            "models: "
+            + (
+                f"{', '.join(reading)} reuse their last answer for up to "
+                f"{_span_s(a.reuse_reading_s)} while their figures are unchanged; new data asks "
+                "again at once"
+                if a.reuse_reading_s > 0
+                else f"{', '.join(reading)} are asked every cycle; reuse_reading_for is off"
+            )
+        )
     if len(on) == 1 and calls >= 4:
         said.append(
             f"models: every role is on {on[0]}; if your tier limits tokens per minute, give the "
@@ -3840,8 +3893,10 @@ def _universe_notes(cfg: Any, bad: list[str]) -> list[str]:
         ]
     named = ", ".join(universe.instruments) or "nothing declared"
     said = [
-        f"universe: {named}; a pass looks at each for the price of a "
-        f"data pull and runs {universe.max_per_cycle} of them"
+        f"universe: {named}"
+        + (f" always, plus up to {universe.top} discovered" if universe.discover else "")
+        + f"; a pass looks at each for the price of a data pull and runs {universe.max_per_cycle} "
+        "of them"
     ]
     if universe.discover:
         said.append(
@@ -3916,23 +3971,41 @@ def _spend_notes(cfg: Any) -> list[str]:
             "for every role and [agents.roles.<role>].effort overrides one"
         )
     else:
-        said = [f"{a.effort} for every role"]
-        said += [
-            f"{role} {table['effort']}"
-            for role, table in sorted(a.roles.items())
-            if table.get("effort")
-        ]
-        out.append("effort: " + "; ".join(said))
+        roles = (
+            "technical_analyst",
+            "macro_analyst",
+            "onchain_analyst",
+            "sentiment_analyst",
+            "validator",
+            "market_screener",
+        )
+        levels: dict[str, list[str]] = {}
+        for role in roles:
+            levels.setdefault(str(a.for_role(role).effort), []).append(role)
+        out.append(
+            "effort: "
+            + "; ".join(f"{level} for {', '.join(who)}" for level, who in sorted(levels.items()))
+        )
     quoted = sorted(m for m, (i, o) in a.pricing.items() if i > 0 or o > 0)
+    free = sorted(m for m, (i, o) in a.pricing.items() if i == 0 and o == 0)
+    used = {
+        a.for_role(role).model or "default"
+        for role in ("technical_analyst", "validator", "market_screener")
+    }
+    used |= {name.partition(":")[2] for name in a.fallback}
+    unpriced = sorted(m for m in used if m not in a.pricing and m != "default")
+    parts = []
     if quoted:
-        out.append(
-            f"prices: declared for {', '.join(quoted)}, so the spend is counted in money as well"
-        )
-    else:
-        out.append(
-            "prices: none quoted, so spend is counted in tokens only; put what you were quoted in "
-            "[agents.pricing.<model>] for the money column"
-        )
+        parts.append(f"declared for {', '.join(quoted)}")
+    if free:
+        parts.append(f"declared free for {', '.join(free)}")
+    if unpriced:
+        parts.append(f"not declared for {', '.join(unpriced)}, so its calls are counted in tokens")
+    out.append(
+        "prices: "
+        + ("; ".join(parts) if parts else "none quoted, so spend is counted in tokens only")
+        + "; [agents.pricing.<model>] is where a quote goes"
+    )
     return out
 
 

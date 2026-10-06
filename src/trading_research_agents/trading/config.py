@@ -299,6 +299,11 @@ def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> S
         max_position=_dec(controls_raw, "max_position"),
         max_orders_per_minute=_int(controls_raw, "max_orders_per_minute"),
         daily_loss_limit_bps=_dec(controls_raw, "daily_loss_limit_bps"),
+        max_position_quote=(
+            _dec(controls_raw, "max_position_quote")
+            if "max_position_quote" in controls_raw
+            else None
+        ),
     )
     kill = controls_raw.get("kill_switch")
     run = RunSettings(
@@ -321,6 +326,13 @@ def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> S
         raise ConfigError("[run] names the instrument and the venue_key (venue/channel)")
     _sized_once(run)
     universe = _universe(raw)
+    if universe.discover and limits.max_position_quote is None:
+        # [controls].max_position counts units: ten units of BTC and ten of DOGE are not one cap.
+        raise ConfigError(
+            "[universe].discover needs [controls].max_position_quote, the position cap in quote "
+            "currency; [controls].max_position counts units and would cap a coin priced in cents "
+            "at a few cents"
+        )
     if universe.discover and run.size_quote is None:
         # One base size across instruments priced from cents to tens of thousands is no size at
         # all; a quote size converts at each instrument's own price.

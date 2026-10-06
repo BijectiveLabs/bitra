@@ -127,3 +127,19 @@ def test_briefs_go_to_the_model_without_spaces() -> None:
 
     _ask(Config(), "macro_analyst", {"a": 1, "b": [1, 2]}, {})  # type: ignore[arg-type]
     assert fake.calls[0].user == json.dumps({"a": 1, "b": [1, 2]}, separators=(",", ":"))
+
+
+def test_a_quote_cap_holds_every_instrument_to_the_same_money() -> None:
+    from types import SimpleNamespace
+
+    from trading_research_agents.agents.cycle import _position_cap
+
+    # 800 USDT of DOGE at 0.2 is 4,000 units; a 10-unit cap written for BTC must not apply.
+    doge = SimpleNamespace(max_position=None, max_position_quote=Decimal(800), size_step=Decimal(1))
+    assert _position_cap(doge, Decimal("0.2"), Decimal(2000)) == Decimal(4000)  # type: ignore[arg-type]
+    btc = SimpleNamespace(
+        max_position=Decimal(10), max_position_quote=Decimal(800), size_step=Decimal("0.001")
+    )
+    assert _position_cap(btc, Decimal(80000), Decimal("0.005")) == Decimal("0.010")  # type: ignore[arg-type]
+    neither = SimpleNamespace(max_position=None, max_position_quote=None, size_step=Decimal(1))
+    assert _position_cap(neither, Decimal(1), Decimal(7)) == Decimal(7)  # type: ignore[arg-type]

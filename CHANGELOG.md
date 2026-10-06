@@ -546,6 +546,13 @@ All notable changes to this project are recorded here. The format follows
 
 ### Fixed
 
+- `[controls].max_position` counts units, so on a desk that discovers coins priced in cents it
+  capped a 400 USDT order at a few cents' worth. `[controls].max_position_quote` caps every
+  instrument in quote currency at its own mid, and discovery requires it; the unit cap still holds
+  `[run].instrument`.
+- `tra check` now says what the desk does today: the screener's call in the per-minute count, reuse
+  of unchanged readings, effort per role as each role is asked, prices declared free or not at
+  all, discovered instruments in the universe and size lines, and how validator votes count.
 - A model answer that does not fit its schema is asked for once more before it counts as missing;
   seen live, one validator's malformed JSON refused a whole trade under `on_missing_validator =
   "refuse"`. Groq now gets an enforced JSON schema (checked on `openai/gpt-oss-120b` for every role),

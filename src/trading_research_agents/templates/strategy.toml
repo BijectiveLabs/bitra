@@ -36,6 +36,8 @@ settlement_interval_s = 28800      # the venue's funding clock
 [controls]
 max_risk_per_trade_bps = 50
 max_position = 0.05
+# max_position_quote = 800        # the same cap in quote currency, per instrument at its own price;
+#                                  # needed with [universe].discover, where coins differ in price
 max_orders_per_minute = 6
 daily_loss_limit_bps = 300
 kill_switch = "KILL"               # touch this file to flatten and stop

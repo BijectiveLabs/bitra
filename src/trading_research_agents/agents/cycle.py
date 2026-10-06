@@ -183,6 +183,8 @@ class CycleConfig:
     # every admitted cycle trades the operator's base size, which is what it did before.
     conviction: Conviction = field(default_factory=Conviction)
     max_position: Decimal | None = None
+    # The position cap in quote currency, converted at this cycle's mid; the smaller cap applies.
+    max_position_quote: Decimal | None = None
     equity: Decimal | None = None
     size_step: Decimal = Decimal("0.000001")
     reward_to_risk: Decimal | None = None
@@ -820,7 +822,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
             ),
             base_size=base,
             price=costs.cost.mid,
-            max_position=cfg.max_position if cfg.max_position is not None else base,
+            max_position=_position_cap(cfg, costs.cost.mid, base),
             equity=equity,
             step=cfg.size_step,
         )
@@ -1390,6 +1392,14 @@ def _exits(cfg: CycleConfig, mid: Decimal, target: str) -> dict[str, str]:
     if cfg.take_frac is not None:
         out["take_price"] = str((mid * (Decimal(1) + away * cfg.take_frac)).quantize(mid))
     return out
+
+
+def _position_cap(cfg: CycleConfig, mid: Decimal, base: Decimal) -> Decimal:
+    """The most this cycle may hold, in units: the unit cap, the quote cap at this mid, or both."""
+    caps = [cfg.max_position] if cfg.max_position is not None else []
+    if cfg.max_position_quote is not None and mid > 0:
+        caps.append(_quantized(cfg.max_position_quote / mid, cfg.size_step))
+    return min(caps) if caps else base
 
 
 def _held_bars(cfg: CycleConfig, horizon: int) -> int:

@@ -126,8 +126,11 @@ own field and the values to leave out, and `exclude` takes out single instrument
 these is yours to set: the defaults are a starting point, not the screen.
 The most traded `top` join the declared instruments. Each discovered instrument carries the venue's
 own symbol and size step, so an order is never sent under the wrong market or off the step.
-Discovery needs `[run].size_quote`: one base size across coins priced from cents to tens of
-thousands is no size at all. `tra universe` shows what discovery finds right now and what each
+Discovery needs `[run].size_quote` and `[controls].max_position_quote`: one base size, or one cap
+counted in units, across coins priced from cents to tens of thousands is no size and no cap at all.
+With a quote cap declared, every instrument is capped at that much quote currency at its own mid,
+and `[controls].max_position` (units) still applies to `[run].instrument`, the one it was written
+for. `tra universe` shows what discovery finds right now and what each
 filter took out.
 
 **Measurement (code).** Each instrument gets one data pull, the book and the recent bars, no tokens.

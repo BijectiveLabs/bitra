@@ -30,6 +30,9 @@ class Limits:
     max_position: Decimal
     max_orders_per_minute: int
     daily_loss_limit_bps: Decimal
+    # The same cap said in quote currency, for a desk whose instruments are priced too differently
+    # for one count of units: converted at each cycle's own mid.
+    max_position_quote: Decimal | None = None
 
     def __post_init__(self) -> None:
         for label, value in (
@@ -39,6 +42,10 @@ class Limits:
         ):
             if not isinstance(value, Decimal) or not value.is_finite() or value <= 0:
                 raise ControlError(f"{label} must be a positive finite Decimal")
+        if self.max_position_quote is not None and (
+            not self.max_position_quote.is_finite() or self.max_position_quote <= 0
+        ):
+            raise ControlError("max_position_quote must be a positive finite Decimal")
         if self.max_orders_per_minute <= 0:
             raise ControlError("max_orders_per_minute must be positive")
 

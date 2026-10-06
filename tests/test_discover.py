@@ -114,6 +114,9 @@ def test_the_universe_declares_discovery_and_needs_a_quote_size() -> None:
     from trading_research_agents.trading.config import ConfigError, parse_strategy_config
 
     raw = agent_raw(universe={"discover": True, "top": 15, "exclude": ["pumpfunusdt"]})
+    with pytest.raises(ConfigError, match=r"needs \[controls\]\.max_position_quote"):
+        parse_strategy_config(raw)
+    raw["controls"]["max_position_quote"] = Decimal(800)
     with pytest.raises(ConfigError, match=r"needs \[run\]\.size_quote"):
         parse_strategy_config(raw)
     raw["run"].pop("size", None)
