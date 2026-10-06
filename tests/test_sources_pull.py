@@ -219,3 +219,29 @@ def test_an_analyst_nobody_declared_data_for_is_shown_as_not_asked(
     console = Console(record=True, width=200)
     console.print(cycle_view(record))
     assert "not asked" in console.export_text()
+
+
+def test_one_missing_file_leaves_its_neighbours_readable(tmp_path: Path) -> None:
+    from trading_research_agents.data.series import load_readable
+
+    path = declare(tmp_path, rows="2026-10-04,4.30\n")
+    path.write_text(
+        path.read_text(encoding="utf-8")
+        + '\n[[series]]\nname = "vix"\nfile = "vix.csv"\n'
+        + 'fetch = { from = "fred", id = "VIXCLS" }\n',
+        encoding="utf-8",
+    )
+    found, problems = load_readable(path)
+    assert [s.name for s in found] == ["us10y"]
+    assert len(problems) == 1 and "vix" in problems[0] and "does not exist" in problems[0]
+
+
+def test_a_daily_figure_is_not_correlated_with_minute_returns() -> None:
+    from trading_research_agents.data.series import correlation
+
+    path_rows = "2026-10-03,4.10\n2026-10-04,4.30\n"
+    folder = Path(__import__("tempfile").mkdtemp())
+    series = load_all(declare(folder, rows=path_rows))[0]
+    minutes = [NOW_NS + i * 60_000_000_000 for i in range(60)]
+    measured = correlation(series, minutes, [0.1 * (-1) ** i for i in range(60)], window="1h")
+    assert measured.value is None and "slower than the bars" in measured.note

@@ -417,6 +417,20 @@ matrix counts the votes.
 
 Each stance is one more call, which is why they are off until an operator asks for them.
 
+No stance decides, neutral included. Pro argues for the proposal, contra against it, neutral weighs
+both and says which side the figures favour; each answers support, oppose or abstain. Their votes
+count in exactly two places, both yours to declare:
+
+| Where | Setting | Effect |
+|---|---|---|
+| the confluence matrix | `[confluence].min_support`, `max_opposition` | a hard gate: too few supports or too many opposes refuses the trade |
+| conviction | `[conviction].validator_weight` | each support adds that weight, each oppose takes it away, abstain is silent; the size follows the score |
+
+With neither declared, the votes are recorded and move nothing, and `tra check` says so: three
+calls a cycle that change no decision are a cost with no purpose. Since pro and contra argue their
+side by assignment, the informative votes are a pro that cannot make the case (abstain), a contra
+that cannot find one against, and neutral.
+
 ## Conviction: who weighs the analysts, and how much goes behind the idea
 
 The matrix answers whether the context agrees with the direction. `[conviction]` answers the

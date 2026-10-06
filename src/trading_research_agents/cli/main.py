@@ -3431,6 +3431,14 @@ def _gate_lines(
                 f"conviction: {unweighted} is asked but carries no weight; "
                 "it explains without moving the size"
             )
+    asked = cfg.agents.validators if cfg.agents is not None else ()
+    gated = cfg.confluence.min_support > 0 or cfg.confluence.max_opposition is not None
+    if asked and not gated and rule.validator_weight <= 0:
+        bad.append(
+            f"validators: {', '.join(asked)} are asked every cycle and their votes move nothing; "
+            "give them [conviction].validator_weight, or [confluence].min_support / "
+            "max_opposition, or stop asking them"
+        )
     targets = cfg.targets
     if targets.idle:
         good.append(

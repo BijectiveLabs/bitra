@@ -261,6 +261,17 @@ class VenueHand:
         if self.sent_count:
             # One decision, one order. A hand asked twice is a wiring fault, not a second trade.
             return {"sent": False, "refused": "this hand has already sent its one order"}
+        kind = market_kind(self._market())
+        if kind not in ("linear perpetual", "unknown"):
+            # Leverage, margin, liquidation and reduce-only exits are all perpetual-futures
+            # mechanics; a spot or option symbol here would be priced and protected wrongly.
+            return {
+                "sent": False,
+                "refused": (
+                    f"{self.symbol} is a {kind} market; venue mode trades linear perpetual "
+                    "futures only"
+                ),
+            }
         target = str(intent.get("target", ""))
         if target not in SIDES:
             return {"sent": False, "refused": f"target {target!r} is not an order"}
@@ -934,3 +945,18 @@ def hand_for(
         liquidation_buffer_bps=liquidation_buffer_bps,
         rate=rate,
     )
+
+
+def market_kind(market: Mapping[str, Any]) -> str:
+    """What ccxt says a market is, in the words the refusal uses."""
+    if not market:
+        return "unknown"
+    if market.get("option"):
+        return "option"
+    if market.get("spot"):
+        return "spot"
+    if market.get("future") and not market.get("swap"):
+        return "dated future"
+    if market.get("swap"):
+        return "linear perpetual" if market.get("linear") else "inverse perpetual"
+    return str(market.get("type") or "unknown")

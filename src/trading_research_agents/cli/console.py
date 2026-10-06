@@ -133,6 +133,9 @@ class Console:
 
     def loop(self) -> int:
         """Open on the cockpit, then take commands until the operator leaves."""
+        # The console owns the screen from its first line; what the shell showed before stays in
+        # the scrollback, above, rather than on top of the cockpit.
+        self.ui().console().clear()
         self.cockpit()
         self.say('commands run here. "help" lists them, "exit" leaves.')
         read = self.read or (lambda: input(PROMPT))

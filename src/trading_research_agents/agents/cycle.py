@@ -65,8 +65,8 @@ from trading_research_agents.data.series import (
     Event,
     Series,
     SeriesError,
-    load_all,
     load_news,
+    load_readable,
     read_events,
 )
 from trading_research_agents.data.sources.base import Fetched
@@ -1006,10 +1006,13 @@ def _reading_brief(
     files = cfg.series.get(role, ())
     for declared in files:
         try:
-            series = (*series, *load_all(declared))
+            readable, problems = load_readable(declared)
         except SeriesError as exc:
             # One unreadable file does not silence a role that has other shelves to read from.
             result.refusals.append(f"{role} {declared.name}: {exc}")
+            continue
+        series = (*series, *readable)
+        result.refusals.extend(f"{role} {declared.name}: {problem}" for problem in problems)
     if files and not series:
         # Everything this role was given is unreadable. Asking anyway would pay a model to say it
         # saw nothing, and would hide a broken file behind a shrug.

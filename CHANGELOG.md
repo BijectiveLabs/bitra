@@ -77,6 +77,14 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- Venue mode checks the market type on every order and refuses anything that is not a linear
+  perpetual (spot, dated futures, inverse contracts, options), and the README says what is traded.
+- `tra check` flags validators that are asked every cycle while neither `[confluence]` nor
+  `[conviction].validator_weight` counts their votes; docs say how each stance's vote is used and
+  that no stance, neutral included, decides.
+- The console clears the screen before it draws the cockpit; the shell's earlier output stays in
+  the scrollback.
+- The macro template lists daily series that reach crypto (dollar, real and nominal yields, VIX).
 - Two free on-chain feeds for `fetch`: `coinmetrics` (Coin Metrics community API; `minus` turns
   exchange inflow less outflow into one net-flow series) and `blockchain.info` (Blockchain.com
   charts). The on-chain template shows both.
@@ -498,6 +506,11 @@ All notable changes to this project are recorded here. The format follows
 
 ### Fixed
 
+- A daily series held flat across a window of minute bars was reported as "correlation 0.0 on
+  n=60" (float noise from a constant); it is now reported as not measurable, with the reason.
+- One missing or broken file in a `sources/` declaration (such as a fetched series not pulled yet)
+  made the whole declaration unreadable and silenced the analyst; each series is now read on its
+  own, and the missing one is named.
 - Appends to order, position, equity, scheduler, usage and ledger records now guard against a torn
   last line (a crash mid-write no longer glues the next record onto it) and wait for the disk where
   money is involved; whole JSON files are written atomically; every lines reader skips a torn line

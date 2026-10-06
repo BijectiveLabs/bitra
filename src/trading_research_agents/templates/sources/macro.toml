@@ -24,7 +24,12 @@
 #                refreshes all of them now.
 #
 # The correlation of each series with the instrument's returns is measured on your own data and
-# carries its sample size. It is never a constant in this file.
+# carries its sample size. It is never a constant in this file. A daily series held flat across a
+# window of minute bars has nothing to correlate, and the brief says so rather than print a zero.
+#
+# What reaches crypto from outside the chart, all daily and free from FRED: the dollar (DTWEXBGS),
+# real yields (DFII10), nominal yields (DGS10, DGS2) and risk appetite (VIXCLS). Read them as the
+# regime around a trade; at minute scale they are context, not a signal.
 
 # Nothing is switched on yet. Uncomment an entry, put the file where it points, and the macro
 # analyst joins the roster on the next run. Left as it is, that role is not asked and not paid
@@ -44,15 +49,30 @@
 # threshold = { bullish_below = 3.5, bearish_above = 4.25 }
 
 # [[series]]
-# name = "dxy"
-# file = "macro/dxy.csv"
+# name = "usd_broad"
+# file = "macro/usd_broad.csv"
 # ts = "date"
 # ts_unit = "iso8601"
 # value = "value"
 # unit = "index"
-# publish_lag = "0s"
-# source = "your export"
-# threshold = { bullish_below = 103, bearish_above = 106 }
+# publish_lag = "1d"
+# source = "FRED DTWEXBGS, nominal broad US dollar index"
+# max_age = "7d"                     # posted weekly
+# fetch = { from = "fred", id = "DTWEXBGS" }
+# no threshold until you have drawn one from its history: shown, not counted
+
+# [[series]]
+# name = "vix"
+# file = "macro/vix.csv"
+# ts = "date"
+# ts_unit = "iso8601"
+# value = "value"
+# unit = "index"
+# publish_lag = "1d"
+# source = "FRED VIXCLS, CBOE volatility index"
+# max_age = "5d"
+# fetch = { from = "fred", id = "VIXCLS" }
+# threshold = { bullish_below = 15, bearish_above = 25 }
 
 # [[series]]
 # name = "cpi_yoy"

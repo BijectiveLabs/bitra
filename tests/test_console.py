@@ -176,3 +176,25 @@ def test_plain_output_carries_typography_as_ascii() -> None:
 
     said = "the operator\u2019s z\u2011score \u2014 \u201cbullish\u201d\u2026"
     assert plain_text(said) == 'the operator\'s z-score - "bullish"...'
+
+
+def test_the_console_clears_the_screen_before_it_draws_the_cockpit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    console, _, _ = build()
+    steps: list[str] = []
+
+    class Screen:
+        def clear(self) -> None:
+            steps.append("clear")
+
+    class Ui:
+        def console(self) -> Screen:
+            return Screen()
+
+    monkeypatch.setattr(shell.Console, "ui", lambda self: Ui())
+    console.cockpit = lambda: steps.append("cockpit")
+    monkeypatch.setattr(shell.Console, "say", lambda self, *a, **k: None)
+    monkeypatch.setattr(shell.Console, "rule", lambda self: None)
+    console.loop()
+    assert steps[:2] == ["clear", "cockpit"]

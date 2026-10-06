@@ -325,6 +325,24 @@ def load_all(path: Path) -> tuple[Series, ...]:
     return tuple(read_series(spec, base) for spec in load_series_map(path))
 
 
+def load_readable(path: Path) -> tuple[tuple[Series, ...], list[str]]:
+    """Every series in a declaration that can be read, and why each other one cannot.
+
+    One file that is missing or broken - a fetched series not pulled yet, a bad export - leaves
+    its neighbours in the same declaration readable. The declaration itself failing is still an
+    error for the caller.
+    """
+    base = path.resolve().parent
+    found: list[Series] = []
+    problems: list[str] = []
+    for spec in load_series_map(path):
+        try:
+            found.append(read_series(spec, base))
+        except SeriesError as exc:
+            problems.append(str(exc))
+    return tuple(found), problems
+
+
 # ---------------------------------------------------------------- measuring
 
 
@@ -354,6 +372,16 @@ def correlation(
     pairs = [(float(v), r) for v, r in zip(known, returns, strict=True) if v is not None]
     if len(pairs) < 3:
         return Measurement(None, len(pairs), window, "fewer than three aligned samples")
+    if len({v for v in known if v is not None}) < 3:
+        # A daily print held flat across a window of minutes is one number, not a sample; its float
+        # mean is what made a constant series read as "correlation 0.0 on 60" (seen 2026-10-05).
+        return Measurement(
+            None,
+            len(pairs),
+            window,
+            "the series took fewer than three values inside the window, so it cannot be "
+            "correlated with these returns; it is slower than the bars",
+        )
     xs, ys = zip(*pairs, strict=True)
     return Measurement(_pearson(xs, ys), len(pairs), window)
 

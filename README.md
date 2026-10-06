@@ -284,6 +284,11 @@ your own is about thirty lines (`docs/providers.md`).
 
 ## From a replay to real orders
 
+What it trades: **linear perpetual futures** (USDT- or USDC-margined swaps) on any venue ccxt
+reaches, long and short, with the leverage and margin mode you declare. Spot, dated futures,
+inverse contracts and options are not traded; venue mode checks the market type on every order and
+refuses anything that is not a linear perpetual.
+
 You can stop at any of these steps. Each is one command, and each was run end to end before this
 README was written.
 

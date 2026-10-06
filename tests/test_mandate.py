@@ -686,3 +686,22 @@ def test_a_decision_the_market_has_left_behind_is_refused() -> None:
     # A move in the trade's favour is not drift against it.
     kinder = Moved("99850", "99852")
     assert _maker(kinder, max_drift_bps=Decimal(10))({**LONG, "bid": "99999"})["sent"] is True
+
+
+def test_venue_mode_trades_linear_perpetuals_and_refuses_anything_else() -> None:
+    from trading_research_agents.trading.dispatch import market_kind
+
+    class SpotExchange(SteppedExchange):
+        def market(self, symbol: str) -> dict[str, Any]:
+            return {"spot": True, "type": "spot", "limits": {"amount": {"min": self.least}}}
+
+    placed = _stepped_hand(SpotExchange("0.01"))(
+        {**LONG, "instrument": "ETHUSDT", "size": "0.03", "mid": "2700"}
+    )
+    assert placed["sent"] is False
+    assert "is a spot market; venue mode trades linear perpetual futures only" in placed["refused"]
+    assert market_kind({"swap": True, "linear": True}) == "linear perpetual"
+    assert market_kind({"swap": True, "inverse": True}) == "inverse perpetual"
+    assert market_kind({"option": True}) == "option"
+    assert market_kind({"future": True}) == "dated future"
+    assert market_kind({}) == "unknown"
