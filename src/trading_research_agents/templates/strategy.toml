@@ -273,7 +273,17 @@ kill_switch = "KILL"               # touch this file to flatten and stop
 # instruments = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
 # max_per_cycle = 1                # how many of them one pass runs a full cycle on
 # max_intents_per_day = 6          # across every instrument, not per one
-# screener = false
+# screener = false                 # true: the screener chooses and orders what code admitted
+#
+# Discovery: code adds the venue's most traded perpetuals each pass (needs [run].size_quote).
+# `tra universe` shows what it would find now.
+# discover = true
+# top = 20
+# min_quote_volume = 10000000      # 24-hour volume, quote currency
+# max_spread_bps = 5
+# min_listed_days = 30
+# crypto_only = true
+# exclude = []
 
 [data]
 max_gap = "5m"                     # the longest silence the audit accepts for this instrument

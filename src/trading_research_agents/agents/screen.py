@@ -23,6 +23,9 @@ from pathlib import Path
 from typing import Any
 
 from trading_research_agents.agents import market_screener
+from trading_research_agents.agents.briefs import bars_of
+from trading_research_agents.agents.cited import figures_of as figures_of_row
+from trading_research_agents.agents.cited import survived
 from trading_research_agents.agents.progress import (
     DONE,
     FAILED,
@@ -34,8 +37,10 @@ from trading_research_agents.agents.progress import (
 )
 from trading_research_agents.agents.roles import RoleError, prompt
 from trading_research_agents.agents.scope import brief_for, dropped
+from trading_research_agents.agents.technical_analyst.tools import features
 from trading_research_agents.data.sources.chain import SourceChain
 from trading_research_agents.execution.desk import Desk
+from trading_research_agents.execution.regime import RegimeRule, label
 from trading_research_agents.execution.targets import intents_today
 from trading_research_agents.execution.trigger import Trigger, last_seen, spread_of, worth_asking
 from trading_research_agents.execution.universe import Candidate, Screened, Universe, order, take
@@ -51,6 +56,8 @@ LIVE_PROMPT = "market_screener_live"
 # What the look costs: the book to price the spread, the bars to see the window's range. Funding and
 # open interest are a cycle's business, not a screen's.
 KINDS = ("orderbook", "ohlcv")
+# What every other instrument's correlation is measured against.
+REFERENCE = "BTCUSDT"
 
 
 def figures_of(snapshot: Snapshot, *, now: float | None = None) -> dict[str, Any]:
@@ -115,6 +122,31 @@ def correlation(left: Sequence[float], right: Sequence[float]) -> Decimal | None
     return Decimal(str(top / (left_var * right_var) ** 0.5)).quantize(Decimal("0.001"))
 
 
+def measured(snapshot: Snapshot, interval_s: int, rule: RegimeRule) -> dict[str, Any]:
+    """What code can say about an instrument from the bars of one look, for the screener."""
+    try:
+        candles = list(snapshot.get("ohlcv").value or ())
+    except KeyError:
+        return {}
+    computed = features(bars_of(candles, interval_s)) if len(candles) >= 2 else None
+    if computed is None:
+        return {}
+    shown = computed.record()
+    out = {
+        name: shown[name]
+        for name in (
+            "window_move_bps",
+            "zscore",
+            "trend_strength",
+            "volume_ratio",
+            "position_in_range",
+        )
+        if shown.get(name) is not None
+    }
+    out["regime"] = label(computed.trend_strength, computed.window_move_bps, rule)
+    return out
+
+
 def look(
     instrument: str,
     chains: Mapping[str, SourceChain],
@@ -125,10 +157,17 @@ def look(
     max_round_trips_per_day: int | None = None,
     options: Mapping[str, Mapping[str, Any]] | None = None,
     moves: dict[str, list[float]] | None = None,
+    listed: Mapping[str, Any] | None = None,
+    rule: RegimeRule | None = None,
 ) -> Candidate:
     """One instrument, looked at for the price of a data pull and no tokens at all."""
     snapshot = take_snapshot(instrument, chains, kinds=KINDS, options=options)
     figures = figures_of(snapshot)
+    interval = int((options or {}).get("ohlcv", {}).get("interval_s", 60))
+    found = measured(snapshot, interval, rule or RegimeRule())
+    for name in ("quote_volume_24h", "change_24h_pct"):
+        if listed and listed.get(name) is not None:
+            found[name] = listed[name]
     if moves is not None:
         moves[instrument] = returns_of(snapshot)
     reasons = [f"data {kind}: {why}" for kind, why in sorted(snapshot.refused.items())]
@@ -152,6 +191,7 @@ def look(
         range_bps=figures["range_bps"],
         age_s=figures["age_s"],
         reasons=(*reasons, *wake.reasons),
+        features=found,
     )
 
 
@@ -170,6 +210,8 @@ def sweep(
     watch: Watch = silent,
     open_now: Collection[str] = (),
     full: str = "",
+    listed: Mapping[str, Mapping[str, Any]] | None = None,
+    rule: RegimeRule | None = None,
 ) -> Screened:
     """Look at every instrument, keep what the trigger admits, and take the top of the order."""
     out = Screened(at=cycle_id(now))
@@ -188,6 +230,8 @@ def sweep(
             max_round_trips_per_day=max_round_trips_per_day,
             options=options,
             moves=moves,
+            listed=(listed or {}).get(instrument),
+            rule=rule,
         )
         # The book comes first, whatever the trigger said: an open position or a full desk is the
         # reason nothing can be sent, and "not moved enough" would hide it (seen live 2026-10-05,
@@ -216,6 +260,10 @@ def sweep(
         )
     if desk is not None and desk.correlation_above is not None and held is not None:
         out.candidates = _uncorrelated(out.candidates, desk, held, moves, out)
+    out.candidates = _with_btc(out.candidates, moves)
+    out.code_order = tuple(
+        c.instrument for c in order(out.candidates, universe.instruments) if c.admitted
+    )
     for candidate in out.candidates:
         for reason in candidate.reasons:
             out.refusals.append(f"{candidate.instrument}: {reason}")
@@ -306,6 +354,29 @@ def _uncorrelated(
     return fresh
 
 
+def _with_btc(candidates: list[Candidate], moves: Mapping[str, list[float]]) -> list[Candidate]:
+    """Each instrument's correlation with BTC over this pass's bars: how much of its move is the
+    market's and how much its own."""
+    anchor = moves.get(REFERENCE)
+    if not anchor:
+        return candidates
+    out = []
+    for candidate in candidates:
+        if candidate.instrument == REFERENCE:
+            out.append(candidate)
+            continue
+        measured_r = correlation(moves.get(candidate.instrument, []), anchor)
+        if measured_r is None:
+            out.append(candidate)
+            continue
+        out.append(
+            replace(
+                candidate, features={**candidate.features, "correlation_to_btc": str(measured_r)}
+            )
+        )
+    return out
+
+
 def screener_brief(candidates: list[Candidate], *, mechanism: str, at: str) -> dict[str, Any]:
     """What the screener is given: the figures code computed, and the mechanism it screens for.
 
@@ -327,51 +398,71 @@ def screener_brief(candidates: list[Candidate], *, mechanism: str, at: str) -> d
                 row[name] = str(value)
         if c.age_s is not None:
             row["age_s"] = c.age_s
+        row.update(c.features)
         rows.append(row)
     return {
         "as_of": at,
         "mechanism": mechanism,
         "basis": (
-            "every figure here was computed by code from one snapshot per instrument; where "
-            "first_look is true this desk has not looked at that instrument before, so it has no "
-            "move and no pressure to report and neither is missing"
+            "every figure here was computed by code from one snapshot per instrument and the "
+            "venue's 24-hour ticker; where first_look is true this desk has not looked at that "
+            "instrument before, so it has no move and no pressure to report and neither is missing"
         ),
         "candidates": rows,
     }
 
 
-def narrow(
-    candidates: list[Candidate], said: market_screener.MarketScreener
+def choose(
+    candidates: list[Candidate],
+    said: market_screener.LiveScreen,
+    brief: Mapping[str, Any],
 ) -> tuple[list[Candidate], list[str]]:
-    """Apply what the screener said, and refuse anything it was not asked about.
-
-    It can only take instruments out. One it never mentions is out - a screener that forgets an
-    instrument has not approved it - and one it invents is a line in the record and nothing else.
-    """
+    """Apply the screener's order. A pick must be an admitted instrument, cite at least one figure
+    from that instrument's own row that holds, and appear once; anything else is refused by name.
+    An instrument it does not pick is not taken this pass."""
+    rows = {str(r.get("instrument")): r for r in brief.get("candidates") or []}
     known = {c.instrument for c in candidates}
-    kept: dict[str, str] = {}
     refusals: list[str] = []
-    for row in said.kept:
-        if not isinstance(row, dict):
-            continue
-        name = str(row.get("instrument", ""))
+    ranked: dict[str, tuple[int, str, str]] = {}
+    for pick in said.picks:
+        name = pick.instrument
         if name not in known:
-            refusals.append(f"market_screener: kept an instrument it was not given: {name!r}")
+            refusals.append(f"market_screener: picked an instrument it was not given: {name!r}")
             continue
-        kept[name] = str(row.get("reason") or row.get("regime") or "kept")
-    dropped_by: dict[str, str] = {}
-    for row in said.excluded:
-        if isinstance(row, dict) and str(row.get("instrument", "")) in known:
-            dropped_by[str(row["instrument"])] = str(row.get("reason") or "excluded")
-
+        if name in ranked:
+            refusals.append(f"market_screener: picked {name} twice; the first stands")
+            continue
+        kept, lost = survived(pick.figures_used, figures_of_row(rows.get(name, {})))
+        for gone in lost:
+            refusals.append(f"market_screener: {name}: discarded a citation, {gone}")
+        if not kept:
+            refusals.append(
+                f"market_screener: {name} picked on no figure from its own row; not taken"
+            )
+            continue
+        ranked[name] = (len(ranked) + 1, pick.setup, pick.reason)
+    dropped_by = {
+        str(row.get("instrument")): str(row.get("reason") or "excluded")
+        for row in said.excluded
+        if isinstance(row, dict)
+    }
     out: list[Candidate] = []
     for candidate in candidates:
         name = candidate.instrument
-        if name in kept:
-            out.append(replace(candidate, kept_by_screener=True, screener_said=kept[name]))
+        if name in ranked:
+            rank, setup, reason = ranked[name]
+            out.append(
+                replace(
+                    candidate,
+                    kept_by_screener=True,
+                    pick_rank=rank,
+                    setup=setup,
+                    screener_said=f"#{rank} {setup}: {reason}",
+                )
+            )
             continue
-        why = dropped_by.get(name, "not mentioned by the screener")
-        refusals.append(f"market_screener: {name} left out, {why}")
+        why = dropped_by.get(name, "not picked by the screener")
+        refusals.append(f"market_screener: {name} not picked, {why}")
         out.append(replace(candidate, kept_by_screener=False, screener_said=why))
     return out, refusals
 
@@ -392,13 +483,16 @@ def asking(
             done = completer.complete(
                 system=prompt(LIVE_PROMPT),
                 user=json.dumps(asked, sort_keys=True, default=str),
-                schema=dict(market_screener.SCHEMA),
+                schema=dict(market_screener.LIVE_SCHEMA),
             )
-            said = market_screener.parse(done.text)
+            said = market_screener.parse_live(done.text)
         except (RoleError, ValueError, RuntimeError, OSError, TimeoutError) as exc:
-            # A screener that cannot answer does not stop the pass: code already admitted these.
-            return candidates, [*refusals, f"market_screener: {exc.__class__.__name__}: {exc}"]
-        narrowed, said_about = narrow(candidates, said)
-        return narrowed, [*refusals, *said_about]
+            # A screener that cannot answer does not stop the pass: code's own order stands.
+            return candidates, [
+                *refusals,
+                f"market_screener: {exc.__class__.__name__}: {exc}; code's order stands",
+            ]
+        chosen, said_about = choose(candidates, said, asked)
+        return chosen, [*refusals, *said_about]
 
     return ask

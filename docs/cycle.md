@@ -96,44 +96,55 @@ directory and no order leaves the machine.
 ## Which instrument, before any of this
 
 A desk that watches one instrument runs it. A desk that declares a universe takes the cheap look
-first, and only then spends a cycle:
+first, and only then spends a cycle. The work is split on purpose: **code finds and measures, the
+screener chooses.**
 
 ```toml
 [universe]
-instruments = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
-max_per_cycle = 1                # how many of them one pass runs a full cycle on
+instruments = ["BTCUSDT"]        # always looked at, whatever discovery finds
+discover = true                  # add the venue's most traded perpetuals each pass
+top = 20                         # how many discovery adds
+min_quote_volume = 10000000      # 24-hour volume in quote currency
+max_spread_bps = 5               # the book now, from the venue's ticker
+min_listed_days = 30             # nothing listed this month
+crypto_only = true               # leave out stocks, ETFs, commodities and currencies
+exclude = []                     # instruments never to take
+max_per_cycle = 1                # how many one pass runs a full cycle on
 max_intents_per_day = 6          # across every instrument, not per one
-screener = true                  # ask the screener to narrow what the trigger admitted
+screener = true                  # the screener chooses and orders; without it, code's order
 ```
 
-A pass takes one data pull per instrument - the book and the recent bars, no tokens at all -
-applies the **same `[trigger]`** to each of them, and orders what survives by how far the mid has
-moved against that instrument's own spread. No new thresholds are declared for this: screening
-across a row is the same question the trigger asks down one, so it is the same declaration.
+**Discovery (code, every pass).** One market list and one ticker call cover every linear perpetual
+the venue lists in `quote` (USDT by default). Code removes what cannot be traded: too little
+volume, a book wider than `max_spread_bps`, listed too recently, not crypto (where the venue marks
+it; Bybit does, and `exclude` covers any other), or a maximum leverage below `[execution].leverage`.
+The most traded `top` join the declared instruments. Each discovered instrument carries the venue's
+own symbol and size step, so an order is never sent under the wrong market or off the step.
+Discovery needs `[run].size_quote`: one base size across coins priced from cents to tens of
+thousands is no size at all. `tra universe` shows what discovery finds right now and what each
+filter took out.
 
-The order is code, because it decides where capital gets to be considered at all. An instrument
-nobody has looked at before has no move to compare and keeps the place the operator gave it in the
-list, which is how a new instrument enters a running desk rather than being ranked out of it
-forever.
+**Measurement (code).** Each instrument gets one data pull, the book and the recent bars, no tokens.
+The same `[trigger]` and desk limits apply to each. What survives is measured: the move since the
+last look and its pressure against the spread, the window's move, z-score, trend strength and
+regime, volume against the window, where the close sits in its range, 24-hour volume and change,
+and the correlation with BTC.
 
-`[universe].screener` adds the market screener as a second opinion over what code admitted, from the
-same figures. It can only take an instrument out: it cannot add one, change the order, or say
-anything about a direction or a size, and code records what it dropped and why. A screener that
-cannot answer leaves the pass exactly as code left it.
+**Choice (the screener).** With `screener = true` the market screener reads those rows and picks the
+instruments where the mechanism has the best chance now, best first, naming the setup it expects
+and citing the figures behind each pick. Code checks every pick: it must be an instrument code
+admitted, and at least one citation from that instrument's own row must hold, or the pick is
+thrown away. The screener cannot add an instrument, and it says nothing about direction or size;
+the technical analyst decides those later from a fuller brief. A screener that cannot answer leaves
+code's order, the move against the spread, in place.
+
+Both orders are kept in `runs/screens/<time>.json` (`code_order` and each candidate's `pick_rank`),
+so once trades have closed the audit can say whether the screener's choices did better than code's.
 
 Each instrument keeps its own history: its own trigger streak, its own carried research spend, its
-own daily round trips. `[universe].max_intents_per_day` is the one figure that counts the whole
-desk, and it is read from the intents on disk like the per-instrument count. The cycle directory
-carries the instrument in its name (`2026-09-29T07-44-43Z-ETHUSDT`), and the pass itself is written
-to `runs/screens/<time>.json` whether or not anything was chosen.
-
-```
-screen 2026-09-29T07-44-23Z: 3 instrument(s) looked at, 2 admitted, 1 taken
-  BTCUSDT      held      moved 3.74 bps, spread 0.01 bps, pressure 374.00
-  ETHUSDT      taken     moved - bps, spread 0.04 bps, pressure -
-  SOLUSDT      admitted  moved - bps, spread 0.84 bps, pressure -
-  held BTCUSDT: the mid has moved 3.74 bps since the last cycle and the declared minimum is 120 bps
-```
+own daily round trips. A position on an instrument discovery stops listing is still counted by the
+desk and looked after by the keeper until it closes. `[universe].max_intents_per_day` is the one
+figure that counts the whole desk.
 
 ## Before anyone is asked: the trigger
 

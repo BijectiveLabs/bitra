@@ -291,6 +291,13 @@ def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> S
         raise ConfigError("[run] names the instrument and the venue_key (venue/channel)")
     _sized_once(run)
     universe = _universe(raw)
+    if universe.discover and run.size_quote is None:
+        # One base size across instruments priced from cents to tens of thousands is no size at
+        # all; a quote size converts at each instrument's own price.
+        raise ConfigError(
+            "[universe].discover needs [run].size_quote, the size in quote currency, because "
+            "discovered instruments are priced too differently for one size in base units"
+        )
     if run.size_steps:
         unstepped = [
             name
@@ -551,7 +558,20 @@ TARGET_KEYS = (
 )
 TRIGGER_KEYS = ("min_move_bps", "max_spread_bps", "cooldown_s", "widen_after")
 AUDIT_KEYS = ("on_alarm", "alarm_cooldown_s", "quant_every_cycles")
-UNIVERSE_KEYS = ("instruments", "max_per_cycle", "max_intents_per_day", "screener")
+UNIVERSE_KEYS = (
+    "instruments",
+    "max_per_cycle",
+    "max_intents_per_day",
+    "screener",
+    "discover",
+    "top",
+    "min_quote_volume",
+    "max_spread_bps",
+    "min_listed_days",
+    "crypto_only",
+    "exclude",
+    "quote",
+)
 DESK_KEYS = ("max_open_risk_bps", "max_open_positions", "correlation_above")
 
 
@@ -805,9 +825,14 @@ def _universe(raw: dict[str, Any]) -> Universe:
     names = table.get("instruments") or []
     if not isinstance(names, list) or not all(isinstance(n, str) and n.strip() for n in names):
         raise ConfigError("[universe].instruments is a list of instrument names")
-    screener = table.get("screener", False)
-    if not isinstance(screener, bool):
-        raise ConfigError("[universe].screener is true or false")
+    flags = {}
+    for key, default in (("screener", False), ("discover", False), ("crypto_only", True)):
+        flags[key] = table.get(key, default)
+        if not isinstance(flags[key], bool):
+            raise ConfigError(f"[universe].{key} is true or false")
+    excluded = table.get("exclude") or []
+    if not isinstance(excluded, list) or not all(isinstance(n, str) for n in excluded):
+        raise ConfigError("[universe].exclude is a list of instrument names")
     try:
         return Universe(
             instruments=tuple(str(n).strip() for n in names),
@@ -815,7 +840,23 @@ def _universe(raw: dict[str, Any]) -> Universe:
             max_intents_per_day=(
                 _count(table, "max_intents_per_day") if "max_intents_per_day" in table else None
             ),
-            screener=screener,
+            screener=flags["screener"],
+            discover=flags["discover"],
+            top=_count(table, "top") if "top" in table else 20,
+            min_quote_volume=(
+                _dec(table, "min_quote_volume")
+                if "min_quote_volume" in table
+                else Decimal(10_000_000)
+            ),
+            max_spread_bps=(
+                _dec(table, "max_spread_bps") if "max_spread_bps" in table else Decimal(5)
+            ),
+            min_listed_days=(
+                _count(table, "min_listed_days") if "min_listed_days" in table else 30
+            ),
+            crypto_only=flags["crypto_only"],
+            exclude=tuple(n.strip().upper() for n in excluded),
+            quote=str(table.get("quote", "USDT")).upper(),
         )
     except UniverseError as exc:
         raise ConfigError(str(exc)) from exc

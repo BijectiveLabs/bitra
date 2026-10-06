@@ -61,26 +61,37 @@ def test_funding_is_priced_over_the_hold_the_desk_keeps(tmp_path: Path, envelope
 
 def test_an_admitted_instrument_that_did_not_run_says_why() -> None:
     record = {
-        "chosen": ["BTCUSDT"],
+        "chosen": ["ETHUSDT"],
+        "code_order": ["BTCUSDT", "ETHUSDT"],
+        "asked_screener": True,
         "candidates": [
             {
                 "instrument": "BTCUSDT",
                 "admitted": True,
                 "kept_by_screener": True,
-                "screener_said": "pressure shows a burst large enough for short-horizon reversion",
+                "pick_rank": 2,
+                "setup": "range_reversion",
+                "screener_said": "#2 range_reversion: a burst large enough for reversion",
+                "features": {"regime": "ranging", "zscore": 1.2, "quote_volume_24h": "4167294740"},
             },
             {
                 "instrument": "ETHUSDT",
                 "admitted": True,
                 "kept_by_screener": True,
-                "screener_said": "range is wide enough",
+                "pick_rank": 1,
+                "setup": "range_breakout",
+                "screener_said": "#1 range_breakout: the range is giving way",
+                "features": {"regime": "mixed", "zscore": 2.85},
             },
         ],
+        "discovered": {"markets": 782, "kept": [{}, {}], "dropped": {"not crypto": 260}},
     }
     text = shown(screen_view(record))
-    assert "waiting" in text and "max_per_cycle was taken by BTCUSDT" in text
-    assert "large enough for short-horizon reversion" in text
-    assert "the screener model read every admitted one" in text
+    assert "waiting" in text and "max_per_cycle was taken by ETHUSDT" in text
+    assert "ahead on the screener's order" in text
+    assert "#1 range_breakout" in text and "4,167M" in text
+    assert "the screener chose, code's own order was BTCUSDT, ETHUSDT" in text
+    assert "2 of 782 perpetuals kept by code (260 not crypto)" in text
 
 
 def test_each_conviction_voice_says_which_way_it_pulled() -> None:

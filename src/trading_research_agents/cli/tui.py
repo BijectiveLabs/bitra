@@ -706,23 +706,30 @@ def keys_table(record: Mapping[str, Any]) -> Table:
 
 
 def screen_view(record: Mapping[str, Any]) -> Group:
-    """One pass over the universe: what was looked at, and what it cost to look (nothing)."""
+    """One pass over the universe: what code found and measured, and what the screener chose."""
     from trading_research_agents.execution.universe import why_no_cycle
 
     table = Table(box=box.SIMPLE_HEAD, show_edge=False, pad_edge=False, title="the universe")
     for name, justify in (
         ("instrument", "left"),
+        ("state", "left"),
+        ("pick", "left"),
+        ("regime", "left"),
+        ("zscore", "right"),
         ("moved bps", "right"),
         ("spread bps", "right"),
-        ("range bps", "right"),
-        ("pressure", "right"),
-        ("state", "left"),
+        ("24h vol", "right"),
         ("why", "left"),
     ):
         table.add_column(name, justify=justify)  # type: ignore[arg-type]
-    chosen = set(record.get("chosen") or ())
+    chosen = list(record.get("chosen") or ())
+    picked = any(row.get("pick_rank") for row in record.get("candidates") or [])
     styles = {"taken": "green", "waiting": "cyan", "held": "yellow"}
-    for row in record.get("candidates") or []:
+    rows = sorted(
+        record.get("candidates") or [],
+        key=lambda r: (r.get("pick_rank") or 10_000, 0 if r.get("admitted") else 1),
+    )
+    for row in rows:
         state = (
             "taken"
             if row["instrument"] in chosen
@@ -730,32 +737,54 @@ def screen_view(record: Mapping[str, Any]) -> Group:
         )
         why = row.get("screener_said") or (row.get("reasons") or [""])[0]
         if state == "waiting":
+            ranked = "the screener's order" if picked else "pressure"
             why = (
-                f"admitted, but [universe].max_per_cycle was taken by {', '.join(sorted(chosen))}, "
-                f"which ranked higher on pressure; {why}"
+                f"admitted, but [universe].max_per_cycle was taken by {', '.join(chosen)}, "
+                f"ahead on {ranked}; {why}"
             )
+        seen = row.get("features") or {}
+        rank = row.get("pick_rank")
         table.add_row(
             str(row["instrument"]),
+            Text(state, style=styles.get(state, "")),
+            f"#{rank} {row.get('setup')}" if rank else "",
+            str(seen.get("regime") or ""),
+            _fmt(seen.get("zscore")),
             _fmt(row.get("moved_bps")),
             _fmt(row.get("spread_bps")),
-            _fmt(row.get("range_bps")),
-            _fmt(row.get("pressure")),
-            Text(state, style=styles.get(state, "")),
+            _volume(seen.get("quote_volume_24h")),
             str(why),
         )
-    read_by_model = any(row.get("screener_said") for row in record.get("candidates") or [])
-    table.caption = (
-        f"{len(chosen)} taken; "
-        + (
-            "the screener model read every admitted one; only the taken run a cycle"
-            if read_by_model
-            else "one data pull each and no tokens spent on the rest"
+    found = record.get("discovered") or {}
+    if found:
+        dropped = ", ".join(f"{n} {why}" for why, n in sorted((found.get("dropped") or {}).items()))
+        table.title = (
+            f"the universe: {len(found.get('kept') or [])} of {found.get('markets')} perpetuals "
+            f"kept by code ({dropped})"
         )
-        if chosen
-        else f"no cycle this pass: {why_no_cycle(record.get('candidates') or [])}; "
-        "no model was asked"
-    )
+    code = list(record.get("code_order") or [])
+    if chosen:
+        caption = f"{len(chosen)} taken"
+        if picked:
+            caption += f"; the screener chose, code's own order was {', '.join(code[:5]) or '-'}"
+        else:
+            caption += "; code's order (pressure), no screener asked"
+    else:
+        caption = f"no cycle this pass: {why_no_cycle(record.get('candidates') or [])}" + (
+            "" if record.get("asked_screener") else "; no model was asked"
+        )
+    table.caption = caption
     return Group(table)
+
+
+def _volume(value: Any) -> str:
+    """24-hour quote volume in millions, the unit a trader reads it in."""
+    if value in (None, ""):
+        return ""
+    try:
+        return f"{Decimal(str(value)) / 1_000_000:,.0f}M"
+    except ArithmeticError:
+        return str(value)
 
 
 def cycle_view(record: Mapping[str, Any]) -> Group:

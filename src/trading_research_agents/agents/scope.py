@@ -136,10 +136,10 @@ SCOPES: dict[str, Scope] = {
     SCREENER: Scope(
         role=SCREENER,
         reads=("as_of", "basis", "mechanism", "candidates"),
-        answers=("kept", "excluded"),
+        answers=("kept", "excluded", "picks"),
         decides=(
-            "which of the instruments code already admitted are worth a cycle; it cannot add one, "
-            "order them, or say anything about a direction or a size"
+            "which of the instruments code found and admitted are worth a cycle, and in what "
+            "order; it cannot add one, or say anything about a direction or a size"
         ),
     ),
     TECH_AUDITOR: Scope(

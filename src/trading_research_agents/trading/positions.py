@@ -146,6 +146,8 @@ class Keeper:
     timeout_bars: int
     hold_limit: str = "timeout"
     clock: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
+    # Also look after every instrument with an entry on record, listed or not.
+    follow_records: bool = False
 
     def limit_for(self, entry: Entry) -> timedelta | None:
         """How long this entry may be held, or None when time never closes it."""
@@ -162,7 +164,10 @@ class Keeper:
         entries = filled_entries(self.root)
         done = finished_orders(self.root)
         said: list[str] = []
-        for name in self.instruments:
+        names = list(self.instruments)
+        if self.follow_records:
+            names = list(dict.fromkeys([*names, *entries]))
+        for name in names:
             try:
                 hand = self.hand_for(name)
                 held = hand.position()

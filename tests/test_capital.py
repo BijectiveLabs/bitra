@@ -351,3 +351,31 @@ def test_an_entry_never_confirmed_as_filled_is_not_written_up_as_a_trade(tmp_pat
     held = Venue(position="0.002")
     said = keeper(tmp_path, held, at=datetime(2026, 10, 5, 4, 0, tzinfo=UTC)).run()
     assert "past its timeout limit" in said[0]
+
+
+def test_a_position_on_an_instrument_no_longer_listed_is_still_looked_after(
+    tmp_path: Path,
+) -> None:
+    # Discovery took BTCUSDT on an earlier pass; this pass lists other names only.
+    entry_cycle(tmp_path, "2026-10-04T17-55-13Z-BTCUSDT")
+    venue = Venue(position="0.002")
+    at = datetime(2026, 10, 5, 3, 0, tzinfo=UTC)
+    blind = Keeper(
+        root=tmp_path,
+        hand_for=lambda name: hand(venue),
+        instruments=("ZECUSDT",),
+        bar_interval_s=60,
+        timeout_bars=240,
+        clock=lambda: at,
+    )
+    assert not any("BTCUSDT" in line for line in blind.run())
+    following = Keeper(
+        root=tmp_path,
+        hand_for=lambda name: hand(venue),
+        instruments=("ZECUSDT",),
+        bar_interval_s=60,
+        timeout_bars=240,
+        clock=lambda: at,
+        follow_records=True,
+    )
+    assert any("past its timeout limit" in line for line in following.run())

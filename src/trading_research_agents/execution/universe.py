@@ -18,7 +18,7 @@ say anything about direction or size.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Decimal
 from typing import Any
 
@@ -35,6 +35,18 @@ class Universe:
     max_per_cycle: int = 1
     max_intents_per_day: int | None = None
     screener: bool = False
+    # Discovery: every linear perpetual the venue lists, filtered to what can be traded, the most
+    # traded `top` of them added to `instruments` each pass. Code finds and measures; the screener
+    # chooses among what code found.
+    discover: bool = False
+    top: int = 20
+    min_quote_volume: Decimal = Decimal(10_000_000)
+    max_spread_bps: Decimal = Decimal(5)
+    min_listed_days: int = 30
+    crypto_only: bool = True
+    exclude: tuple[str, ...] = ()
+    # The settlement currency of the perpetuals discovery considers.
+    quote: str = "USDT"
 
     def __post_init__(self) -> None:
         if len(set(self.instruments)) != len(self.instruments):
@@ -43,14 +55,19 @@ class Universe:
             raise UniverseError("[universe].max_per_cycle is at least 1")
         if self.max_intents_per_day is not None and self.max_intents_per_day < 0:
             raise UniverseError("[universe].max_intents_per_day is not negative")
-        if self.screener and not self.instruments:
+        if self.screener and not self.instruments and not self.discover:
             raise UniverseError(
-                "[universe].screener has nothing to screen; declare instruments or drop it"
+                "[universe].screener has nothing to screen; declare instruments, set discover, "
+                "or drop it"
             )
+        if self.top < 1 or self.min_listed_days < 0:
+            raise UniverseError("[universe].top is at least 1 and min_listed_days not negative")
+        if self.min_quote_volume < 0 or self.max_spread_bps <= 0:
+            raise UniverseError("[universe].min_quote_volume and max_spread_bps are positive")
 
     @property
     def idle(self) -> bool:
-        return not self.instruments
+        return not self.instruments and not self.discover
 
     def record(self) -> dict[str, Any]:
         return {
@@ -58,7 +75,19 @@ class Universe:
             "max_per_cycle": self.max_per_cycle,
             "max_intents_per_day": self.max_intents_per_day,
             "screener": self.screener,
+            "discover": self.discover,
+            "top": self.top,
+            "min_quote_volume": str(self.min_quote_volume),
+            "max_spread_bps": str(self.max_spread_bps),
+            "min_listed_days": self.min_listed_days,
+            "crypto_only": self.crypto_only,
+            "exclude": list(self.exclude),
+            "quote": self.quote,
         }
+
+    def with_instruments(self, names: tuple[str, ...]) -> Universe:
+        """This universe for one pass, with what discovery found added to the declared names."""
+        return replace(self, instruments=names, discover=False)
 
 
 @dataclass(frozen=True)
@@ -79,6 +108,13 @@ class Candidate:
     # one. Two names moving together are one trade in two places.
     correlation: Decimal | None = None
     correlated_with: str = ""
+    # What code measured on this instrument for the screener to choose from, beyond the trigger's
+    # figures: regime, stretch, volume, the venue's 24 hours, correlation with BTC.
+    features: Mapping[str, Any] = field(default_factory=dict)
+    # Where the screener placed it (1 is first) and the setup it expects; None when it was not
+    # picked or no screener was asked.
+    pick_rank: int | None = None
+    setup: str = ""
 
     @property
     def taken(self) -> bool:
@@ -106,6 +142,9 @@ class Candidate:
             "reasons": list(self.reasons),
             "kept_by_screener": self.kept_by_screener,
             "screener_said": self.screener_said,
+            "features": dict(self.features),
+            "pick_rank": self.pick_rank,
+            "setup": self.setup,
         }
 
 
@@ -118,6 +157,10 @@ class Screened:
     chosen: tuple[str, ...] = ()
     refusals: list[str] = field(default_factory=list)
     asked_screener: bool = False
+    # Code's own order of what it admitted, kept beside the screener's so the two can be compared
+    # once trades have closed.
+    code_order: tuple[str, ...] = ()
+    discovered: Mapping[str, Any] | None = None
 
     def record(self) -> dict[str, Any]:
         return {
@@ -126,6 +169,8 @@ class Screened:
             "chosen": list(self.chosen),
             "refusals": self.refusals,
             "asked_screener": self.asked_screener,
+            "code_order": list(self.code_order),
+            "discovered": None if self.discovered is None else dict(self.discovered),
         }
 
 
@@ -138,9 +183,11 @@ def order(candidates: list[Candidate], declared: tuple[str, ...]) -> list[Candid
     """
     where = {name: i for i, name in enumerate(declared)}
 
-    def key(c: Candidate) -> tuple[int, Decimal, int]:
+    def key(c: Candidate) -> tuple[int, int, Decimal, int]:
         pressure = c.pressure
         return (
+            # The screener's order, when it gave one, comes before code's.
+            c.pick_rank if c.pick_rank is not None else 1_000_000,
             0 if pressure is not None else 1,
             -(pressure or Decimal(0)),
             where.get(c.instrument, len(where)),

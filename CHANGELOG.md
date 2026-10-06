@@ -77,6 +77,15 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- **Discovery and a screener that chooses.** `[universe].discover` adds the venue's most traded
+  linear perpetuals each pass (one market list and one ticker call), filtered by code for volume,
+  spread, listing age, crypto only and the desk's leverage; each carries the venue's own symbol and
+  size step. Every candidate is measured by code (move and pressure, regime, z-score, trend strength,
+  volume, 24-hour volume and change, correlation with BTC). With `screener = true` the screener
+  now picks and orders the candidates, naming the setup it expects and citing figures from each
+  instrument's own row; code drops a pick it was not given or that cites nothing that holds.
+  Code's own order is kept beside it for comparison. `tra universe` previews discovery. Positions
+  on instruments no longer listed are still counted by the desk and looked after by the keeper.
 - A model link whose quota is spent, or that asks for a longer wait than `max_retry_wait_s`,
   rests (15 minutes for a spent quota) and the chain goes straight to the next link; seen live, a
   spent Gemini quota put 15 to 45 seconds in front of every validator and the book moved past the

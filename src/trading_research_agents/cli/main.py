@@ -569,6 +569,13 @@ def build_parser() -> argparse.ArgumentParser:
     audit_cmd.add_argument("--env-file", type=Path, default=None)
     audit_cmd.add_argument("--json", action="store_true")
 
+    universe_cmd = top.add_parser(
+        "universe", help="what discovery finds on the venue now, and what each filter took out"
+    )
+    universe_cmd.set_defaults(command="universe")
+    universe_cmd.add_argument("--config", type=Path, default=Path("strategy.toml"))
+    universe_cmd.add_argument("--json", action="store_true")
+
     runs = top.add_parser(
         "runs", help="check a desk's records against their hashes and inputs, or prune old ones"
     ).add_subparsers(dest="command", required=True)
@@ -1801,6 +1808,35 @@ def _venue_preflight(cfg: Any, env: Mapping[str, str]) -> Callable[[], Any]:
     return run
 
 
+def show_universe(args: argparse.Namespace) -> int:
+    """The instruments a pass would look at now: declared, and found by discovery."""
+    cfg = load_strategy_config(args.config)
+    universe, found, said = _discovered_universe(cfg)
+    lines = list(said)
+    if found is None and not said:
+        lines.append(
+            "discovery is off ([universe].discover); the pass looks at "
+            f"{', '.join(universe.instruments) or 'nothing'}"
+        )
+    if found is not None:
+        dropped = ", ".join(f"{n} {why}" for why, n in sorted(found["dropped"].items()))
+        lines.append(f"{len(found['kept'])} of {found['markets']} perpetuals kept ({dropped})")
+        lines.append(
+            f"{'instrument':<16}{'24h volume':>16}{'spread bps':>12}{'24h %':>9}"
+            f"{'step':>10}{'max lev':>9}{'listed d':>10}"
+        )
+        for row in found["kept"]:
+            volume = f"{Decimal(row['quote_volume_24h']) / 1_000_000:,.0f}M"
+            lines.append(
+                f"{row['instrument']:<16}{volume:>16}{row['spread_bps']:>12}"
+                f"{row['change_24h_pct'] or '-':>9}{row['step']:>10}"
+                f"{row['max_leverage'] or '-':>9}{row['listed_days'] or '-':>10}"
+            )
+        lines.append(f"this pass looks at: {', '.join(universe.instruments)}")
+    emit({"instruments": list(universe.instruments), "discovered": found}, args.json, lines)
+    return 0
+
+
 def runs_verify(args: argparse.Namespace) -> int:
     """Whether the desk's records are what it wrote, and its briefs what its inputs give."""
     from trading_research_agents.agents.verify import verify_runs
@@ -2471,7 +2507,7 @@ def run_cycle_command(args: argparse.Namespace) -> int:
                         replace(
                             cycle_cfg,
                             instrument=instrument,
-                            size_step=cfg.run.step_for(instrument),
+                            size_step=_step_for(cfg, instrument),
                             carried_spend=held,
                             place=sends,
                             account=None if sends is None else sends.account,
@@ -2623,6 +2659,58 @@ class Auditing:
         return said
 
 
+# What discovery found in this process, per instrument: the venue's own symbol and its size step.
+# A discovered instrument has no line in data.toml or [run].size_step, and guessing either would
+# send an order under the wrong market or off the venue's step.
+_DISCOVERED: dict[str, dict[str, Any]] = {}
+_DISCOVERY_CLIENTS: dict[str, Any] = {}
+
+
+def _discovered_universe(cfg: Any) -> tuple[Any, dict[str, Any] | None, list[str]]:
+    """This pass's universe: the declared instruments, plus what discovery found on the venue."""
+    from trading_research_agents.data.sources.discover import DiscoverError, Rules, discover, merged
+
+    universe = cfg.universe
+    if not universe.discover:
+        return universe, None, []
+    venue = cfg.execution.venue or cfg.run.venue_key.partition("/")[0]
+    rules = Rules(
+        quote=universe.quote,
+        top=universe.top,
+        min_quote_volume=universe.min_quote_volume,
+        max_spread_bps=universe.max_spread_bps,
+        min_listed_days=universe.min_listed_days,
+        crypto_only=universe.crypto_only,
+        exclude=universe.exclude,
+        leverage=cfg.execution.leverage,
+    )
+    try:
+        client = _DISCOVERY_CLIENTS.get(venue)
+        if client is None:
+            import ccxt
+
+            client = getattr(ccxt, venue)({"enableRateLimit": True})
+            _DISCOVERY_CLIENTS[venue] = client
+        found = discover(client, venue, rules)
+    except (DiscoverError, ImportError, AttributeError) as exc:
+        said = f"discovery: {exc}; this pass looks at the declared instruments only"
+        return universe.with_instruments(universe.instruments), None, [said]
+    for row in found.listed:
+        _DISCOVERED[row.instrument] = {"symbol": row.symbol, "step": row.step}
+    names = merged(universe.instruments, found)
+    return universe.with_instruments(names), found.record(), []
+
+
+def _step_for(cfg: Any, instrument: str) -> Decimal:
+    """The venue's size step: declared first, then what discovery read from the venue."""
+    if instrument in cfg.run.size_steps:
+        return Decimal(cfg.run.size_steps[instrument])
+    found = _DISCOVERED.get(instrument)
+    if found is not None:
+        return Decimal(found["step"])
+    return Decimal(cfg.run.step_for(instrument))
+
+
 def _sweep(
     cfg: Any,
     cycle_cfg: Any,
@@ -2645,6 +2733,7 @@ def _sweep(
     universe = cfg.universe
     if args.instrument or universe.idle:
         return (cycle_cfg.instrument,), None
+    universe, discovered, discovery_said = _discovered_universe(cfg)
     now = cycle_cfg.clock()
     # --now overrides the trigger for the cycle, so it overrides it for the pass that feeds the
     # cycle too: an operator who asked anyway should not be told nothing was worth looking at.
@@ -2687,6 +2776,8 @@ def _sweep(
             watch=watch,
             open_now=open_now,
             full=full,
+            listed={row["instrument"]: row for row in (discovered or {}).get("kept", [])},
+            rule=cfg.regime,
         )
 
     if args.json or not _watching():
@@ -2697,6 +2788,8 @@ def _sweep(
         steps = [*universe.instruments, *(["market_screener"] if universe.screener else [])]
         with _ui().CycleView(cycle_cfg.usage, steps, title="screen") as view:
             screened = look(view.on_step)
+    screened.discovered = discovered
+    screened.refusals[:0] = discovery_said
     where = out.parent / "screens"
     where.mkdir(parents=True, exist_ok=True)
     write_json(where / f"{screened.at}.json", screened.record())
@@ -2761,6 +2854,9 @@ def _keeper(
         hand_for=hand_for,
         instruments=tuple(cfg.universe.instruments) or (instrument,),
         bar_interval_s=cfg.run.bar_interval_s,
+        # Discovered instruments come and go from the list; a position on one is looked after
+        # for as long as the records say it was entered.
+        follow_records=True,
         timeout_bars=cfg.exit_rule.timeout_bars,
         hold_limit=cfg.execution.hold_limit,
     )
@@ -2782,7 +2878,10 @@ def _held_reader(cfg: Any, out: Path, mode: str, args: argparse.Namespace, proje
 
     def ask_the_venue() -> tuple[tuple[Open, ...], str]:
         ours = filled_from_records(out)
-        names = cfg.universe.instruments or (args.instrument or cfg.run.instrument,)
+        declared = cfg.universe.instruments or (args.instrument or cfg.run.instrument,)
+        # An instrument discovery once took, and that this desk filled, is still the desk's to
+        # count even when this pass did not list it.
+        names = tuple(dict.fromkeys([*declared, *ours]))
         held: list[Open] = []
         for name in names:
             size = _venue_hand(args, cfg, project, name).position()
@@ -3236,6 +3335,8 @@ def _symbol_for(cfg: Any, project: Path, instrument: str = "") -> str:
         mapped = (raw.get("data", {}).get("symbols") or {}).get(named)
         if mapped:
             return str(mapped)
+    if named in _DISCOVERED:
+        return str(_DISCOVERED[named]["symbol"])
     return str(named)
 
 
@@ -3734,10 +3835,19 @@ def _universe_notes(cfg: Any, bad: list[str]) -> list[str]:
             f"universe: not declared, so every cycle is {cfg.run.instrument} from [run]; "
             "[universe].instruments is where a desk names what else it watches"
         ]
+    named = ", ".join(universe.instruments) or "nothing declared"
     said = [
-        f"universe: {', '.join(universe.instruments)}; a pass looks at each for the price of a "
+        f"universe: {named}; a pass looks at each for the price of a "
         f"data pull and runs {universe.max_per_cycle} of them"
     ]
+    if universe.discover:
+        said.append(
+            f"universe: discovery adds the {universe.top} most traded {universe.quote} "
+            f"perpetuals each pass (at least {universe.min_quote_volume:,} a day, spread at most "
+            f"{universe.max_spread_bps} bps, listed {universe.min_listed_days}+ days"
+            + (", crypto only" if universe.crypto_only else "")
+            + "); `tra universe` shows them now"
+        )
     if universe.max_intents_per_day is not None:
         said.append(
             f"universe: at most {universe.max_intents_per_day} intent(s) a day across every "
@@ -3745,8 +3855,8 @@ def _universe_notes(cfg: Any, bad: list[str]) -> list[str]:
         )
     if universe.screener:
         said.append(
-            "universe: the screener is asked to narrow what the trigger admitted; it cannot add an "
-            "instrument or change the order"
+            "universe: the screener picks and orders what code admitted, citing each instrument's "
+            "own figures; it cannot add an instrument, and code's order is kept beside its own"
         )
     if cfg.trigger.idle:
         bad.append(
@@ -4364,6 +4474,7 @@ HANDLERS = {
     ("mandate", "mandate"): show_mandate,
     ("venues", "venues"): show_venues,
     ("sources", "show"): sources_show,
+    ("universe", "universe"): show_universe,
     ("runs", "verify"): runs_verify,
     ("runs", "prune"): runs_prune,
     ("sources", "pull"): sources_pull,
