@@ -245,3 +245,23 @@ def test_a_daily_figure_is_not_correlated_with_minute_returns() -> None:
     minutes = [NOW_NS + i * 60_000_000_000 for i in range(60)]
     measured = correlation(series, minutes, [0.1 * (-1) ** i for i in range(60)], window="1h")
     assert measured.value is None and "slower than the bars" in measured.note
+
+
+def test_a_history_reaching_before_1970_is_written_and_fred_is_asked_for_recent_rows(
+    tmp_path: Path,
+) -> None:
+    from trading_research_agents.data.series import moment
+
+    assert str(moment(-246_576_000_000_000_000).date()) == "1962-03-10"
+    path = declare(tmp_path, 'fetch = { from = "fred", id = "DGS10" }')
+    vendor = Vendor(
+        {
+            "observations": [
+                {"date": "1962-01-02", "value": "4.06"},
+                {"date": "2026-10-02", "value": "5.28"},
+            ]
+        }
+    )
+    got = pull(load_series_map(path)[0], tmp_path, env={"FRED_API_KEY": "k" * 32}, get=vendor)
+    assert got.rows == 2 and str(got.last).startswith("2026-10-02")
+    assert "sort_order=desc&limit=500" in vendor.asked[0][0]

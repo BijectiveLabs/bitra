@@ -25,6 +25,7 @@ from trading_research_agents.data.series import (
     TIME_UNITS,
     SeriesError,
     SeriesSpec,
+    moment,
     read_series,
 )
 
@@ -40,7 +41,10 @@ PRESETS: dict[str, dict[str, Any]] = {
     },
     # Federal Reserve Economic Data, free with a key from fred.stlouisfed.org.
     "fred": {
-        "url": "https://api.stlouisfed.org/fred/series/observations?file_type=json&series_id={id}",
+        "url": (
+            "https://api.stlouisfed.org/fred/series/observations?file_type=json&series_id={id}"
+            "&sort_order=desc&limit=500"
+        ),
         "rows": "observations",
         "ts": "date",
         "ts_unit": "iso8601",
@@ -160,7 +164,10 @@ def pull(
     if how.get("key_env"):
         secret = held.get(str(how["key_env"]), "")
         if not secret:
-            raise PullError(f"{spec.name}: {how['key_env']} is not in the environment")
+            raise PullError(
+                f"{spec.name}: {how['key_env']} is not in the environment; set it in the shell "
+                "or in the .env beside this desk's strategy.toml (a .env anywhere else is not read)"
+            )
         if how.get("key_header"):
             headers[str(how["key_header"])] = f"{how.get('key_prefix', '')}{secret}"
         else:
@@ -189,7 +196,7 @@ def pull(
         series=spec.name,
         added=len(known) - before,
         rows=len(known),
-        last=None if last is None else datetime.fromtimestamp(last / NS_PER_S, tz=UTC).isoformat(),
+        last=None if last is None else moment(last).isoformat(),
     )
 
 
@@ -267,7 +274,7 @@ def _write(path: Path, spec: SeriesSpec, points: Mapping[int, Decimal]) -> None:
     writer.writerow([spec.ts, spec.value])
     for when in sorted(points):
         if spec.ts_unit == "iso8601":
-            stamp = datetime.fromtimestamp(when / NS_PER_S, tz=UTC).isoformat()
+            stamp = moment(when).isoformat()
         else:
             stamp = str(when // TIME_UNITS[spec.ts_unit])
         writer.writerow([stamp, str(points[when])])
@@ -314,7 +321,7 @@ def describe(spec: SeriesSpec, base: Path, now: datetime) -> dict[str, Any]:
     age = now.timestamp() - latest.observed_ns / NS_PER_S
     return {
         **out,
-        "last": datetime.fromtimestamp(latest.observed_ns / NS_PER_S, tz=UTC).isoformat(),
+        "last": moment(latest.observed_ns).isoformat(),
         "value": str(latest.value),
         "age_h": round(age / 3600, 1),
         "counted": age <= spec.max_age.total_seconds(),

@@ -26,6 +26,15 @@ from typing import Any
 
 NS_PER_S = 1_000_000_000
 DEFAULT_MAX_AGE = timedelta(days=4)
+EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
+
+
+def moment(ns: int) -> datetime:
+    """Epoch nanoseconds as a UTC time. fromtimestamp refuses dates before 1970 on Windows, and
+    FRED serves yields back to 1962."""
+    return EPOCH + timedelta(microseconds=ns // 1000)
+
+
 TIME_UNITS = {"s": 1_000_000_000, "ms": 1_000_000, "us": 1_000, "ns": 1}
 
 
@@ -435,7 +444,7 @@ def threshold_state(series: Series, at_ns: int) -> dict[str, Any]:
         return {"series": spec.name, "state": "unknown", "value": None, "known_since": None}
     age = timedelta(seconds=(at_ns - point.observed_ns) / NS_PER_S)
     origin = f"fetched from {spec.fetch['from']}" if spec.fetch else "a file kept by hand"
-    observed = datetime.fromtimestamp(point.observed_ns / NS_PER_S, tz=UTC).isoformat()
+    observed = moment(point.observed_ns).isoformat()
     if age > spec.max_age:
         # An old reading counted as today's is a made-up reading. It is shown, so the operator
         # sees the file has gone stale, and it is never a state anyone weighs.
@@ -456,7 +465,7 @@ def threshold_state(series: Series, at_ns: int) -> dict[str, Any]:
         "unit": spec.unit,
         "value": str(point.value),
         "observed_at": observed,
-        "known_since": datetime.fromtimestamp(point.published_ns / NS_PER_S, tz=UTC).isoformat(),
+        "known_since": moment(point.published_ns).isoformat(),
         "origin": origin,
         "age_h": round(age.total_seconds() / 3600, 1),
         "state": state,
@@ -523,7 +532,7 @@ class Event:
 
     def record(self) -> dict[str, Any]:
         return {
-            "when": datetime.fromtimestamp(self.when_ns / NS_PER_S, tz=UTC).isoformat(),
+            "when": moment(self.when_ns).isoformat(),
             "what": self.what,
             "source": self.source,
         }
