@@ -3771,10 +3771,17 @@ def _load_notes(a: Any, roster: tuple[str, ...], screener: bool = False) -> list
                 else f"{', '.join(reading)} are asked every cycle; reuse_reading_for is off"
             )
         )
-    if len(on) == 1 and calls >= 4:
+    # Vendors meter per model, so two models on one provider are two sets of limits.
+    pairs = sorted({f"{a.for_role(r).provider}:{a.for_role(r).model}" for r in roles})
+    if len(pairs) == 1 and calls >= 4:
         said.append(
-            f"models: every role is on {on[0]}; if your tier limits tokens per minute, give the "
-            'validators their own provider with [agents.roles.validator] provider = "..."'
+            f"models: every role is on {pairs[0]}; if your tier limits tokens per minute or per "
+            "day, give the table-reading roles another model or provider in [agents.roles.<role>]"
+        )
+    elif len(on) == 1:
+        said.append(
+            f"models: the roles share {on[0]} across {', '.join(pairs)}, each model on "
+            "its own limits"
         )
     if a.validators:
         said.append(
