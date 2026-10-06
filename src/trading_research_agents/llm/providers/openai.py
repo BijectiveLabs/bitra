@@ -134,11 +134,15 @@ class OpenAICompleter:
         # A router or a local server may answer without a usage block; the call is then
         # metered by count and time only, and the usage line says so through the zeros.
         usage = response.usage
+        # Read where the server reports it, so whether a prompt cache engages is measured; the
+        # system prompt is the same on every call and is most of every input.
+        details = getattr(usage, "prompt_tokens_details", None)
         return Completion(
             text=str(text),
             model=str(response.model),
             input_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
             output_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
+            cached_tokens=int(getattr(details, "cached_tokens", 0) or 0),
         )
 
 

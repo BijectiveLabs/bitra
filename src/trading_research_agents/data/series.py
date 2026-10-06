@@ -388,8 +388,7 @@ def correlation(
             None,
             len(pairs),
             window,
-            "the series took fewer than three values inside the window, so it cannot be "
-            "correlated with these returns; it is slower than the bars",
+            "slower than the bars: fewer than three values in the window",
         )
     xs, ys = zip(*pairs, strict=True)
     return Measurement(_pearson(xs, ys), len(pairs), window)

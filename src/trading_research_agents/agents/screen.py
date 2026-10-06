@@ -45,6 +45,7 @@ from trading_research_agents.execution.targets import intents_today
 from trading_research_agents.execution.trigger import Trigger, last_seen, spread_of, worth_asking
 from trading_research_agents.execution.universe import Candidate, Screened, Universe, order, take
 from trading_research_agents.llm.completer import Completer
+from trading_research_agents.records import COMPACT
 from trading_research_agents.store.snapshot import Snapshot, cycle_id, take_snapshot
 
 BPS = Decimal(10_000)
@@ -482,7 +483,7 @@ def asking(
             asked = brief_for(market_screener.ROLE, brief)
             done = completer.complete(
                 system=prompt(LIVE_PROMPT),
-                user=json.dumps(asked, sort_keys=True, default=str),
+                user=json.dumps(asked, sort_keys=True, default=str, separators=COMPACT),
                 schema=dict(market_screener.LIVE_SCHEMA),
             )
             said = market_screener.parse_live(done.text)

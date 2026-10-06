@@ -101,6 +101,8 @@ kill_switch = "KILL"               # touch this file to flatten and stop
 # on_missing_validator = "refuse" # a declared stance no model answered refuses the trade;
 #                                  # "continue" trades on the votes that did come back
 # max_retry_wait_s = 15           # wait once for a provider that says "try again in N s"
+# reuse_reading_for = "1h"        # reuse a reading analyst's answer while its figures are
+#                                  # unchanged; new data always asks again; "off" asks every cycle
 #
 # A role that only reads and labels does not need the model that reasons over sixty bars, and the
 # difference is most of a token bill. Anything a role does not override it inherits from [agents],

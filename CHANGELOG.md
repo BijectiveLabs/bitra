@@ -77,6 +77,13 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- **Fewer tokens for the same decisions** (measured: the reading analysts were 37 % of all tokens,
+  validators 27 %, output 37 %). A reading analyst's answer is reused while its brief's figures are
+  unchanged (`[agents].reuse_reading_for`, default 1 hour; any new value asks again at once). The
+  validators are not asked when code is certain to refuse regardless of their votes (desk, round
+  trips, reward to risk, an edge that fails even without impact). Table-reading roles take
+  `effort = "low"` where an effort is declared. Briefs are sent without JSON spacing, and cached
+  prompt tokens are read from OpenAI-compatible servers that report them.
 - `[universe].type_field` and `exclude_types` set which market types discovery leaves out on any
   venue (Bybit's `symbolType` is the default there), and `quote` the settlement currency; every
   part of the code side of the screen is now the client's to configure.

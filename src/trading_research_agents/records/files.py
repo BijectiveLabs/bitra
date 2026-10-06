@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any
 
 CHUNK = 1 << 20
+# What a model is sent: no spaces after separators, which are tokens and carry nothing.
+COMPACT = (",", ":")
 
 
 def append_line(path: Path, row: Mapping[str, Any], *, durable: bool = False) -> None:

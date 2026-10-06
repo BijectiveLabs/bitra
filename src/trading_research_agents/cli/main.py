@@ -2419,6 +2419,7 @@ def run_cycle_command(args: argparse.Namespace) -> int:
         size_step=cfg.run.step_for(instrument),
         validators=a.validators,
         on_missing_validator=a.on_missing_validator,
+        reuse_reading_s=a.reuse_reading_s,
         context_intervals=cfg.run.context_intervals,
         hold_limit=cfg.execution.hold_limit,
         timeout_bars=cfg.exit_rule.timeout_bars,

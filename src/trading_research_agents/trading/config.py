@@ -173,6 +173,9 @@ class AgentSettings:
     on_missing_validator: str = "refuse"
     # How long a role waits for a provider that said "try again in N seconds" before the next link.
     max_retry_wait_s: float = 15.0
+    # A reading analyst's answer is reused while its brief's figures are unchanged, for at most
+    # this long. New data always asks again. Zero turns reuse off.
+    reuse_reading_s: float = 3600.0
 
     def for_role(self, role: str) -> RoleModel:
         """What this role is asked with: its own model where declared, otherwise the default."""
@@ -190,8 +193,35 @@ class AgentSettings:
             call_timeout_s=int(table.get("call_timeout_s", self.call_timeout_s)),
             max_retries=int(table.get("max_retries", self.max_retries)),
             fallback=tuple(str(name) for name in (table.get("fallback") or self.fallback)),
-            effort=(str(table["effort"]) if table.get("effort") else self.effort),
+            effort=(
+                str(table["effort"])
+                if table.get("effort")
+                # A role that reads a table code computed does not need to think long. Only where
+                # an effort is declared at all: a model with no reasoning setting refuses the field.
+                else (LOW_EFFORT if role in TABLE_READERS and self.effort else self.effort)
+            ),
         )
+
+
+# Roles whose brief is a table of figures code already computed.
+TABLE_READERS = (
+    "market_screener",
+    "macro_analyst",
+    "onchain_analyst",
+    "sentiment_analyst",
+    "validator",
+)
+LOW_EFFORT = "low"
+
+
+def _reuse_window(raw: Any) -> float:
+    """[agents].reuse_reading_for: a duration such as "1h", or 0 / "off" for no reuse."""
+    if raw in (0, "0", "off", False):
+        return 0.0
+    try:
+        return parse_duration(str(raw))
+    except DataConfigError as exc:
+        raise ConfigError(f"[agents].reuse_reading_for: {exc}") from exc
 
 
 @dataclass(frozen=True)
@@ -537,6 +567,7 @@ def _agents(raw: dict[str, Any], strategy_raw: dict[str, Any]) -> AgentSettings 
             table, "on_missing_validator", ("refuse", "continue"), "refuse", "[agents]"
         ),
         max_retry_wait_s=float(table.get("max_retry_wait_s", 15.0)),
+        reuse_reading_s=_reuse_window(table.get("reuse_reading_for", "1h")),
         fallback=_fallback(table.get("fallback")),
     )
 

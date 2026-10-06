@@ -91,7 +91,9 @@ book does not spend a provider's rate on cycles that could only be refused.
 ## Prompt caching
 
 The Anthropic adapter marks the system prompt as cacheable and reads back what the provider says it
-cached. Both figures are now written to `usage.jsonl` per call:
+cached; the OpenAI-compatible adapter reads `prompt_tokens_details.cached_tokens` where a server
+reports it (Groq did not, for `openai/gpt-oss-120b`, on 2026-10-06). Both figures are written to
+`usage.jsonl` per call:
 
 ```json
 {"role": "technical_analyst", "input_tokens": 1180, "cached_tokens": 0, "cache_write_tokens": 0}
@@ -179,6 +181,32 @@ Undeclared, the field is left out of the request entirely, which matters: most s
 `base_url` reject `reasoning_effort` outright, and a model with no reasoning to configure should be
 sent nothing. A level a vendor cannot take is mapped rather than refused, because a fallback chain
 that dies on a spelling is a chain that does not help on the day it is needed.
+
+Roles that read a table code already computed (the screener, the macro, on-chain and sentiment
+analysts, the validators) take `low` when `[agents].effort` is declared and their own role table
+does not say otherwise; the technical analyst keeps `[agents].effort`. With nothing declared, no
+role is sent an effort at all, for the reason above.
+
+## Not paying twice for the same reading
+
+The macro, on-chain and sentiment briefs are built from series that update daily on free feeds and
+faster on paid ones. When a brief's figures are identical to ones already answered, the earlier
+answer is used again instead of asking:
+
+```toml
+[agents]
+reuse_reading_for = "1h"     # how long an unchanged reading stands; "off" asks every cycle
+```
+
+The key is the figures, without the clock: any new value, on any feed at any speed, asks again at
+once. The window only bounds how long an unchanged reading stands. The declared state is computed
+by code every cycle either way, and it is what decisions read. A reused answer is marked `reused`
+with its age in the cycle's agents table and under `reused` in `cycle.json`.
+
+Two more things keep calls from being wasted. The validators are not asked when code is certain to
+refuse whatever they say: the desk with nothing added, the day's round trips, the declared reward to
+risk, or an edge that fails against the part of the round trip that does not grow with size. And
+briefs are sent as JSON without spaces, which are tokens that carry nothing.
 
 ## Choosing a model per role
 

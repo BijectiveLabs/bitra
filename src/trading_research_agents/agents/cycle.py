@@ -102,6 +102,7 @@ from trading_research_agents.execution.trigger import (
 from trading_research_agents.llm.completer import Completer
 from trading_research_agents.llm.usage import BudgetSpentError, UsageLedger
 from trading_research_agents.records import (
+    COMPACT,
     append_index,
     append_line,
     build_index,
@@ -113,6 +114,7 @@ from trading_research_agents.records import (
     write_json,
 )
 from trading_research_agents.store.cycles import SUMMARY, CycleDir
+from trading_research_agents.store.reuse import key_of, lookup, remember
 from trading_research_agents.store.snapshot import (
     INPUTS,
     Snapshot,
@@ -218,6 +220,8 @@ class CycleConfig:
     # refuse: a declared stance that no model answered stops the trade. continue: trade on the votes
     # that came back. A lost check never adds size either way.
     on_missing_validator: str = "refuse"
+    # How long a reading analyst's answer stands while its brief's figures are unchanged; 0 is off.
+    reuse_reading_s: float = 0.0
     # Higher timeframes read as context, in seconds; the decision stays on interval_s.
     context_intervals: tuple[int, ...] = ()
     # How long a position is kept: the analyst's horizon, or [exit].timeout_bars. The cost gate
@@ -354,6 +358,8 @@ class CycleResult:
             "series": self.briefs.get("series"),
             # Reading analysts this cycle did not ask, and why.
             "not_asked": self.briefs.get("not_asked"),
+            # Reading analysts whose answer was reused, and how old it was in seconds.
+            "reused": self.briefs.get("reused"),
             "exits": self.exits or None,
             # What the models cost this cycle, and which calls had no declared price.
             "spend": self.briefs.get("spend"),
@@ -370,10 +376,58 @@ def _ask(
     completer = cfg.completer_for(role)
     done = completer.complete(
         system=prompt(role),
-        user=json.dumps(question, sort_keys=True, default=str),
+        user=json.dumps(question, sort_keys=True, default=str, separators=COMPACT),
         schema=dict(schema),
     )
     return done.text
+
+
+def _before_votes(cfg: CycleConfig, result: CycleResult, costs: Any) -> str:
+    """A refusal later steps are certain to make whatever the validators say, or nothing.
+
+    Only what cannot change after the votes is read here: the desk with nothing added to it, the
+    day's round trips, the declared reward to risk, and the edge against the part of the round trip
+    that does not grow with size. A smaller conviction size only lowers the impact, so a claim that
+    fails without impact fails with it too.
+    """
+    rule = cfg.targets
+    if not rule.idle:
+        if rule.max_round_trips_per_day is not None:
+            trips = intents_today(cfg.root, at=cfg.clock(), instrument=cfg.instrument)
+            if trips >= rule.max_round_trips_per_day:
+                return (
+                    f"targets: {trips} intent(s) already written today; the declared limit is "
+                    f"{rule.max_round_trips_per_day}"
+                )
+        if rule.min_reward_risk is not None and (
+            cfg.reward_to_risk is None or cfg.reward_to_risk < rule.min_reward_risk
+        ):
+            return (
+                f"targets: reward-to-risk {cfg.reward_to_risk} is below the declared "
+                f"{rule.min_reward_risk}"
+            )
+        floor = sum((c.bps for c in costs.cost.components if c.name != "impact"), Decimal(0))
+        if rule.min_edge_multiple is not None and floor > 0:
+            best = edge_multiple(edge_bps=cfg.magnitude_bps, cost_bps=floor)
+            if best is not None and best < rule.min_edge_multiple:
+                return (
+                    f"targets: the claimed edge is at most {best}x the round trip and the desk "
+                    f"declared {rule.min_edge_multiple}x"
+                )
+        if rule.min_net_bps is not None and cfg.magnitude_bps - floor < rule.min_net_bps:
+            return (
+                f"targets: net is at most {cfg.magnitude_bps - floor} bps and the declared "
+                f"minimum is {rule.min_net_bps} bps"
+            )
+    if cfg.desk.bounds_a_trade:
+        held, source = _held(cfg, result)
+        book = within_desk(
+            cfg.desk, instrument=cfg.instrument, adding_bps=Decimal(0), held=held, source=source
+        )
+        if not book.admitted:
+            result.book = book
+            return "desk: " + "; ".join(book.reasons)
+    return ""
 
 
 def _ask_readable(
@@ -577,9 +631,21 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
             path=where.answer("technical"),
         )
     ]
+    keys: dict[str, str] = {}
+    reused: dict[str, float] = {}
     for role, brief in reading_briefs.items():
         write_json(where.brief(role), brief)
         module = READING[role]
+        keys[role] = key_of(brief)
+        earlier = lookup(cfg.root, role, keys[role], window_s=cfg.reuse_reading_s, now=cfg.clock())
+        if earlier is not None and earlier[0] is not None:
+            # The same figures were read and answered within the window; the answer is put where
+            # this cycle's own would go, and the task below finds it there instead of asking.
+            write_json(where.answer(role), earlier[0])
+            reused[role] = round(earlier[1])
+            announce(
+                cfg.watch, role, DONE, f"reused, {reused[role]}s old; its figures have not changed"
+            )
         tasks.append(
             Task(
                 name=role,
@@ -587,9 +653,19 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
                 path=where.answer(role),
             )
         )
+    if reused:
+        result.briefs["reused"] = reused
 
-    fan = run_tasks(tasks, max_workers=cfg.max_workers)
+    fan = run_tasks(tasks, max_workers=cfg.max_workers, resume=bool(reused))
     result.fan = fan
+    for role in reading_briefs:
+        if role in reused or role not in fan.answers:
+            continue
+        try:
+            READING[role].parse(str(fan.answers[role]))
+        except (RoleError, ValueError):
+            continue
+        remember(cfg.root, role, keys[role], fan.answers[role], now=cfg.clock())
     result.context = _context_of(fan, reading_briefs, result)
     for name, error in fan.failed.items():
         result.refusals.append(f"{name}: {error}")
@@ -675,6 +751,14 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
     announce(cfg.watch, "cost", DONE, f"round trip {costs.cost.round_trip_bps:.2f} bps")
 
     if cfg.validators:
+        early = _before_votes(cfg, result, costs)
+        if early:
+            # Refused by code that does not read a single vote, so asking three models first
+            # would only pay for an answer nothing can use.
+            result.refusals.append(f"{early}; the validators were not asked")
+            announce(cfg.watch, early.partition(":")[0], REFUSED, early.partition(": ")[2])
+            _finish(cfg, where, result)
+            return result
         _run_validators(cfg, where, result, asked=asked, analyst=analyst, costs=costs)
         silent = [
             name

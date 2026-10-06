@@ -1,6 +1,7 @@
 """How every record this package keeps is written to disk and read back."""
 
 from trading_research_agents.records.files import (
+    COMPACT,
     append_line,
     read_gzip_json,
     read_lines,
@@ -18,6 +19,7 @@ from trading_research_agents.records.index import (
 )
 
 __all__ = [
+    "COMPACT",
     "INDEX_DIR",
     "append_index",
     "append_line",
