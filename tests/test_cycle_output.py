@@ -159,3 +159,35 @@ def test_an_answer_that_came_back_unreadable_is_not_shown_as_ok() -> None:
         "context": {"validator_contra": {"stance": "contra", "error": "lacks verdict"}},
     }
     assert "unreadable" in shown(cycle_view(record))
+
+
+def test_a_validator_counts_for_what_it_says_beyond_its_stance() -> None:
+    from types import SimpleNamespace
+
+    from trading_research_agents.agents.cycle import _informative_votes
+
+    def votes(pro: str, contra: str, neutral: str) -> tuple[str, ...]:
+        context = {
+            "validator_pro": {"verdict": pro},
+            "validator_contra": {"verdict": contra},
+            "validator_neutral": {"verdict": neutral},
+            "macro_analyst": {"regime": "risk-off"},
+        }
+        return _informative_votes(SimpleNamespace(context=context))  # type: ignore[arg-type]
+
+    # Pro for and contra against, as assigned: only neutral says anything.
+    assert votes("support", "oppose", "support") == ("abstain", "support", "abstain")
+    # A pro that cannot argue for it, and a contra that cannot argue against it, both count.
+    assert votes("abstain", "abstain", "oppose") == ("support", "oppose", "oppose")
+    assert votes("oppose", "support", "abstain") == ("support", "abstain", "oppose")
+
+
+def test_a_cycle_that_ended_early_says_which_panels_it_never_reached() -> None:
+    record = {
+        "analyst": {"target": "long", "setup": "range_reversion"},
+        "conviction": {"admitted": False, "score": {"score": "0.337"}},
+        "refusals": ["conviction: score 0.337 is below the declared floor 0.4"],
+    }
+    text = shown(cycle_view(record))
+    assert "not reached" in text and "risk per trade, desk, targets, intent" in text
+    assert "the cycle ended at conviction" in text

@@ -444,12 +444,17 @@ count in exactly two places, both yours to declare:
 | Where | Setting | Effect |
 |---|---|---|
 | the confluence matrix | `[confluence].min_support`, `max_opposition` | a hard gate: too few supports or too many opposes refuses the trade |
-| conviction | `[conviction].validator_weight` | each support adds that weight, each oppose takes it away, abstain is silent; the size follows the score |
+| conviction | `[conviction].validator_weight` | each vote that says something adds or takes away that weight; the size follows the score |
 
 With neither declared, the votes are recorded and move nothing, and `tra check` says so: three
-calls a cycle that change no decision are a cost with no purpose. Since pro and contra argue their
-side by assignment, the informative votes are a pro that cannot make the case (abstain), a contra
-that cannot find one against, and neutral.
+calls a cycle that change no decision are a cost with no purpose.
+
+Conviction weighs what a vote says beyond its stance. Pro argues for and contra against by
+assignment, so a pro that supports and a contra that opposes tell conviction nothing and weigh
+nothing (on the demo desk pro supported 36 times in 37 and contra opposed 34 times in 35; counted as
+votes, they only diluted every score). A pro that abstains or opposes counts as opposition, a contra
+that abstains or supports counts as support, and neutral counts as it votes. The confluence matrix
+still counts the verdicts as given, because its numbers are the ones you declared.
 
 ## Conviction: who weighs the analysts, and how much goes behind the idea
 

@@ -188,6 +188,9 @@ def test_a_short_retry_after_is_waited_for_once_on_the_same_provider() -> None:
     )
     assert retry_after_of(RuntimeError(said)) == 10.192499999
     assert retry_after_of(RuntimeError("try again in 592.5ms")) == 0.5925
+    # A tokens-per-day limit says minutes; the link should rest that long, not be asked again.
+    assert retry_after_of(RuntimeError("Please try again in 8m55.5s.")) == 535.5
+    assert retry_after_of(RuntimeError("retry in 1h2m3s")) == 3723.0
     assert retry_after_of(RuntimeError("503 UNAVAILABLE")) is None
 
     class Limited:

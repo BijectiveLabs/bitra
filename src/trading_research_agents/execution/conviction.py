@@ -227,8 +227,9 @@ def score_of(
         parts.append(("validators", str(rule.validator_weight * (support - opposition))))
 
     full = [(role, str(weight)) for role, weight in sorted(rule.weights.items())]
-    if rule.validator_weight > 0 and votes:
-        full.append(("validators", str(rule.validator_weight * len(votes))))
+    if rule.validator_weight > 0 and support + opposition:
+        # What the votes that said something could have moved; a silent vote weighs nothing.
+        full.append(("validators", str(rule.validator_weight * (support + opposition))))
     if possible <= 0:
         return Score(score=Decimal(0), raw=raw, possible=Decimal(0), weights=tuple(full))
     share = max(raw, Decimal(0)) / possible

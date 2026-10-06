@@ -838,6 +838,10 @@ def cycle_view(record: Mapping[str, Any]) -> Group:
         head.append(("refused", Text(str(refusal), style="yellow")))
     if record.get("stopped_by"):
         head.append(("stopped by", Text(str(record["stopped_by"]), style="yellow")))
+    skipped = _not_reached(record)
+    if skipped:
+        # A panel that is missing reads as a panel that broke; say the cycle ended before it.
+        head.append(("not reached", Text(skipped, style="dim")))
     parts.append(Panel(_kv(head), title="cycle", box=box.ROUNDED, expand=False))
 
     if data.get("values"):
@@ -1008,6 +1012,30 @@ def cycle_view(record: Mapping[str, Any]) -> Group:
             who.add_row(role, Text(f"not asked: {said}", style="yellow"), "")
         parts.append(who)
     return Group(*parts)
+
+
+# The steps after the analysts, in the order a cycle runs them, by the record key each one fills.
+LATER_STEPS = (
+    ("cost", "cost"),
+    ("conviction", "conviction"),
+    ("risk", "risk per trade"),
+    ("desk", "desk"),
+    ("targets", "targets"),
+    ("intent", "intent"),
+)
+
+
+def _not_reached(record: Mapping[str, Any]) -> str:
+    """The steps a cycle that ended early never got to, and where it ended."""
+    if record.get("intent") or record.get("held") or not record.get("analyst"):
+        return ""
+    present = [i for i, (key, _) in enumerate(LATER_STEPS) if record.get(key)]
+    last = present[-1] if present else -1
+    missing = [label for key, label in LATER_STEPS[last + 1 :]]
+    if not missing:
+        return ""
+    ended = str(record.get("stopped_by") or (record.get("refusals") or ["a refusal"])[-1])
+    return f"{', '.join(missing)}; the cycle ended at {ended.partition(':')[0]}"
 
 
 def _exit_rows(exits: dict[str, Any]) -> list[tuple[str, Any]]:

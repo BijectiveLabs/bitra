@@ -546,6 +546,14 @@ All notable changes to this project are recorded here. The format follows
 
 ### Fixed
 
+- Conviction counted every validator verdict, so a pro that supported and a contra that opposed,
+  as they do by assignment, added weight to the denominator and diluted every score (measured: 13
+  of 13 cycles in a session fell below the floor; with the fix, the five that neutral supported
+  clear it). A vote now counts for what it says beyond its stance.
+- A retry-after written in minutes or hours ("try again in 8m55s", a tokens-per-day limit) was not
+  read, so the spent link was asked again every cycle instead of resting.
+- The cycle panel says which steps a cycle never reached and where it ended, so a missing risk or
+  targets panel no longer looks like a broken one.
 - `[controls].max_position` counts units, so on a desk that discovers coins priced in cents it
   capped a 400 USDT order at a few cents' worth. `[controls].max_position_quote` caps every
   instrument in quote currency at its own mid, and discovery requires it; the unit cap still holds

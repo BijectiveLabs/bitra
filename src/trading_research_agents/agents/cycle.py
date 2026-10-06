@@ -818,7 +818,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
                     if isinstance(said.get("declared_state"), Mapping)
                 },
                 confidence=analyst.confidence,
-                votes=_votes(result),
+                votes=_informative_votes(result),
             ),
             base_size=base,
             price=costs.cost.mid,
@@ -1346,6 +1346,28 @@ def _votes(result: CycleResult) -> tuple[str, ...]:
     for role, said in sorted(result.context.items()):
         if role.startswith("validator") and isinstance(said.get("verdict"), str):
             out.append(str(said["verdict"]))
+    return tuple(out)
+
+
+# What a stance's verdict tells conviction. Pro argues for and contra against by assignment, so
+# their expected verdict carries no information (measured on the demo desk: pro supported 36 of 37,
+# contra opposed 34 of 35) and only adds weight that dilutes every score. A stance that cannot make
+# its own case is the signal. Neutral counts as it votes.
+STANCE_SIGNAL: dict[str, dict[str, str]] = {
+    "pro": {"support": "abstain", "abstain": "oppose", "oppose": "oppose"},
+    "contra": {"oppose": "abstain", "abstain": "support", "support": "support"},
+}
+
+
+def _informative_votes(result: CycleResult) -> tuple[str, ...]:
+    """The validators' verdicts as conviction weighs them: what each one says beyond its stance."""
+    out = []
+    for role, said in sorted(result.context.items()):
+        verdict = said.get("verdict") if role.startswith("validator") else None
+        if not isinstance(verdict, str):
+            continue
+        stance = role.partition("_")[2]
+        out.append(STANCE_SIGNAL.get(stance, {}).get(verdict, verdict))
     return tuple(out)
 
 

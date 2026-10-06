@@ -32,7 +32,13 @@ class ProviderError(RuntimeError):
         return made
 
 
-RETRY_IN = re.compile(r"(?:try again|retry) in ([0-9]+(?:\.[0-9]+)?)\s*(ms|s)\b", re.IGNORECASE)
+# "try again in 10.19s", "in 592.5ms", and the hours-and-minutes form a daily limit uses,
+# "in 8m55.68s" or "in 1h2m3s" (seen 2026-10-06 on a tokens-per-day limit).
+RETRY_IN = re.compile(
+    r"(?:try again|retry) in ((?:[0-9]+(?:\.[0-9]+)?(?:h|ms|m|s))+)", re.IGNORECASE
+)
+PART = re.compile(r"([0-9]+(?:\.[0-9]+)?)(h|ms|m|s)", re.IGNORECASE)
+UNIT_S = {"h": 3600.0, "m": 60.0, "s": 1.0, "ms": 0.001}
 
 
 def retry_after_of(exc: BaseException) -> float | None:
@@ -49,8 +55,7 @@ def retry_after_of(exc: BaseException) -> float | None:
     found = RETRY_IN.search(str(exc))
     if found is None:
         return None
-    value = float(found.group(1))
-    return value / 1000 if found.group(2).lower() == "ms" else value
+    return sum(float(n) * UNIT_S[unit.lower()] for n, unit in PART.findall(found.group(1)))
 
 
 CREDENTIAL_NAMES = ("_API_KEY", "_KEY", "_SECRET", "_TOKEN", "_PASSPHRASE", "_PASSWORD")
