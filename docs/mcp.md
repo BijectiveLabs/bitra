@@ -2,8 +2,9 @@
 
 Agents are a surface. The language-model roles inside the package call the gates at layers 0,
 2 and 3; the MCP server lets any agent host outside the package call the gates too. It reads.
-It does not trade, promote a tier, or write a ledger row, and it never will: capital is
-governed by code that is tested and fails closed, not by a tool a model can call.
+It does not trade, promote a tier, or write a ledger row. That is a guarantee, not a gap: capital
+is governed by code that is tested and fails closed, not by a tool a model can call. Read tools are
+open to contributions.
 
 ```
 pip install 'trading-research-agents[mcp]'

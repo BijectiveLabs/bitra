@@ -2683,6 +2683,8 @@ def _discovered_universe(cfg: Any) -> tuple[Any, dict[str, Any] | None, list[str
         crypto_only=universe.crypto_only,
         exclude=universe.exclude,
         leverage=cfg.execution.leverage,
+        type_field=universe.type_field,
+        exclude_types=universe.exclude_types,
     )
     try:
         client = _DISCOVERY_CLIENTS.get(venue)

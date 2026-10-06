@@ -109,6 +109,9 @@ max_spread_bps = 5               # the book now, from the venue's ticker
 min_listed_days = 30             # nothing listed this month
 crypto_only = true               # leave out stocks, ETFs, commodities and currencies
 exclude = []                     # instruments never to take
+quote = "USDT"                   # the settlement currency to look in
+# type_field = "symbolType"      # the venue's own market field that says what a market is,
+# exclude_types = ["stock", "etf", "commodity", "forex"]   # and the values to leave out
 max_per_cycle = 1                # how many one pass runs a full cycle on
 max_intents_per_day = 6          # across every instrument, not per one
 screener = true                  # the screener chooses and orders; without it, code's order
@@ -116,8 +119,11 @@ screener = true                  # the screener chooses and orders; without it, 
 
 **Discovery (code, every pass).** One market list and one ticker call cover every linear perpetual
 the venue lists in `quote` (USDT by default). Code removes what cannot be traded: too little
-volume, a book wider than `max_spread_bps`, listed too recently, not crypto (where the venue marks
-it; Bybit does, and `exclude` covers any other), or a maximum leverage below `[execution].leverage`.
+volume, a book wider than `max_spread_bps`, listed too recently, not crypto, or a maximum leverage
+below `[execution].leverage`. Bybit marks its stock, ETF, commodity and currency perpetuals, and
+that is the default there; for any other venue, `type_field` and `exclude_types` name the venue's
+own field and the values to leave out, and `exclude` takes out single instruments. Every one of
+these is yours to set: the defaults are a starting point, not the screen.
 The most traded `top` join the declared instruments. Each discovered instrument carries the venue's
 own symbol and size step, so an order is never sent under the wrong market or off the step.
 Discovery needs `[run].size_quote`: one base size across coins priced from cents to tens of

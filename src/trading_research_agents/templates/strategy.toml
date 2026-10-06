@@ -284,6 +284,9 @@ kill_switch = "KILL"               # touch this file to flatten and stop
 # min_listed_days = 30
 # crypto_only = true
 # exclude = []
+# quote = "USDT"
+# type_field = "symbolType"        # another venue: its own field for what a market is,
+# exclude_types = ["stock", "etf", "commodity", "forex"]   # and the values to leave out
 
 [data]
 max_gap = "5m"                     # the longest silence the audit accepts for this instrument

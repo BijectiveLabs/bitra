@@ -571,6 +571,8 @@ UNIVERSE_KEYS = (
     "crypto_only",
     "exclude",
     "quote",
+    "type_field",
+    "exclude_types",
 )
 DESK_KEYS = ("max_open_risk_bps", "max_open_positions", "correlation_above")
 
@@ -857,6 +859,8 @@ def _universe(raw: dict[str, Any]) -> Universe:
             crypto_only=flags["crypto_only"],
             exclude=tuple(n.strip().upper() for n in excluded),
             quote=str(table.get("quote", "USDT")).upper(),
+            type_field=str(table.get("type_field", "")).strip(),
+            exclude_types=_universe_names(table, "exclude_types"),
         )
     except UniverseError as exc:
         raise ConfigError(str(exc)) from exc
@@ -940,6 +944,13 @@ def _context_intervals(raw: Any, decision_s: int) -> tuple[int, ...]:
         # Each one is a venue call and a section of the brief on every cycle.
         raise ConfigError(f"[run].context_intervals takes at most {MAX_CONTEXT_INTERVALS}")
     return tuple(sorted(out))
+
+
+def _universe_names(table: dict[str, Any], key: str) -> tuple[str, ...]:
+    value = table.get(key) or []
+    if not isinstance(value, list) or not all(isinstance(n, str) for n in value):
+        raise ConfigError(f"[universe].{key} is a list of names")
+    return tuple(n.strip() for n in value)
 
 
 def _regime(raw: dict[str, Any]) -> RegimeRule:

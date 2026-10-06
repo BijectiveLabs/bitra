@@ -89,8 +89,9 @@ the cycle refuses rather than sending somewhere close.
 
 `tra keys --probe` checks both paths by name, and says which is which.
 
-## What is not here
+## Not built yet
 
-In `tra live`: limit orders and maker channels (venue mode in `tra run` has both), the private WebSocket for execution reports, a second live
-venue, and production. Each is a deliberate omission recorded in the changelog; none is a
-missing line of code.
+In `tra live`: limit orders and maker channels (venue mode in `tra run` has both), the private
+websocket for execution reports, and a second live venue. Each is open to a contribution that keeps
+the guarantees in `docs/boundaries.md`. A production tier is not offered, and that one is a
+guarantee rather than a gap: the ladder stops at canary.

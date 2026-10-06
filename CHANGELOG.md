@@ -77,6 +77,14 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- `[universe].type_field` and `exclude_types` set which market types discovery leaves out on any
+  venue (Bybit's `symbolType` is the default there), and `quote` the settlement currency; every
+  part of the code side of the screen is now the client's to configure.
+- `docs/boundaries.md` now separates guarantees (enforced by code and tests, kept by every change)
+  from what is not built yet (spot and other market types, DEX execution, more than one account,
+  transfers, routing, portfolio accounting), with what a contribution in each area would need; the
+  README and `CONTRIBUTING.md` say the same. Before, the scope read as a list of things the project
+  refused.
 - **Discovery and a screener that chooses.** `[universe].discover` adds the venue's most traded
   linear perpetuals each pass (one market list and one ticker call), filtered by code for volume,
   spread, listing age, crypto only and the desk's leverage; each carries the venue's own symbol and

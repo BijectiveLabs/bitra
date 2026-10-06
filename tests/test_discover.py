@@ -123,3 +123,24 @@ def test_the_universe_declares_discovery_and_needs_a_quote_size() -> None:
     assert not universe.idle and universe.quote == "USDT"
     passed = universe.with_instruments(("BTCUSDT", "ZECUSDT"))
     assert passed.instruments == ("BTCUSDT", "ZECUSDT") and not passed.discover
+
+
+def test_any_venue_can_say_which_market_types_to_leave_out() -> None:
+    markets = {
+        "BTC/USDT:USDT": market("BTCUSDT", info={"kind": "crypto"}),
+        "TSLA/USDT:USDT": market("TSLAUSDT", info={"kind": "Equity"}),
+    }
+    tickers = {s: ticker(5e8) for s in markets}
+    venue = Venue(markets, tickers)
+    # A venue with no default keeps both until the operator says what its field means.
+    assert len(discover(venue, "othervenue", Rules(), clock=lambda: NOW_S).listed) == 2
+    told = Rules(type_field="kind", exclude_types=("equity",))
+    found = discover(venue, "othervenue", told, clock=lambda: NOW_S)
+    assert [x.instrument for x in found.listed] == ["BTCUSDT"]
+    assert found.dropped == {"not crypto": 1}
+    # Turning crypto_only off on Bybit lets its stock perpetuals through.
+    bybit = Venue(
+        {"SOXL/USDT:USDT": market("SOXLUSDT", info={"symbolType": "ETF"})},
+        {"SOXL/USDT:USDT": ticker(5e8)},
+    )
+    assert discover(bybit, "bybit", Rules(crypto_only=False), clock=lambda: NOW_S).listed

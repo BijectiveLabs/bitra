@@ -29,7 +29,7 @@ a venue's practice environment behind a mandate you sign, and two auditors that 
 - [Your money, your orders, your positions](#your-money-your-orders-your-positions)
 - [The console, and watching a desk](#the-console-and-watching-a-desk)
 - [Command line](#command-line)
-- [Where this software stops](#where-this-software-stops)
+- [What it guarantees, and what is not built yet](#what-it-guarantees-and-what-is-not-built-yet)
 - [Documentation](#documentation)
 
 ## What it solves
@@ -286,8 +286,9 @@ your own is about thirty lines (`docs/providers.md`).
 
 What it trades: **linear perpetual futures** (USDT- or USDC-margined swaps) on any venue ccxt
 reaches, long and short, with the leverage and margin mode you declare. Spot, dated futures,
-inverse contracts and options are not traded; venue mode checks the market type on every order and
-refuses anything that is not a linear perpetual.
+inverse contracts and options are not built yet; until they are, venue mode checks the market type
+on every order and refuses anything that is not a linear perpetual. `docs/boundaries.md` says what
+adding one would take.
 
 You can stop at any of these steps. Each is one command, and each was run end to end before this
 README was written.
@@ -427,17 +428,23 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | `tra agent session`, `eval`, `trace` | the research session, model comparison, a run read back |
 | `tra mcp serve` | the read-only gates as tools for any MCP host |
 
-## Where this software stops
+## What it guarantees, and what is not built yet
 
-These are decisions, not gaps, and `docs/boundaries.md` gives the reason for each and what to do
-instead:
+Some rules are guarantees, enforced by code and tests, and every change has to keep them:
 
-- **No strategy ships.** The example cores are examples; your edge is yours to declare.
-- **One order per decision.** No retries, no execution algorithms, no portfolio across venues.
-- **No account or treasury operations.** No transfers, no withdrawals.
-- **No DEX execution.** A chain can be priced, not traded.
+- **No model touches an order or a key.** Models read figures and answer; code sizes, prices,
+  limits and sends.
 - **No model can loosen a control.** A model can tighten a limit, step the ladder down or arm the
-  kill switch. It can never widen a limit, promote the ladder or disarm the switch.
+  kill switch; never widen, promote or disarm.
+- **One decision, at most one order.** A venue error is recorded and the next cycle decides again;
+  nothing is retried around real capital.
+- **Stale or missing data is refused,** never read as zero or as current.
+
+Other things are simply not built yet, and contributions are welcome: spot, inverse, dated futures
+and options; decentralised venues; more than one account; transfers and treasury; routing and
+execution algorithms; portfolio accounting. `docs/boundaries.md` lists each one with what it does
+today and what a contribution would need. The example strategy cores are examples: your edge is
+yours to declare.
 
 `docs/liability.md` says plainly where responsibility sits when real capital is involved.
 
@@ -453,7 +460,7 @@ instead:
 | `docs/llm.md`, `docs/providers.md` | how models are used: fallback, spend, adding a provider |
 | `docs/live.md`, `docs/trading.md` | the ladder from replay to a live session |
 | `docs/data.md` | the data gate, and bringing your own data |
-| `docs/boundaries.md`, `docs/liability.md` | where the software stops, and who is responsible |
+| `docs/boundaries.md`, `docs/liability.md` | what is guaranteed, what is not built yet, and who is responsible |
 | `docs/agent.md`, `docs/mcp.md` | the research agent, and the MCP server |
 | `docs/architecture.md` | packages, import rules, file formats |
 | `docs/chain.md`, `docs/execution.md`, `docs/ledger.md` | the research chain, execution realism, verdicts |

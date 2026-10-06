@@ -21,8 +21,8 @@ DAY_MS = 86_400_000
 TICK_SIZE = 4
 
 # Venues that list stocks, ETFs, commodities and currencies as perpetuals say so in their own market
-# fields. Each entry names the field and the values that are not crypto. A venue missing here is
-# filtered by [universe].exclude alone, and `tra universe` shows what came through.
+# fields. Each entry names the field and the values that are not crypto, and is only the default:
+# [universe].type_field and exclude_types set or replace it for any venue.
 NON_CRYPTO: dict[str, tuple[str, frozenset[str]]] = {
     "bybit": ("symbolType", frozenset({"stock", "etf", "commodity", "forex"})),
 }
@@ -44,6 +44,16 @@ class Rules:
     crypto_only: bool = True
     exclude: tuple[str, ...] = ()
     leverage: Decimal | None = None
+    # The venue's own field that says what a market is, and the values to leave out. Empty means
+    # the venue's default from NON_CRYPTO, if it has one.
+    type_field: str = ""
+    exclude_types: tuple[str, ...] = ()
+
+    def types_for(self, venue: str) -> tuple[str, frozenset[str]] | None:
+        """The field and values that mark a market as not to be traded on this venue."""
+        if self.type_field:
+            return self.type_field, frozenset(t.lower() for t in self.exclude_types)
+        return NON_CRYPTO.get(venue) if self.crypto_only else None
 
 
 @dataclass(frozen=True)
@@ -140,11 +150,12 @@ def _unfit(
     """Why a market cannot be traded, or the figures it passed on."""
     if instrument.upper() in excluded:
         return "excluded by the operator"
-    if rules.crypto_only and venue in NON_CRYPTO:
-        field_name, values = NON_CRYPTO[venue]
+    marked = rules.types_for(venue)
+    if marked is not None:
+        field_name, values = marked
         kind = str((market.get("info") or {}).get(field_name) or "").lower()
         if kind in values:
-            return "not crypto"
+            return "not crypto" if rules.crypto_only else f"{field_name} is {kind}"
     volume = _dec(ticker.get("quoteVolume"))
     if volume is None or volume < rules.min_quote_volume:
         return "too little volume"

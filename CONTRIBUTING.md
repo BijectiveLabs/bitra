@@ -59,6 +59,14 @@ imports a vendor SDK. A test checks that too.
 
 **English, professional register.** Identifiers, docstrings, docs and commit messages.
 
+## Extending what it can do
+
+Spot and other market types, decentralised venues, more than one account, routing and execution
+algorithms, portfolio accounting: `docs/boundaries.md` lists each under "not built yet", with what
+it does today and what a contribution would need. Open an issue first with the design, so the shape
+is agreed before the code. A contribution may add any of them; it may not weaken a guarantee on the
+same page to get there, and the tests that hold those guarantees must keep passing unchanged.
+
 ## Adding a gate
 
 A gate is a function from evidence to a verdict from the closed vocabulary. Before writing it:

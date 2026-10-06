@@ -47,6 +47,10 @@ class Universe:
     exclude: tuple[str, ...] = ()
     # The settlement currency of the perpetuals discovery considers.
     quote: str = "USDT"
+    # The venue's own market field that says what a market is, and which values to leave out; for a
+    # venue the package has no default for, or to change the default.
+    type_field: str = ""
+    exclude_types: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if len(set(self.instruments)) != len(self.instruments):
@@ -83,6 +87,8 @@ class Universe:
             "crypto_only": self.crypto_only,
             "exclude": list(self.exclude),
             "quote": self.quote,
+            "type_field": self.type_field,
+            "exclude_types": list(self.exclude_types),
         }
 
     def with_instruments(self, names: tuple[str, ...]) -> Universe:
