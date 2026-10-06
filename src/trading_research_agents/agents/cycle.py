@@ -376,6 +376,27 @@ def _ask(
     return done.text
 
 
+def _ask_readable(
+    cfg: CycleConfig,
+    role: str,
+    question: Mapping[str, Any],
+    schema: Mapping[str, Any],
+    parse: Callable[[str], Any],
+) -> str:
+    """Ask, and ask once more when the answer does not fit its schema.
+
+    A malformed answer is a failed call, not a verdict, and with on_missing_validator at refuse one
+    of them stops a trade (seen 2026-10-06: a validator's JSON came back with its fields out of
+    place). One more call is cheaper than a lost cycle; a second malformed answer is left to fail.
+    """
+    text = _ask(cfg, role, question, schema)
+    try:
+        parse(text)
+    except (RoleError, ValueError):
+        return _ask(cfg, role, question, schema)
+    return text
+
+
 def run_cycle(cfg: CycleConfig) -> CycleResult:
     """Take one snapshot, ask the agents, price the trade, and write the cycle down."""
     cycle = cycle_id(cfg.clock(), cfg.instrument)
@@ -545,7 +566,13 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
             work=timed(
                 cfg.watch,
                 "technical",
-                lambda: _ask(cfg, technical_analyst.ROLE, asked, technical_analyst.SCHEMA),
+                lambda: _ask_readable(
+                    cfg,
+                    technical_analyst.ROLE,
+                    asked,
+                    technical_analyst.SCHEMA,
+                    technical_analyst.parse,
+                ),
             ),
             path=where.answer("technical"),
         )
@@ -1069,7 +1096,7 @@ def _reading_brief(
 
 def _reading_task(cfg: CycleConfig, module: Any, brief: dict[str, Any]) -> Callable[[], str]:
     def ask() -> str:
-        return _ask(cfg, module.ROLE, brief, module.SCHEMA)
+        return _ask_readable(cfg, module.ROLE, brief, module.SCHEMA, module.parse)
 
     return ask
 
@@ -1222,7 +1249,7 @@ def _run_validators(
 
 def _validator_task(cfg: CycleConfig, brief: Mapping[str, Any]) -> Callable[[], str]:
     def ask() -> str:
-        return _ask(cfg, validator.ROLE, brief, validator.SCHEMA)
+        return _ask_readable(cfg, validator.ROLE, brief, validator.SCHEMA, validator.parse)
 
     return ask
 

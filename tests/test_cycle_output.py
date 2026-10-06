@@ -110,3 +110,52 @@ def test_each_conviction_voice_says_which_way_it_pulled() -> None:
     text = shown(cycle_view(record))
     assert "+0.465 of 1.0, for the trade" in text
     assert "-0.186 of 0.5, against it" in text
+
+
+def test_a_malformed_answer_is_asked_for_once_more() -> None:
+    from types import SimpleNamespace
+
+    from trading_research_agents.agents import validator
+    from trading_research_agents.agents.cycle import _ask_readable
+    from trading_research_agents.llm.completer import FakeCompleter
+
+    good = {"stance": "contra", "claims": [], "verdict": "abstain", "reason": "nothing settles it"}
+    fake = FakeCompleter(['{"stance": "contra", "claims": [], "reason", ":"}', good])
+    cfg = SimpleNamespace(completer_for=lambda role: fake)
+    text = _ask_readable(cfg, validator.ROLE, {}, validator.SCHEMA, validator.parse)  # type: ignore[arg-type]
+    assert validator.parse(text).verdict == "abstain" and len(fake.calls) == 2
+
+
+def test_a_server_that_cannot_enforce_a_schema_falls_back_to_json_mode() -> None:
+    from types import SimpleNamespace
+
+    from trading_research_agents.llm.providers.openai import OpenAICompleter
+
+    sent: list[dict[str, Any]] = []
+
+    def create(**body: Any) -> Any:
+        sent.append(body)
+        if body["response_format"]["type"] == "json_schema":
+            raise RuntimeError("Error code: 400 - response_format json_schema is not supported")
+        message = SimpleNamespace(content='{"ok": true}', refusal=None)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=message)],
+            model="m",
+            usage=SimpleNamespace(prompt_tokens=1, completion_tokens=1),
+        )
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    completer = OpenAICompleter("m", client=client, key_env=None)
+    assert (
+        completer.complete(system="s", user="u", schema={"type": "object"}).text == '{"ok": true}'
+    )
+    assert [b["response_format"]["type"] for b in sent] == ["json_schema", "json_object"]
+    assert completer.structured == "json_object"
+
+
+def test_an_answer_that_came_back_unreadable_is_not_shown_as_ok() -> None:
+    record = {
+        "agents": {"agents": [{"agent": "validator_contra", "ok": True, "seconds": 15.6}]},
+        "context": {"validator_contra": {"stance": "contra", "error": "lacks verdict"}},
+    }
+    assert "unreadable" in shown(cycle_view(record))

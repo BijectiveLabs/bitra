@@ -994,9 +994,14 @@ def cycle_view(record: Mapping[str, Any]) -> Group:
         for name in ("agent", "state", "seconds"):
             who.add_column(name)
         rounds = [*agents["agents"], *((record.get("validators") or {}).get("agents") or [])]
+        said = record.get("context") or {}
         for row in rounds:
             state = "reused" if row.get("reused") else ("ok" if row.get("ok") else "failed")
-            style = {"ok": "green", "failed": "red", "reused": "dim"}[state]
+            answer = said.get(str(row.get("agent")))
+            if state == "ok" and isinstance(answer, Mapping) and answer.get("error"):
+                # The call came back, and what came back could not be read as an answer.
+                state = "unreadable"
+            style = {"ok": "green", "failed": "red", "reused": "dim", "unreadable": "red"}[state]
             who.add_row(str(row.get("agent")), Text(state, style=style), str(row.get("seconds")))
         for role, why in sorted((record.get("not_asked") or {}).items()):
             said = str(why).removeprefix(role + ": ")

@@ -118,6 +118,11 @@ class OpenAICompleter:
                 **self.request(system=system, user=user, schema=schema)
             )
         except Exception as exc:
+            if self.structured == "json_schema" and _refuses_schema(exc):
+                # A server or a model that cannot enforce a schema says so; JSON mode with the
+                # schema in the prompt is what it can do, and the caller still validates.
+                self.structured = "json_object"
+                return self.complete(system=system, user=user, schema=schema)
             # A connection drop or a vendor-side error is a failed call, never a crash.
             raise ProviderError.from_vendor(exc) from exc
         choice = response.choices[0]
@@ -135,3 +140,12 @@ class OpenAICompleter:
             input_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
             output_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
         )
+
+
+def _refuses_schema(exc: Exception) -> bool:
+    """A 400 about the structured-output request itself, not about the call in general."""
+    said = str(exc).lower()
+    status = getattr(exc, "status_code", None)
+    return (status in (None, 400, 422)) and any(
+        word in said for word in ("response_format", "json_schema", "structured output")
+    )

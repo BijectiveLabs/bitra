@@ -12,7 +12,8 @@ else:
   window_move_bps     the price move across the recent window of bars
   zscore              the last close against the window, in standard deviations
   trend_strength      net move over the path walked; near 1 is a random walk, 2 and above a trend
-  regime              trending up, trending down, ranging or mixed, from trend_strength
+  regime              trending up, trending down, ranging or mixed, from trend_strength; take it as
+                      given rather than reading your own trend into trend_strength
   volume_ratio        the last bar's volume against the window's average
   position_in_range   where the close sits between the window's low (0) and high (1)
   quote_volume_24h    what traded in the last 24 hours, in quote currency

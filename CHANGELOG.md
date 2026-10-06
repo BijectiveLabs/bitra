@@ -539,6 +539,13 @@ All notable changes to this project are recorded here. The format follows
 
 ### Fixed
 
+- A model answer that does not fit its schema is asked for once more before it counts as missing;
+  seen live, one validator's malformed JSON refused a whole trade under `on_missing_validator =
+  "refuse"`. Groq now gets an enforced JSON schema (checked on `openai/gpt-oss-120b` for every role),
+  and any OpenAI-compatible server that cannot enforce one falls back to JSON mode by itself. The
+  agents table marks an answer that came back unreadable instead of showing it as ok.
+- Validators and the screener are told that `ret_*_bps` and `window_move_bps` are moves already
+  made, not forecasts, and that a `trend_strength` below 2 is not a trend; both were misread live.
 - The technical brief's window move was named `net_bps`, and validators read it as the trade's net
   return (seen live: "a modest net return (22.07 bps) below the claimed edge"). It is now
   `window_move_bps`.

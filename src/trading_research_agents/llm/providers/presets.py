@@ -31,7 +31,9 @@ PRESETS: dict[str, Preset] = {
     for p in (
         Preset("openai", None, "OPENAI_API_KEY", "json_schema", "the SDK's own default endpoint"),
         Preset("deepseek", "https://api.deepseek.com", "DEEPSEEK_API_KEY", "json_object", ""),
-        Preset("groq", "https://api.groq.com/openai/v1", "GROQ_API_KEY", "json_object", ""),
+        # Enforced schemas on the models that support them (checked on openai/gpt-oss-120b,
+        # 2026-10-06, after a JSON-mode answer came back malformed); others fall back to JSON mode.
+        Preset("groq", "https://api.groq.com/openai/v1", "GROQ_API_KEY", "json_schema", ""),
         Preset("xai", "https://api.x.ai/v1", "XAI_API_KEY", "json_object", ""),
         Preset("mistral", "https://api.mistral.ai/v1", "MISTRAL_API_KEY", "json_schema", ""),
         Preset(

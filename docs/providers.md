@@ -10,7 +10,7 @@ vendor that speaks the OpenAI chat API.
 | `google` | `[google]` | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | the SDK's | JSON schema |
 | `openai` | `[openai]` | `OPENAI_API_KEY` | the SDK's | strict JSON schema |
 | `deepseek` | `[openai]` | `DEEPSEEK_API_KEY` | `https://api.deepseek.com` | JSON mode |
-| `groq` | `[openai]` | `GROQ_API_KEY` | `https://api.groq.com/openai/v1` | JSON mode |
+| `groq` | `[openai]` | `GROQ_API_KEY` | `https://api.groq.com/openai/v1` | enforced schema; JSON mode where a model cannot |
 | `xai` | `[openai]` | `XAI_API_KEY` | `https://api.x.ai/v1` | JSON mode |
 | `mistral` | `[openai]` | `MISTRAL_API_KEY` | `https://api.mistral.ai/v1` | JSON schema |
 | `openrouter` | `[openai]` | `OPENROUTER_API_KEY` | `https://openrouter.ai/api/v1` | JSON mode |
