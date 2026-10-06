@@ -184,13 +184,9 @@ def test_the_console_clears_the_screen_before_it_draws_the_cockpit(
     console, _, _ = build()
     steps: list[str] = []
 
-    class Screen:
-        def clear(self) -> None:
-            steps.append("clear")
-
     class Ui:
-        def console(self) -> Screen:
-            return Screen()
+        def take_screen(self) -> None:
+            steps.append("clear")
 
     monkeypatch.setattr(shell.Console, "ui", lambda self: Ui())
     console.cockpit = lambda: steps.append("cockpit")
@@ -198,3 +194,19 @@ def test_the_console_clears_the_screen_before_it_draws_the_cockpit(
     monkeypatch.setattr(shell.Console, "rule", lambda self: None)
     console.loop()
     assert steps[:2] == ["clear", "cockpit"]
+
+
+def test_taking_the_screen_erases_the_scrollback_and_leaves_a_pipe_alone() -> None:
+    import io
+
+    from trading_research_agents.cli import tui
+
+    class Terminal(io.StringIO):
+        def isatty(self) -> bool:
+            return True
+
+    screen = Terminal()
+    assert tui.take_screen(screen) is True
+    assert screen.getvalue() == "\x1b[3J\x1b[2J\x1b[H"
+    pipe = io.StringIO()
+    assert tui.take_screen(pipe) is False and pipe.getvalue() == ""

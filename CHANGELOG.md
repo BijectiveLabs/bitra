@@ -82,8 +82,9 @@ All notable changes to this project are recorded here. The format follows
 - `tra check` flags validators that are asked every cycle while neither `[confluence]` nor
   `[conviction].validator_weight` counts their votes; docs say how each stance's vote is used and
   that no stance, neutral included, decides.
-- The console clears the screen before it draws the cockpit; the shell's earlier output stays in
-  the scrollback.
+- The console takes the whole terminal when it opens, as `cls` or `clear` would (screen and
+  scrollback), and turns on escape sequences on the classic Windows console first; the shell's
+  earlier output no longer sits above the cockpit.
 - The macro template lists daily series that reach crypto (dollar, real and nominal yields, VIX).
 - Two free on-chain feeds for `fetch`: `coinmetrics` (Coin Metrics community API; `minus` turns
   exchange inflow less outflow into one net-flow series) and `blockchain.info` (Blockchain.com

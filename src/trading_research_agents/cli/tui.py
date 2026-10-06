@@ -67,6 +67,39 @@ def console(safe: bool = False) -> Console:
     return _console
 
 
+# Erase the scrollback, erase the screen, cursor home: what `cls` and `clear` do. Erasing the
+# screen alone leaves the shell's earlier lines one scroll away, which reads as not taking over.
+TAKE_SCREEN = "\x1b[3J\x1b[2J\x1b[H"
+VT_PROCESSING = 0x0004
+STD_OUTPUT = -11
+
+
+def take_screen(stream: Any = None) -> bool:
+    """Give the whole terminal to the console, the way a full-screen program starts.
+
+    Returns whether it did; a pipe or a file is left alone.
+    """
+    out = stream or sys.stdout
+    if not getattr(out, "isatty", lambda: False)():
+        return False
+    if os.name == "nt":
+        _virtual_terminal()
+    out.write(TAKE_SCREEN)
+    out.flush()
+    return True
+
+
+def _virtual_terminal() -> None:
+    """Escape sequences on the classic Windows console are text until this mode is on."""
+    import ctypes
+
+    kernel = getattr(ctypes, "windll").kernel32  # noqa: B009 - absent off Windows
+    handle = kernel.GetStdHandle(STD_OUTPUT)
+    mode = ctypes.c_ulong()
+    if kernel.GetConsoleMode(handle, ctypes.byref(mode)):
+        kernel.SetConsoleMode(handle, mode.value | VT_PROCESSING)
+
+
 def enabled(plain: bool = False, as_json: bool = False) -> bool:
     """Whether a person is watching: a terminal, no --plain, no TRA_PLAIN, no --json."""
     if plain or as_json or os.environ.get("TRA_PLAIN"):

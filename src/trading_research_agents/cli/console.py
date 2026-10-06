@@ -96,7 +96,7 @@ class Console:
             self.help()
             return CLEARED
         if text in CLEAR:
-            self.ui().console().clear()
+            self.ui().take_screen()
             self.cockpit()
             return CLEARED
         try:
@@ -133,9 +133,9 @@ class Console:
 
     def loop(self) -> int:
         """Open on the cockpit, then take commands until the operator leaves."""
-        # The console owns the screen from its first line; what the shell showed before stays in
-        # the scrollback, above, rather than on top of the cockpit.
-        self.ui().console().clear()
+        # The console owns the terminal from its first line, as a full-screen program does; the
+        # shell's earlier output would otherwise sit above the cockpit, or one scroll away.
+        self.ui().take_screen()
         self.cockpit()
         self.say('commands run here. "help" lists them, "exit" leaves.')
         read = self.read or (lambda: input(PROMPT))
