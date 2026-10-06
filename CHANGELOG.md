@@ -77,6 +77,11 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- The targets panel reads the trade as a trader would: each exit as a price, the move in price and
+  what it does to the position (a short's take profit is a fall in price and a gain), reward to
+  risk as a ratio, the expected edge with where it came from, the round trip, what is left after
+  cost against the multiple the desk asks for, model spend with any unpriced calls named, and
+  trades today before this one. Unasked analysts carry their reason in the agents table.
 - Venue mode checks the market type on every order and refuses anything that is not a linear
   perpetual (spot, dated futures, inverse contracts, options), and the README says what is traded.
 - `tra check` flags validators that are asked every cycle while neither `[confluence]` nor

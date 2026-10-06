@@ -351,6 +351,9 @@ class CycleResult:
             # Reading analysts this cycle did not ask, and why.
             "not_asked": self.briefs.get("not_asked"),
             "exits": self.exits or None,
+            # What the models cost this cycle, and which calls had no declared price.
+            "spend": self.briefs.get("spend"),
+            "targets_rule": self.briefs.get("targets_rule"),
             "trigger": None if self.wake is None else self.wake.record(),
             "held": self.held,
             "mode": self.briefs.get("mode"),
@@ -374,6 +377,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
     cycle = cycle_id(cfg.clock(), cfg.instrument)
     where = CycleDir(root=cfg.root, cycle=cycle).make()
     spent_before = cfg.usage.cost
+    calls_before = len(cfg.usage.records)
     kinds = list(cfg.chains)
     announce(cfg.watch, "data", RUNNING, f"{len(kinds)} kind(s)")
     # What the operator declared per kind in data.toml, then the window this cycle needs. A venue
@@ -817,7 +821,13 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         return result
 
     spent = cfg.carried_spend + (cfg.usage.cost - spent_before)
+    calls = cfg.usage.records[calls_before:]
+    result.briefs["spend"] = {
+        "calls": len(calls),
+        "unpriced": sorted({f"{c.provider}:{c.model}" for c in calls if c.cost is None}),
+    }
     if not cfg.targets.idle:
+        result.briefs["targets_rule"] = cfg.targets.record()
         met = within_targets(
             cfg.targets,
             net_bps=verdict.net_bps,
@@ -1272,8 +1282,11 @@ def _exit_view(mid: Decimal, target: str, exits: Mapping[str, str]) -> dict[str,
         price = exits.get(f"{name}_price")
         if price is None or mid <= 0:
             continue
+        moved = ((Decimal(price) / mid - 1) * 10_000).quantize(Decimal("0.01"))
         out[f"{name}_price"] = price
-        out[f"{name}_bps"] = str(((Decimal(price) / mid - 1) * 10_000).quantize(Decimal("0.01")))
+        # The price's move, and what that move does to this position: a short gains as it falls.
+        out[f"{name}_bps"] = str(moved)
+        out[f"{name}_pnl_bps"] = str(moved if target == "long" else -moved)
     return out
 
 

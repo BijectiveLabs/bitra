@@ -907,14 +907,17 @@ def cycle_view(record: Mapping[str, Any]) -> Group:
     if met or exits:
         style = "green" if met.get("admitted", True) else "yellow"
         shown: list[tuple[str, Any]] = _exit_rows(exits)
+        cost = record.get("cost") or {}
         if met:
+            rule = record.get("targets_rule") or {}
             shown.extend(
                 [
-                    ("net", _net(met.get("net_bps"), record.get("cost") or {})),
-                    ("edge over cost", _multiple(met.get("edge_multiple"))),
-                    ("reward to risk", met.get("reward_risk")),
-                    ("research", _research(met.get("research_bps"))),
-                    ("round trips today", met.get("round_trips_today")),
+                    ("reward : risk", _ratio(met.get("reward_risk"))),
+                    ("expected edge", _edge(cost)),
+                    ("round trip", _trip(cost)),
+                    ("after cost", _after(met, rule)),
+                    ("model spend", _spend(met.get("research_bps"), record.get("spend") or {})),
+                    ("trades today", f"{met.get('round_trips_today')} before this one"),
                 ]
             )
         parts.append(
@@ -937,42 +940,78 @@ def cycle_view(record: Mapping[str, Any]) -> Group:
             style = {"ok": "green", "failed": "red", "reused": "dim"}[state]
             who.add_row(str(row.get("agent")), Text(state, style=style), str(row.get("seconds")))
         for role, why in sorted((record.get("not_asked") or {}).items()):
-            who.add_row(role, Text("not asked", style="yellow"), "")
-            who.caption = (who.caption + "; " if who.caption else "") + (
-                f"{role}: {str(why).removeprefix(role + ': ')}"
-            )
+            said = str(why).removeprefix(role + ": ")
+            who.add_row(role, Text(f"not asked: {said}", style="yellow"), "")
         parts.append(who)
     return Group(*parts)
 
 
 def _exit_rows(exits: dict[str, Any]) -> list[tuple[str, Any]]:
-    """Entry, take profit and stop loss as prices, each with its distance from the entry."""
+    """The position, then each exit as a price, how far price moves to reach it, and what that
+    does to the position. A short's take profit is a fall in price and a gain to the position."""
     if not exits:
         return []
-    rows: list[tuple[str, Any]] = [("entry", f"{exits.get('side')} at about {exits.get('entry')}")]
+    rows: list[tuple[str, Any]] = [
+        ("position", f"{exits.get('side')} at about {exits.get('entry')}")
+    ]
     for label, name in (("take profit", "take"), ("stop loss", "stop")):
-        if exits.get(f"{name}_price") is not None:
-            moved = _bps(exits[f"{name}_bps"])
-            rows.append((label, Text.assemble(f"{exits[f'{name}_price']}  (", moved, ")")))
+        if exits.get(f"{name}_price") is None:
+            continue
+        move = Decimal(str(exits[f"{name}_bps"])) / 100
+        pnl = exits.get(f"{name}_pnl_bps", exits[f"{name}_bps"])
+        rows.append(
+            (
+                label,
+                Text.assemble(
+                    f"{exits[f'{name}_price']}  price {move:+.2f}%, the position ", _bps(pnl)
+                ),
+            )
+        )
     return rows
 
 
-def _net(net: Any, cost: dict[str, Any]) -> Any:
-    """Net with the arithmetic behind it: the claimed edge less the round trip."""
-    if net is None:
-        return None
-    edge, trip = cost.get("edge_bps"), (cost.get("cost") or {}).get("round_trip_bps")
-    if edge is None or trip is None:
-        return _bps(net)
-    return Text.assemble(_bps(net), f"  (edge {edge} less cost {trip})")
+def _ratio(value: Any) -> Any:
+    if value in (None, ""):
+        return "-"
+    return f"{Decimal(str(value)).normalize():f} : 1"
+
+
+def _edge(cost: dict[str, Any]) -> Any:
+    """What the desk expects to earn per trade on average, and whether anyone measured it."""
+    if cost.get("edge_bps") is None:
+        return "-"
+    edge = Decimal(str(cost["edge_bps"]))
+    return f"{edge:.2f} bps a trade on average; {cost.get('edge_source')}"
+
+
+def _trip(cost: dict[str, Any]) -> Any:
+    trip = (cost.get("cost") or {}).get("round_trip_bps")
+    return "-" if trip is None else f"{Decimal(str(trip)):.2f} bps, paid win or lose"
+
+
+def _after(met: dict[str, Any], rule: dict[str, Any]) -> Any:
+    """The expected edge less the cost, and how many times the cost the edge is."""
+    if met.get("net_bps") is None:
+        return "-"
+    said = Text.assemble(_bps(met["net_bps"]))
+    if met.get("edge_multiple") not in (None, ""):
+        asks = rule.get("min_edge_multiple")
+        tail = f"; the desk asks {asks}x" if asks not in (None, "") else ""
+        said.append(f"  (the edge is {met['edge_multiple']}x the cost{tail})")
+    return said
+
+
+def _spend(research: Any, spend: dict[str, Any]) -> Any:
+    """Model calls as a cost of this trade; calls with no declared price are named, not zeroed."""
+    shown = "-" if research in (None, "") else f"{research} bps of this notional"
+    unpriced = spend.get("unpriced") or []
+    if unpriced:
+        return Text(f"{shown}; not priced: {', '.join(unpriced)}", style="yellow")
+    return shown
 
 
 def _multiple(value: Any) -> Any:
     return "-" if value in (None, "") else f"{value}x the round trip"
-
-
-def _research(value: Any) -> Any:
-    return "-" if value in (None, "") else f"{value} bps of this notional"
 
 
 def audit_view(record: Mapping[str, Any]) -> Group:

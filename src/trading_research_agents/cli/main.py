@@ -2949,7 +2949,8 @@ def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], l
         said = [f"exits: {shown['side']} at about {shown['entry']}"]
         for label, name in (("take profit", "take"), ("stop loss", "stop")):
             if f"{name}_price" in shown:
-                said.append(f"{label} {shown[f'{name}_price']} ({shown[f'{name}_bps']} bps)")
+                pnl = shown.get(f"{name}_pnl_bps", shown[f"{name}_bps"])
+                said.append(f"{label} {shown[f'{name}_price']} (position {pnl} bps)")
         lines.append(", ".join(said))
     if result.targets is not None:
         met = result.targets

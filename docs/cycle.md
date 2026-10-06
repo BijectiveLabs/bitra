@@ -655,19 +655,30 @@ The round trips are counted from the intents the cycles actually wrote today, no
 memory: a process that restarts must not forget what it has already done. Every refusal names its
 figure, so "targets: net 4 bps is below the declared minimum 10 bps" is the whole explanation.
 
-The targets panel starts with the trade as most traders read one:
+The targets panel reads the trade the way a trader does, then shows what the desk checked:
 
 ```
-entry              long at about 120.815
-take profit        123.231  (+200.00 bps)
-stop loss          119.607  (-100.00 bps)
-net                +12.81 bps  (edge 25.0000 less cost 12.1900)
+position       short at about 86114.35
+take profit    84392.06  price -2.00%, the position +200.00 bps
+stop loss      86975.49  price +1.00%, the position -100.00 bps
+reward : risk  2 : 1
+expected edge  25.00 bps a trade on average; [agents].magnitude_bps, declared by the operator
+               and not measured here
+round trip     12.46 bps, paid win or lose
+after cost     +12.54 bps  (the edge is 2.01x the cost; the desk asks 2.0x)
+model spend    0.00 bps of this notional; not priced: google:gemini-flash-latest
+trades today   0 before this one
 ```
 
-The take profit and the stop come from `[exit]`; net is the edge the desk claims (`magnitude_bps`,
-or the measured one) less the round trip the cost gate priced. They are different numbers on
-purpose: the exits say where the position is closed, the edge says what the desk expects to earn on
-average, and the cost says what it pays either way.
+Each exit shows two numbers because a short gains when price falls: the price's move, and what that
+move does to the position. The exits come from `[exit]` as fractions of the entry price.
+
+The expected edge is a different thing from the take profit, on purpose. The take profit and the
+stop say where this position closes; the edge is what the desk expects to earn a trade on
+average, across the ones that hit the stop, the take profit or the time limit. The cost gate and
+`[targets]` judge the trade on the edge less the round trip, because that is the number a desk
+lives on. Model spend names the calls that had no declared price in `[agents.pricing]`, rather
+than counting them as free.
 
 ## The cost gate, and what each number is worth
 

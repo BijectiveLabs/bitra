@@ -258,3 +258,33 @@ def test_the_exits_travel_as_prices_and_distances_for_the_panel(
     console.print(cycle_view(result.record()))
     shown = console.export_text()
     assert "take profit" in shown and "stop loss" in shown and "+200.00 bps" in shown
+
+
+def test_a_short_reads_its_exits_as_gains_and_losses_to_the_position(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    from rich.console import Console
+
+    from trading_research_agents.cli.tui import cycle_view
+    from trading_research_agents.execution.targets import Targets
+
+    cfg, _, _ = cycle_config(
+        tmp_path,
+        envelope,
+        [analyst_answer(target="short")],
+        stop_frac=Decimal("0.01"),
+        take_frac=Decimal("0.02"),
+        targets=Targets(min_edge_multiple=Decimal("2.0")),
+        reward_to_risk=Decimal("2"),
+    )
+    record = run_cycle(cfg).record()
+    assert record["exits"]["take_bps"] == "-200.00" and record["exits"]["take_pnl_bps"] == "200.00"
+    assert record["exits"]["stop_pnl_bps"] == "-100.00"
+    assert record["spend"]["unpriced"] == ["fake:fake"]
+    console = Console(record=True, width=200)
+    console.print(cycle_view(record))
+    shown = console.export_text()
+    assert "price -2.00%, the position +200.00 bps" in shown
+    assert "price +1.00%, the position -100.00 bps" in shown
+    assert "2 : 1" in shown and "the desk asks 2.0x" in shown
+    assert "not priced: fake:fake" in shown
