@@ -721,14 +721,19 @@ def screen_view(record: Mapping[str, Any]) -> Group:
     ):
         table.add_column(name, justify=justify)  # type: ignore[arg-type]
     chosen = set(record.get("chosen") or ())
-    styles = {"taken": "green", "admitted": "cyan", "held": "yellow"}
+    styles = {"taken": "green", "waiting": "cyan", "held": "yellow"}
     for row in record.get("candidates") or []:
         state = (
             "taken"
             if row["instrument"] in chosen
-            else ("admitted" if row["admitted"] and row["kept_by_screener"] else "held")
+            else ("waiting" if row["admitted"] and row["kept_by_screener"] else "held")
         )
         why = row.get("screener_said") or (row.get("reasons") or [""])[0]
+        if state == "waiting":
+            why = (
+                f"admitted, but [universe].max_per_cycle was taken by {', '.join(sorted(chosen))}, "
+                f"which ranked higher on pressure; {why}"
+            )
         table.add_row(
             str(row["instrument"]),
             _fmt(row.get("moved_bps")),
@@ -736,10 +741,16 @@ def screen_view(record: Mapping[str, Any]) -> Group:
             _fmt(row.get("range_bps")),
             _fmt(row.get("pressure")),
             Text(state, style=styles.get(state, "")),
-            str(why)[:60],
+            str(why),
         )
+    read_by_model = any(row.get("screener_said") for row in record.get("candidates") or [])
     table.caption = (
-        f"{len(chosen)} taken; one data pull each and no tokens spent on the rest"
+        f"{len(chosen)} taken; "
+        + (
+            "the screener model read every admitted one; only the taken run a cycle"
+            if read_by_model
+            else "one data pull each and no tokens spent on the rest"
+        )
         if chosen
         else f"no cycle this pass: {why_no_cycle(record.get('candidates') or [])}; "
         "no model was asked"
@@ -777,6 +788,23 @@ def cycle_view(record: Mapping[str, Any]) -> Group:
     intent = record.get("intent")
     if intent:
         head.append(("intent", Text(f"{intent['target']} {intent['size']}", style="bold")))
+    placed = record.get("placed")
+    if isinstance(placed, dict):
+        if placed.get("sent"):
+            filled = placed.get("filled")
+            head.append(
+                (
+                    "venue",
+                    Text(
+                        f"sent, order {placed.get('order_id') or '?'}"
+                        + (f", filled {filled}" if filled not in (None, "") else ""),
+                        style="green",
+                    ),
+                )
+            )
+        else:
+            why = placed.get("refused") or placed.get("error") or "not sent"
+            head.append(("venue", Text(f"NOT SENT: {why}", style="bold red")))
     for refusal in (record.get("refusals") or [])[:6]:
         head.append(("refused", Text(str(refusal), style="yellow")))
     if record.get("stopped_by"):
@@ -875,7 +903,9 @@ def cycle_view(record: Mapping[str, Any]) -> Group:
         most = score.get("weights") or {}
         for role, value in (score.get("contributions") or {}).items():
             of = f" of {most[role]}" if role in most else ""
-            voices.append((role.replace("_analyst", ""), f"{value}{of}"))
+            pulled = Decimal(str(value))
+            way = "for the trade" if pulled > 0 else "against it" if pulled < 0 else "silent"
+            voices.append((role.replace("_analyst", ""), f"{pulled:+} {of.strip()}, {way}"))
         voices.append(("size", f"{stake.get('size')} at {stake.get('multiple')}x base"))
         if stake.get("leverage") is not None:
             voices.append(("leverage", f"{stake.get('leverage')}x equity"))

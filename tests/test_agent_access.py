@@ -226,3 +226,44 @@ def test_a_short_retry_after_is_waited_for_once_on_the_same_provider() -> None:
         sleep=slept.append,
     )
     assert impatient.complete(system="", user="", schema={}).model == "spare"
+
+
+def test_a_spent_quota_rests_the_link_and_answers_name_who_gave_them() -> None:
+    from trading_research_agents.llm import chain as chains
+    from trading_research_agents.llm.chain import CompleterChain, Link
+    from trading_research_agents.llm.completer import Completion
+
+    chains._resting.clear()
+    asked: list[str] = []
+
+    class Spent:
+        def complete(self, *, system: str, user: str, schema: Any) -> Completion:
+            asked.append("google")
+            raise ProviderError.from_vendor(
+                RuntimeError("429 RESOURCE_EXHAUSTED. You exceeded your current quota")
+            )
+
+    class Spare:
+        def complete(self, *, system: str, user: str, schema: Any) -> Completion:
+            asked.append("groq")
+            return Completion(
+                text="{}", model="openai/gpt-oss-120b", input_tokens=1, output_tokens=1
+            )
+
+    def ask() -> Completion:
+        return CompleterChain(
+            role="validator",
+            links=[
+                Link("google:gemini-flash-latest", Spent),
+                Link("groq:openai/gpt-oss-120b", Spare),
+            ],
+            max_wait_s=15,
+            sleep=lambda _: None,
+        ).complete(system="", user="", schema={})
+
+    first = ask()
+    second = ask()
+    # The spent link was asked once; the next cycle went straight to the one that answers.
+    assert asked == ["google", "groq", "groq"]
+    assert first.provider == "groq" and second.model == "openai/gpt-oss-120b"
+    chains._resting.clear()

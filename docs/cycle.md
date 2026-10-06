@@ -219,7 +219,7 @@ that picture too, all of it computed by code from the snapshot:
 |---|---|---|
 | `regime` | trending up, trending down, ranging or mixed, on the decision timeframe | `trend_strength` against the lines in `[regime]` |
 | `trend_strength` | net move over the path walked, times the square root of the steps; a random walk sits near 1 on any window | the window's closes |
-| `net_bps` | the move from the first close of the window to the last | the window's closes |
+| `window_move_bps` | the price move from the first close of the window to the last; a market move, not the trade's net | the window's closes |
 | `timeframes.<tf>` | the same regime, net move, z-score and position in range on each higher timeframe | `[run].context_intervals`, one candle pull each |
 | `book_imbalance` | resting bids against resting asks over the first 10 levels, from -1 to 1; positive leans to the bid | the order book already in the snapshot |
 | `open_interest` | the change in percent since the previous snapshot of this instrument, and how long ago that was | the open interest already pulled, and the last snapshot on disk |

@@ -38,11 +38,11 @@ class RegimeRule:
         }
 
 
-def label(strength: float | None, net_bps: float | None, rule: RegimeRule) -> str:
-    if strength is None or net_bps is None:
+def label(strength: float | None, move_bps: float | None, rule: RegimeRule) -> str:
+    if strength is None or move_bps is None:
         return "mixed"
     if strength >= float(rule.trend_above):
-        return "trending up" if net_bps > 0 else "trending down"
+        return "trending up" if move_bps > 0 else "trending down"
     if strength <= float(rule.range_below):
         return "ranging"
     return "mixed"

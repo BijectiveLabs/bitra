@@ -77,6 +77,16 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- A model link whose quota is spent, or that asks for a longer wait than `max_retry_wait_s`,
+  rests (15 minutes for a spent quota) and the chain goes straight to the next link; seen live, a
+  spent Gemini quota put 15 to 45 seconds in front of every validator and the book moved past the
+  drift limit before the order went out. Usage now names the provider that actually answered.
+- The cycle panel says when the venue did not take the order (`venue  NOT SENT: ...`), and the
+  refusal is on the cycle's record; before, the panel showed the intent and nothing else.
+- The universe table marks an admitted instrument that did not run as `waiting`, says the pass
+  took `[universe].max_per_cycle` by pressure, no longer cuts a reason at 60 characters, and no
+  longer claims no tokens were spent when the screener model read every candidate.
+- Conviction shows each voice with its sign and whether it pulled for the trade or against it.
 - The targets panel reads the trade as a trader would: each exit as a price, the move in price and
   what it does to the position (a short's take profit is a fall in price and a gain), reward to
   risk as a ratio, the expected edge with where it came from, the round trip, what is left after
@@ -125,7 +135,7 @@ All notable changes to this project are recorded here. The format follows
   from the entry in bps, and spells out net as the claimed edge less the round-trip cost. The plain
   output prints an `exits:` line.
 - The technical analyst now sees the market around its decision: the regime on its own timeframe
-  (`regime`, `trend_strength`, `net_bps`), the same on higher timeframes declared in
+  (`regime`, `trend_strength`, `window_move_bps`), the same on higher timeframes declared in
   `[run].context_intervals`, the order book imbalance near the touch, the open interest change
   since the previous snapshot, and what the operator's thresholds say on the macro and other series
   (`readings`), all computed by code before any model is asked.
@@ -512,6 +522,11 @@ All notable changes to this project are recorded here. The format follows
 
 ### Fixed
 
+- The technical brief's window move was named `net_bps`, and validators read it as the trade's net
+  return (seen live: "a modest net return (22.07 bps) below the claimed edge"). It is now
+  `window_move_bps`.
+- Funding was priced over the analyst's horizon even when the desk holds to `[exit].timeout_bars`;
+  it is now priced over the hold the desk actually keeps.
 - A daily series held flat across a window of minute bars was reported as "correlation 0.0 on
   n=60" (float noise from a constant); it is now reported as not measurable, with the reason.
 - One missing or broken file in a `sources/` declaration (such as a fetched series not pulled yet)

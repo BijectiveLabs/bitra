@@ -78,6 +78,8 @@ class Completion:
     # way to know is the figure the provider returns.
     cached_tokens: int = 0
     cache_write_tokens: int = 0
+    # The provider that answered, when a chain asked more than one; empty means the declared one.
+    provider: str = ""
 
 
 class Completer(Protocol):

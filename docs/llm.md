@@ -50,7 +50,12 @@ fallback = ["groq:openai/gpt-oss-120b"]     # this role's own order, instead of 
 
 The first link that answers wins. A link that answers "try again in N seconds" with N inside
 `[agents].max_retry_wait_s` (15 by default) is waited for once before the next link is tried, so a
-short burst over a per-minute limit does not throw away the model you chose. A link that cannot be reached is recorded with the vendor's own
+short burst over a per-minute limit does not throw away the model you chose. A link whose quota
+is spent (the vendor says `RESOURCE_EXHAUSTED` or quota), or that asks for a longer wait than that,
+rests for 15 minutes, or for as long as the vendor asked, across every role in the process: the
+next cycles go straight to the next link instead of paying the same failure in seconds the market
+does not wait for. When every link rests, the one waking soonest is asked anyway. Usage records the
+provider that actually answered. A link that cannot be reached is recorded with the vendor's own
 error class and the next one is tried **with the same brief** - there is no conversation to carry
 over, because the brief was built by code from the snapshot. A link is built the first time it is
 needed, so naming a spare you have no key for costs nothing until the day you need it.

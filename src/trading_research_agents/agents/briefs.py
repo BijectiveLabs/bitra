@@ -198,7 +198,7 @@ def technical_brief(
         funding_rate=funding,
         age_s=fetched.age_s(now),
         mechanism=mechanism,
-        regime=label(computed.trend_strength, computed.net_bps, rule),
+        regime=label(computed.trend_strength, computed.window_move_bps, rule),
         book_imbalance=imbalance,
         timeframes=frames or None,
         open_interest=held,
@@ -224,11 +224,11 @@ def timeframe_figures(
     shown = computed.record()
     return {
         "bars": computed.bars,
-        "net_bps": shown["net_bps"],
+        "window_move_bps": shown["window_move_bps"],
         "zscore": shown["zscore"],
         "position_in_range": shown["position_in_range"],
         "trend_strength": shown["trend_strength"],
-        "regime": label(computed.trend_strength, computed.net_bps, rule),
+        "regime": label(computed.trend_strength, computed.window_move_bps, rule),
         "age_s": fetched.age_s(now),
     }
 

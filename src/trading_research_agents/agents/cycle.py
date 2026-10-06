@@ -220,6 +220,10 @@ class CycleConfig:
     on_missing_validator: str = "refuse"
     # Higher timeframes read as context, in seconds; the decision stays on interval_s.
     context_intervals: tuple[int, ...] = ()
+    # How long a position is kept: the analyst's horizon, or [exit].timeout_bars. The cost gate
+    # prices funding over the longer of what the desk will hold, not the shorter.
+    hold_limit: str = "horizon"
+    timeout_bars: int | None = None
     regime: RegimeRule = field(default_factory=RegimeRule)
     # What actually sends an order, when the operator is in venue mode and the mandate cleared.
     place: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None
@@ -629,7 +633,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
             channel=_channel(cfg),
             size=base,
             direction=direction,
-            horizon_bars=analyst.horizon_bars,
+            horizon_bars=_held_bars(cfg, analyst.horizon_bars),
             bar_interval_s=cfg.bar_interval_s,
             settlement_interval_s=cfg.settlement_interval_s,
             latency_slippage_bps=cfg.latency_slippage_bps,
@@ -789,7 +793,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
                 channel=_channel(cfg),
                 size=size,
                 direction=direction,
-                horizon_bars=analyst.horizon_bars,
+                horizon_bars=_held_bars(cfg, analyst.horizon_bars),
                 bar_interval_s=cfg.bar_interval_s,
                 settlement_interval_s=cfg.settlement_interval_s,
                 latency_slippage_bps=cfg.latency_slippage_bps,
@@ -907,7 +911,9 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
                     cfg.watch, "venue", DONE, f"order {result.placed.get('order_id') or 'sent'}"
                 )
             else:
-                announce(cfg.watch, "venue", REFUSED, str(result.placed.get("refused", "not sent")))
+                said = str(result.placed.get("refused") or result.placed.get("error") or "not sent")
+                result.refusals.append(f"venue: not sent, {said}")
+                announce(cfg.watch, "venue", REFUSED, said)
             write_json(where.path.joinpath("placed.json"), result.placed, durable=True)
             if result.placed.get("interrupted"):
                 result.stopped_by = f"interrupted at the venue: {result.placed.get('note')}"
@@ -1273,6 +1279,16 @@ def _exits(cfg: CycleConfig, mid: Decimal, target: str) -> dict[str, str]:
     if cfg.take_frac is not None:
         out["take_price"] = str((mid * (Decimal(1) + away * cfg.take_frac)).quantize(mid))
     return out
+
+
+def _held_bars(cfg: CycleConfig, horizon: int) -> int:
+    """The bars a position can stay open: the analyst's horizon capped by the timeout when the
+    desk closes on the horizon, otherwise as long as the timeout allows."""
+    if cfg.timeout_bars is None:
+        return horizon
+    if cfg.hold_limit == "horizon":
+        return min(horizon, cfg.timeout_bars)
+    return max(horizon, cfg.timeout_bars)
 
 
 def _exit_view(mid: Decimal, target: str, exits: Mapping[str, str]) -> dict[str, str]:

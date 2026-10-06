@@ -2384,6 +2384,8 @@ def run_cycle_command(args: argparse.Namespace) -> int:
         validators=a.validators,
         on_missing_validator=a.on_missing_validator,
         context_intervals=cfg.run.context_intervals,
+        hold_limit=cfg.execution.hold_limit,
+        timeout_bars=cfg.exit_rule.timeout_bars,
         regime=cfg.regime,
         targets=cfg.targets,
         desk=cfg.desk,

@@ -32,7 +32,7 @@ class Features:
     volume_ratio: float | None
     range_ratio: float | None
     position_in_range: float | None
-    net_bps: float | None = None
+    window_move_bps: float | None = None
     trend_strength: float | None = None
 
     def record(self) -> dict[str, Any]:
@@ -50,7 +50,9 @@ class Features:
             "position_in_range": (
                 None if self.position_in_range is None else round(self.position_in_range, 3)
             ),
-            "net_bps": None if self.net_bps is None else round(self.net_bps, 2),
+            "window_move_bps": (
+                None if self.window_move_bps is None else round(self.window_move_bps, 2)
+            ),
             "trend_strength": (
                 None if self.trend_strength is None else round(self.trend_strength, 3)
             ),
@@ -99,7 +101,7 @@ def features(window: Sequence[Bar]) -> Features | None:
         volume_ratio=volume_ratio,
         range_ratio=range_ratio,
         position_in_range=position,
-        net_bps=(last / closes[0] - 1) * 1e4 if closes[0] > 0 else None,
+        window_move_bps=(last / closes[0] - 1) * 1e4 if closes[0] > 0 else None,
         trend_strength=trend_strength(closes),
     )
 

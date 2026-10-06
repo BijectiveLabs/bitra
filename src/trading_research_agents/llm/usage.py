@@ -232,7 +232,7 @@ class MeteredCompleter:
             UsageRecord(
                 at=now,
                 role=self.role,
-                provider=self.provider,
+                provider=completion.provider or self.provider,
                 model=completion.model,
                 input_tokens=completion.input_tokens,
                 output_tokens=completion.output_tokens,

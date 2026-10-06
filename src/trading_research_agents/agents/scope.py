@@ -120,7 +120,7 @@ SCOPES: dict[str, Scope] = {
             "volume_ratio",
             "range_ratio",
             "position_in_range",
-            "net_bps",
+            "window_move_bps",
             "trend_strength",
             "regime",
             "timeframes",
