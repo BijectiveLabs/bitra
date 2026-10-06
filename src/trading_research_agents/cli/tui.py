@@ -67,9 +67,10 @@ def console(safe: bool = False) -> Console:
     return _console
 
 
-# Erase the scrollback, erase the screen, cursor home: what `cls` and `clear` do. Erasing the
-# screen alone leaves the shell's earlier lines one scroll away, which reads as not taking over.
-TAKE_SCREEN = "\x1b[3J\x1b[2J\x1b[H"
+# Cursor home, erase the screen, then erase the scrollback: what `clear` sends. The order matters on
+# the classic Windows console, where erasing the screen pushes it into the scrollback; erasing the
+# scrollback first left the shell's lines above the cockpit (seen 2026-10-06).
+TAKE_SCREEN = "\x1b[H\x1b[2J\x1b[3J"
 VT_PROCESSING = 0x0004
 STD_OUTPUT = -11
 

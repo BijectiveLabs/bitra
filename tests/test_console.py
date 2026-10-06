@@ -207,6 +207,6 @@ def test_taking_the_screen_erases_the_scrollback_and_leaves_a_pipe_alone() -> No
 
     screen = Terminal()
     assert tui.take_screen(screen) is True
-    assert screen.getvalue() == "\x1b[3J\x1b[2J\x1b[H"
+    assert screen.getvalue() == "\x1b[H\x1b[2J\x1b[3J"
     pipe = io.StringIO()
     assert tui.take_screen(pipe) is False and pipe.getvalue() == ""
