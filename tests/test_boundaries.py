@@ -1,7 +1,8 @@
 """Dependency direction and the adoption rules, checked from the source rather than trusted.
 
 ledger and envelope are vocabulary and import nothing else from this project. Arrows only
-point down the list in docs/architecture.md. Nothing imports a language model outside agent.
+point down the list in docs.bijectivelabs.dev/opensource/architecture. Nothing imports a language
+model outside agent.
 No strategy ships inside the package, and no core module names a venue: both live behind
 the plugin directories or in examples/.
 """

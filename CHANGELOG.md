@@ -8,6 +8,12 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- The documentation is a VitePress site (`docs/`), published to docs.bijectivelabs.dev from
+  `master` through GitHub Pages (`.github/workflows/docs.yml`). The pages that lived in `docs/` as
+  plain Markdown moved to `docs/opensource/`, with a new introduction, quick start, command
+  reference, security page and contributing page. References in the code and templates point at the
+  site.
+- `SECURITY.md` describes what the package does today: venue keys in memory, orders in venue mode.
 - A series can name the asset it is about (`asset`, with `elsewhere` for how much it counts on other
   instruments). Bitcoin's chain no longer weighs the same on a Zcash trade as on a Bitcoin one.
 - `[trigger].look_valid_for` (default 1h): a last look older than this counts as a first look, and

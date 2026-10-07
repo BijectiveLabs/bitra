@@ -195,7 +195,7 @@ The macro, on-chain and sentiment analysts read dated series you declare under `
 is either a file you keep or a feed the desk refreshes itself (FRED, the Crypto Fear & Greed Index,
 or any paid vendor that answers JSON over https). `tra sources show` lists every series with where it
 came from and how old its last value is, and a value older than its `max_age` is shown as stale and
-never counted. [docs/sources.md](docs/sources.md) has the details.
+never counted. [Data sources](https://docs.bijectivelabs.dev/opensource/sources) has the details.
 
 Which validators run is yours to declare. A vote never decides on its own: it moves conviction by
 the weight you give it (`[conviction].validator_weight`), and a stance counts for what it says beyond
@@ -215,8 +215,8 @@ this cycle as well. A setup that doesn't fit the regime, such as a trend trade i
 market, is refused by name; `[regime]` holds the lines.
 
 Everything after the analysts is arithmetic over numbers you declared. No model can place, cancel or
-resize an order, read a file outside the project, or edit your configuration. `docs/agents.md` has
-the full table of what an agent can reach, and `docs/cycle.md` walks through every step.
+resize an order, read a file outside the project, or edit your configuration. [Agents](https://docs.bijectivelabs.dev/opensource/agents) has
+the full table of what an agent can reach, and [The cycle](https://docs.bijectivelabs.dev/opensource/cycle) walks through every step.
 
 ## Venues
 
@@ -241,7 +241,7 @@ tra venues okx --setup    # the blocks to paste into envelope.toml, data.toml, s
 ```
 
 The setup leaves your fees blank on purpose, because a guessed fee would price every trade wrong,
-and the file won't load until you fill them in. `docs/venues.md` has the full table, the keys each
+and the file won't load until you fill them in. [Venues](https://docs.bijectivelabs.dev/opensource/venues) has the full table, the keys each
 venue needs, and the four steps.
 
 ## Models and providers
@@ -285,14 +285,14 @@ free tier meters each model on its own, so roles can share a provider across two
 model keeps its own allowance; `tra check` judges the load per model and says when one is too much. Every
 call is a line in `usage.jsonl` with its tokens and latency, and nothing caps spend unless you
 declare a ceiling. `tra keys --probe` proves each key works without sending a prompt. A vendor of
-your own is about thirty lines (`docs/providers.md`).
+your own is about thirty lines ([Model providers](https://docs.bijectivelabs.dev/opensource/providers)).
 
 ## From a replay to real orders
 
 What it trades: **linear perpetual futures** (USDT- or USDC-margined swaps) on any venue ccxt
 reaches, long and short, with the leverage and margin mode you declare. Spot, dated futures,
 inverse contracts and options are not built yet; until they are, venue mode checks the market type
-on every order and refuses anything that is not a linear perpetual. `docs/boundaries.md` says what
+on every order and refuses anything that is not a linear perpetual. [Boundaries](https://docs.bijectivelabs.dev/opensource/boundaries) says what
 adding one would take.
 
 You can stop at any of these steps. Each is one command, and each was run end to end before this
@@ -340,7 +340,7 @@ Underneath, on every venue: the order goes only to the environment you declared 
 mainnet); an open position or a working order refuses a second entry; a size off the venue's step is
 refused rather than rounded; a clock more than a second off the venue's refuses before anything is
 signed; and Ctrl-C or a service stop cancels a resting order before the process leaves. Every close
-goes to `positions.jsonl` and every finished trade to `round_trips.jsonl`. `docs/capital.md` has
+goes to `positions.jsonl` and every finished trade to `round_trips.jsonl`. [Capital, orders and positions](https://docs.bijectivelabs.dev/opensource/capital) has
 every setting, every refusal and the arithmetic behind each one.
 
 One thing to know before you rely on it: the position checks run at the start of each pass of
@@ -422,7 +422,7 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | Command | What it does |
 |---|---|
 | `tra ladder show`, `promote`, `demote` | which tier the desk stands at; one step up with evidence, or down |
-| `tra chain floor`, `observe`, `check`, `validate` | the research chain, layer by layer (`docs/chain.md`) |
+| `tra chain floor`, `observe`, `check`, `validate` | the research chain, layer by layer ([The falsification chain](https://docs.bijectivelabs.dev/opensource/chain)) |
 | `tra ledger show` | every idea that died, and what killed it |
 | `tra agent session`, `eval`, `trace` | the research session, model comparison, a run read back |
 | `tra mcp serve` | the read-only gates as tools for any MCP host |
@@ -441,28 +441,32 @@ Some rules are guarantees, enforced by code and tests, and every change has to k
 
 Other things are simply not built yet, and contributions are welcome: spot, inverse, dated futures
 and options; decentralised venues; more than one account; transfers and treasury; routing and
-execution algorithms; portfolio accounting. `docs/boundaries.md` lists each one with what it does
+execution algorithms; portfolio accounting. [Boundaries](https://docs.bijectivelabs.dev/opensource/boundaries) lists each one with what it does
 today and what a contribution would need. The example strategy cores are examples: your edge is
 yours to declare.
 
-`docs/liability.md` says plainly where responsibility sits when real capital is involved.
+[Liability](https://docs.bijectivelabs.dev/opensource/liability) says plainly where responsibility sits when real capital is involved.
 
 ## Documentation
 
+The full documentation is at [docs.bijectivelabs.dev](https://docs.bijectivelabs.dev). Its source is in
+`docs/`, so a change in behaviour and the page that describes it go in the same pull request.
+
 | Read this | For |
 |---|---|
-| `docs/cycle.md` | the cycle step by step, and every setting that shapes it |
-| `docs/agents.md` | each role, what it reads, and what an agent can and cannot reach |
-| `docs/sources.md` | where the macro, on-chain and sentiment figures come from, fetching them, and freshness |
-| `docs/capital.md` | equity, margin, leverage, liquidation, daily loss, time exits, the kill switch, and the records they leave |
-| `docs/venues.md` | which venues work, and adding yours |
-| `docs/llm.md`, `docs/providers.md` | how models are used: fallback, spend, adding a provider |
-| `docs/live.md`, `docs/trading.md` | the ladder from replay to a live session |
-| `docs/data.md` | the data gate, and bringing your own data |
-| `docs/boundaries.md`, `docs/liability.md` | what is guaranteed, what is not built yet, and who is responsible |
-| `docs/agent.md`, `docs/mcp.md` | the research agent, and the MCP server |
-| `docs/architecture.md` | packages, import rules, file formats |
-| `docs/chain.md`, `docs/execution.md`, `docs/ledger.md` | the research chain, execution realism, verdicts |
+| [The cycle](https://docs.bijectivelabs.dev/opensource/cycle) | the cycle step by step, and every setting that shapes it |
+| [Agents](https://docs.bijectivelabs.dev/opensource/agents) | each role, what it reads, and what an agent can and cannot reach |
+| [Data sources](https://docs.bijectivelabs.dev/opensource/sources) | where the macro, on-chain and sentiment figures come from, fetching them, and freshness |
+| [Capital, orders and positions](https://docs.bijectivelabs.dev/opensource/capital) | equity, margin, leverage, liquidation, daily loss, time exits, the kill switch, and the records they leave |
+| [Venues](https://docs.bijectivelabs.dev/opensource/venues) | which venues work, and adding yours |
+| [Working with language models](https://docs.bijectivelabs.dev/opensource/llm), [Model providers](https://docs.bijectivelabs.dev/opensource/providers) | how models are used: fallback, spend, adding a provider |
+| [The live tier](https://docs.bijectivelabs.dev/opensource/live), [The trading agent](https://docs.bijectivelabs.dev/opensource/trading) | the ladder from replay to a live session |
+| [The data gate](https://docs.bijectivelabs.dev/opensource/data) | the data gate, and bringing your own data |
+| [Boundaries](https://docs.bijectivelabs.dev/opensource/boundaries), [Liability](https://docs.bijectivelabs.dev/opensource/liability) | what is guaranteed, what is not built yet, and who is responsible |
+| [The agent](https://docs.bijectivelabs.dev/opensource/agent), [The MCP server](https://docs.bijectivelabs.dev/opensource/mcp) | the research agent, and the MCP server |
+| [Architecture](https://docs.bijectivelabs.dev/opensource/architecture) | packages, import rules, file formats |
+| [The falsification chain](https://docs.bijectivelabs.dev/opensource/chain), [Execution realism](https://docs.bijectivelabs.dev/opensource/execution), [The kill ledger](https://docs.bijectivelabs.dev/opensource/ledger) | the research chain, execution realism, verdicts |
+| [Command line](https://docs.bijectivelabs.dev/opensource/commands) | every `tra` command |
 | `CHANGELOG.md` | what changed |
 
 ## Development

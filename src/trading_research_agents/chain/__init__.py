@@ -1,7 +1,7 @@
 """The falsification chain: the ways an idea can die, ordered by what each test costs to run.
 
 Layers 0 (cost floor), 3 (pre-registration), 4 (data requirements) and 5 (validation) are here,
-with the era seal that layer 5 runs behind. See docs/chain.md.
+with the era seal that layer 5 runs behind. See docs.bijectivelabs.dev/opensource/chain.
 """
 
 from trading_research_agents.chain.floor import FloorCheck, FloorOutcome, cost_floor

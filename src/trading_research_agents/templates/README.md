@@ -27,4 +27,4 @@ promoted to canary with evidence and your signature:
     tra ladder promote --evidence "..." --signed-by you                        # to T3
     tra live --env-file .env
 
-Where the responsibility sits: docs/liability.md in the project's repository.
+Where the responsibility sits: docs.bijectivelabs.dev/opensource/liability in the project's repository.

@@ -49,12 +49,12 @@ written from the doctrine it implements, not from the code.
 entry that breaks a rule cannot be constructed.
 
 **Comments say why, not what.** If a comment explains what the next line does, the line
-should be clearer. Detail belongs in `docs/`.
+should be clearer. Detail belongs in the docs (`docs/opensource/`).
 
 **ASCII in source.** Non-ASCII characters are not used in `.py` files. A test checks.
 
 **Direction of dependency.** `ledger` and `envelope` import nothing else from this project.
-Arrows point only downward through the list in `docs/architecture.md`. Only `llm/providers`
+Arrows point only downward through the list in [Architecture](https://docs.bijectivelabs.dev/opensource/architecture). Only `llm/providers`
 imports a vendor SDK. A test checks that too.
 
 **English, professional register.** Identifiers, docstrings, docs and commit messages.
@@ -62,7 +62,7 @@ imports a vendor SDK. A test checks that too.
 ## Extending what it can do
 
 Spot and other market types, decentralised venues, more than one account, routing and execution
-algorithms, portfolio accounting: `docs/boundaries.md` lists each under "not built yet", with what
+algorithms, portfolio accounting: [Boundaries](https://docs.bijectivelabs.dev/opensource/boundaries) lists each under "not built yet", with what
 it does today and what a contribution would need. Open an issue first with the design, so the shape
 is agreed before the code. A contribution may add any of them; it may not weaken a guarantee on the
 same page to get there, and the tests that hold those guarantees must keep passing unchanged.

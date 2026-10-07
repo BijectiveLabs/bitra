@@ -57,10 +57,10 @@ kill_switch = "KILL"               # touch this file to flatten and stop
 # session_loss_limit_bps = 100
 # max_session_minutes = 120
 
-# ---- the technical analyst as the core instead of a code core (docs/agents.md). Replace the
+# ---- the technical analyst as the core instead of a code core (docs.bijectivelabs.dev/opensource/agents). Replace the
 # [strategy] table with `agent = "technical_analyst"` and declare the budget:
 # [agents]
-# provider = "deepseek"            # any registered provider (docs/providers.md)
+# provider = "deepseek"            # any registered provider (docs.bijectivelabs.dev/opensource/providers)
 # model = "deepseek-flash"
 # mechanism = "positions forced to close into the settlement window"
 # lookback_bars = 60
@@ -147,7 +147,7 @@ kill_switch = "KILL"               # touch this file to flatten and stop
 # confidence, each reading analyst by how far its series sit past the lines you drew in sources/
 # (-1 to 1), each validator for or against. The score is their net over the weight they expressed:
 # agreement lifts it, opposition lowers it in proportion, and only opposition that outweighs the
-# case refuses the trade. docs/cycle.md works four cases through. Nothing here can make a trade
+# case refuses the trade. docs.bijectivelabs.dev/opensource/cycle works four cases through. Nothing here can make a trade
 # larger than [controls] and [run].size already allow - it can only make it smaller.
 # [conviction]
 # weights = { technical_analyst = 2.0, onchain_analyst = 1.5, macro_analyst = 1.0, sentiment_analyst = 0.5 }

@@ -2111,7 +2111,8 @@ PLACEHOLDER_PROVIDER = "your-provider"
 AGENT_HEAD = (
     "[strategy]\n"
     'agent = "technical_analyst"          # the model decides on each closed bar\n'
-    "# file = ... / class = ...             # or a code core instead (docs/trading.md)\n\n"
+    "# file = ... / class = ...             # or a code core instead\n"
+    "#                                       # (docs.bijectivelabs.dev/opensource/trading)\n\n"
 )
 
 
@@ -2258,7 +2259,7 @@ Optional, and worth doing in this order: fill in a file under `sources/` and its
 roster; give that analyst a weight in `[conviction].weights` and its agreement starts changing the
 size; name it in `[confluence].required` and its disagreement starts refusing the trade.
 
-`docs/boundaries.md` says what this software will not do, and why.
+`docs.bijectivelabs.dev/opensource/boundaries` says what this software will not do, and why.
 """
 
 
