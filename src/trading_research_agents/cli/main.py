@@ -2282,6 +2282,14 @@ class Schedule:
     def looping(self) -> bool:
         return self.every_s is not None
 
+    @property
+    def every_label(self) -> str:
+        every = int(self.every_s or 0)
+        for size, unit in ((3600, "h"), (60, "m")):
+            if every >= size and every % size == 0:
+                return f"{every // size}{unit}"
+        return f"{every}s"
+
     def stop_reason(self, result: Any, ran: int) -> str:
         if not self.looping:
             return "one cycle"
@@ -2301,6 +2309,18 @@ class Schedule:
         if every <= 0:
             return 0.0
         return round(every - (self.clock() % every), 3)
+
+    def announce(self, left: float) -> str:
+        """The wait as an operator reads it: when it ends on the clock, and why it is short."""
+        ends = datetime.fromtimestamp(self.clock() + left, tz=UTC).strftime("%H:%M:%S")
+        minutes, seconds = divmod(int(left + 0.999), 60)
+        hours, minutes = divmod(minutes, 60)
+        shown = f"{hours}h {minutes:02d}m" if hours else f"{minutes}m {seconds:02d}s"
+        return (
+            f"scheduler: next pass at {ends} UTC, in {shown}. "
+            f"Passes land on the clock, every {self.every_label}, "
+            "not a full interval after the last one"
+        )
 
     def wait(self) -> float:
         """Sleep to the next boundary and say how long that was."""
@@ -2565,7 +2585,7 @@ def run_cycle_command(args: argparse.Namespace) -> int:
                 # meantime needs to know the desk is waiting rather than stuck.
                 left = schedule.left()
                 if not args.json:
-                    sys.stdout.write(f"scheduler: next cycle in {left}s\n")
+                    sys.stdout.write(schedule.announce(left) + "\n")
                     sys.stdout.flush()
                 if _watching(args.json) and left > 0:
                     _ui().countdown(left)

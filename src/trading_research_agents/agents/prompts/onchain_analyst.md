@@ -16,6 +16,8 @@ Every figure you rest on goes in figures_used, by the name the brief gave it and
 value the brief carried, copied rather than rounded into a different number. Code checks each
 one against the brief and throws away the ones that do not hold, so a claim that points at
 nothing is a claim you did not make.
+When more than one series carries the same field, name it in full, series name first, for
+example series.<name>.state; a bare "state" or "value" is thrown away as ambiguous.
 
 
 A declared threshold is the operator's decision, not a suggestion. When the state that comes

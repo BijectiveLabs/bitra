@@ -16,6 +16,12 @@ tra run --every 5m --cycles 12 --env-file .env   # one cycle every five minutes,
 happening rather than one that is half built. One process, no cron, no daemon: the loop is in the
 same command, and everything that should end it ends it by name.
 
+The first pass runs as soon as the desk starts. After that, passes land on the clock: with
+`--every 30m` they fall at :00 and :30 UTC, with `--every 5m` at every fifth minute. So the wait
+after a pass is whatever is left to the next boundary, not a full interval, and a pass that takes
+several minutes shortens it further. The desk says it plainly after every pass, for example
+`next pass at 08:30:00 UTC, in 20m 00s`.
+
 | Ends the loop | Why |
 |---|---|
 | the budget | a cycle that stopped because the token budget is spent will not be followed by one that costs more |

@@ -11,9 +11,10 @@ The agents read those figures and give an opinion. Then code prices the trade, a
 sizes it, and either writes it down or sends one order with the stop attached. Every decision and
 every refusal is kept on disk with its reason, so you can check afterwards what happened and why.
 
-It's a pre-release and isn't on PyPI yet. What works today: the full autonomous cycle on live data,
-four analysts and three validators, the gates that decide, sizing from your own rules, real orders on
-a venue's practice environment behind a mandate you sign, and two auditors that read the records.
+It's a pre-release and isn't on PyPI yet. What works today: a universe of perpetuals found and
+measured by code, a screener that picks where to look, the full autonomous cycle on live data, four
+analysts and up to three validators, the gates that decide, sizing from your own rules, real orders
+on a venue's practice environment behind a mandate you sign, and two auditors that read the records.
 
 ---
 
@@ -21,13 +22,13 @@ a venue's practice environment behind a mandate you sign, and two auditors that 
 
 - [What it solves](#what-it-solves)
 - [Quick start](#quick-start)
-- [What you see while it runs](#what-you-see-while-it-runs)
+- [What you see, in order](#what-you-see-in-order)
 - [How one cycle decides](#how-one-cycle-decides)
 - [Venues](#venues)
 - [Models and providers](#models-and-providers)
 - [From a replay to real orders](#from-a-replay-to-real-orders)
 - [Your money, your orders, your positions](#your-money-your-orders-your-positions)
-- [The console, and watching a desk](#the-console-and-watching-a-desk)
+- [Watching a desk, and what is kept](#watching-a-desk-and-what-is-kept)
 - [Command line](#command-line)
 - [What it guarantees, and what is not built yet](#what-it-guarantees-and-what-is-not-built-yet)
 - [Documentation](#documentation)
@@ -80,53 +81,48 @@ todo  [agents].provider is still the placeholder; name the provider you have a k
 ```
 
 Name your provider and model in `strategy.toml` (see [Models and providers](#models-and-providers))
-and `tra run` decides once. `tra run --every 5m` keeps deciding as each bar closes.
+and `tra run` decides once. `tra run --every 5m` keeps deciding: the first pass runs now, then one
+every five minutes on the clock (:00, :05, :10 and so on), so the wait after a pass is whatever is
+left to the next mark, and the desk tells you the time it ends at.
 
-## What you see while it runs
+Type `tra` on its own inside the desk and you get the console, which is the next section.
 
-A cycle spends most of its time waiting on models, so the terminal shows the whole pipeline from
-the start and updates it as each step begins and ends. Steps that run at the same time spin at the
-same time, each with its own clock, and the line underneath says who is working right now:
+## What you see, in order
 
-```
-                     cycle
-step               state        detail
-────────────────────────────────────────────────
-data               done         4 kind(s) (1.2s)
-trigger            done         moved 41.20 bps
-capital            done         equity 10412.80, used 10000
-regime             done         ranging on 1m, 15m mixed, 1h trending up
-technical          / running    4s
-macro              / running    4s
-sentiment          done         2.5s
-cost               pending
-validator pro      pending
-validator contra   pending
-conviction         pending
-risk               pending
-cost gate          pending
-targets            pending
-intent             pending
-6s | working: technical, macro | 1792 tokens
-```
+**1. The console.** Run `tra` inside your desk and it opens the cockpit: what is ready, what isn't,
+and the next command to run. Under it is a prompt that takes every command and draws it right
+there. Arrow keys go back through what you typed, tab completes, `help` lists the commands and
+`exit` leaves. For scripts and cron, `tra -c "run --now"` runs one command and exits.
 
-A desk that watches several instruments shows the same kind of table for the pass over them first,
-one row per instrument, with why each one was taken or held. Here a `tra run --every 5m` desk on
-three instruments takes SOL and holds the other two, then works through the cycle with both
-validators still thinking:
+![the cockpit](assets/cockpit.png)
+
+**2. The pass over your instruments.** Type `run --every 5m` and the desk first refreshes any data
+series that are due, one line each. Then it looks at every instrument on your list, one data pull
+apiece, and measures it. The screen steps through them live:
+
+![the screen pass](assets/pair-screener.png)
+
+**3. One cycle per instrument it takes.** Code found the candidates and measured them; the screener
+chose among them and cited each instrument's own figures; code's own order is kept beside the
+choice. The instruments taken get a full cycle. The terminal shows the whole pipeline from the
+start and updates it as each step begins and ends. Steps that run at the same time spin at the same
+time, each with its own clock, and the line underneath says who is working right now:
 
 ![a scheduled desk at work](assets/trading-agents.png)
 
-Between scheduled cycles it counts down to the next one, and an auditor woken by an alarm gets a
-spinner of its own. When the cycle finishes, the table gives way to the result: the data it used
-and what the round trip costs,
+**4. The result.** When the cycle finishes, the table gives way to the pass over the universe, what
+was taken and what was held and why, then the data the cycle used and what the round trip costs:
 
 ![one cycle](assets/cycle.png)
 
-then what each validator argued, how conviction weighed the analysts, the risk at the stop, and
-whether the trade clears the desk's targets:
+After that, what each validator argued, how conviction weighed the analysts, the risk at the stop,
+and whether the trade clears the desk's targets:
 
 ![validators, conviction, risk and targets](assets/one-cycle.png)
+
+**5. Between cycles.** The desk says when the next pass is, on the clock and in minutes, for
+example `next pass at 14:30:00 UTC, in 10m 57s`, and counts down to it. An auditor woken by an alarm
+gets a spinner of its own.
 
 The same cycle as plain text (`--plain`, a pipe or a log), from a real run on live data, shortened:
 
@@ -157,10 +153,12 @@ of twice the cost and got 1.94 times. A refusal names the figure behind it, ever
 
 ```mermaid
 flowchart TD
-    engine[["code fetches the data<br/>each value carries its source and age"]] --> wake
+    find[["code finds the universe and measures each instrument<br/>one data pull each; every value carries its source and age"]] --> wake
     wake{"trigger<br/>has anything moved since the last look?"}
     wake -- "no" --> held["held: one data pull, no tokens spent"]
-    wake -- "yes" --> briefs
+    wake -- "yes" --> pick["the screener picks among what code admitted<br/>citing each instrument's own figures"]
+    pick -- "none taken" --> held
+    pick -- "taken" --> briefs
     briefs["code writes the briefs<br/>each role sees only the figures its job needs"] --> round1
     subgraph round1["asked at the same time"]
         direction LR
@@ -170,7 +168,7 @@ flowchart TD
         mood["sentiment analyst"]
     end
     round1 --> price["code prices the round trip<br/>fee, spread, impact, funding, slippage"]
-    price --> round2["validators: pro, contra, neutral<br/>a claim that cites no figure is thrown away"]
+    price --> round2["validators, as many as you declare<br/>a claim that cites no figure is thrown away"]
     round2 --> matrix{"confluence<br/>do your declared states agree with the direction?"}
     matrix -- "no" --> refused["a refusal that names its figure"]
     matrix -- "yes" --> size["conviction<br/>how much, from your ladder"]
@@ -189,7 +187,8 @@ Who does what:
 | macro analyst | dated rates and levels, dated text | risk-on, risk-off or neutral | propose a direction |
 | on-chain analyst | chain and derivatives figures | accumulation, distribution or neutral | propose a direction |
 | sentiment analyst | dated scores and notes you curate | negative, neutral, positive, or not declared | invent a mood no figure supports |
-| validators (pro, contra, neutral) | the proposal and the figures behind it | support, oppose or abstain, with cited claims | cite a figure it wasn't given |
+| market screener | what code measured for each admitted instrument: move, spread, regime, volume, correlation to BTC | which instruments to take, in what order, citing their figures | add an instrument code did not admit |
+| validators (pro, contra, neutral) | the proposal and the figures behind it | support, oppose or abstain, with cited claims | decide, or cite a figure it wasn't given |
 | technology and quant auditors | the cycles this desk recorded | findings and proposed changes | change anything |
 
 The macro, on-chain and sentiment analysts read dated series you declare under `sources/`. Each one
@@ -197,6 +196,10 @@ is either a file you keep or a feed the desk refreshes itself (FRED, the Crypto 
 or any paid vendor that answers JSON over https). `tra sources show` lists every series with where it
 came from and how old its last value is, and a value older than its `max_age` is shown as stale and
 never counted. [docs/sources.md](docs/sources.md) has the details.
+
+Which validators run is yours to declare. A vote never decides on its own: it moves conviction by
+the weight you give it (`[conviction].validator_weight`), and a stance counts for what it says beyond
+its assignment, since a pro that supports is expected to.
 
 Analysts are allowed to disagree. Each one's view becomes a score between -1 and 1, computed from
 its own figures against the lines you drew, so a macro reading barely past its line counts as a small
@@ -248,7 +251,7 @@ environment (or the `.env` beside your config) and nowhere else.
 
 | Provider | Key in `.env` | Install with | Structured output | Tested live here |
 |---|---|---|---|---|
-| `groq` | `GROQ_API_KEY` | `openai` | JSON mode, checked by code | **yes**: `openai/gpt-oss-120b`, every live cycle in our records |
+| `groq` | `GROQ_API_KEY` | `openai` | JSON schema, falling back to JSON mode; checked by code | **yes**: `openai/gpt-oss-120b` and `openai/gpt-oss-20b`, every live cycle in our records |
 | `google` | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | `google-genai` | JSON schema | **yes**: `gemini-flash-latest`, as the fallback |
 | `anthropic` | `ANTHROPIC_API_KEY` | `anthropic` | JSON schema | unit-tested; default model `claude-opus-5-5` |
 | `openai` | `OPENAI_API_KEY` | `openai` | strict JSON schema | unit-tested |
@@ -277,7 +280,9 @@ model = "a-cheaper-model"
 effort = "low"
 ```
 
-`fallback` is tried in order when a provider is rate limited or down, with the same brief. Every
+`fallback` is tried in order when a provider is rate limited or down, with the same brief. A vendor's
+free tier meters each model on its own, so roles can share a provider across two models and each
+model keeps its own allowance; `tra check` judges the load per model and says when one is too much. Every
 call is a line in `usage.jsonl` with its tokens and latency, and nothing caps spend unless you
 declare a ceiling. `tra keys --probe` proves each key works without sending a prompt. A vendor of
 your own is about thirty lines (`docs/providers.md`).
@@ -347,14 +352,7 @@ Point `[run].venue_key` at a `maker-taker` channel and entries rest on the book 
 instead - a lower fee, fewer fills, since a resting order can be left behind by the market. Either
 way the cost gate prices the fee of the channel you chose.
 
-## The console, and watching a desk
-
-![the cockpit](assets/cockpit.png)
-
-Type `tra` on its own and it opens a console: the cockpit above (what's ready, what isn't, the next
-command), then a prompt that takes every command and draws it right there. Arrow keys go back
-through what you typed, tab completes, `help` lists the commands and `exit` leaves. For scripts and
-cron, `tra -c "run --now"` runs one command and exits.
+## Watching a desk, and what is kept
 
 The console runs commands in its own process, so closing it ends what it was running. A desk that
 should keep running belongs under a supervisor (systemd, a service manager, `tmux`), and then you
@@ -371,7 +369,8 @@ What is kept, and where:
 
 | What | Where | Notes |
 |---|---|---|
-| everything one cycle did | `runs/cycles/<id>/` | snapshot, briefs, answers, intent, `placed.json`, `cycle.json` |
+| everything one cycle did | `runs/cycles/<id>/` | snapshot, briefs, answers, intent, `placed.json`, `cycle.json`, and `inputs.json.gz` with the raw inputs; `cycle.json` holds a sha256 of each file |
+| the pass over the universe | `runs/screens/` | every instrument measured, what the screener chose and why |
 | every model call | `runs/cycles/usage.jsonl` | tokens, latency, price |
 | when the desk ran and what stopped it | `runs/cycles/scheduler.jsonl` | one line per start and stop |
 | every position closed, by time, by the venue or by the kill switch | `runs/cycles/positions.jsonl` | venue mode |
@@ -400,7 +399,7 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | Command | What it does |
 |---|---|
 | `tra run` | one autonomous cycle |
-| `tra run --every 5m --cycles 12` | twelve scheduled passes, five minutes apart, on the interval's own boundary |
+| `tra run --every 5m --cycles 12` | twelve scheduled passes: the first now, then one on every fifth minute of the clock |
 | `tra run --now` | ask the roster even if the trigger would have held a quiet market |
 | `tra watch --every 5s` | a read-only view of a running desk |
 | `tra audit` | both auditors over the records; nothing is applied |

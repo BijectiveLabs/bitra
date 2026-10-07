@@ -1066,6 +1066,16 @@ def test_the_schedule_lands_on_the_next_boundary(tmp_path: Path) -> None:
     assert plan.wait() == 288.0 and slept == [288.0]
 
 
+def test_the_schedule_says_when_the_wait_ends_on_the_clock() -> None:
+    from trading_research_agents.cli.main import Schedule
+
+    # 1_800_000_000 is 2027-01-15 08:00:00 UTC; ten minutes into a half hour leaves twenty.
+    plan = Schedule(every_s=1800.0, clock=lambda: 1_800_000_600.0)
+    said = plan.announce(plan.left())
+    assert "08:30:00 UTC" in said and "in 20m 00s" in said and "every 30m" in said
+    assert Schedule(every_s=90.0).every_label == "90s"
+
+
 def test_a_loop_ends_on_the_budget_the_kill_switch_or_the_count(tmp_path: Path) -> None:
     from trading_research_agents.cli.main import Schedule
 

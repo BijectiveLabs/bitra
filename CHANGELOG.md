@@ -8,6 +8,15 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- The scheduler says when the next pass ends on the clock (`next pass at 14:30:00 UTC, in 10m 57s`)
+  and why it is shorter than the interval: passes land on multiples of `--every`, so a desk started
+  at 14:16 on `--every 30m` waits until 14:30, not until 14:46.
+- When the screener takes none of what code admitted, the pass says so, instead of blaming the
+  trigger for the one instrument that did not move.
+- The macro and on-chain prompts ask for a figure named in full when two series carry the same field;
+  a bare `state` was thrown away as ambiguous.
+- README follows the order a person meets the tool: the console, the screen pass, one cycle, then
+  the result.
 - A pass holds every candidate before any model is asked when the desk already carries
   `[desk].max_open_positions`; those cycles could only be refused at the desk step, and their calls
   counted against the provider's rate limit (seen live: a validator rate-limited on a cycle that

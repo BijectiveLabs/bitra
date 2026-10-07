@@ -323,6 +323,25 @@ def test_an_empty_pass_says_which_rule_held_each_instrument() -> None:
     assert why_no_cycle(quiet) == "BTCUSDT not moved enough for [trigger]"
 
 
+def test_a_pass_the_screener_emptied_says_so_rather_than_blaming_the_trigger() -> None:
+    from trading_research_agents.execution.universe import why_no_cycle
+
+    rows = [
+        {"instrument": "BTCUSDT", "admitted": True, "kept_by_screener": False, "reasons": []},
+        {"instrument": "ETHUSDT", "admitted": True, "kept_by_screener": False, "reasons": []},
+        {
+            "instrument": "NEARUSDT",
+            "admitted": False,
+            "kept_by_screener": True,
+            "reasons": ["the mid has moved 1.99 bps since the last cycle"],
+        },
+    ]
+    said = why_no_cycle(rows)
+    assert "NEARUSDT not moved enough for [trigger]" in said
+    assert "the screener took none of the 2 that code admitted" in said
+    assert "other reasons" not in said
+
+
 def test_a_full_desk_says_so_instead_of_paying_for_a_refused_cycle() -> None:
     from trading_research_agents.execution.universe import why_no_cycle
 

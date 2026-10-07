@@ -228,8 +228,12 @@ def why_no_cycle(rows: Sequence[Mapping[str, Any]]) -> str:
     )
     found: dict[str, list[Mapping[str, Any]]] = {name: [] for name, _ in causes}
     rest: list[str] = []
+    passed_over: list[str] = []
     for row in rows:
         if row.get("admitted") and row.get("kept_by_screener", True):
+            continue
+        if row.get("admitted"):
+            passed_over.append(str(row["instrument"]))
             continue
         cause = next((name for name, words in causes if held_for(row, words)), None)
         if cause is None:
@@ -253,6 +257,11 @@ def why_no_cycle(rows: Sequence[Mapping[str, Any]]) -> str:
         said.append(f"{', '.join(capped)} waiting: the desk is at [desk].max_open_positions")
     if quiet:
         said.append(f"{', '.join(quiet)} not moved enough for [trigger]")
+    if passed_over:
+        said.append(
+            f"the screener took none of the {len(passed_over)} that code admitted; "
+            "its reason for each is above"
+        )
     if rest:
         said.append(f"{', '.join(rest)} held for other reasons (above)")
     if open_now and paired and not quiet and not rest:
