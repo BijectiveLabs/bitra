@@ -42,7 +42,13 @@ from trading_research_agents.data.sources.chain import SourceChain
 from trading_research_agents.execution.desk import Desk
 from trading_research_agents.execution.regime import RegimeRule, label
 from trading_research_agents.execution.targets import intents_today
-from trading_research_agents.execution.trigger import Trigger, last_seen, spread_of, worth_asking
+from trading_research_agents.execution.trigger import (
+    Trigger,
+    last_seen,
+    previous_looks,
+    spread_of,
+    worth_asking,
+)
 from trading_research_agents.execution.universe import Candidate, Screened, Universe, order, take
 from trading_research_agents.llm.completer import Completer
 from trading_research_agents.records import COMPACT
@@ -160,6 +166,7 @@ def look(
     moves: dict[str, list[float]] | None = None,
     listed: Mapping[str, Any] | None = None,
     rule: RegimeRule | None = None,
+    looks: Mapping[str, tuple[Decimal, datetime]] | None = None,
 ) -> Candidate:
     """One instrument, looked at for the price of a data pull and no tokens at all."""
     snapshot = take_snapshot(instrument, chains, kinds=KINDS, options=options)
@@ -172,11 +179,15 @@ def look(
     if moves is not None:
         moves[instrument] = returns_of(snapshot)
     reasons = [f"data {kind}: {why}" for kind, why in sorted(snapshot.refused.items())]
+    seen = last_seen(root, instrument=instrument)
+    earlier = (looks or {}).get(instrument)
+    if earlier is not None and (seen.at is None or earlier[1] > seen.at):
+        seen = replace(seen, mid=earlier[0], at=earlier[1])
     wake = worth_asking(
         trigger,
         mid=figures["mid"],
         spread_bps=figures["spread_bps"],
-        seen=last_seen(root, instrument=instrument),
+        seen=seen,
         now=now,
         round_trips_today=intents_today(root, at=now, instrument=instrument),
         max_round_trips_per_day=max_round_trips_per_day,
@@ -213,6 +224,7 @@ def sweep(
     full: str = "",
     listed: Mapping[str, Mapping[str, Any]] | None = None,
     rule: RegimeRule | None = None,
+    screens: Path | None = None,
 ) -> Screened:
     """Look at every instrument, keep what the trigger admits, and take the top of the order."""
     out = Screened(at=cycle_id(now))
@@ -220,6 +232,7 @@ def sweep(
         return out
     moves: dict[str, list[float]] = {}
     out.candidates = []
+    looks = {} if screens is None else previous_looks(screens)
     for instrument in universe.instruments:
         announce(watch, instrument, RUNNING, "one data pull")
         candidate = look(
@@ -233,6 +246,7 @@ def sweep(
             moves=moves,
             listed=(listed or {}).get(instrument),
             rule=rule,
+            looks=looks,
         )
         # The book comes first, whatever the trigger said: an open position or a full desk is the
         # reason nothing can be sent, and "not moved enough" would hide it (seen live 2026-10-05,
@@ -382,7 +396,7 @@ def screener_brief(candidates: list[Candidate], *, mechanism: str, at: str) -> d
     """What the screener is given: the figures code computed, and the mechanism it screens for.
 
     A figure that does not apply is left out rather than sent as null. On the first look at an
-    instrument there is no previous mid, so there is no move and no pressure - and a null in a brief
+    instrument there is no recent mid, so there is no move and no pressure - and a null in a brief
     reads as a measurement that failed, which is a different thing and one a reader will hold
     against the instrument.
     """
@@ -407,7 +421,7 @@ def screener_brief(candidates: list[Candidate], *, mechanism: str, at: str) -> d
         "basis": (
             "every figure here was computed by code from one snapshot per instrument and the "
             "venue's 24-hour ticker; where first_look is true this desk has not looked at that "
-            "instrument before, so it has no move and no pressure to report and neither is missing"
+            "instrument lately, so it has no move and no pressure to report and neither is missing"
         ),
         "candidates": rows,
     }

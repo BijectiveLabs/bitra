@@ -144,10 +144,18 @@ class SeriesSpec:
     # operator keeps the file up to date by hand, and max_age is what keeps them honest.
     fetch: Mapping[str, Any] | None = None
     refresh: timedelta = timedelta(hours=1)
+    # The asset this series is about, such as BTC for Bitcoin's exchange flows. Empty means it is
+    # about the market as a whole and counts the same for every instrument. For an instrument of
+    # another asset it still counts, scaled by `elsewhere`: Bitcoin's chain says something about
+    # a Zcash trade, but less than it says about Bitcoin's own.
+    asset: str = ""
+    elsewhere: Decimal = Decimal("0.5")
 
     def __post_init__(self) -> None:
         if not self.name.strip():
             raise SeriesError("a series has a name")
+        if not Decimal(0) <= self.elsewhere <= Decimal(1):
+            raise SeriesError(f"{self.name}: elsewhere is between 0 and 1")
         if self.ts_unit not in TIME_UNITS and self.ts_unit != "iso8601":
             raise SeriesError(f"{self.name}: ts_unit is s, ms, us, ns or iso8601")
         if self.publish_lag < timedelta(0):
@@ -260,6 +268,8 @@ def load_series_map(path: Path) -> tuple[SeriesSpec, ...]:
                     ),
                     fetch=_fetch(entry.get("fetch"), name),
                     refresh=_duration(str(entry.get("refresh", "1h")), "refresh"),
+                    asset=str(entry.get("asset", "")).strip().upper(),
+                    elsewhere=Decimal(str(entry.get("elsewhere", "0.5"))),
                 )
             )
         except (TypeError, ValueError) as exc:

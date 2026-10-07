@@ -42,6 +42,41 @@ fetch = { from = "alternative.me" }
 threshold = { bullish_above = 60, bearish_below = 25 }
 ```
 
+## A series about one asset
+
+A chain figure belongs to a chain. Bitcoin's exchange flows say a good deal about a Bitcoin trade and
+less about a Zcash one. Name the asset a series is about, and say how much it counts elsewhere:
+
+```toml
+[[series]]
+name = "eth_exchange_net_flow"
+# ...
+asset = "ETH"          # full weight on ETHUSDT; left out, a series counts the same everywhere
+elsewhere = 0.5        # the share it counts on any other instrument; 0 mutes it there, 1 is full
+```
+
+The asset of an instrument is its name without the quote: `ZECUSDT` is `ZEC`. Each row in the brief
+carries its asset, and a row counted at less than full says so (`counts`). The change is in the
+conviction score only: the analyst still reads every figure, and a series with no `asset` behaves
+as it always did.
+
+## What is free, and what is not
+
+Checked against the Coin Metrics community catalog on 2026-10-07, daily frequency, no key:
+
+| Asset | What the community tier carries |
+|---|---|
+| BTC, ETH | exchange inflow and outflow in coins and in USD (`FlowInExNtv`, `FlowOutExNtv`, `FlowInExUSD`, `FlowOutExUSD`), supply on exchanges (`SplyExNtv`), active addresses, transfer count, MVRV |
+| USDT | supply (`SplyCur`), active addresses, transfer count (`TxTfrCnt`); `IssTotUSD` answered zero for every day, so it is not usable |
+| XRP, ZEC and most others | supply, transfer count, market cap; no exchange flows |
+| SOL | market cap only |
+
+Large-holder and whale figures, per-exchange flows and stablecoin movements between venues are not
+in the free tier. They are what a paid provider sells, and the desk reads them the same way: one
+`[[series]]` with `fetch = { from = "http", ... }` pointed at that provider, and a threshold. What
+the on-chain analyst reads is whatever is declared in `onchain.toml` and `derivatives.toml`; nothing
+in the code is tied to a vendor, and a vendor with no declaration is not read.
+
 ## Fetching
 
 | `from` | What it is | Key |

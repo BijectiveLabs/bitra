@@ -312,7 +312,33 @@ def context_brief(
         raise BriefError(f"{role} is not a reading analyst")
     brief["instrument"] = snapshot.instrument
     brief["declared_series"] = [s.name for s in series]
+    _scope_rows(brief, series, snapshot.instrument)
     return brief
+
+
+QUOTE_SUFFIXES = ("USDT", "USDC", "BUSD", "USD", "PERP")
+
+
+def base_of(instrument: str) -> str:
+    """The asset an instrument is on: BTCUSDT is BTC. A name with no known quote is its own base."""
+    name = instrument.upper()
+    for quote in QUOTE_SUFFIXES:
+        if name.endswith(quote) and len(name) > len(quote):
+            return name[: -len(quote)]
+    return name
+
+
+def _scope_rows(brief: dict[str, Any], series: Sequence[Series], instrument: str) -> None:
+    """Mark each row with the asset it is about and how much it counts for this instrument."""
+    specs = {s.spec.name: s.spec for s in series}
+    here = base_of(instrument)
+    for row in brief.get("series") or []:
+        spec = specs.get(str(row.get("series")))
+        if spec is None or not spec.asset:
+            continue
+        row["asset"] = spec.asset
+        if spec.asset != here:
+            row["counts"] = str(spec.elsewhere)
 
 
 # What a declared threshold means for each reading role's own vocabulary. The operator declares
@@ -372,9 +398,12 @@ def _net_strength(rows: Sequence[Mapping[str, Any]]) -> Decimal:
             continue
         raw = row.get("strength")
         if raw is not None:
-            found.append(Decimal(str(raw)))
+            value = Decimal(str(raw))
         else:
-            found.append({"bullish": Decimal(1), "bearish": Decimal(-1)}.get(state, Decimal(0)))
+            value = {"bullish": Decimal(1), "bearish": Decimal(-1)}.get(state, Decimal(0))
+        # A series about another asset is divided over the same count but weighed less, so a desk
+        # reading only another asset's chain hears a quieter voice, not the same one.
+        found.append(value * Decimal(str(row.get("counts", 1))))
     if not found:
         return Decimal(0)
     return (sum(found, Decimal(0)) / len(found)).quantize(Decimal("0.001"))

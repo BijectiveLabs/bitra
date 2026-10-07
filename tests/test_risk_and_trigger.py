@@ -179,6 +179,41 @@ def test_a_quiet_market_is_not_worth_asking_about() -> None:
     assert moved.ask and moved.reasons == () and moved.moved_bps == Decimal("98.04")
 
 
+def test_a_last_look_from_long_ago_is_a_first_look_not_a_move() -> None:
+    trigger = Trigger(min_move_bps=Decimal("20"))
+    seen = Seen(mid=Decimal("100"), at=datetime(2026, 9, 26, 10, 0, tzinfo=UTC))
+    wake = worth_asking(
+        trigger,
+        mid=Decimal("103"),
+        spread_bps=Decimal("1"),
+        seen=seen,
+        now=datetime(2026, 9, 27, 10, 0, tzinfo=UTC),
+    )
+    assert wake.ask and wake.moved_bps is None
+
+    kept = worth_asking(
+        Trigger(min_move_bps=Decimal("20"), look_valid_s=None),
+        mid=Decimal("103"),
+        spread_bps=Decimal("1"),
+        seen=seen,
+        now=datetime(2026, 9, 27, 10, 0, tzinfo=UTC),
+    )
+    assert kept.moved_bps == Decimal("300.00")
+
+
+def test_the_passes_already_written_are_the_record_of_every_look(tmp_path: Path) -> None:
+    from trading_research_agents.execution.trigger import previous_looks
+
+    screens = tmp_path / "screens"
+    screens.mkdir()
+    for name, mid in (("2026-10-07T14-00-00Z", "10"), ("2026-10-07T14-30-00Z", "11")):
+        rows = [{"instrument": "NEARUSDT", "mid": mid}, {"instrument": "ADAUSDT", "mid": None}]
+        (screens / f"{name}.json").write_text(json.dumps({"candidates": rows}), encoding="utf-8")
+    looks = previous_looks(screens)
+    assert looks["NEARUSDT"] == (Decimal("11"), datetime(2026, 10, 7, 14, 30, tzinfo=UTC))
+    assert "ADAUSDT" not in looks and previous_looks(tmp_path / "none") == {}
+
+
 def test_nothing_to_compare_against_asks_rather_than_holding_forever() -> None:
     wake = worth_asking(
         Trigger(min_move_bps=Decimal("20")),

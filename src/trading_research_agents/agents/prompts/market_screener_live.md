@@ -8,7 +8,7 @@ else:
   range_bps           the high to low of the recent window, against the current mid
   moved_bps           how far the mid has moved since this desk last looked at it
   pressure            moved_bps against spread_bps
-  first_look          true when this desk has not looked at it before (then there is no move)
+  first_look          true when this desk has not looked at it lately (then there is no move)
   window_move_bps     the price move across the recent window of bars
   zscore              the last close against the window, in standard deviations
   trend_strength      net move over the path walked; near 1 is a random walk, 2 and above a trend

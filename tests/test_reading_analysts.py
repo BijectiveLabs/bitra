@@ -297,6 +297,32 @@ def test_code_reads_the_declared_state_beside_whatever_the_model_says(tmp_path: 
     assert declared_state(onchain_analyst.ROLE, both)["declared"] == "mixed"
 
 
+def test_a_series_about_another_asset_counts_for_less_on_this_one(tmp_path: Path) -> None:
+    from trading_research_agents.agents.briefs import base_of, declared_state
+
+    path = series_file(
+        tmp_path,
+        "btc_flow",
+        [("2026-09-20", "1800"), ("2026-09-25", "4000")],
+        threshold="{ bearish_above = 1500, bullish_below = 0 }",
+        asset='"btc"',
+        elsewhere="0.25",
+    )
+    series = load_all(path)
+    assert base_of("ZECUSDT") == "ZEC" and base_of("BTCUSD") == "BTC" and base_of("USDT") == "USDT"
+
+    own = context_brief(onchain_analyst.ROLE, snapshot(), series=series)
+    assert own["series"][0]["asset"] == "BTC" and "counts" not in own["series"][0]
+
+    other = snapshot()
+    other.instrument = "ZECUSDT"
+    away = context_brief(onchain_analyst.ROLE, other, series=series)
+    assert away["series"][0]["counts"] == "0.25"
+    here = Decimal(declared_state(onchain_analyst.ROLE, own)["score"])
+    there = Decimal(declared_state(onchain_analyst.ROLE, away)["score"])
+    assert here != 0 and there == (here * Decimal("0.25")).quantize(Decimal("0.001"))
+
+
 def test_a_threshold_grades_how_far_past_its_line_a_value_sits() -> None:
     from trading_research_agents.data.series import Threshold
 

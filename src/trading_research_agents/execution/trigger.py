@@ -13,6 +13,7 @@ price of one data pull. What it looks at:
   max_spread_bps    a book this wide cannot be traded through whatever anyone concludes
   cooldown_s        one decision per instrument in this window; a second one is a second opinion
   widen_after       after a run of refusals with nothing changing, ask for a larger move each time
+  look_valid_s      a last look older than this is not a reference; the instrument is a first look
 
 The last one is the honest answer to the day that produces no trade. The desk does not go blind: it
 raises its own bar for being disturbed, and one real move brings it straight back.
@@ -49,8 +50,13 @@ class Trigger:
     max_spread_bps: Decimal | None = None
     cooldown_s: int | None = None
     widen_after: int | None = None
+    # A move measured against a mid from yesterday says little about now, so a reference older than
+    # this is dropped and the instrument is looked at as if for the first time.
+    look_valid_s: int | None = 3600
 
     def __post_init__(self) -> None:
+        if self.look_valid_s is not None and self.look_valid_s < 1:
+            raise TriggerError("[trigger].look_valid_for is at least one second")
         if self.min_move_bps is not None and self.min_move_bps < 0:
             raise TriggerError("[trigger].min_move_bps is not negative")
         if self.max_spread_bps is not None and self.max_spread_bps <= 0:
@@ -80,6 +86,7 @@ class Trigger:
             "max_spread_bps": None if self.max_spread_bps is None else str(self.max_spread_bps),
             "cooldown_s": self.cooldown_s,
             "widen_after": self.widen_after,
+            "look_valid_s": self.look_valid_s,
         }
 
 
@@ -179,8 +186,16 @@ def worth_asking(
     # Measured whenever there is something to measure against, declared minimum or not: the move is
     # what a pass over several instruments is ordered by, and a figure computed only when a
     # threshold happens to be set is a figure that disappears exactly when the threshold is waived.
-    if mid is not None and seen.mid is not None and seen.mid > 0:
-        travelled = moved_bps(mid=mid, before=seen.mid)
+    before = seen.mid
+    if (
+        before is not None
+        and seen.at is not None
+        and trigger.look_valid_s is not None
+        and (now - seen.at).total_seconds() > trigger.look_valid_s
+    ):
+        before = None
+    if mid is not None and before is not None and before > 0:
+        travelled = moved_bps(mid=mid, before=before)
     if needed is not None and travelled is not None and travelled < needed:
         because = (
             ""
@@ -243,6 +258,34 @@ def last_seen(root: Path, *, instrument: str, look_back: int = 40) -> Seen:
         if mid is not None and last_intent is not None:
             break
     return Seen(mid=mid, at=at, refusals=refusals, last_intent_at=last_intent)
+
+
+def previous_looks(screens: Path, *, files: int = 6) -> dict[str, tuple[Decimal, datetime]]:
+    """The latest mid each instrument had in the passes already written, with when it was taken.
+
+    A pass looks at every instrument but runs a cycle on a few, so the cycles on disk are a poor
+    answer to "since the last look": most names have not had one for hours. The screens are the
+    record of every look.
+    """
+    if not screens.is_dir():
+        return {}
+    out: dict[str, tuple[Decimal, datetime]] = {}
+    for path in sorted(screens.glob("*.json"), reverse=True)[: max(files, 1)]:
+        when = at_of(path.stem)
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        rows = record.get("candidates") if isinstance(record, dict) else None
+        if when is None or not isinstance(rows, list):
+            continue
+        for row in rows:
+            if not isinstance(row, dict) or row.get("instrument") in out:
+                continue
+            found = _mid_of({"seen": {"mid": row.get("mid")}})
+            if found is not None:
+                out[str(row["instrument"])] = (found, when)
+    return out
 
 
 def _summaries(

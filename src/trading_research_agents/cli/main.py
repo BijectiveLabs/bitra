@@ -2810,6 +2810,7 @@ def _sweep(
             full=full,
             listed={row["instrument"]: row for row in (discovered or {}).get("kept", [])},
             rule=cfg.regime,
+            screens=out.parent / "screens",
         )
 
     if args.json or not _watching():
@@ -4079,6 +4080,8 @@ def _trigger_notes(cfg: Any) -> list[str]:
         said.append(f"{trigger.cooldown_s}s since the last intent")
     if trigger.widen_after is not None:
         said.append(f"more movement after {trigger.widen_after} straight refusals")
+    if trigger.min_move_bps is not None and trigger.look_valid_s is not None:
+        said.append(f"a last look older than {trigger.look_valid_s}s counts as a first look")
     return ["trigger: asks the roster only on " + "; ".join(said)]
 
 

@@ -599,7 +599,7 @@ TARGET_KEYS = (
     "max_research_bps",
     "max_round_trips_per_day",
 )
-TRIGGER_KEYS = ("min_move_bps", "max_spread_bps", "cooldown_s", "widen_after")
+TRIGGER_KEYS = ("min_move_bps", "max_spread_bps", "cooldown_s", "widen_after", "look_valid_for")
 AUDIT_KEYS = ("on_alarm", "alarm_cooldown_s", "quant_every_cycles")
 UNIVERSE_KEYS = (
     "instruments",
@@ -947,8 +947,13 @@ def _trigger(raw: dict[str, Any]) -> Trigger:
             max_spread_bps=(_dec(table, "max_spread_bps") if "max_spread_bps" in table else None),
             cooldown_s=_count(table, "cooldown_s") if "cooldown_s" in table else None,
             widen_after=_count(table, "widen_after") if "widen_after" in table else None,
+            look_valid_s=(
+                int(parse_duration(str(table["look_valid_for"])))
+                if "look_valid_for" in table
+                else Trigger().look_valid_s
+            ),
         )
-    except TriggerError as exc:
+    except (TriggerError, DataConfigError) as exc:
         raise ConfigError(str(exc)) from exc
 
 

@@ -19,7 +19,7 @@ from trading_research_agents.records import write_json
 
 DIRECTORY = "reuse"
 # What changes with the clock rather than with the data, and so says nothing about the reading.
-VOLATILE = frozenset({"as_of", "age_s", "age_h", "instrument", "known_since"})
+VOLATILE = frozenset({"as_of", "age_s", "age_h", "instrument", "known_since", "counts"})
 KEPT = 64
 
 

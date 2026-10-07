@@ -8,6 +8,13 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- A series can name the asset it is about (`asset`, with `elsewhere` for how much it counts on other
+  instruments). Bitcoin's chain no longer weighs the same on a Zcash trade as on a Bitcoin one.
+- `[trigger].look_valid_for` (default 1h): a last look older than this counts as a first look, and
+  "moved since the last look" is measured against the latest pass over the universe, not only the
+  last cycle, which for most instruments was hours ago.
+- A position the venue closed is reported with its currency and its return in bps of the entry
+  notional: `net 1.9327 USDT (193.3 bps of the entry notional)`.
 - The scheduler says when the next pass ends on the clock (`next pass at 14:30:00 UTC, in 10m 57s`)
   and why it is shorter than the interval: passes land on multiples of `--every`, so a desk started
   at 14:16 on `--every 30m` waits until 14:30, not until 14:46.

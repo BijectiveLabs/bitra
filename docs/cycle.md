@@ -174,12 +174,19 @@ min_move_bps = 15                # the mid has to have moved this far since the 
 max_spread_bps = 8               # a book wider than this cannot be traded through
 cooldown_s = 900                 # one decision per instrument in this window
 widen_after = 6                  # after this many straight refusals, ask for more movement
+look_valid_for = "1h"            # a last look older than this counts as a first look; 1h by default
 ```
 
 Every figure it reads is free: the touch of the snapshot the cycle has already taken, the cycle
 summaries on disk, the clock, and the count of intents already written today. A cycle that holds
 costs one data pull and no tokens, and the hold is written down with its arithmetic - what the mid
 moved, what the desk asked for, and why.
+
+"Since the last look" is measured against the latest mid the desk recorded for that
+instrument, whether in a cycle or in a pass over the universe. A pass looks at every instrument
+but runs a cycle on a few, so the passes are the record that matters. A last look older than
+`look_valid_for` is dropped, and the instrument is a first look: it has no move to report, and the
+trigger admits it instead of measuring hours of drift against it.
 
 `widen_after` is the part that answers a whole quiet day. After a run of refusals with nothing
 changing, the movement required grows with the streak, to a hard ceiling of eight times the

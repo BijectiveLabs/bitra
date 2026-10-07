@@ -336,8 +336,11 @@ class Keeper:
             exit_price = paid / amount
             sign = Decimal(1) if entry.side == "buy" else Decimal(-1)
             gross = (exit_price - entry.price) * min(amount, entry.size) * sign
+            notional = entry.price * min(amount, entry.size)
             trip.update(
                 {
+                    "quote": _quote_of(str(getattr(hand, "symbol", ""))),
+                    "net_bps": str(((gross - fees) / notional * 10_000).quantize(Decimal("0.1"))),
                     "exit": str(exit_price.quantize(Decimal("0.0001"))),
                     "gross": str(gross.quantize(Decimal("0.0001"))),
                     "fees": str(fees.quantize(Decimal("0.0001"))),
@@ -388,9 +391,21 @@ def _how(closed: Mapping[str, Any]) -> str:
     return str(closed.get("error") or closed.get("note") or "not closed")
 
 
+def _quote_of(symbol: str) -> str:
+    """The settlement currency of a ccxt symbol: `XRP/USDT:USDT` is USDT."""
+    return symbol.partition("/")[2].partition(":")[0]
+
+
 def _trip_line(trip: Mapping[str, Any]) -> str:
     if "net" not in trip:
         return str(trip.get("note", "no result recorded"))
-    return f"exit {trip['exit']}, net {trip['net']} after {trip['fees']} of fees" + (
-        f"; funding {trip['funding']} as the venue reports it" if trip.get("funding") else ""
+    unit = f" {trip['quote']}" if trip.get("quote") else ""
+    share = f" ({trip['net_bps']} bps of the entry notional)" if trip.get("net_bps") else ""
+    return (
+        f"exit {trip['exit']}, net {trip['net']}{unit}{share} after {trip['fees']}{unit} fees"
+        + (
+            f"; funding {trip['funding']}{unit} as the venue reports it"
+            if trip.get("funding")
+            else ""
+        )
     )

@@ -273,7 +273,8 @@ def test_a_position_the_venue_closed_is_recorded_with_its_result(tmp_path: Path)
         ],
     )
     said = keeper(tmp_path, venue, at=datetime(2026, 10, 5, 3, 0, tzinfo=UTC)).run()
-    assert "was closed at the venue; exit 87005.2000, net 3.2826" in said[0]
+    assert "was closed at the venue; exit 87005.2000, net 3.2826 USDT" in said[0]
+    assert "(192.4 bps of the entry notional) after 0.1300 USDT fees" in said[0]
     assert venue.orders == []
 
 
