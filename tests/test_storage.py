@@ -70,6 +70,24 @@ def test_verify_names_a_file_changed_after_the_cycle_ended(
     assert "technical brief zscore is 3.0; the inputs give" in said
 
 
+def test_a_figure_a_later_release_retired_is_not_a_failure(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    from trading_research_agents.agents.verify import _recompute
+
+    cfg, _, _ = cycle_config(tmp_path, envelope, [analyst_answer()])
+    folder = Path(str(run_cycle(cfg).path))
+    brief = folder / "briefs" / "technical.json"
+    stored = json.loads(brief.read_text(encoding="utf-8"))
+    stored["timeframes"] = {"15m": {"net_bps": 29.18}}
+    brief.write_text(json.dumps(stored), encoding="utf-8")
+    assert _recompute(folder) == []
+
+    stored["zscore"] = 3.0
+    brief.write_text(json.dumps(stored), encoding="utf-8")
+    assert any("zscore" in problem for problem in _recompute(folder))
+
+
 def legacy_desk(root: Path, now: datetime) -> None:
     """Cycle directories the way a desk wrote them before the index existed."""
     for minutes, instrument, sent in (

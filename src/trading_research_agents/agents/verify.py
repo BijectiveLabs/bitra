@@ -121,7 +121,11 @@ def _recompute(folder: Path) -> list[str]:
     for frame, figures in (stored.get("timeframes") or {}).items():
         rebuilt = (brief.get("timeframes") or {}).get(frame) or {}
         for name, value in figures.items():
-            if name != "age_s" and rebuilt.get(name) != value:
+            # A figure this version no longer builds was retired by a later release; the hashes
+            # still vouch for the file, and there is nothing to recompute it against.
+            if name == "age_s" or name not in rebuilt:
+                continue
+            if rebuilt.get(name) != value:
                 problems.append(
                     f"technical brief timeframes.{frame}.{name} is {value!r}; the inputs give "
                     f"{rebuilt.get(name)!r}"
