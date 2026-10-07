@@ -1,4 +1,29 @@
-![Bijective Labs](assets/bijective_banner.png)
+<p align="center">
+  <a href="https://bijectivelabs.dev"><img src="assets/bijective_banner.png" alt="Bijective Labs"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/BijectiveLabs/trading-research-agents/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/BijectiveLabs/trading-research-agents/ci.yml?branch=develop&style=flat-square&logo=githubactions&logoColor=white&label=CI"></a>
+  <a href="https://github.com/BijectiveLabs/trading-research-agents/actions/workflows/docs.yml"><img alt="Docs build" src="https://img.shields.io/github/actions/workflow/status/BijectiveLabs/trading-research-agents/docs.yml?style=flat-square&logo=vitepress&logoColor=white&label=docs%20build"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square"></a>
+  <img alt="Status: pre-release" src="https://img.shields.io/badge/status-pre--release-orange?style=flat-square">
+</p>
+
+<p align="center">
+  <img alt="Python 3.11, 3.12, 3.13" src="https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-3776AB?style=flat-square&logo=python&logoColor=white">
+  <img alt="Managed with uv" src="https://img.shields.io/badge/uv-managed-DE5FE9?style=flat-square&logo=uv&logoColor=white">
+  <img alt="Linted and formatted with Ruff" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json&style=flat-square">
+  <img alt="Type checked with mypy" src="https://img.shields.io/badge/types-mypy-2A6DB2?style=flat-square">
+  <img alt="Venues through ccxt" src="https://img.shields.io/badge/venues-ccxt-111111?style=flat-square">
+  <img alt="Linux and Windows" src="https://img.shields.io/badge/tested%20on-Linux%20%7C%20Windows-555555?style=flat-square">
+</p>
+
+<p align="center">
+  <a href="https://bijectivelabs.dev"><img alt="bijectivelabs.dev" src="https://img.shields.io/badge/web-bijectivelabs.dev-1d2a3d?style=flat-square"></a>
+  <a href="https://docs.bijectivelabs.dev"><img alt="Documentation" src="https://img.shields.io/badge/docs-docs.bijectivelabs.dev-1f6feb?style=flat-square"></a>
+  <a href="CHANGELOG.md"><img alt="Changelog" src="https://img.shields.io/badge/changelog-CHANGELOG.md-E05735?style=flat-square"></a>
+  <a href="SECURITY.md"><img alt="Security policy" src="https://img.shields.io/badge/security-policy-2ea44f?style=flat-square"></a>
+</p>
 
 # trading-research-agents
 
