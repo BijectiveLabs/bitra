@@ -20,11 +20,11 @@ narrate an incident mid-run. Capital is governed by code that is tested and fail
 | T0 research | recorded (Parquet from `tra data audit`) | simulated | `tra backtest` (`trade replay`) |
 | T1 paper | live public trades | simulated | `tra paper` (`trade shadow`) |
 | T2 shadow | live public trades | simulated, intents recorded, zero orders | `tra paper` (`trade shadow`) |
-| T3 canary | live public trades | a live venue plugin, hard caps | `tra live` (`trade live`), see `docs/live.md` |
+| T3 canary | live public trades | a live venue plugin, hard caps | `tra live` (`trade live`), see [The live tier](/opensource/live) |
 | T4 production | | | **not in this release**; the ladder refuses it |
 
 The common spellings are aliases of the tiers. Real orders exist only at canary, through a
-plugin behind a security review that runs as tests (`docs/live.md`); the research this
+plugin behind a security review that runs as tests ([The live tier](/opensource/live)); the research this
 descends from never reached the live tier because its funnel worked, and the canary exists
 to find out whether the venue behaves the way the simulation assumed, not to make money.
 
@@ -54,7 +54,7 @@ class = "MyCore"
 lookback = 60
 ```
 
-`examples/strategies/` holds two cores so the runtime and the harness can be exercised end
+[`examples/strategies/`](https://github.com/BijectiveLabs/trading-research-agents/blob/develop/examples/strategies/) holds two cores so the runtime and the harness can be exercised end
 to end: `trailing_zscore.py` for the runtime and `pair_reversion.py` for the walk-forward
 harness. They come from the research record this project descends from, where both were
 measured and closed. They are examples of the mechanism, not recommendations, and nothing
@@ -167,7 +167,7 @@ its own core.
 Live feeds are plugins, found by name through `trading.feeds`. `tra trade shadow` takes the
 name from the venue half of `[run].venue_key` (`bybit/taker-taker` selects `bybit`) or from
 `--feed NAME`, and refuses a name with no plugin before opening a connection. One feed ships,
-behind the `[shadow]` extra; `docs/venues.md` says how to add another.
+behind the `[shadow]` extra; [Venues](/opensource/venues) says how to add another.
 
 The bundled feed subscribes to the venue's public trade stream with no key. A subscribe that
 is not acknowledged within ten seconds is not a subscription. A link carrying nothing for two

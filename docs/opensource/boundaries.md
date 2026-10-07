@@ -5,7 +5,7 @@ This page separates two things that are easy to confuse.
 - **Guarantees** are rules the code enforces and the tests check. They protect capital and keys,
   and any change, including a contribution, has to keep them.
 - **Not built yet** is scope: things a trading system can do that this project does not do today.
-  None of them is forbidden. Each one says what a contribution would need, and `CONTRIBUTING.md`
+  None of them is forbidden. Each one says what a contribution would need, and [Contributing](/opensource/contributing)
   says how to propose it.
 
 ## Guarantees
@@ -56,4 +56,4 @@ Venue mode needs a mandate the operator wrote and signed in their own project, t
 canary tier, the caps declared, and keys in the environment. Nothing here is advice: the licence is
 MIT with no warranty, and a verdict from a gate is a statement about a dataset and a registration,
 not a recommendation to trade. Compliance, reporting, jurisdiction, and whether you may run this at
-all are the operator's to settle. `docs/liability.md` says where responsibility sits, in plain words.
+all are the operator's to settle. [Liability](/opensource/liability) says where responsibility sits, in plain words.

@@ -13,9 +13,9 @@ forbids skipping forward.
 | 3 | Pre-registration | the claim cannot be stated so that data could refute it | hours | implemented |
 | 4 | Data requirements | no available instrument can measure the premise | hours to days | implemented |
 | 5 | Statistical validation | interval spans zero, loses to a matched null, or lives in one subperiod | days | implemented |
-| 6 | Strategy design | the exit is not bound to the mechanism | weeks | implemented (`docs/trading.md`) |
+| 6 | Strategy design | the exit is not bound to the mechanism | weeks | implemented ([The trading agent](/opensource/trading)) |
 | 7 | Shadow | net expectation negative in the live market, zero orders placed | weeks of calendar | implemented (`tra trade shadow`, then `tra chain validate` on its trades) |
-| 8 | Live capital | the canary loses against its own registration | capital | `tra live` at the canary tier, and venue mode in `tra run` (`docs/live.md`, `docs/capital.md`) |
+| 8 | Live capital | the canary loses against its own registration | capital | `tra live` at the canary tier, and venue mode in `tra run` ([The live tier](/opensource/live), [Capital, orders and positions](/opensource/capital)) |
 
 ## Layer 0: the cost floor
 

@@ -1,0 +1,992 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300&display=swap');
+
+/* Paksa search dan tiga-dots menempel tanpa spasi di desktop */
+@media (min-width: 960px) {
+  .VPNavBar .container {
+    gap: 0 !important;
+  }
+  .VPNavBar .container > .VPNavBarSearch {
+    margin-right: 0 !important;
+    margin-left: 0 !important;
+    flex-grow: 0 !important;
+  }
+  .VPNavBar .container > .VPFlyout.extra {
+    margin-left: 0 !important;
+    flex-grow: 0 !important;
+  }
+}
+/* BIJECTIVE docs: unified color + no border */
+
+:root {
+  --vp-font-family-base: 'Inter', 'Segoe UI', sans-serif;
+  --vp-font-family-mono: 'Consolas', 'Courier New', monospace;
+  --vp-c-brand-1: #1f6feb;
+  --vp-c-brand-2: #1a5ecc;
+  --vp-c-brand-3: #154fae;
+  --vp-c-text-1: #182338;
+  --vp-c-text-2: #4b5a73;
+  --docs-bg: #f9f9f9;
+
+  /* Native VitePress variables to ensure consistent background colors including the header */
+  --vp-c-bg: var(--docs-bg) !important;
+  --vp-c-bg-alt: var(--docs-bg) !important;
+  --vp-nav-bg-color: var(--docs-bg) !important;
+}
+
+/* ── Dark mode overrides ─────────────────────────────────────── */
+.dark {
+  --docs-bg: #1a1a1a;
+  --vp-c-brand-1: #4a9eff;
+  --vp-c-brand-2: #3b82f6;
+  --vp-c-brand-3: #2563eb;
+  --vp-c-text-1: #d6d6d6;
+  --vp-c-text-2: #888888;
+  --vp-c-bg: #1a1a1a !important;
+  --vp-c-bg-alt: #1f1f1f !important;
+  --vp-c-bg-soft: #242424 !important;
+  --vp-nav-bg-color: #1a1a1a !important;
+  --vp-c-divider: rgba(255,255,255,0.08) !important;
+  --vp-c-border: rgba(255,255,255,0.08) !important;
+  --vp-c-gutter: #1a1a1a !important;
+  --vp-sidebar-bg-color: #1a1a1a !important;
+}
+
+/* Dark: unify all backgrounds */
+.dark .Layout,
+.dark .VPNav,
+.dark .VPNavBar,
+.dark .VPContent,
+.dark .VPDoc,
+.dark .VPDoc .container,
+.dark .VPDoc .content,
+.dark .VPSidebar,
+.dark .VPDocAside,
+.dark .VPDoc .aside,
+.dark .VPDocAside .content,
+.dark .VPDoc .aside-container {
+  background: var(--docs-bg) !important;
+  border-color: rgba(255,255,255,0.08) !important;
+  box-shadow: none !important;
+}
+
+.dark html,
+.dark body,
+.dark .Layout {
+  background: var(--docs-bg) !important;
+}
+
+/* Dark: implementation framework */
+.dark .implementation-framework .vc-aside {
+  background: #222222;
+  border-color: rgba(255,255,255,0.08);
+}
+
+/* Dark: content text — bright off-white with just a faint, dulled hint of
+   warmth (not cool gray, not visibly yellow) for a more assertive read */
+.dark .VPDoc p,
+.dark .VPDoc li {
+  color: #f9f7ee;
+}
+
+.dark .VPDoc h1 { color: #dce4ea; }
+.dark .VPDoc h2 { color: #cdd8e0; border-color: rgba(255,255,255,0.07) !important; }
+.dark .VPDoc h3 { color: #bcc8d2 !important; }
+
+/* Dark: code blocks */
+.dark .VPDoc div[class*="language-"],
+.dark .VPDoc pre {
+  background: #141414 !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+}
+
+/* Dark: custom block (tip, warning, etc.) */
+.dark .custom-block.tip {
+  background: rgba(74, 158, 255, 0.06);
+  border-color: rgba(74, 158, 255, 0.18);
+}
+.dark .custom-block.warning {
+  background: rgba(251, 191, 36, 0.05);
+  border-color: rgba(251, 191, 36, 0.15);
+}
+.dark .custom-block.danger {
+  background: rgba(239, 68, 68, 0.06);
+  border-color: rgba(239, 68, 68, 0.16);
+}
+
+/* Dark: table */
+.dark .vp-doc table {
+  background: #0b0e18;
+}
+.dark .vp-doc table th {
+  background: #0f1220;
+  color: #7a8a9e;
+}
+.dark .vp-doc table td {
+  border-color: rgba(255,255,255,0.05) !important;
+}
+
+/* Dark: sidebar links */
+.dark .VPSidebar .VPSidebarItem .item .text {
+  color: #7a8a9e;
+}
+.dark .VPSidebar .VPSidebarItem.is-active .item .text,
+.dark .VPSidebar .VPSidebarItem.is-active > .item > .link > .text {
+  color: #4a9eff;
+}
+
+/* Dark: scrollbar */
+.dark .VPSidebar:hover,
+.dark nav#VPSidebarNav:hover {
+  scrollbar-color: rgba(255,255,255,0.1) transparent;
+}
+
+/* Dark: search */
+.dark .VPLocalSearchBox {
+  --vp-local-search-bg: #0d0f16;
+  --vp-local-search-result-bg: #0d0f16;
+  --vp-local-search-highlight-bg: rgba(74,158,255,0.2);
+}
+
+/* Dark: implementation framework custom block */
+.dark .implementation-framework .vc-aside {
+  background: #0f1119;
+  border-color: rgba(255,255,255,0.07);
+}
+.dark .implementation-framework .vc-aside th,
+.dark .implementation-framework .vc-aside td {
+  border-bottom-color: rgba(255,255,255,0.05);
+}
+
+/* Dark: disabled sidebar links */
+.dark nav#VPSidebarNav a[href="#"],
+.dark .VPSidebar .VPLink[href="#"] {
+  color: #3d4a5c;
+}
+
+/* ── End dark mode ───────────────────────────────────────────── */
+
+html,
+body {
+  font-family: var(--vp-font-family-base);
+  margin: 0;
+  padding: 0;
+  background: var(--docs-bg);
+  min-height: 100dvh;
+}
+
+/* Remove only the "On this page" dropdown from VPLocalNav */
+.VPLocalNav .outline-link,
+.VPLocalNavOutlineDropdown {
+  display: none !important;
+}
+
+/* We don't hide VPLocalNav completely, we move it to overlap the header so it acts as the hamburger */
+@media (max-width: 959px) {
+  .VPLocalNav {
+    position: fixed !important;
+    top: 0 !important;
+    right: 0 !important;
+    left: auto !important;
+    width: auto !important;
+    height: var(--vp-nav-height, 64px) !important;
+    border: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    z-index: 1001 !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+  }
+  
+  /* The outline "On this page" dropdown on mobile remains hidden */
+  .VPLocalNav .outline-link,
+  .VPLocalNavOutlineDropdown {
+    display: none !important;
+  }
+
+  /* Style the text/icon inside the local nav menu trigger */
+  .VPLocalNav .menu {
+    border: none !important;
+    background: transparent !important;
+    margin: 0 !important;
+    padding: 0 16px !important;
+    height: 100% !important;
+    width: auto !important;
+    display: flex !important;
+    justify-content: flex-end !important;
+    align-items: center !important;
+    gap: 8px !important;
+    color: var(--vp-c-text-1) !important;
+  }
+
+  /* Sembunyikan teks "Menu" — cukup ikon hamburger */
+  .VPLocalNav .menu-text {
+    display: none !important;
+  }
+  
+  /* Hide the "top" anchor */
+  .VPLocalNav .top {
+    display: none !important;
+  }
+
+  /* Show the theme toggle (appearance) on mobile, to the left of VPLocalNav */
+  .VPNavBarAppearance {
+    display: flex !important;
+    align-items: center !important;
+    position: fixed !important;
+    top: 0 !important;
+    right: 52px !important;
+    height: var(--vp-nav-height, 64px) !important;
+    z-index: 1001 !important;
+    padding: 0 4px !important;
+  }
+
+  /* Sembunyikan hamburger VitePress bawaan — kita pakai VPLocalNav */
+  .VPNavBarHamburger {
+    display: none !important;
+  }
+}
+
+/* Unify background and remove border/shadow across docs layout */
+.Layout,
+.VPNav,
+.VPNavBar,
+.VPContent,
+.VPDoc,
+.VPDoc .container,
+.VPDoc .content,
+.VPSidebar,
+.VPDocAside,
+.VPDoc .aside,
+.VPDocAside .content,
+.VPDoc .aside-container {
+  background: var(--docs-bg) !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Remove header divider/border explicitly */
+.VPNavBar,
+.VPNavBar.has-sidebar,
+.VPNavBar .divider,
+.VPNavBar .curtain {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Hapus semua garis divider di navbar — termasuk di samping theme toggle dan social links */
+.VPNavBarAppearance,
+.VPNavBarSocialLinks,
+.VPNavBarExtra,
+.VPNavBarSearch {
+  border-left: none !important;
+  border-right: none !important;
+}
+.VPNavBarAppearance::before,
+.VPNavBarAppearance::after,
+.VPNavBarSocialLinks::before,
+.VPNavBarSocialLinks::after {
+  display: none !important;
+}
+.VPNavBar .content-body > * {
+  border-left: none !important;
+}
+
+@media (min-width: 960px) {
+  .VPNavBar .content-body {
+    gap: 12px !important;
+  }
+  .VPNavBarMenuLink,
+  .VPNavBarMenu .VPNavBarMenuLink {
+    padding: 0 10px !important;
+  }
+  .VPNavBarAppearance {
+    padding: 0 6px !important;
+  }
+  .VPNavBarSocialLinks {
+    padding: 0 6px !important;
+  }
+}
+
+.VPNav,
+.VPNavBar,
+.VPNavBar .container,
+.VPNavBar .content,
+.VPNavBar .content-body {
+  border-bottom: none !important;
+  box-shadow: none !important;
+}
+
+.VPLocalNav,
+.VPLocalNav .container,
+.VPLocalNav .menu,
+.VPLocalNav .outline-link,
+.VPNavScreen,
+.VPNavScreen .container {
+  border: none !important;
+  border-bottom: none !important;
+  box-shadow: none !important;
+}
+
+.VPNavBarTitle .title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0; /* minimal safe gap between logo and site title */
+  font-family: 'Montserrat', var(--vp-font-family-base) !important;
+  font-weight: 300 !important;
+  letter-spacing: -0.02em;
+}
+
+.VPNavBarTitle .title span {
+  margin-left: -2px !important;
+}
+
+/* Logo sizing - base (mobile) and slightly larger on desktop for a balanced header */
+.VPNavBarTitle .title .VPImage.logo,
+.VPNavBarTitle .title img.VPImage.logo,
+.VPNavBar .container .VPNavBarTitle.has-sidebar a.title img.VPImage.logo {
+  height: 36px !important;
+  width: auto !important;
+}
+
+@media (min-width: 960px) {
+  .VPNavBarTitle .title .VPImage.logo,
+  .VPNavBarTitle .title img.VPImage.logo,
+  .VPNavBar .container .VPNavBarTitle.has-sidebar a.title img.VPImage.logo {
+    height: 40px !important;
+  }
+  .VPNavBar .container .VPNavBarTitle.has-sidebar a.title span,
+  .VPNavBarTitle .title span {
+    font-size: 0.98rem;
+    margin-left: -6px !important;
+  }
+}
+
+.VPDoc p,
+.VPDoc li {
+  font-family: 'Rubik', var(--vp-font-family-base) !important;
+  font-weight: 400 !important;
+  font-size: 15px !important;
+  color: #2e3b44;
+  line-height: 1.7;
+}
+
+/* Headings: Montserrat 400 for H1 */
+.VPDoc h1 {
+  font-family: 'Montserrat', var(--vp-font-family-base) !important;
+  font-weight: 400 !important;
+}
+
+/* Headings: Montserrat 300 for H2 */
+.VPDoc h2 {
+  font-family: 'Montserrat', var(--vp-font-family-base) !important;
+  font-weight: 300 !important;
+}
+
+/* Headings: Montserrat for H3, in a darker colour */
+.VPDoc h3 {
+  font-family: 'Montserrat', var(--vp-font-family-base) !important;
+  font-weight: 300 !important;
+  color: #1b2630 !important;
+}
+
+/* Make all text fonts 20% smaller on mobile */
+@media (max-width: 959px) {
+  .VPDoc p, .VPDoc li {
+    font-size: 12px !important; /* 20% smaller than 15px */
+  }
+  .VPDoc h1 { font-size: calc(2.2rem * 0.8) !important; }
+  .VPDoc h2 { font-size: calc(1.65rem * 0.8) !important; }
+  .VPDoc h3 { font-size: calc(1.35rem * 0.8) !important; }
+  .VPDoc h4 { font-size: calc(1.15rem * 0.8) !important; }
+  /* Scale base variables for other components */
+  :root {
+    --vp-font-size-base: calc(15px * 0.8);
+    --vp-font-size-large: calc(17px * 0.8);
+    --vp-font-size-small: calc(13px * 0.8);
+    --vp-font-size-x-small: calc(11px * 0.8);
+  }
+}
+
+/* Prevent scrollbar until hover/focus */
+.VPContent .VPDocAside,
+.VPContent .VPDocAside .content,
+.VPContent .VPDoc .aside,
+.VPContent .VPDoc .aside-container,
+.VPSidebar,
+nav#VPSidebarNav {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.3s ease;
+}
+
+.VPContent .VPDocAside::-webkit-scrollbar,
+.VPContent .VPDocAside .content::-webkit-scrollbar,
+.VPContent .VPDoc .aside::-webkit-scrollbar,
+.VPContent .VPDoc .aside-container::-webkit-scrollbar,
+.VPSidebar::-webkit-scrollbar,
+nav#VPSidebarNav::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.VPContent .VPDocAside::-webkit-scrollbar-track,
+.VPContent .VPDocAside .content::-webkit-scrollbar-track,
+.VPContent .VPDoc .aside::-webkit-scrollbar-track,
+.VPContent .VPDoc .aside-container::-webkit-scrollbar-track,
+.VPSidebar::-webkit-scrollbar-track,
+nav#VPSidebarNav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.VPContent .VPDocAside::-webkit-scrollbar-thumb,
+.VPContent .VPDocAside .content::-webkit-scrollbar-thumb,
+.VPContent .VPDoc .aside::-webkit-scrollbar-thumb,
+.VPContent .VPDoc .aside-container::-webkit-scrollbar-thumb,
+.VPSidebar::-webkit-scrollbar-thumb,
+nav#VPSidebarNav::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 4px;
+  transition: background-color 0.3s ease;
+}
+
+.VPContent .VPDocAside:hover,
+.VPContent .VPDocAside .content:hover,
+.VPContent .VPDoc .aside:hover,
+.VPContent .VPDoc .aside-container:hover,
+.VPSidebar:hover,
+nav#VPSidebarNav:hover {
+  scrollbar-color: rgba(156, 163, 175, 0.4) transparent;
+}
+
+.VPContent .VPDocAside:hover::-webkit-scrollbar-thumb,
+.VPContent .VPDocAside .content:hover::-webkit-scrollbar-thumb,
+.VPContent .VPDoc .aside:hover::-webkit-scrollbar-thumb,
+.VPContent .VPDoc .aside-container:hover::-webkit-scrollbar-thumb,
+.VPSidebar:hover::-webkit-scrollbar-thumb,
+nav#VPSidebarNav:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.4);
+}
+
+/* Right sidebar: Montserrat thin (200), without touching the rest of the content */
+.VPContent .VPDoc .aside,
+.VPContent .VPDoc .aside p,
+.VPContent .VPDoc .aside li,
+.VPDocAside,
+.VPDocAside .content,
+.VPDocAside .content p,
+.VPDocAside .content li {
+  font-family: 'Montserrat', var(--vp-font-family-base) !important;
+  font-weight: 300 !important;
+  font-style: normal !important;
+}
+
+/* Right sidebar: ensure each item stacks vertically and has a subtle underline on interaction */
+.VPDocAside .content p,
+.VPDocAside .content a,
+.VPContent .VPDoc .aside p,
+.VPContent .VPDoc .aside a {
+  position: relative;
+  display: block; /* stack items vertically to avoid multiple titles per line */
+  width: 100%;
+  padding-bottom: 4px;
+  text-decoration: none !important;
+  margin-bottom: 6px; /* breathe room between items */
+  box-sizing: border-box;
+}
+
+.VPDocAside .content p::after,
+.VPDocAside .content li::after,
+.VPDocAside .content a::after,
+.VPContent .VPDoc .aside p::after,
+.VPContent .VPDoc .aside li::after,
+.VPContent .VPDoc .aside a::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: rgba(31,111,235,0.12);
+  transition: background-color .18s ease, transform .18s ease, opacity .18s ease;
+  opacity: 0;
+  transform-origin: left center;
+  transform: scaleX(0);
+  border-radius: 2px;
+  z-index: 1;
+}
+
+/* Show underline only on interaction (hover, focus, active/tap) */
+.VPDocAside .content p:hover::after,
+.VPDocAside .content li:hover::after,
+.VPDocAside .content a:hover::after,
+.VPContent .VPDoc .aside p:hover::after,
+.VPContent .VPDoc .aside li:hover::after,
+.VPContent .VPDoc .aside a:hover::after,
+.VPDocAside .content p:focus-within::after,
+.VPDocAside .content a:focus::after,
+.VPDocAside .content p:active::after,
+.VPDocAside .content a:active::after,
+.VPDocAside .content a:focus-visible::after,
+.VPContent .VPDoc .aside a:focus-visible::after,
+.VPContent .VPDoc .aside p:focus-within::after,
+.VPContent .VPDoc .aside p:active::after {
+  background: var(--vp-c-brand-1, #1f6feb);
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+/* If a paragraph or list item contains a link, hide the parent's underline to avoid double lines */
+.VPDocAside .content p:has(a)::after,
+.VPDocAside .content li:has(a)::after,
+.VPContent .VPDoc .aside p:has(a)::after,
+.VPContent .VPDoc .aside li:has(a)::after {
+  display: none;
+}
+
+/* Ensure anchor underline sits above parent when present */
+.VPDocAside .content a::after,
+.VPContent .VPDoc .aside a::after {
+  z-index: 2;
+}
+
+/* Keep right sidebar as independent sticky section on desktop */
+@media (min-width: 960px) {
+  .VPContent .VPDoc {
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 16px 20px !important;
+  }
+
+  .VPContent .VPDoc .container {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 300px !important;
+    gap: 16px !important;
+    align-items: start !important;
+    width: 100%;
+    max-width: 1400px;
+    margin: 0 auto !important;
+  }
+
+  .VPContent .VPDoc .content,
+  .VPContent .VPDoc .content-container {
+    grid-column: 1 / 2 !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0;
+    margin: 0 !important;
+    padding: 28px 32px !important;
+  }
+
+  .VPContent .VPDocAside,
+  .VPContent .VPDoc .aside {
+    grid-column: 2 / 3 !important;
+    display: block !important;
+    position: sticky !important;
+    top: calc(var(--vp-nav-height, 64px) + 12px);
+    align-self: start;
+    max-height: calc(100dvh - var(--vp-nav-height, 64px) - 24px);
+    overflow: auto;
+    padding: 12px !important;
+  }
+
+  .VPContent .VPDocAside .content,
+  .VPContent .VPDoc .aside-container {
+    position: static !important;
+    max-height: none !important;
+    height: auto !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+}
+
+/* Mobile: prevent overscroll chaining without locking scroll */
+@media (max-width: 959px) {
+  .VPSidebar,
+  .VPDocAside .content,
+  .VPDoc .aside-container {
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Remove border visuals inside content too */
+.custom-block,
+pre,
+.vp-doc table,
+.vp-doc table td,
+.vp-doc table th {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Global overscroll-behavior patch */
+html,
+body,
+.Layout {
+  background: var(--docs-bg) !important;
+  overscroll-behavior: none !important;
+  overflow-x: clip; /* Safely prevent horizontal rendering overlaps */
+}
+
+
+
+/* Navbar order: hamburger first, search next to the three-dots menu (desktop) */
+.VPNavBar .container {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+}
+.VPNavBar .container > .VPNavBarHamburger.hamburger {
+  order: 1 !important;
+  margin-right: auto !important;
+}
+@media (min-width: 960px) {
+  .VPNavBar .container > .VPNavBarSearch {
+    order: 2 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+  .VPNavBar .container > .VPFlyout.extra {
+    order: 3 !important;
+    margin-left: 0 !important;
+  }
+}
+@media (max-width: 959px) {
+  .VPNavBar .container > .VPNavBarSearch {
+    order: 2 !important;
+  }
+  .VPNavBar .container > .VPFlyout.extra {
+    order: 3 !important;
+  }
+
+  /* Keep header single, fixed and search + hamburger visible */
+  .VPNav {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    z-index: 1000 !important;
+  }
+  
+  .VPContent {
+    padding-top: var(--vp-nav-height, 64px) !important;
+  }
+
+  .VPNavBar .container {
+    padding-right: 90px !important; /* leaves space for VPLocalNav right beside Search */
+    justify-content: flex-end !important;
+  }
+
+  /* On mobile the default hamburger (which opens an empty nav) is hidden visually, because
+     VPLocalNav, which opens the real sidebar, sits in its place. */
+  .VPNavBarHamburger {
+    display: none !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+
+  /* VitePress ships the local search overlay at z-index: 100, but .VPNav above is
+     forced to z-index: 1000 (and .VPLocalNav to 1001) so the navbar stays pinned
+     while scrolling. That makes the navbar's stacking context paint above the
+     search modal, so the logo intercepts every tap meant for the search input.
+     Push the overlay above both so it can actually receive input on mobile. */
+  .VPLocalSearchBox {
+    z-index: 1002 !important;
+  }
+}
+
+/* Implementation Framework — page-specific layout & code styling */
+.implementation-framework .vc-hero {
+  padding: 28px 20px;
+  margin-bottom: 20px;
+}
+.implementation-framework .vc-hero h1 {
+  font-size: 2.4rem;
+  margin: 0 0 8px;
+  letter-spacing: -0.02em;
+}
+.implementation-framework .vc-lead {
+  max-width: 72ch;
+  font-size: 1.05rem;
+  color: #364956;
+  margin-bottom: 18px;
+}
+.implementation-framework .vc-grid {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 24px;
+  align-items: start;
+}
+.implementation-framework .vc-aside {
+  background: #ffffff;
+  padding: 14px;
+  border-radius: 8px;
+  border: 1px solid #eef4f8;
+}
+.implementation-framework .vc-aside h3 {
+  display: block !important;
+  margin: 12px 0 8px !important;
+  line-height: 1.2 !important;
+}
+.implementation-framework .vc-code-compare {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+/* Spasi tambahan ketika tumpuk: pastikan blok kedua terlihat terpisah */
+.implementation-framework .vc-code-compare > .vc-code + .vc-code {
+  margin-top: 12px;
+}
+.implementation-framework .vc-code {
+  border-radius: 8px;
+  overflow: hidden;
+}
+.implementation-framework pre {
+  background: #0b1220;
+  color: #e6eef6;
+  padding: 16px;
+  border-radius: 8px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, 'Roboto Mono', monospace !important;
+  font-size: 0.94rem;
+  line-height: 1.6;
+}
+.implementation-framework .vc-code.integrated pre {
+  border-left: 4px solid var(--vp-c-brand-1, #1f6feb);
+}
+.implementation-framework .vc-aside table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+.implementation-framework .vc-aside th,
+.implementation-framework .vc-aside td {
+  padding: 8px 6px;
+  text-align: left;
+  border-bottom: 1px solid #f1f6f9;
+}
+@media (max-width: 959px) {
+  .implementation-framework .vc-grid {
+    grid-template-columns: 1fr;
+  }
+  .implementation-framework .vc-code-compare {
+    grid-template-columns: 1fr;
+  }
+  .implementation-framework .vc-hero h1 {
+    font-size: 1.6rem;
+  }
+}
+
+/* Architecture diagram spacing: room above and below so text does not crowd it */
+.VPDoc figure.arch-diagram {
+  margin: 20px 0 !important;
+  text-align: center;
+}
+.VPDoc figure.arch-diagram img {
+  display: block;
+  margin: 12px auto !important;
+  max-width: 100%;
+  height: auto;
+}
+.VPDoc figure.arch-diagram figcaption {
+  margin-top: 8px;
+  color: #52627a;
+  font-size: 12px; /* desktop default */
+}
+
+@media (max-width: 959px) {
+  .VPDoc figure.arch-diagram figcaption {
+    font-size: 10px; /* mobile */
+  }
+}
+
+/* Image zoom overlay + interactions */
+.VPDoc img.vp-image-zoomable {
+  cursor: zoom-in;
+  transition: box-shadow .18s ease;
+}
+
+.vp-image-zoom-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex; /* keep in flow so transitions work */
+  align-items: center;
+  justify-content: center;
+  background: rgba(11,18,32,0); /* animate to semi-opaque */
+  z-index: 99999;
+  padding: 24px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: background .22s ease, opacity .22s ease, visibility .22s ease;
+}
+.vp-image-zoom-overlay.open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  background: rgba(11,18,32,0.5);
+}
+.vp-image-zoom-content {
+  position: relative;
+  max-width: min(860px, 80vw);
+  max-height: 80vh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.vp-image-zoom-img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(11,18,32,0.5);
+  transform: translateY(6px) scale(.96);
+  opacity: 0;
+  transition: transform .26s cubic-bezier(.2,.8,.2,1), opacity .2s ease;
+}
+.vp-image-zoom-overlay.open .vp-image-zoom-img {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+}
+
+/* Ensure GPU-accelerated, and keep image hidden until loaded to allow stable animation on mobile */
+.vp-image-zoom-img { will-change: transform, opacity; }
+.vp-image-zoom-overlay.loading .vp-image-zoom-img {
+  opacity: 0;
+  transform: translateY(8px) scale(.96);
+  filter: blur(2px);
+}
+.vp-image-zoom-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: #ffffff;
+  border: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  box-shadow: 0 6px 18px rgba(11,18,32,0.18);
+  font-size: 20px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 3;
+}
+.vp-image-zoom-close:active { transform: scale(.98); }
+
+@media (max-width: 959px) {
+  .vp-image-zoom-content { padding: 8px; }
+  .vp-image-zoom-close { width: 32px; height: 32px; top: -10px; right: -10px; }
+}
+
+/* Timbul keyframe for elegant pop-in */
+@keyframes vp-timbul {
+  0% { transform: translateY(12px) scale(.96); opacity: 0; }
+  60% { transform: translateY(-6px) scale(1.02); opacity: 1; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+.vp-image-zoom-overlay.open .vp-image-zoom-img {
+  animation: vp-timbul .36s cubic-bezier(.2,.9,.2,1) both;
+  box-shadow: 0 28px 70px rgba(11,18,32,0.55);
+}
+
+/* Ensure close button is visible on desktop: fixed at viewport corner */
+@media (min-width: 960px) {
+  .vp-image-zoom-close {
+    position: fixed !important;
+    top: 20px !important;
+    right: 20px !important;
+    z-index: 100001 !important;
+    box-shadow: 0 10px 30px rgba(11,18,32,0.22);
+  }
+}
+
+/* Docs sidebar: show 'forbidden' indicator on links that are disabled (href="#") */
+nav#VPSidebarNav a[href="#"], .VPSidebar .VPLink[href="#"] {
+  position: relative;
+  cursor: not-allowed;
+  opacity: 0.9;
+  color: #6b7280; /* muted gray */
+  text-decoration: none !important;
+}
+
+nav#VPSidebarNav a[href="#"]::after,
+.VPSidebar .VPLink[href="#"]::after {
+  content: '🚫';
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%) scale(0.9);
+  opacity: 0;
+  transition: opacity .15s ease, transform .15s ease;
+  pointer-events: none;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+nav#VPSidebarNav a[href="#"]:hover::after,
+.VPSidebar .VPLink[href="#"]:hover::after {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+}
+
+/* also ensure disabled sidebar links don't show the external-link icon highlight */
+nav#VPSidebarNav a[href="#"] .vp-external-link-icon,
+.VPSidebar .VPLink[href="#"] .vp-external-link-icon {
+  opacity: 0.6;
+}
+
+/* Ensure mini-title-like labels (strong/bold text) render with clear weight */
+.VPDoc strong,
+.VPDoc b {
+  font-family: 'Inter', 'Montserrat', var(--vp-font-family-base) !important;
+  font-weight: 700 !important;
+  color: inherit !important;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* If a list item starts with bold label followed by colon, keep it visually compact */
+.VPDoc li > strong:first-child {
+  display: inline-block;
+  margin-right: 6px;
+  font-weight: 700 !important;
+}
+
+/* Vertical indicator for active outline link (right sidebar) */
+.outline-link {
+  position: relative;
+  padding-left: 14px; /* space for the indicator */
+}
+
+.outline-link::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 8px;
+  bottom: 8px;
+  width: 0px;
+  background: var(--vp-c-brand-1);
+  border-radius: 2px;
+  transition: width .12s ease, opacity .12s ease;
+  opacity: 0;
+}
+
+.outline-link.active {
+  color: var(--vp-c-brand-1) !important;
+  font-weight: 600 !important;
+}
+
+.outline-link.active::before {
+  width: 4px;
+  opacity: 1;
+}
+

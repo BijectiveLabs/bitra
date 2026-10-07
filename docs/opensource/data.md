@@ -31,7 +31,7 @@ Data reaches the gate one of two ways, and the gate does not distinguish them af
 
 A **venue plugin** knows where a venue's public archive lives and how its rows are laid out.
 Two ship with the package; any other is a small class registered under the
-`trading_research_agents.venues` entry point (see `docs/venues.md`). `tra data fetch --venue`
+`trading_research_agents.venues` entry point (see [Venues](/opensource/venues)). `tra data fetch --venue`
 and `tra data audit --venue` take any registered name.
 
 A **column map** takes any other CSV: a vendor export, a Client's own recorder, a venue with

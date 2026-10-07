@@ -93,5 +93,5 @@ the cycle refuses rather than sending somewhere close.
 
 In `tra live`: limit orders and maker channels (venue mode in `tra run` has both), the private
 websocket for execution reports, and a second live venue. Each is open to a contribution that keeps
-the guarantees in `docs/boundaries.md`. A production tier is not offered, and that one is a
+the guarantees in [Boundaries](/opensource/boundaries). A production tier is not offered, and that one is a
 guarantee rather than a gap: the ladder stops at canary.

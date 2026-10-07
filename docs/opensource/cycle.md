@@ -332,7 +332,7 @@ to be fresh.
 A file can keep itself current: a `fetch` line refreshes it from FRED, the Crypto Fear & Greed
 Index or any vendor that answers JSON over https, and `tra run` does that before each pass once the
 series' `refresh` interval has passed. Every series also has a `max_age`; a value older than that is
-shown as `stale` and never counted. [Sources](sources.md) covers both.
+shown as `stale` and never counted. [Sources](/opensource/sources) covers both.
 
 The three reading analysts go out together with the technical analyst, so the cycle waits for the
 slowest of them and not for the sum of all four. Each one reads through the same series engine as
@@ -902,7 +902,7 @@ the account's equity and `[run].equity`. At send time your leverage and margin m
 the venue and read back, the estimated liquidation must sit beyond the stop, and a taker entry goes
 out as a limit IOC within a slippage band. At the start of every pass each open position is matched
 to the order that filled it, closed by time past `[execution].hold_limit`, written up when the
-venue's exits closed it, and flattened when the kill switch is armed. `docs/capital.md` has every
+venue's exits closed it, and flattened when the kill switch is armed. [Capital, orders and positions](/opensource/capital) has every
 setting, every check in order, the arithmetic and the records.
 
 ### What happens after the order
@@ -934,7 +934,7 @@ open two.
 
 | Refusal | What it means |
 |---|---|
-| `data <kind>: ...` | a chain was exhausted; see `docs/data.md`, and give that kind a longer `ttl` or another source |
+| `data <kind>: ...` | a chain was exhausted; see [The data gate](/opensource/data), and give that kind a longer `ttl` or another source |
 | `no technical brief: ...` | there were not enough closed candles in the snapshot to compute features |
 | `trigger: the mid has moved ...` | nothing happened worth paying a model to look at; no tokens were spent |
 | `technical: flat` | the analyst saw nothing worth pricing |

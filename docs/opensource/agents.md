@@ -64,7 +64,7 @@ verdict on the whole session, including what every call cost.
 agent = "technical_analyst"
 
 [agents]
-provider = "deepseek"                 # any registered provider; docs/providers.md
+provider = "deepseek"                 # any registered provider; see Model providers
 model = "deepseek-flash"
 mechanism = "positions forced to close into the settlement window"
 token_budget = 200000                 # the whole session, every role; keep it under the vendor's daily quota
@@ -120,7 +120,7 @@ size, or declared by the operator and labelled as such.
 | Role | Tools (`agents/<role>/tools.py`) | What the brief carries |
 |---|---|---|
 | `market_screener` | `screen_figures` | per instrument: rows, print rate, realised volatility, first-lag autocorrelation, the 1:10 variance ratio, largest gap, last-hour volume against the average, turnover, the cost floor for the claimed edge, and a regime the code proposes from a written rule (`[agents.screen]` sets the two thresholds: `min_prints_per_minute`, `volatile_above_bps`) |
-| `technical_analyst` | `features` | on each closed bar: returns over 1, 5 and 20 bars, the close as a z-score of the window, the gap to VWAP, the last bar's volume and range against the window's, the position between the window's high and low, the net move and trend strength with the regime they give; the same on each higher timeframe in `[run].context_intervals`; the book imbalance, the open interest change since the last snapshot, and the declared state of the other series (see [the cycle](cycle.md#the-market-around-the-decision)) |
+| `technical_analyst` | `features` | on each closed bar: returns over 1, 5 and 20 bars, the close as a z-score of the window, the gap to VWAP, the last bar's volume and range against the window's, the position between the window's high and low, the net move and trend strength with the regime they give; the same on each higher timeframe in `[run].context_intervals`; the book imbalance, the open interest change since the last snapshot, and the declared state of the other series (see [the cycle](/opensource/cycle#the-market-around-the-decision)) |
 | `macro_analyst` | `macro_brief` over `data/series.py` | per series in `series.toml`: the value known at the time and when it became known (publication lag honoured), the state against the operator's declared threshold, the correlation and strongest lead-lag with the instrument's returns measured on the operator's data with n, the calendar events inside the horizon |
 | `onchain_analyst` | `onchain_brief` | the same engine, plus the net over a window and the last value as a z-score of its own history |
 | `risk_manager` | `risk_brief` | per run: latency from intent to fill (median, max, n, ratio to the declared), net per round trip overall and over the last window against the claimed magnitude, maximum drawdown, the favourable and adverse excursions of the closed round trips with what the winners gave back, which control refused and how often |
@@ -136,7 +136,7 @@ operator's own declarations: the distance to the stop times the size, against eq
 `[controls].max_risk_per_trade_bps`. It runs inside every cycle, between the conviction ladder and
 the cost gate, and it cuts the size to fit or refuses. No model is asked, because a model asked how
 much to risk answers differently on Tuesday than on Monday from the same figures, and a size that
-depends on which sentence was written last cannot be backtested or audited. See `docs/cycle.md`.
+depends on which sentence was written last cannot be backtested or audited. See [The cycle](/opensource/cycle).
 
 **The role.** Whether the limits themselves are still the right limits is a judgement over a
 completed run: latency against what was declared, net per round trip against what was claimed,
@@ -220,7 +220,7 @@ operator's own declarations, which is what makes a result reproducible tomorrow.
 
 ### Series from anywhere
 
-`examples/series.toml` maps external series the way `mapping.toml` maps trades: the file, the
+[`examples/series.toml`](https://github.com/BijectiveLabs/trading-research-agents/blob/develop/examples/series.toml) maps external series the way `mapping.toml` maps trades: the file, the
 time column and its unit, the value column, the unit, and `publish_lag`, the time between an
 observation and the moment it was actually available. A monthly print released two weeks after
 month end is unknown for those two weeks, and the brief says so. Thresholds in the map are the
@@ -233,9 +233,9 @@ tra agent session --macro series.toml --events events.json --onchain onchain.tom
 
 A session takes its maps as paths, one flag at a time. A cycle (`tra run`) reads the shelf instead:
 `sources/<class>.toml` beside the config, one file per class of data, described in
-[the cycle](cycle.md). Same engine, same as-of rule, different way of saying what the desk has.
+[the cycle](/opensource/cycle). Same engine, same as-of rule, different way of saying what the desk has.
 Fetching those files, and the `max_age` that keeps an old value from counting, are in
-[sources](sources.md).
+[sources](/opensource/sources).
 
 ## Cost and latency as numbers
 
@@ -282,7 +282,7 @@ The short version for anyone reviewing this before putting money behind it:
 
 | Concern | How it is handled | Where |
 |---|---|---|
-| Memory | None between calls. Each call is one system prompt plus one brief built by code. Earlier cycles are files on disk, and only the auditors read them. | `docs/llm.md`, `store/cycles.py` |
+| Memory | None between calls. Each call is one system prompt plus one brief built by code. Earlier cycles are files on disk, and only the auditors read them. | [Working with language models](/opensource/llm), `store/cycles.py` |
 | What a role sees | Its own sections of the brief. Anything else is removed and the removal is recorded. | `agents/scope.py` |
 | What a role may say | A closed JSON schema per role. Extra fields, a wrong enum, or a number out of range are refused before anyone reads the answer. | `agents/<role>/role.py`, `llm/form.py` |
 | Whether its figures are real | Every cited figure is checked against the brief, value included. Citations that do not hold are discarded, and a deciding answer with nothing left is refused. | `agents/cited.py` |
@@ -291,7 +291,7 @@ The short version for anyone reviewing this before putting money behind it:
 | Spend | Every call is a line in `usage.jsonl`. Declared ceilings (`token_budget`, `max_calls_per_hour`, `min_interval_s`) apply to the whole desk in one run, not to each role. | `llm/usage.py` |
 | Credentials | Keys come from the environment: the shell, an `--env-file` you name, or the `.env` beside `strategy.toml`; never from a config file. A vendor or venue error is scrubbed of any credential this process holds before it goes into a record or a brief. | `llm/completer.py`, `trading/dispatch.py` |
 | Text from outside | Headlines, notes, vendor messages and another role's reason reach some briefs as material to read. The prompts say so, and more to the point, none of those roles decides: the gates read the operator's declared states and measured figures. The role that proposes a direction reads numbers only. | `agents/prompts/` |
-| Orders | No role can place, cancel or modify one. Only the venue hand sends, after every gate, under a signed mandate. | `trading/dispatch.py`, `docs/cycle.md` |
+| Orders | No role can place, cancel or modify one. Only the venue hand sends, after every gate, under a signed mandate. | `trading/dispatch.py`, [The cycle](/opensource/cycle) |
 
 A cycle is never resumed. Its answers belong to the snapshot it took, and reusing them against a
 newer book would mix two moments in one decision. The next cycle takes its own snapshot.

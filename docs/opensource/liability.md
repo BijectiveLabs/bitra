@@ -24,7 +24,7 @@ words, where the decisions are made and by whom, so that nobody is surprised lat
   closed in the research this project descends from. A verdict from a gate is a statement about
   a dataset and a registration, not a recommendation to trade.
 
-`docs/boundaries.md` is the other half of this page: what the software will not do, by design,
+[Boundaries](/opensource/boundaries) is the other half of this page: what the software will not do, by design,
 with the reason beside each one.
 
 If you deploy this against capital, you are the operator: you chose the venue, the key, the

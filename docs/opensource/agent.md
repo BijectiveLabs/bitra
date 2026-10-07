@@ -65,7 +65,7 @@ is skipped and the basis is recorded as `declared`.
 
 The three research roles above are one of two things the package calls an agent. The
 other is the session: seven roles with full access to the gates, the technical analyst
-among them as a decision core. `docs/agents.md` describes it; `docs/providers.md` lists the
+among them as a decision core. [Agents](/opensource/agents) describes it; [Model providers](/opensource/providers) lists the
 model providers both share.
 
 ## Providers

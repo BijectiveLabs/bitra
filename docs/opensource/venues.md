@@ -18,7 +18,7 @@ There are three plugin kinds: archived data in, live data in, orders out.
 
 Data that comes from somewhere other than a venue's public archive (a vendor export, a
 Client's own recorder) does not need a plugin at all: a column map takes it through the same
-gate. See `docs/data.md`, section "Any other source".
+gate. See [The data gate](/opensource/data), section "Any other source".
 
 ## Which venues work today
 
@@ -236,7 +236,7 @@ What the runtime expects of it, and what the bundled adapter does: `routes_exits
 after every fill, raising `VenueError` on any disagreement; closes are reduce-only;
 `preflight()` refuses a key with more or fewer permissions than a trade key, a clock too far
 from the venue's, and a position the run was not told to adopt; `cost_of` charges the fees
-the venue reported. `docs/live.md` is the review a new adapter is held to, and
+the venue reported. [The live tier](/opensource/live) is the review a new adapter is held to, and
 `tests/test_live_venue.py` is the shape of the tests it should ship with.
 
 ## The bundled plugins

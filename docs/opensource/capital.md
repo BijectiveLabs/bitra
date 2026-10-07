@@ -12,7 +12,7 @@ them. A venue that cannot answer one gets a named refusal or a note in the recor
 | Decision | Who | How |
 |---|---|---|
 | direction, confidence, horizon | the technical analyst | inside its schema, from figures code computed |
-| how much behind the idea | the conviction rule | your weights and ladder over every voice (`docs/cycle.md`) |
+| how much behind the idea | the conviction rule | your weights and ladder over every voice ([The cycle](/opensource/cycle)) |
 | the most it may lose at the stop | your risk rule | `[controls].max_risk_per_trade_bps` against equity |
 | leverage and margin mode | you | `[execution].leverage`, `[execution].margin_mode` |
 | when a position is closed by time | you | `[execution].hold_limit` |
@@ -159,4 +159,4 @@ from what actually filled rather than from what was intended.
 - **Margin mode can be account-wide.** On some venues setting it changes every symbol on the
   account, not only the one being traded. Choose it with the whole account in mind.
 - **One desk, one venue.** Netting across venues, transfers between accounts and a book managed
-  across a portfolio belong to a platform, not to this package (`docs/boundaries.md`).
+  across a portfolio belong to a platform, not to this package ([Boundaries](/opensource/boundaries)).
