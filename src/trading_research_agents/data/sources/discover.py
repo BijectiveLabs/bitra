@@ -27,6 +27,10 @@ TICK_SIZE = 4
 # [universe].type_field and exclude_types set or replace it for any venue.
 NON_CRYPTO: dict[str, tuple[str, frozenset[str]]] = {
     "bybit": ("symbolType", frozenset({"stock", "etf", "commodity", "forex"})),
+    # instCategory is 1 for crypto. 3 (stocks) and 4 (commodities) were read from the live market
+    # list on 2026-10-08: 190 and 9 of 485 perpetuals. 5 and 6 are the venue's documented forex
+    # and bond categories.
+    "okx": ("instCategory", frozenset({"3", "4", "5", "6"})),
 }
 
 

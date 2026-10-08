@@ -192,3 +192,15 @@ def test_a_venue_with_no_quote_volume_on_perpetuals_is_read_through_its_contract
     [btc] = found.listed
     # 6.7 million contracts of 0.01 BTC at 82.7 thousand is about 5.55 billion.
     assert Decimal("5.5e9") < btc.quote_volume < Decimal("5.6e9")
+
+
+def test_okx_stock_and_commodity_perpetuals_are_not_crypto() -> None:
+    markets = {
+        "BTC/USDT:USDT": market("BTC-USDT-SWAP", base="BTC", info={"instCategory": "1"}),
+        "AAPL/USDT:USDT": market("AAPL-USDT-SWAP", base="AAPL", info={"instCategory": "3"}),
+        "XAU/USDT:USDT": market("XAU-USDT-SWAP", base="XAU", info={"instCategory": "4"}),
+    }
+    tickers = {s: ticker(1e9) for s in markets}
+    found = discover(Venue(markets, tickers), "okx", Rules(), clock=lambda: NOW_S)
+    assert [x.instrument for x in found.listed] == ["BTCUSDT"]
+    assert found.dropped == {"not crypto": 2}

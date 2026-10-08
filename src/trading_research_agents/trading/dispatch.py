@@ -24,6 +24,7 @@ process dying.
 from __future__ import annotations
 
 import os
+import re
 import time
 from collections.abc import Callable, Mapping
 from contextlib import suppress
@@ -168,6 +169,12 @@ class VenueHand:
             raise DispatchError(f"[execution].exits is one of {list(EXITS)}")
         if self.client is None:
             self.client = self._build()
+        options = getattr(self.client, "options", None)
+        if isinstance(options, dict):
+            # ccxt reads the margin mode for orders, leverage and its read-back from here when a
+            # call does not name one. Left out, a venue that defaults to cross margin
+            # would trade cross while the operator declared isolated.
+            options.setdefault("defaultMarginMode", self.margin_mode)
 
     def _build(self) -> Any:
         wanted = self.credentials
@@ -237,6 +244,9 @@ class VenueHand:
             skew = self._skew()
             if skew:
                 return skew
+            hedged = self._hedged()
+            if hedged:
+                return hedged
             self._open_orders()
             self.position()
         except DispatchError as exc:
@@ -293,6 +303,9 @@ class VenueHand:
             if skew:
                 return {"sent": False, "refused": skew}
             self.skew_checked = True
+        hedged = self._hedged()
+        if hedged:
+            return {"sent": False, "refused": hedged}
         standing = self.position()
         if standing and not self.adopt_open_position:
             # Any open position, not only one pointing the other way. A second entry in the same
@@ -470,6 +483,29 @@ class VenueHand:
             if len(held) >= 8:
                 text = text.replace(held, "[redacted]")
         return text
+
+    def _hedged(self) -> str:
+        """Why an account in long/short position mode is refused, or nothing when it is one-way.
+
+        In long/short mode a position is two (a long and a short), every order names which side it
+        belongs to, and a reduce-only close means something else. The exits, the position reads and
+        the close here are written for one position per instrument, so this does not guess.
+        """
+        has = getattr(self.client, "has", {}) or {}
+        read = getattr(self.client, "fetch_position_mode", None)
+        if read is None or not has.get("fetchPositionMode"):
+            return ""
+        try:
+            mode = read(self.symbol) or {}
+        except Exception:
+            # Not readable is not the same as hedged; a venue that cannot say refuses at its end.
+            return ""
+        if mode.get("hedged") is True:
+            return (
+                f"the {self.venue} account is in long/short position mode; set it to one-way (net) "
+                "mode, because this desk holds one position per instrument"
+            )
+        return ""
 
     def _skew(self) -> str:
         """Empty when this machine's clock agrees with the venue's; otherwise by how much."""
@@ -947,10 +983,14 @@ def _drift_bps(
 
 
 def _client_id(intent: Mapping[str, Any]) -> str:
-    """One id per cycle and instrument, so a cycle run twice cannot open two positions."""
-    cycle = str(intent.get("at", "")) or "unknown"
-    instrument = str(intent.get("instrument", "")).replace("/", "")
-    return f"tra-{cycle}-{instrument}"[:36]
+    """One id per cycle and instrument, so a cycle run twice cannot open two positions.
+
+    Letters and digits only, 32 at most: the narrowest rule among the venues holds for all.
+    """
+    cycle = re.sub(r"[^0-9A-Za-z]", "", str(intent.get("at", "")) or "unknown")
+    instrument = re.sub(r"[^0-9A-Za-z]", "", str(intent.get("instrument", "")))
+    body = cycle if instrument and cycle.endswith(instrument) else cycle + instrument
+    return f"tra{body}"[:32]
 
 
 def hand_for(

@@ -94,6 +94,28 @@ Only Bybit has been run end to end with real orders. The contract arithmetic and
 resolution for the other venues are tested against the shapes ccxt returns, not against those
 venues' accounts, so start any of them on its practice environment first.
 
+## Trying OKX on its demo
+
+OKX's demo trading is reached through ccxt's sandbox switch, so in this project it is
+`environment = "testnet"`. A demo key only works on the demo, and a live key is refused there.
+
+1. Create a demo API key in OKX's demo trading mode with trade permission, and put `OKX_API_KEY`,
+   `OKX_API_SECRET` and `OKX_API_PASSPHRASE` in `.env`.
+2. Run `tra venues okx --setup` and paste the blocks it prints. Set `[live].environment = "testnet"`
+   and `[execution].venue = "okx"`, and fill your demo account's fees in `envelope.toml`.
+3. Put `ccxt:okx` first in each chain in `data.toml`. Take out any `params` written for another
+   venue, such as the open interest bucket Bybit wants.
+4. Set the account's position mode to one-way (net). In long/short mode the desk refuses to send,
+   because it holds one position per instrument.
+5. `tra check`, then `tra keys --probe`, then one `tra run --now`, and read `placed.json`.
+
+What the desk does for OKX that it does not need to for Bybit: margin mode and leverage are applied
+as isolated (ccxt would otherwise default to cross), the client order id is letters and digits only
+and at most 32 characters, sizes are sent as contracts, and the stop and take profit go with the
+entry as attached algo orders at the market price. The request ccxt builds for a limit IOC entry
+with both was inspected offline on 2026-10-08 and carries `tdMode` isolated, `ordType` ioc,
+`attachAlgoOrds` and the id. It has not been sent to OKX yet; the first demo cycle is that test.
+
 ## Adding a venue you trade on
 
 Four steps, and the command writes most of them for you.

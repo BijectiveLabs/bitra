@@ -227,7 +227,7 @@ def test_the_hand_sends_one_order_and_records_what_came_back() -> None:
     assert sent["params"]["takeProfit"] == {"triggerPrice": 102000.0}
     assert placed["stop_price"] == "99000" and placed["exits"] == "attached"
     # One client id per cycle and instrument: the same cycle cannot open two positions.
-    assert sent["params"]["clientOrderId"] == "tra-2026-09-28T02-55-40Z-BTCUSDT"
+    assert sent["params"]["clientOrderId"] == "tra20260928T025540ZBTCUSDT"
     assert placed["client_order_id"] == sent["params"]["clientOrderId"]
 
     # One decision, one order: the same hand asked again refuses.
@@ -638,6 +638,52 @@ def test_a_venue_that_will_not_say_its_contract_size_is_not_guessed() -> None:
     placed = _contract_hand(venue)({**LONG, "size": "0.04"})
     assert placed["sent"] is False and "does not say how large one" in placed["refused"]
     assert venue.orders == []
+
+
+def test_the_client_order_id_is_letters_and_digits_within_thirty_two() -> None:
+    from trading_research_agents.trading.dispatch import _client_id
+
+    made = _client_id({"at": "2026-10-07T16-30-47Z-1000PEPEUSDT", "instrument": "1000PEPEUSDT"})
+    assert made == "tra20261007T163047Z1000PEPEUSDT"[:32] and made.isalnum() and len(made) <= 32
+    assert _client_id({"at": "2026-09-28T02-55-40Z", "instrument": "BTCUSDT"}).isalnum()
+
+
+def test_the_declared_margin_mode_is_the_clients_default_for_every_call() -> None:
+    class WithOptions(FakeExchange):
+        options: dict[str, Any] = {}
+
+    venue = WithOptions()
+    VenueHand(
+        venue="bybit",
+        symbol="BTC/USDT:USDT",
+        max_notional=Decimal(100),
+        keys=("K", "S"),
+        client=venue,
+        margin_mode="isolated",
+    )
+    assert venue.options["defaultMarginMode"] == "isolated"
+
+
+def test_an_account_in_long_short_mode_is_refused_before_anything_is_sent() -> None:
+    class Hedged(FakeExchange):
+        def __init__(self) -> None:
+            super().__init__()
+            self.has["fetchPositionMode"] = True
+
+        def fetch_position_mode(self, symbol: str) -> dict[str, Any]:
+            return {"hedged": True}
+
+    venue = Hedged()
+    hand = VenueHand(
+        venue="bybit",
+        symbol="BTC/USDT:USDT",
+        max_notional=Decimal(2000),
+        keys=("K", "S"),
+        client=venue,
+    )
+    placed = hand(LONG)
+    assert placed["sent"] is False and "long/short position mode" in placed["refused"]
+    assert venue.orders == [] and "long/short position mode" in hand.ready()
 
 
 def test_an_interrupt_while_an_order_rests_takes_it_off_the_book_first() -> None:

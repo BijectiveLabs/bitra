@@ -8,6 +8,12 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- Venue mode now declares its margin mode to the client, so a venue that defaults to cross margin
+  (OKX) trades and reads leverage as isolated when isolated is what the operator declared.
+- The client order id is letters and digits, 32 at most, which every venue accepts; the old form
+  carried hyphens that OKX rejects.
+- An account in long/short position mode is refused before any order, with the way to fix it.
+- OKX stock and commodity perpetuals are not crypto in discovery (190 and 9 of its 485 perpetuals).
 - An instrument is named by base and settlement currency (`BTCUSDT`, `ZECUSDC`) and resolved on the
   venue orders go to, as a linear perpetual. On OKX, Gate, KuCoin and Hyperliquid, whose ids are
   spelled differently, the same name now reaches the right market, and a name that is also spot on
