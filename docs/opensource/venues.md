@@ -38,6 +38,11 @@ we have run end to end, and what ccxt says a venue can do. The second is read fr
 | Deribit, HTX, Gate, MEXC | orders with `exits = "none"` | varies, see `tra venues` | `<VENUE>_API_KEY`, `<VENUE>_API_SECRET` | not yet |
 | Kraken, Kraken Futures, Phemex | data only for a cycle: they cannot report the position, and the venue hand will not send without it | | | |
 
+No venue is blocked here. The table says two separate things: what ccxt reports a venue can do,
+and what we have run ourselves. A venue ccxt says takes orders can be used; the only one the desk
+declines is a venue it cannot read the account of, because sending into a position nobody can see
+is the one mistake that cannot be undone. Everything else is a limit we state, not a gate we add.
+
 "Everything" means ccxt reports the five things the venue hand needs: send an order, attach the
 stop and take profit to it, read the position, read the open orders, and cancel. "Run end to end"
 is the stronger claim, and only Bybit has earned it. Start any other venue on its practice
