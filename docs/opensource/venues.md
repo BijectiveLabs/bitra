@@ -129,8 +129,9 @@ and `tra check` warns when it is below what your account pays.
 OKX's demo trading is reached through ccxt's sandbox switch, so in this project it is
 `environment = "testnet"`. A demo key only works on the demo.
 
-Two things only you can do: set the account's position mode to one-way (net), because the desk
-refuses long/short mode, and turn venue mode on when you are ready (`tra mandate`, your signature,
+Three things only you can do: set the account mode to Spot and futures (or a margin mode),
+because an OKX account in Spot mode cannot trade perpetuals at all; set the position mode to
+one-way (net), because the desk refuses long/short mode; and turn venue mode on when you are ready (`tra mandate`, your signature,
 the ladder, then `mode = "venue"`).
 
 What the desk does for OKX that it does not need to for Bybit: margin mode and leverage are applied

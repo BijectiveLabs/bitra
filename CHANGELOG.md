@@ -8,6 +8,9 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- Account settings ccxt does not unify are checked before the first order and in `tra keys --probe`
+  (`trading/venues/accounts.py`). The first: an OKX account in Spot mode, which refuses every
+  perpetual order with sCode 51010, is named with the setting to change.
 - Everything an order is sized, stepped or resolved by is read from the market list of the
   environment orders go to, not the live one. A practice account is not a copy of live: OKX's demo
   listed 155 linear perpetuals against 485 live, and 50 of the 138 on both had another contract

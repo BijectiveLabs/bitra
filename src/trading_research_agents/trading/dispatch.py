@@ -39,6 +39,7 @@ from trading_research_agents.trading.capital import (
     margin_needed,
     read_account,
 )
+from trading_research_agents.trading.venues.accounts import account_refusal
 
 SIDES = {"long": "buy", "short": "sell"}
 # Read from ccxt 4.5 on 2026-09-29: a venue reaches its demo environment through
@@ -152,6 +153,7 @@ class VenueHand:
     clock: Callable[[], float] = time.time
     sleep: Callable[[float], None] = time.sleep
     skew_checked: bool = False
+    account_checked: bool = False
     leverage_set: bool = False
     sent_count: int = 0
 
@@ -248,6 +250,9 @@ class VenueHand:
             hedged = self._hedged()
             if hedged:
                 return hedged
+            setting = account_refusal(self.venue, self.client)
+            if setting:
+                return setting
             self._open_orders()
             self.position()
         except DispatchError as exc:
@@ -307,6 +312,11 @@ class VenueHand:
         hedged = self._hedged()
         if hedged:
             return {"sent": False, "refused": hedged}
+        if not self.account_checked:
+            setting = account_refusal(self.venue, self.client)
+            if setting:
+                return {"sent": False, "refused": setting}
+            self.account_checked = True
         standing = self.position()
         if standing and not self.adopt_open_position:
             # Any open position, not only one pointing the other way. A second entry in the same
