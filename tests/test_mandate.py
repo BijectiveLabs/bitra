@@ -703,6 +703,38 @@ def test_the_setup_for_a_venue_without_a_live_plugin_has_no_live_table() -> None
     assert [c.entry_fee_bps for c in envelope.channels] == [Decimal("5"), Decimal("2")]
 
 
+def test_a_venue_that_raises_for_no_position_is_read_as_flat() -> None:
+    class NullResponse(Exception):  # noqa: N818 - ccxt's own class name is what is matched
+        pass
+
+    class Raises(FakeExchange):
+        def fetch_position(self, symbol: str) -> object:
+            raise NullResponse("fetchPosition() could not find a position for " + symbol)
+
+    hand = VenueHand(
+        venue="bybit",
+        symbol="BTC/USDT:USDT",
+        max_notional=Decimal(2000),
+        keys=("K", "S"),
+        client=Raises(),
+    )
+    assert hand.position() == Decimal(0)
+
+    class Down(FakeExchange):
+        def fetch_position(self, symbol: str) -> object:
+            raise TimeoutError("venue did not answer")
+
+    broken = VenueHand(
+        venue="bybit",
+        symbol="BTC/USDT:USDT",
+        max_notional=Decimal(2000),
+        keys=("K", "S"),
+        client=Down(),
+    )
+    with pytest.raises(DispatchError, match="cannot read the account"):
+        broken.position()
+
+
 def test_the_client_order_id_is_letters_and_digits_within_thirty_two() -> None:
     from trading_research_agents.trading.dispatch import _client_id
 
@@ -880,3 +912,25 @@ def test_venue_mode_trades_linear_perpetuals_and_refuses_anything_else() -> None
     assert market_kind({"option": True}) == "option"
     assert market_kind({"future": True}) == "dated future"
     assert market_kind({}) == "unknown"
+
+
+def test_the_clock_is_judged_on_the_quickest_reading_not_the_first() -> None:
+    class Slow(FakeExchange):
+        def __init__(self) -> None:
+            super().__init__()
+            self.times = iter([1621.0, 1205.0, 2205.0])
+
+        def fetch_time(self) -> float:
+            return next(self.times)
+
+    ticks = iter([0.0, 0.842, 1.0, 1.21, 2.0, 2.21])
+    hand = VenueHand(
+        venue="bybit",
+        symbol="BTC/USDT:USDT",
+        max_notional=Decimal(2000),
+        keys=("K", "S"),
+        client=Slow(),
+        clock=lambda: next(ticks),
+    )
+    # The first reading carries a handshake and looks 1200 ms off; the two quick ones agree at 100.
+    assert hand._skew() == ""

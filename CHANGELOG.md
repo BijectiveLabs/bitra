@@ -8,6 +8,12 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- A venue that answers "no position" by raising (OKX through ccxt raises `NullResponse`) is read as a
+  flat account, not as an account that cannot be read.
+- The clock check takes three readings and believes the quickest. The first request on a new
+  connection carries the TLS handshake and made a clock 0.6 s behind look 1.2 s behind.
+- `tra keys --probe` reads the account before the mandate is signed; a key that cannot reach the
+  account is worth knowing first. A refused key shows in `tra check`.
 - Fees fill themselves. `tra check` and `tra run` read the maker and taker fee from the account
   and write them on blank `envelope.toml` lines, labelled. Without keys, or on a practice account
   that does not report fees, the venue's standard tier from its market list is written instead,

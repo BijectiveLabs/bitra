@@ -513,15 +513,25 @@ class VenueHand:
         fetch = getattr(self.client, "fetch_time", None)
         if fetch is None:
             return ""
+        # Three readings, and the one with the shortest round trip is believed. The first request
+        # on a fresh connection carries the TLS handshake, which moved the midpoint by 300 ms and
+        # more on 2026-10-08 (842 ms for the first round trip, 210 ms for the next ones).
+        best: tuple[float, float] | None = None
         try:
-            before = self.clock() * 1000
-            venue_ms = float(fetch())
-            after = self.clock() * 1000
+            for _ in range(3):
+                before = self.clock() * 1000
+                venue_ms = float(fetch())
+                after = self.clock() * 1000
+                if best is None or after - before < best[0]:
+                    best = (after - before, (before + after) / 2 - venue_ms)
         except Exception:
             # A venue that will not tell the time is not a reason to refuse; the account read that
             # follows fails loudly if the signature does.
+            if best is None:
+                return ""
+        if best is None:
             return ""
-        skew = (before + after) / 2 - venue_ms
+        skew = best[1]
         if abs(skew) <= MAX_CLOCK_SKEW_MS:
             return ""
         return (
@@ -631,6 +641,11 @@ class VenueHand:
         try:
             held = fetch(self.symbol)
         except Exception as exc:
+            if type(exc).__name__ == "NullResponse":
+                # The venue answered, with no position in it. Some adapters say that by raising
+                # (seen through ccxt 4.5.84, 2026-10-08) rather than returning an empty one;
+                # it is a read that succeeded and found the account flat, not a failed read.
+                return Decimal(0)
             raise DispatchError(
                 self._clean(f"cannot read the account: {exc.__class__.__name__}: {exc}")
             ) from exc
