@@ -461,7 +461,7 @@ class VenueHand:
         if not stop or not take:
             return (
                 "no stop and take profit were computed for this intent; declare "
-                "[exit].stop_sigma_frac and [exit].take_profit_sigma_frac, or say "
+                "[exit].stop_frac and [exit].take_profit_frac, or say "
                 '[execution].exits = "none" and carry the exits yourself'
             )
         if not self._can_attach():

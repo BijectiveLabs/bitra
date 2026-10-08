@@ -30,7 +30,7 @@ def raw(strategy: dict[str, Any]) -> dict[str, Any]:
     return {
         "strategy": strategy,
         "exit": {
-            "stop_sigma_frac": Decimal("0.01"),
+            "stop_frac": Decimal("0.01"),
             "timeout_bars": 10,
             "mechanism_bound": "the dislocation resolves within a few bars or is gone",
         },
@@ -174,10 +174,10 @@ def test_targets_are_read_and_a_ratio_needs_a_take_profit() -> None:
     assert cfg.targets.max_round_trips_per_day == 6 and not cfg.targets.idle
 
     ratio = agent_raw(targets={"min_reward_risk": Decimal("1.5")})
-    with pytest.raises(ConfigError, match=r"needs \[exit\].take_profit_sigma_frac"):
+    with pytest.raises(ConfigError, match=r"needs \[exit\].take_profit_frac"):
         parse_strategy_config(ratio)
 
-    ratio["exit"]["take_profit_sigma_frac"] = Decimal("0.02")
+    ratio["exit"]["take_profit_frac"] = Decimal("0.02")
     assert parse_strategy_config(ratio).targets.min_reward_risk == Decimal("1.5")
 
     with pytest.raises(ConfigError, match="unknown"):
@@ -361,3 +361,22 @@ def test_each_instrument_may_carry_its_own_step(tmp_path: Path) -> None:
         parse_strategy_config(_quiet(tmp_path, size_step={"BTCUSDT": 0}), base=tmp_path)
     one = parse_strategy_config(_quiet(tmp_path, size_step=Decimal("0.001")), base=tmp_path)
     assert one.run.step_for("anything") == Decimal("0.001")
+
+
+def test_the_exit_fractions_read_under_their_names_and_the_old_ones(tmp_path: Path) -> None:
+    config = _quiet(tmp_path)
+    rest = {k: v for k, v in config["exit"].items() if "frac" not in k}
+    config["exit"] = {**rest, "stop_frac": Decimal("0.003"), "take_profit_frac": Decimal("0.006")}
+    cfg = parse_strategy_config(config, base=tmp_path)
+    assert cfg.exit_rule.stop_frac == Decimal("0.003")
+    assert cfg.exit_rule.take_profit_frac == Decimal("0.006")
+
+    # A desk written before the rename keeps working.
+    config["exit"] = {
+        **rest,
+        "stop_sigma_frac": Decimal("0.01"),
+        "take_profit_sigma_frac": Decimal("0.02"),
+    }
+    old = parse_strategy_config(config, base=tmp_path)
+    assert old.exit_rule.stop_frac == Decimal("0.01")
+    assert old.exit_rule.take_profit_frac == Decimal("0.02")

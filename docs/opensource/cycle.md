@@ -918,7 +918,7 @@ setting, every check in order, the arithmetic and the records.
 ### What happens after the order
 
 The stop and the take profit go to the venue **attached to the entry**, in the same call. Code
-computes both from `[exit].stop_sigma_frac` and `[exit].take_profit_sigma_frac` against the price
+computes both from `[exit].stop_frac` and `[exit].take_profit_frac` against the price
 the cost gate priced on, so no model is ever asked where a stop belongs. A filled position with no
 exit is the one state this software must never create, because it is the state that survives our
 process dying - and if the venue cannot take them with the entry, the order is not sent at all. An

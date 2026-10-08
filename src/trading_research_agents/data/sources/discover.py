@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -264,6 +264,39 @@ def _dec(value: Any) -> Decimal | None:
     except (InvalidOperation, ValueError):
         return None
     return out if out.is_finite() else None
+
+
+def aligned(found: Found, client: Any, environment: str) -> Found:
+    """The shortlist as the environment orders go to lists it.
+
+    Ranking and filtering read the live market, where volume and spreads mean something. What an
+    order is sized by, and whether the market exists at all, is read from the environment the
+    order goes to, which on a practice account can differ market by market.
+    """
+    markets = getattr(client, "markets", None) or {}
+    tick = getattr(client, "precisionMode", TICK_SIZE) == TICK_SIZE
+    kept: list[Listed] = []
+    missing = 0
+    for row in found.listed:
+        market = markets.get(row.symbol)
+        if not market or not (market.get("swap") and market.get("linear")):
+            missing += 1
+            continue
+        contract = _dec(market.get("contractSize"))
+        contract = contract if contract is not None and contract > 0 else Decimal(1)
+        least = _dec(((market.get("limits") or {}).get("amount") or {}).get("min"))
+        kept.append(
+            replace(
+                row,
+                step=market_step(market, tick=tick),
+                min_size=None if least is None else least * contract,
+                contract_size=contract,
+            )
+        )
+    dropped = dict(found.dropped)
+    if missing:
+        dropped[f"not listed on {environment}"] = missing
+    return Found(listed=kept, dropped=dropped, markets=found.markets)
 
 
 def merged(declared: Sequence[str], found: Found) -> tuple[str, ...]:

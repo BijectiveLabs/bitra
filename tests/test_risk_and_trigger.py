@@ -346,7 +346,7 @@ def test_a_declared_risk_limit_with_no_stop_refuses_rather_than_sending_an_unche
     result = run_cycle(cfg)
 
     assert not result.acted
-    assert any("declare [exit].stop_sigma_frac" in r for r in result.refusals)
+    assert any("declare [exit].stop_frac" in r for r in result.refusals)
 
 
 def test_a_held_cycle_pays_for_one_data_pull_and_nothing_else(

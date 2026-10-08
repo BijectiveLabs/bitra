@@ -92,14 +92,14 @@ def test_a_step_with_no_declaration_is_what_the_venue_states_in_the_base() -> No
         markets_by_id={btc["id"]: [btc]},
         load_markets=lambda: None,
     )
-    cli._DISCOVERY_CLIENTS["okx"] = client
+    cli._EXECUTION_CLIENTS[("okx", "testnet")] = client
     try:
         cfg = SimpleNamespace(
-            execution=SimpleNamespace(venue="okx"),
+            execution=SimpleNamespace(venue="okx", environment="testnet"),
             run=SimpleNamespace(venue_key="okx/taker-taker"),
         )
         # 0.01 of a contract that is 0.01 of a coin: 0.0001 of the base.
         assert cli._venue_step(cfg, "BTCUSDT") == Decimal("0.0001")
         assert cli._venue_step(cfg, "NOPEUSDT") is None
     finally:
-        cli._DISCOVERY_CLIENTS.pop("okx", None)
+        cli._EXECUTION_CLIENTS.pop(("okx", "testnet"), None)

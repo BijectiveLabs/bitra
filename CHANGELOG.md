@@ -8,6 +8,13 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- Everything an order is sized, stepped or resolved by is read from the market list of the
+  environment orders go to, not the live one. A practice account is not a copy of live: OKX's demo
+  listed 155 linear perpetuals against 485 live, and 50 of the 138 on both had another contract
+  size or lot (MET: 1 coin a contract live, 10 on the demo). Discovery still ranks on the live
+  market and keeps only what the environment lists, with its steps.
+- `[exit].stop_sigma_frac` and `take_profit_sigma_frac` are `stop_frac` and `take_profit_frac`:
+  they were always a fraction of price, not of a sigma. The old names still load.
 - A setup has to point the way its own figures point. A trend setup needs a measured trend, so it is
   refused in a mixed market as in a ranging one; a range fade must fade the stretch; an exhaustion
   trade must go against the move; a breakout trades the side the close left from. Seen live: a

@@ -30,15 +30,15 @@ class ExitError(ValueError):
     """The exit cannot be simulated honestly as specified."""
 
 
-def stop_price(entry_px: Decimal, direction: Direction, sigma_frac: Decimal) -> Decimal:
-    """The stop at `sigma_frac` of price from entry, on the adverse side."""
+def stop_price(entry_px: Decimal, direction: Direction, frac: Decimal) -> Decimal:
+    """The stop at `frac` of price from entry, on the adverse side."""
     if not isinstance(entry_px, Decimal) or entry_px <= 0:
         raise ExitError(f"entry_px must be a positive Decimal, got {entry_px!r}")
-    if not isinstance(sigma_frac, Decimal) or sigma_frac <= 0:
-        raise ExitError(f"sigma_frac must be a positive Decimal, got {sigma_frac!r}")
+    if not isinstance(frac, Decimal) or frac <= 0:
+        raise ExitError(f"frac must be a positive Decimal, got {frac!r}")
     if direction is Direction.LONG:
-        return entry_px * (1 - sigma_frac)
-    return entry_px * (1 + sigma_frac)
+        return entry_px * (1 - frac)
+    return entry_px * (1 + frac)
 
 
 def _slip(fill: Decimal, direction: Direction, slip_bps: Decimal) -> Decimal:
@@ -150,31 +150,31 @@ class ExitRule:
     to exist without the sentence.
     """
 
-    stop_sigma_frac: Decimal
+    stop_frac: Decimal
     timeout_bars: int
     mechanism_bound: str
-    take_profit_sigma_frac: Decimal | None = None
+    take_profit_frac: Decimal | None = None
     slip_bps: Decimal = Decimal("5.0")
 
     def __post_init__(self) -> None:
-        if not isinstance(self.stop_sigma_frac, Decimal) or self.stop_sigma_frac <= 0:
-            raise ExitError("stop_sigma_frac must be a positive Decimal")
+        if not isinstance(self.stop_frac, Decimal) or self.stop_frac <= 0:
+            raise ExitError("stop_frac must be a positive Decimal")
         if self.timeout_bars <= 0:
             raise ExitError("timeout_bars must be positive")
         if len(self.mechanism_bound.split()) < 6:
             raise ExitError(
                 "an exit rule states, in a sentence, why it is where the mechanism ends"
             )
-        if self.take_profit_sigma_frac is not None and self.take_profit_sigma_frac <= 0:
-            raise ExitError("take_profit_sigma_frac must be positive when given")
+        if self.take_profit_frac is not None and self.take_profit_frac <= 0:
+            raise ExitError("take_profit_frac must be positive when given")
         _check_slip(self.slip_bps)
 
     def stop_for(self, entry_px: Decimal, direction: Direction) -> Decimal:
-        return stop_price(entry_px, direction, self.stop_sigma_frac)
+        return stop_price(entry_px, direction, self.stop_frac)
 
     def take_profit_for(self, entry_px: Decimal, direction: Direction) -> Decimal | None:
-        if self.take_profit_sigma_frac is None:
+        if self.take_profit_frac is None:
             return None
         if direction is Direction.LONG:
-            return entry_px * (1 + self.take_profit_sigma_frac)
-        return entry_px * (1 - self.take_profit_sigma_frac)
+            return entry_px * (1 + self.take_profit_frac)
+        return entry_px * (1 - self.take_profit_frac)

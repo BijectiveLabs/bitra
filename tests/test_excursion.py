@@ -154,8 +154,8 @@ def test_a_replay_records_the_excursion_of_every_round_trip(tmp_path: Path) -> N
             ),
             strategy=LongThenFlat(),
             exit_rule=ExitRule(
-                stop_sigma_frac=Decimal("0.5"),
-                take_profit_sigma_frac=None,
+                stop_frac=Decimal("0.5"),
+                take_profit_frac=None,
                 timeout_bars=50,
                 mechanism_bound=("the reversion is done when the close returns to its window mean"),
                 slip_bps=Decimal(0),

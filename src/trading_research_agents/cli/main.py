@@ -1912,15 +1912,16 @@ def show_universe(args: argparse.Namespace) -> int:
         dropped = ", ".join(f"{n} {why}" for why, n in sorted(found["dropped"].items()))
         lines.append(f"{len(found['kept'])} of {found['markets']} perpetuals kept ({dropped})")
         lines.append(
-            f"{'instrument':<16}{'24h volume':>16}{'spread bps':>12}{'24h %':>9}"
-            f"{'step':>10}{'max lev':>9}{'listed d':>10}"
+            f"{'instrument':<16}{'24h volume':>14} {'spread bps':>11} {'24h %':>9} "
+            f"{'step':>12} {'max lev':>8} {'listed d':>9}"
         )
         for row in found["kept"]:
             volume = f"{Decimal(row['quote_volume_24h']) / 1_000_000:,.0f}M"
+            step = format(Decimal(row["step"]).normalize(), "f")
             lines.append(
-                f"{row['instrument']:<16}{volume:>16}{row['spread_bps']:>12}"
-                f"{row['change_24h_pct'] or '-':>9}{row['step']:>10}"
-                f"{row['max_leverage'] or '-':>9}{row['listed_days'] or '-':>10}"
+                f"{row['instrument']:<16}{volume:>14} {row['spread_bps']:>11} "
+                f"{row['change_24h_pct'] or '-':>9} {step:>12} "
+                f"{row['max_leverage'] or '-':>8} {row['listed_days'] or '-':>9}"
             )
         lines.append(f"this pass looks at: {', '.join(universe.instruments)}")
     emit({"instruments": list(universe.instruments), "discovered": found}, args.json, lines)
@@ -2943,11 +2944,11 @@ def run_cycle_command(args: argparse.Namespace) -> int:
         forced=bool(args.now),
         max_risk_per_trade_bps=cfg.limits.max_risk_per_trade_bps,
         reward_to_risk=reward_risk(
-            stop_frac=cfg.exit_rule.stop_sigma_frac,
-            take_frac=cfg.exit_rule.take_profit_sigma_frac,
+            stop_frac=cfg.exit_rule.stop_frac,
+            take_frac=cfg.exit_rule.take_profit_frac,
         ),
-        stop_frac=cfg.exit_rule.stop_sigma_frac,
-        take_frac=cfg.exit_rule.take_profit_sigma_frac,
+        stop_frac=cfg.exit_rule.stop_frac,
+        take_frac=cfg.exit_rule.take_profit_frac,
         data_options={declared.kind: dict(declared.options) for declared in data_cfg.kinds},
         series=series,
         news=news,
@@ -3187,7 +3188,13 @@ _DISCOVERY_CLIENTS: dict[str, Any] = {}
 
 def _discovered_universe(cfg: Any) -> tuple[Any, dict[str, Any] | None, list[str]]:
     """This pass's universe: the declared instruments, plus what discovery found on the venue."""
-    from trading_research_agents.data.sources.discover import DiscoverError, Rules, discover, merged
+    from trading_research_agents.data.sources.discover import (
+        DiscoverError,
+        Rules,
+        aligned,
+        discover,
+        merged,
+    )
 
     universe = cfg.universe
     if not universe.discover:
@@ -3214,12 +3221,21 @@ def _discovered_universe(cfg: Any) -> tuple[Any, dict[str, Any] | None, list[str
             _DISCOVERY_CLIENTS[venue] = client
         found = discover(client, venue, rules)
     except (DiscoverError, ImportError, AttributeError) as exc:
-        said = f"discovery: {exc}; this pass looks at the declared instruments only"
-        return universe.with_instruments(universe.instruments), None, [said]
+        why = f"discovery: {exc}; this pass looks at the declared instruments only"
+        return universe.with_instruments(universe.instruments), None, [why]
+    said: list[str] = []
+    try:
+        found = aligned(found, _execution_client(cfg), _declared_environment(cfg))
+    except Exception as exc:
+        said.append(
+            f"discovery: the {_declared_environment(cfg)} market list of {venue} could not be read "
+            f"({exc.__class__.__name__}); steps are the live market's, and an order off the "
+            "environment's own step is refused at the venue hand"
+        )
     for row in found.listed:
         _DISCOVERED[row.instrument] = {"symbol": row.symbol, "step": row.step}
     names = merged(universe.instruments, found)
-    return universe.with_instruments(names), found.record(), []
+    return universe.with_instruments(names), found.record(), said
 
 
 def _step_for(cfg: Any, instrument: str) -> Decimal:
@@ -3241,10 +3257,9 @@ def _venue_step(cfg: Any, instrument: str) -> Decimal | None:
     """The step in the base the execution venue states for this instrument, or nothing."""
     from trading_research_agents.data.sources.discover import market_step
 
-    venue = cfg.execution.venue or cfg.run.venue_key.partition("/")[0]
     try:
         symbol = _on_the_execution_venue(cfg, instrument)
-        client = _DISCOVERY_CLIENTS[venue]
+        client = _execution_client(cfg)
         tick = getattr(client, "precisionMode", 4) == 4
         return market_step(client.markets[symbol], tick=tick)
     except Exception:
@@ -3898,6 +3913,33 @@ def _symbol_for(cfg: Any, project: Path, instrument: str = "") -> str:
     return _on_the_execution_venue(cfg, str(named))
 
 
+_EXECUTION_CLIENTS: dict[tuple[str, str], Any] = {}
+
+
+def _execution_client(cfg: Any) -> Any:
+    """A keyless client of the venue orders go to, in the environment they go to, markets loaded.
+
+    A practice environment is not a copy of the live one. On 2026-10-08 one venue's demo listed 155
+    linear perpetuals against 485 live, and 50 of the 138 on both had a different contract
+    size or lot: MET is 1 coin a contract live and 10 on the demo. Whatever an order is sized,
+    stepped or resolved by has to come from the list the order will be checked against.
+    """
+    import ccxt
+
+    venue = cfg.execution.venue or cfg.run.venue_key.partition("/")[0]
+    environment = _declared_environment(cfg)
+    key = (venue, environment)
+    if key not in _EXECUTION_CLIENTS:
+        client = getattr(ccxt, venue)({"enableRateLimit": True})
+        if environment == "demo":
+            client.enable_demo_trading(True)
+        elif environment == "testnet":
+            client.set_sandbox_mode(True)
+        client.load_markets()
+        _EXECUTION_CLIENTS[key] = client
+    return _EXECUTION_CLIENTS[key]
+
+
 def _on_the_execution_venue(cfg: Any, name: str) -> str:
     """The market `name` stands for on the venue orders go to, which is the venue that decides.
 
@@ -3910,17 +3952,10 @@ def _on_the_execution_venue(cfg: Any, name: str) -> str:
 
     venue = cfg.execution.venue or cfg.run.venue_key.partition("/")[0]
     try:
-        client = _DISCOVERY_CLIENTS.get(venue)
-        if client is None:
-            import ccxt
-
-            client = getattr(ccxt, venue)({"enableRateLimit": True})
-            _DISCOVERY_CLIENTS[venue] = client
-        if not getattr(client, "markets", None):
-            client.load_markets()
+        client = _execution_client(cfg)
         return resolve(name, client.markets_by_id, client.markets.values())
     except ResolveError as exc:
-        raise ConfigError(f"{venue}: {exc}") from exc
+        raise ConfigError(f"{venue} ({_declared_environment(cfg)}): {exc}") from exc
     except Exception:
         return name
 
@@ -4255,16 +4290,22 @@ def _one_sided(path: Path) -> list[str]:
 def _size_notes(cfg: Any) -> list[str]:
     """What one unit of base size means on each instrument this desk can trade."""
     run = cfg.run
-    steps = (
-        ", ".join(f"{name} {step}" for name, step in run.size_steps.items())
-        if run.size_steps
-        else str(run.size_step)
-    )
+    stated = run.size_step == RunSettings.__dataclass_fields__["size_step"].default
+    if run.size_steps:
+        steps = "the step " + ", ".join(f"{name} {step}" for name, step in run.size_steps.items())
+    elif stated:
+        steps = "the step the venue states for each instrument, in the environment orders go to"
+    else:
+        steps = f"the step {run.size_step}"
     if run.size_quote is not None:
-        found = "; discovered instruments use the venue's own step" if cfg.universe.discover else ""
+        found = (
+            "; discovered instruments use the venue's own step"
+            if cfg.universe.discover and not stated
+            else ""
+        )
         said = [
             f"size: {run.size_quote} of quote currency, converted at each cycle's own mid and "
-            f"rounded down to the step ({steps}){found}; a replay still needs [run].size",
+            f"rounded down to {steps}{found}; a replay still needs [run].size",
         ]
         cap = cfg.limits.max_position_quote
         if cap is not None:
@@ -4597,10 +4638,10 @@ def _risk_notes(cfg: Any, bad: list[str]) -> list[str]:
             "risk per trade: not declared; the conviction ladder and [controls].max_position are "
             "all that bound a size"
         ]
-    if cfg.exit_rule.stop_sigma_frac is None:
+    if cfg.exit_rule.stop_frac is None:
         bad.append(
             f"[controls].max_risk_per_trade_bps is {allowed} and no stop is declared, so the loss "
-            "at the stop cannot be computed; declare [exit].stop_sigma_frac"
+            "at the stop cannot be computed; declare [exit].stop_frac"
         )
         return []
     if cfg.run.equity is None:

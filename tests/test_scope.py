@@ -20,7 +20,7 @@ from trading_research_agents.agents.scope import (
     scope_of,
 )
 
-LATER = ("equity", "size", "max_position", "round_trip_bps", "stop_sigma_frac", "take_profit")
+LATER = ("equity", "size", "max_position", "round_trip_bps", "stop_frac", "take_profit")
 READING = ("macro_analyst", "onchain_analyst", "sentiment_analyst")
 
 

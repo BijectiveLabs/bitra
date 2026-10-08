@@ -277,20 +277,25 @@ def load_strategy_config(path: Path) -> StrategyConfig:
 
 def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> StrategyConfig:
     strategy_raw = _table(raw, "strategy")
-    exit_raw = _table(raw, "exit")
+    exit_raw = dict(_table(raw, "exit"))
+    # The names a desk written before 0.6.0 used. They said sigma and meant a fraction of price.
+    for old, new in (
+        ("stop_sigma_frac", "stop_frac"),
+        ("take_profit_sigma_frac", "take_profit_frac"),
+    ):
+        if old in exit_raw and new not in exit_raw:
+            exit_raw[new] = exit_raw.pop(old)
     run_raw = _table(raw, "run")
     controls_raw = _table(raw, "controls")
 
     agents = _agents(raw, strategy_raw)
     strategy = _build_strategy(strategy_raw, base) if agents is None else _placeholder(agents)
     exit_rule = ExitRule(
-        stop_sigma_frac=_dec(exit_raw, "stop_sigma_frac"),
+        stop_frac=_dec(exit_raw, "stop_frac"),
         timeout_bars=_int(exit_raw, "timeout_bars"),
         mechanism_bound=str(exit_raw.get("mechanism_bound", "")),
-        take_profit_sigma_frac=(
-            _dec(exit_raw, "take_profit_sigma_frac")
-            if "take_profit_sigma_frac" in exit_raw
-            else None
+        take_profit_frac=(
+            _dec(exit_raw, "take_profit_frac") if "take_profit_frac" in exit_raw else None
         ),
         slip_bps=_dec(exit_raw, "slip_bps") if "slip_bps" in exit_raw else Decimal("5.0"),
     )
@@ -806,9 +811,9 @@ def _targets(raw: dict[str, Any], exit_rule: ExitRule) -> Targets:
     unknown = sorted(set(table) - set(TARGET_KEYS))
     if unknown:
         raise ConfigError(f"[targets]: unknown {unknown}; have {list(TARGET_KEYS)}")
-    if "min_reward_risk" in table and exit_rule.take_profit_sigma_frac is None:
+    if "min_reward_risk" in table and exit_rule.take_profit_frac is None:
         raise ConfigError(
-            "[targets].min_reward_risk needs [exit].take_profit_sigma_frac; "
+            "[targets].min_reward_risk needs [exit].take_profit_frac; "
             "a ratio without a take profit is not a ratio"
         )
     try:

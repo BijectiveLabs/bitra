@@ -12,8 +12,8 @@ entry_z = 2.0
 exit_z = 0.5
 
 [exit]
-stop_sigma_frac = 0.01             # 1 percent of price, on the adverse side
-take_profit_sigma_frac = 0.02
+stop_frac = 0.01             # 1 percent of price, on the adverse side
+take_profit_frac = 0.02
 timeout_bars = 240
 mechanism_bound = "The dislocation the core trades resolves within a few hours; past that the mechanism is gone."
 slip_bps = 5.0

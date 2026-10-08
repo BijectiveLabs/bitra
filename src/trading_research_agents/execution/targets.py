@@ -137,7 +137,7 @@ def reward_risk(*, stop_frac: Decimal, take_frac: Decimal | None) -> Decimal | N
     if take_frac is None:
         return None
     if stop_frac <= 0:
-        raise TargetError("[exit].stop_sigma_frac is positive")
+        raise TargetError("[exit].stop_frac is positive")
     return (take_frac / stop_frac).quantize(Decimal("0.001"))
 
 

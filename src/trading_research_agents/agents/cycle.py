@@ -855,7 +855,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         # declaration is missing rather than sending a size nothing checked.
         result.refusals.append(
             "risk: [controls].max_risk_per_trade_bps is declared and no stop is, so the loss at "
-            "the stop cannot be computed; declare [exit].stop_sigma_frac or drop the limit"
+            "the stop cannot be computed; declare [exit].stop_frac or drop the limit"
         )
         announce(cfg.watch, "risk", REFUSED, "no stop to size from")
         _finish(cfg, where, result)

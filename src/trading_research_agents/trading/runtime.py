@@ -265,7 +265,7 @@ class _Loop:
         equity_known = self.c.equity is not None
         if target is not Target.FLAT and equity_known and self.last_price is not None:
             notional = self.c.size * self.last_price
-            risk = self.c.exit_rule.stop_sigma_frac * BPS * notional / (self.c.equity or Decimal(1))
+            risk = self.c.exit_rule.stop_frac * BPS * notional / (self.c.equity or Decimal(1))
         admission = self.c.controls.admit(
             ts_ns=ts_ns, target=target, size=self.c.size, risk_bps=risk, equity_known=equity_known
         )

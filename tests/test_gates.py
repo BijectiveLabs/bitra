@@ -135,7 +135,7 @@ def test_a_declaration_that_is_missing_or_unknown_reads_as_undeclared() -> None:
 def test_the_reward_to_risk_comes_from_the_exit_rule_as_declared() -> None:
     assert reward_risk(stop_frac=Decimal("0.01"), take_frac=Decimal("0.02")) == Decimal("2.000")
     assert reward_risk(stop_frac=Decimal("0.01"), take_frac=None) is None
-    with pytest.raises(TargetError, match="stop_sigma_frac is positive"):
+    with pytest.raises(TargetError, match="stop_frac is positive"):
         reward_risk(stop_frac=Decimal("0"), take_frac=Decimal("0.02"))
 
 

@@ -174,7 +174,7 @@ def test_an_exit_rule_is_bound_to_its_mechanism() -> None:
         Decimal("0.01"),
         timeout_bars=24,
         mechanism_bound="Funding settles every eight hours; then the forced reduction is over.",
-        take_profit_sigma_frac=Decimal("0.02"),
+        take_profit_frac=Decimal("0.02"),
     )
     assert rule.stop_for(Decimal("100"), Direction.SHORT) == Decimal("101.00")
     assert rule.take_profit_for(Decimal("100"), Direction.SHORT) == Decimal("98.00")
