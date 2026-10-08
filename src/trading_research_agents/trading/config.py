@@ -639,6 +639,7 @@ EXECUTION_KEYS = (
     "hold_limit",
     "adopt_open_position",
     "params",
+    "environment",
 )
 
 
@@ -668,6 +669,7 @@ def _mandate(raw: dict[str, Any], venue_key: str) -> Mandate:
             ),
             adopt_open_position=_flag(table, "adopt_open_position"),
             params=dict(table.get("params") or {}),
+            environment=str(table.get("environment", "")),
             max_drift_bps=_dec(table, "max_drift_bps") if "max_drift_bps" in table else None,
             leverage=_dec(table, "leverage") if "leverage" in table else None,
             margin_mode=str(table.get("margin_mode", "isolated")),

@@ -215,13 +215,15 @@ class CcxtSource:
         if levels <= 0:
             raise SourceError("levels is positive")
         raw = self._client.fetch_order_book(symbol, levels, _params(options))
+        # A level is [price, size], and some venues append more after those two (OKX adds the
+        # count of orders), so only the first two are read.
         bids = tuple(
-            BookLevel(_decimal(p, "bid price"), _decimal(q, "bid size"))
-            for p, q in list(raw.get("bids") or [])[:levels]
+            BookLevel(_decimal(level[0], "bid price"), _decimal(level[1], "bid size"))
+            for level in list(raw.get("bids") or [])[:levels]
         )
         asks = tuple(
-            BookLevel(_decimal(p, "ask price"), _decimal(q, "ask size"))
-            for p, q in list(raw.get("asks") or [])[:levels]
+            BookLevel(_decimal(level[0], "ask price"), _decimal(level[1], "ask size"))
+            for level in list(raw.get("asks") or [])[:levels]
         )
         if not bids or not asks:
             raise SourceError(f"{self.name}: {symbol} book came back one-sided")
@@ -244,7 +246,9 @@ class CcxtSource:
         raw = self._client.fetch_funding_rate(symbol, _params(options))
         rate = _decimal(raw.get("fundingRate"), "fundingRate")
         now = self.clock()
-        stamp = raw.get("timestamp") or raw.get("fundingTimestamp")
+        # Never the venue's fundingTimestamp: that is the next settlement, in the future (seen on
+        # OKX, which sends no timestamp at all), and a rate dated in the future would read as fresh.
+        stamp = raw.get("timestamp")
         as_of_ns = int(stamp) * 1_000_000 if stamp else int(now * NS_PER_S)
         detail: dict[str, Any] = {"symbol": symbol, "rate": str(rate)}
         for key in ("interval", "nextFundingTimestamp", "markPrice"):

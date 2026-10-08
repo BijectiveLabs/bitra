@@ -1700,7 +1700,7 @@ def show_keys(args: argparse.Namespace) -> int:
         out.rows.append(
             provider_row(p, env, label=f"provider {name} ({why})", verify=bool(args.probe))
         )
-    if cfg is not None and cfg.live is not None:
+    if cfg is not None and cfg.live is not None and _has_live_plugin(cfg.live.venue):
         venue = live_venue(cfg.live.venue)
         out.rows.append(
             venue_row(
@@ -1771,8 +1771,19 @@ class _DispatchKeys:
         return tuple(credentials_for(self.venue).values())
 
 
+def _has_live_plugin(name: str) -> bool:
+    try:
+        live_venue(name)
+    except UnknownLiveVenueError:
+        return False
+    return True
+
+
 def _declared_environment(cfg: Any) -> str:
-    return cfg.live.environment if cfg.live is not None else "demo"
+    """Where orders go: [execution].environment, else the live session's, else the venue's demo."""
+    if cfg.execution.environment:
+        return str(cfg.execution.environment)
+    return str(cfg.live.environment) if cfg.live is not None else "demo"
 
 
 def _dispatch_ready(args: argparse.Namespace, cfg: Any) -> Callable[[], Any]:
@@ -3289,7 +3300,12 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
                     )
                 else:
                     good.append(f"provider {p.name}: ready")
-        if cfg.live is not None:
+        if cfg.live is not None and not _has_live_plugin(cfg.live.venue):
+            good.append(
+                f"live: no live-session plugin for {cfg.live.venue}, so `tra live` is not "
+                "available there; `tra run` reaches the venue through ccxt and is not affected"
+            )
+        elif cfg.live is not None:
             tier = Ladder(args.ladder).tier
             if tier is Tier.CANARY:
                 good.append(f"ladder: {tier.name}; live sessions may run")
@@ -3344,7 +3360,7 @@ def _venue_hand(
         max_notional=mandate.max_notional,
         role=channel.entry_role,
         exits=mandate.exits,
-        environment=cfg.live.environment if cfg.live is not None else "demo",
+        environment=_declared_environment(cfg),
         limit_timeout_s=mandate.limit_timeout_s,
         price_offset_bps=mandate.price_offset_bps,
         adopt_open_position=mandate.adopt_open_position,

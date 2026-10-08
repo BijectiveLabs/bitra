@@ -8,6 +8,14 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- `[execution].environment` (`demo`, `testnet` or `mainnet`) says where orders go. It falls back to
+  `[live].environment`, then `demo`. A `[live]` table for a venue with no live-session plugin no
+  longer breaks `tra check` and `tra keys`.
+- The order book reads levels that carry more than a price and a size (OKX sends four values); before,
+  it refused the venue's book outright.
+- A funding rate with no timestamp is dated when it was read. It was dated at the venue's next
+  settlement, in the future, so it read as fresh with a negative age.
+- Discovery reports the 24-hour change to four places.
 - Venue mode now declares its margin mode to the client, so a venue that defaults to cross margin
   (OKX) trades and reads leverage as isolated when isolated is what the operator declared.
 - The client order id is letters and digits, 32 at most, which every venue accepts; the old form

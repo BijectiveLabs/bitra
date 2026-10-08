@@ -95,6 +95,8 @@ class Mandate:
     liquidation_buffer_bps: Decimal = Decimal(50)
     # When an open position is closed by time: [exit].timeout_bars, the analyst's horizon, or never.
     hold_limit: str = "timeout"
+    # Where orders go: demo, testnet or mainnet. Empty falls back to [live].environment, then demo.
+    environment: str = ""
 
     def __post_init__(self) -> None:
         if self.mode not in MODES:
@@ -123,6 +125,8 @@ class Mandate:
             raise MandateError("[execution].liquidation_buffer_bps is not negative")
         if self.hold_limit not in HOLD_LIMITS:
             raise MandateError(f"[execution].hold_limit is one of {list(HOLD_LIMITS)}")
+        if self.environment not in ("", "demo", "testnet", "mainnet"):
+            raise MandateError('[execution].environment is "demo", "testnet" or "mainnet"')
         if self.acknowledged_on:
             try:
                 signed = date.fromisoformat(self.acknowledged_on)
@@ -154,6 +158,7 @@ class Mandate:
             "liquidation_buffer_bps": str(self.liquidation_buffer_bps),
             "hold_limit": self.hold_limit,
             "adopt_open_position": self.adopt_open_position,
+            "environment": self.environment,
             "params": {str(k): str(v) for k, v in sorted(self.params.items())},
         }
 

@@ -101,8 +101,9 @@ OKX's demo trading is reached through ccxt's sandbox switch, so in this project 
 
 1. Create a demo API key in OKX's demo trading mode with trade permission, and put `OKX_API_KEY`,
    `OKX_API_SECRET` and `OKX_API_PASSPHRASE` in `.env`.
-2. Run `tra venues okx --setup` and paste the blocks it prints. Set `[live].environment = "testnet"`
-   and `[execution].venue = "okx"`, and fill your demo account's fees in `envelope.toml`.
+2. Run `tra venues okx --setup` and paste the blocks it prints. Set `[execution].venue = "okx"` and
+   `[execution].environment = "testnet"`, and fill your demo account's fees in `envelope.toml`. The
+   `[live]` table is for `tra live`, which has a plugin only for Bybit, so an OKX desk leaves it out.
 3. Put `ccxt:okx` first in each chain in `data.toml`. Take out any `params` written for another
    venue, such as the open interest bucket Bybit wants.
 4. Set the account's position mode to one-way (net). In long/short mode the desk refuses to send,

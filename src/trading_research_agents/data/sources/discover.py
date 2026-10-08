@@ -188,7 +188,8 @@ def _unfit(
     most = _dec(((market.get("limits") or {}).get("leverage") or {}).get("max"))
     if rules.leverage is not None and most is not None and most < rules.leverage:
         return "leverage above the venue's maximum"
-    return volume, spread, _dec(ticker.get("percentage"))
+    change = _dec(ticker.get("percentage"))
+    return volume, spread, None if change is None else change.quantize(Decimal("0.0001"))
 
 
 def _listed(

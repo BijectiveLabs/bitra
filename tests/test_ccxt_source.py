@@ -124,6 +124,35 @@ def test_the_book_carries_its_own_stamp_and_refuses_one_sided() -> None:
         empty.fetch("orderbook", "BTCUSDT")
 
 
+def test_a_book_level_with_more_than_a_price_and_a_size_is_read() -> None:
+    # OKX appends a deprecated field and the number of orders: [price, size, 0, orders].
+    raw = {
+        "bids": [[100.5, 2, 0, 3], [100.4, 3, 0, 1]],
+        "asks": [[100.7, 1, 0, 2], [100.8, 4, 0, 5]],
+        "timestamp": OPEN_AT,
+    }
+    got = source(FakeCcxt(fetch_order_book=raw), now_ms=OPEN_AT + 1_000).fetch(
+        "orderbook", "BTCUSDT", levels=2
+    )
+    assert got.value.mid == Decimal("100.6")
+
+
+def test_a_funding_rate_with_no_timestamp_is_as_old_as_it_was_read_not_the_next_settlement() -> (
+    None
+):
+    now_ms = OPEN_AT + 1_000
+    client = FakeCcxt(
+        fetch_funding_rate={
+            "fundingRate": "0.0001",
+            "timestamp": None,
+            # The next settlement, an hour from now: the venue's date, not the rate's.
+            "fundingTimestamp": now_ms + 3_600_000,
+        }
+    )
+    got = source(client, now_ms=now_ms).fetch("funding", "BTCUSDT")
+    assert got.age_s(now_ms / 1000) == pytest.approx(0.0)
+
+
 def test_funding_and_open_interest_keep_the_venues_own_decimal_string() -> None:
     client = FakeCcxt(
         fetch_funding_rate={"fundingRate": "0.00012345", "timestamp": OPEN_AT, "interval": "8h"},

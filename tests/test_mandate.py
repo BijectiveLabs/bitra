@@ -640,6 +640,16 @@ def test_a_venue_that_will_not_say_its_contract_size_is_not_guessed() -> None:
     assert venue.orders == []
 
 
+def test_the_environment_orders_go_to_is_declared_where_orders_are() -> None:
+    from trading_research_agents.trading.config import _mandate
+
+    raw = {"execution": {"mode": "venue", "venue": "okx", "environment": "testnet"}}
+    assert _mandate(raw, "okx/taker-taker").environment == "testnet"
+    assert _mandate({"execution": {"mode": "venue"}}, "bybit/taker-taker").environment == ""
+    with pytest.raises(Exception, match="environment"):
+        _mandate({"execution": {"environment": "paper"}}, "bybit/taker-taker")
+
+
 def test_the_client_order_id_is_letters_and_digits_within_thirty_two() -> None:
     from trading_research_agents.trading.dispatch import _client_id
 
