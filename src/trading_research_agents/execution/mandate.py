@@ -217,7 +217,8 @@ def blocking(
         stops.append("[canary] limits are not declared; a live session has no defaults")
     if missing_keys:
         stops.append(
-            f"missing {', '.join(missing_keys)} in the environment; keys never come from a file"
+            f"missing {', '.join(missing_keys)}: not in the shell and not in the .env beside "
+            "strategy.toml, the only two places keys are read from"
         )
     return tuple(stops)
 

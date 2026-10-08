@@ -1867,7 +1867,9 @@ def _dispatch_ready(args: argparse.Namespace, cfg: Any) -> Callable[[], Any]:
     """Read the account through the very client an order would go through. Nothing is sent."""
 
     def run() -> Any:
-        hand = _venue_hand(args, cfg, args.config.resolve().parent)
+        # Reading the account sends nothing, so it does not wait for the mandate and the ladder:
+        # a key that cannot reach the account is worth knowing before either is signed.
+        hand = _venue_hand(args, cfg, args.config.resolve().parent, authorise=False)
         said = hand.ready()
         if said:
             raise RuntimeError(said)
@@ -2304,6 +2306,10 @@ def _fill_account_fees(
             bad.append(f"fees: not read for {venue} ({said}); the blank lines stay")
         return good, bad
     from_account = said.startswith("read from your")
+    if not from_account and all(env.get(k) for k in keys):
+        # A refused key is why orders would fail too; an account that does not report fees is not.
+        refused = any(word in said for word in ("PermissionDenied", "AuthenticationError"))
+        (bad if refused else good).append(f"fees: {said}")
     by_role = {"maker": fees[0], "taker": fees[1]}
     to_fill = blanks + (ours if from_account else [])
     if to_fill:
@@ -3819,7 +3825,13 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
 
 
 def _venue_hand(
-    args: argparse.Namespace, cfg: Any, project: Path, instrument: str = "", rate: Any = None
+    args: argparse.Namespace,
+    cfg: Any,
+    project: Path,
+    instrument: str = "",
+    rate: Any = None,
+    *,
+    authorise: bool = True,
 ) -> Any:
     """What venue mode sends with, built only after everything standing in the way is cleared."""
     from trading_research_agents.execution.mandate import blocking
@@ -3835,7 +3847,7 @@ def _venue_hand(
         missing_keys=[k for k in keys if not env.get(k)],
         canary_declared=cfg.canary is not None,
     )
-    if stops:
+    if stops and authorise:
         raise ConfigError("venue mode is not authorised here: " + "; ".join(stops))
     channel = next(
         (c for c in load_envelope(args.envelope).channels if c.key == cfg.run.venue_key), None

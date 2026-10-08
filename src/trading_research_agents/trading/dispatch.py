@@ -182,7 +182,8 @@ class VenueHand:
         missing = [wanted[field] for field, value in held.items() if not value]
         if missing:
             raise DispatchError(
-                f"{' and '.join(missing)} not in the environment; keys never come from a file"
+                f"{' and '.join(missing)} not set: not in the shell and not in the .env beside "
+                "strategy.toml, the only two places keys are read from"
             )
         try:
             import ccxt

@@ -505,7 +505,7 @@ def test_a_hand_needs_a_cap_and_the_keys_come_from_the_environment() -> None:
             client=FakeExchange(),
         )
 
-    with pytest.raises(DispatchError, match="not in the environment"):
+    with pytest.raises(DispatchError, match="not in the shell and not in the"):
         hand_for(venue="bybit", symbol="BTC/USDT:USDT", max_notional=Decimal(100), env={})
 
 
