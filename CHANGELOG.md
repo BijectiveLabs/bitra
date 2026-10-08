@@ -8,6 +8,11 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- `tra models <provider>` lists the models the key can use, from the vendor's own list; no
+  prompt is sent. `tra init --agent` takes a provider's default model when it has one.
+- `tra sources add <class> <name> --from <preset> --high bullish|bearish` puts a fetched series on
+  the shelf in one step: pulled, declared with the source's own timing, and with lines drawn from
+  its own history (quartiles by default), labelled as such.
 - `tra init --venue <ccxt id>` writes a desk for that exchange: data chains, venue key, execution
   venue and practice environment, the keys that venue signs with, and a fee file of its own.
   Orders stay in sandbox mode.

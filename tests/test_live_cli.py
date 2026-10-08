@@ -416,3 +416,22 @@ def test_init_for_a_venue_wires_data_orders_and_fees_for_that_venue(tmp_path: Pa
     assert "bybit" not in envelope and 'venue = "okx"' in envelope
     example = (target / ".env.example").read_text(encoding="utf-8")
     assert "OKX_API_PASSPHRASE=" in example and "BYBIT" not in example
+
+
+def test_models_lists_what_the_key_can_use_and_init_takes_a_default_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from trading_research_agents.llm.providers import registry
+
+    monkeypatch.setenv("GROQ_API_KEY", "k" * 40)
+    monkeypatch.setattr(registry, "model_ids", lambda name, base_url=None: ["a-20b", "b-120b"])
+    assert main(["models", "groq", "--filter", "120", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["models"] == ["b-120b"]
+
+    # A provider with a default model needs no --model; one without says where to look.
+    assert main(["init", str(tmp_path / "a"), "--agent", "anthropic"]) == 0
+    assert 'provider = "anthropic"' in (tmp_path / "a" / "strategy.toml").read_text(
+        encoding="utf-8"
+    )
+    assert main(["init", str(tmp_path / "b"), "--agent", "groq"]) != 0
+    assert "tra models groq" in capsys.readouterr().err

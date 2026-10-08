@@ -66,6 +66,19 @@ failure and the ledger records as a failed call. `decide_every_bars` is the othe
 A local server that needs no key gets a placeholder, because the client library insists on
 one.
 
+## Picking a model
+
+```bash
+tra models groq                    # every model your key can use there
+tra models google --filter flash   # only the names that contain "flash"
+tra init my-desk --profile autonomous --agent groq --model openai/gpt-oss-120b
+```
+
+`tra models` reads the vendor's own model list with your key: no prompt is sent and nothing is
+spent. Without a provider it reads `[agents].provider` from the desk. `tra init --agent` writes the
+provider and model into the desk from the start; a provider with a default model (Anthropic) needs
+no `--model`, and one without says to run `tra models` first.
+
 ## Adding a provider
 
 A vendor that needs its own client registers under the `trading_research_agents.providers`

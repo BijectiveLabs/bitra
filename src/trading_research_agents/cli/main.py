@@ -505,6 +505,17 @@ def build_parser() -> argparse.ArgumentParser:
     watch_cmd.add_argument("--limit", type=int, default=12, help="cycles in view; default 12")
     watch_cmd.add_argument("--json", action="store_true")
 
+    models_cmd = top.add_parser(
+        "models", help="the models your key can use on a provider; no prompt is sent"
+    )
+    models_cmd.set_defaults(command="models")
+    models_cmd.add_argument("provider", nargs="?", help="default: [agents].provider")
+    models_cmd.add_argument("--filter", default="", help="only names containing this text")
+    models_cmd.add_argument("--base-url", default=None)
+    models_cmd.add_argument("--config", type=Path, default=Path("strategy.toml"))
+    models_cmd.add_argument("--env-file", type=Path, default=None)
+    models_cmd.add_argument("--json", action="store_true")
+
     keys_cmd = top.add_parser(
         "keys", help="whether every key this project needs is there and works; none is shown"
     )
@@ -613,6 +624,48 @@ def build_parser() -> argparse.ArgumentParser:
         sub.add_argument("--config", type=Path, default=Path("strategy.toml"))
         sub.add_argument("--env-file", type=Path, default=None)
         sub.add_argument("--json", action="store_true")
+    add = sources.add_parser(
+        "add",
+        help="put a fetched series on the shelf: pulled now, its lines drawn from its own history",
+        epilog=(
+            "example: tra sources add macro us10y --from fred --id DGS10 --high bearish; "
+            "tra sources add onchain eth_net_flow --from coinmetrics --id FlowInExNtv "
+            "--minus FlowOutExNtv --fetch-asset eth --asset ETH --high bearish --band 10"
+        ),
+    )
+    add.add_argument("kind", choices=("macro", "sentiment", "onchain", "derivatives"))
+    add.add_argument("name", help="the series' name in briefs and records")
+    add.add_argument("--from", dest="origin", required=True, help="a preset, or http")
+    add.add_argument("--id", default=None, help="the source's own name for the series")
+    add.add_argument("--minus", default=None, help="a second series subtracted from the first")
+    add.add_argument("--fetch-asset", default=None, help="the asset the source is asked about")
+    for flag in (
+        "--url",
+        "--rows",
+        "--ts",
+        "--ts-unit",
+        "--value",
+        "--key-env",
+        "--key-param",
+        "--key-header",
+        "--key-prefix",
+    ):
+        add.add_argument(flag, default=None, help="http sources: see docs/sources")
+    add.add_argument(
+        "--high",
+        required=True,
+        choices=("bullish", "bearish"),
+        help="whether a high value is good or bad for the trade; the one thing asked of you",
+    )
+    add.add_argument(
+        "--band", type=int, default=25, help="percentile for the lines; 25 is quartiles"
+    )
+    add.add_argument("--days", type=int, default=365, help="the history the lines are drawn from")
+    add.add_argument("--asset", default="", help="the asset the series is about, such as BTC")
+    add.add_argument("--unit", default="")
+    add.add_argument("--config", type=Path, default=Path("strategy.toml"))
+    add.add_argument("--env-file", type=Path, default=None)
+    add.add_argument("--json", action="store_true")
 
     venues_cmd = top.add_parser(
         "venues", help="what a venue can do through ccxt: data, orders, exits, account reads"
@@ -1978,6 +2031,96 @@ def sources_pull(args: argparse.Namespace) -> int:
     return 1 if any("error" in r for r in rows) else 0
 
 
+def sources_add(args: argparse.Namespace) -> int:
+    """One series onto the shelf in one step: pulled now, lines drawn from its own history."""
+    from trading_research_agents.data.pull import PullError
+    from trading_research_agents.data.shelf import ShelfError, add_series
+
+    _load_env(args)
+    fetch: dict[str, Any] = {"from": args.origin}
+    for key, value in (
+        ("id", args.id),
+        ("minus", args.minus),
+        ("asset", args.fetch_asset),
+        ("url", args.url),
+        ("rows", args.rows),
+        ("ts", args.ts),
+        ("ts_unit", args.ts_unit),
+        ("value", args.value),
+        ("key_env", args.key_env),
+        ("key_param", args.key_param),
+        ("key_header", args.key_header),
+        ("key_prefix", args.key_prefix),
+    ):
+        if value is not None:
+            fetch[key] = value
+    try:
+        added = add_series(
+            args.config.resolve().parent,
+            args.kind,
+            args.name,
+            fetch,
+            high=args.high,
+            band=args.band,
+            days=args.days,
+            asset=args.asset,
+            unit=args.unit,
+            now=datetime.now(UTC),
+        )
+    except (ShelfError, PullError) as exc:
+        raise ConfigError(str(exc)) from exc
+    lines = [
+        f"{added.series}: {added.rows} rows pulled, lines drawn from {added.window} of them",
+        f"appended to {added.path}:",
+        "",
+        *added.block.rstrip().splitlines(),
+        "",
+        "the lines are a starting point drawn from the series itself; move them if you know better",
+    ]
+    emit(
+        {
+            "series": added.series,
+            "path": str(added.path),
+            "rows": added.rows,
+            "lower": str(added.lower),
+            "upper": str(added.upper),
+        },
+        args.json,
+        lines,
+    )
+    return CLEARED
+
+
+def show_models(args: argparse.Namespace) -> int:
+    """What a provider will serve this key, read from the vendor. No prompt, no spend."""
+    from trading_research_agents.llm.providers.registry import model_ids
+
+    _load_env(args)
+    name = args.provider
+    if not name and args.config.is_file():
+        raw = tomllib.loads(args.config.read_text(encoding="utf-8"))
+        name = str((raw.get("agents") or {}).get("provider") or "")
+    if not name or name == PLACEHOLDER_PROVIDER:
+        raise ConfigError(f"name a provider: {', '.join(providers())}")
+    p = provider(name)
+    if p.key_env and not os.environ.get(p.key_env):
+        raise ConfigError(f"{p.key_env} is not set; put it in .env beside strategy.toml")
+    try:
+        found = model_ids(name, base_url=args.base_url)
+    except UnknownProviderError:
+        raise
+    except Exception as exc:
+        raise ConfigError(
+            f"{name} did not list its models: {exc.__class__.__name__}: {exc}"
+        ) from exc
+    wanted = args.filter.lower()
+    shown = [m for m in found if wanted in m.lower()]
+    lines = [*shown, f"{len(shown)} of {len(found)} model(s) on {name}; no prompt was sent"]
+    lines.append(f'use one as [agents].model, with provider = "{name}"')
+    emit({"provider": name, "models": shown}, args.json, lines)
+    return CLEARED
+
+
 def show_venues(args: argparse.Namespace) -> int:
     """What a venue can actually do, asked of ccxt rather than promised in a README."""
     from trading_research_agents.data.sources.capability import CapabilityError, capability_of
@@ -2180,7 +2323,12 @@ def init_project(args: argparse.Namespace) -> int:
         able = capability_of(args.venue)
         keys = list(credentials_for(able.venue).values())
     if args.agent and not args.model:
-        raise ValueError("--agent needs --model")
+        args.model = provider(args.agent).default_model or ""
+        if not args.model:
+            raise ValueError(
+                f"--agent {args.agent} needs --model; `tra models {args.agent}` lists the ones "
+                "your key can use"
+            )
     if args.agent:
         provider(args.agent)
     if autonomous and not args.agent:
@@ -2211,7 +2359,11 @@ def init_project(args: argparse.Namespace) -> int:
         lines.append(
             "the cycle is wired: the shelf, the matrix, the conviction ladder, the targets"
         )
-        lines.append("next: put your key in .env, name the provider in [agents], then `tra check`")
+        lines.append(
+            "next: put your key in .env, then `tra check`"
+            if args.agent
+            else "next: put your key in .env, name the provider in [agents], then `tra check`"
+        )
     else:
         lines.append("next: cd there, `tra data get BTCUSDT 2025-01-01`, then `tra backtest`")
     emit({"directory": str(target), "files": list(TEMPLATE_FILES)}, args.json, lines)
@@ -3492,7 +3644,7 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
         if cfg.agents is not None and cfg.agents.provider == PLACEHOLDER_PROVIDER:
             bad.append(
                 "[agents].provider is still the placeholder; name the provider you have a key "
-                f"for, and its model ({', '.join(providers())})"
+                f"for ({', '.join(providers())}), and a model `tra models <provider>` lists"
             )
         elif cfg.agents is not None:
             try:
@@ -4840,6 +4992,8 @@ HANDLERS = {
     ("runs", "verify"): runs_verify,
     ("runs", "prune"): runs_prune,
     ("sources", "pull"): sources_pull,
+    ("sources", "add"): sources_add,
+    ("models", "models"): show_models,
     ("audit", "audit"): run_audit_command,
     ("keys", "keys"): show_keys,
     ("watch", "watch"): watch_desk,

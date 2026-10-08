@@ -276,3 +276,37 @@ def provider(name: str) -> Provider:
 def providers() -> tuple[str, ...]:
     _discover()
     return tuple(sorted(_registry))
+
+
+def model_ids(name: str, *, base_url: str | None = None) -> list[str]:
+    """The models this machine's key can use on a provider, as the vendor lists them.
+
+    One authenticated read of the vendor's own model list: no prompt is sent and nothing is spent.
+    It is how an operator picks a model name without copying it from a web page.
+    """
+    found = provider(name)
+    if found.name == "anthropic":
+        import anthropic
+
+        client = anthropic.Anthropic(timeout=PROBE_TIMEOUT_S, max_retries=0)
+        return sorted(m.id for m in client.models.list())
+    if found.name == "google":
+        from google import genai
+
+        # The client is held while the pages are read: a listing outlives a client it was asked of
+        # only until the next page, and then reads through a closed connection.
+        gclient = genai.Client(http_options={"timeout": int(PROBE_TIMEOUT_S * 1000)})
+        return sorted(str(m.name).removeprefix("models/") for m in gclient.models.list() if m.name)
+    if found.name in PRESETS:
+        import openai
+
+        p = PRESETS[found.name]
+        url = base_url or p.base_url
+        options: dict[str, Any] = {"timeout": PROBE_TIMEOUT_S, "max_retries": 0}
+        if url is not None:
+            options["base_url"] = url
+        key = os.environ.get(p.key_env) if p.key_env else None
+        options["api_key"] = key or "not-needed"
+        oclient = openai.OpenAI(**options)
+        return sorted(m.id for m in oclient.models.list())
+    raise UnknownProviderError(f"{name} does not list its models through this package")

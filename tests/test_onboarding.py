@@ -167,6 +167,6 @@ def test_init_with_an_agent_makes_the_analyst_the_core(
     out = capsys.readouterr().out
     assert "DEEPSEEK_API_KEY is not set" in out
     assert main(["init", str(project / "x"), "--agent", "deepseek"]) == 1
-    assert "--agent needs --model" in capsys.readouterr().err
+    assert "needs --model; `tra models deepseek`" in capsys.readouterr().err
     assert main(["init", str(project / "y"), "--agent", "nope", "--model", "m"]) == 1
     assert "no provider named" in capsys.readouterr().err

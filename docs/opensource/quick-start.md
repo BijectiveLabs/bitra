@@ -57,7 +57,9 @@ effort = "medium"
 fallback = ["google:gemini-flash-latest"]
 ```
 
-`tra keys --probe` proves the key works without sending a prompt. [Model providers](/opensource/providers)
+`tra models groq` lists the models your key can use, read from the vendor, so the name is
+copied from there rather than from a web page. `tra keys --probe` proves the key works without
+sending a prompt. [Model providers](/opensource/providers)
 lists every provider, the key each one reads and how well it has been tested.
 
 ## Keep it running

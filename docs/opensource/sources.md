@@ -42,6 +42,26 @@ fetch = { from = "alternative.me" }
 threshold = { bullish_above = 60, bearish_below = 25 }
 ```
 
+## Adding a series in one step
+
+```bash
+tra sources add macro us10y --from fred --id DGS10 --high bearish
+tra sources add onchain eth_net_flow --from coinmetrics --id FlowInExNtv --minus FlowOutExNtv \
+    --fetch-asset eth --asset ETH --high bearish --band 10
+```
+
+The command pulls the series now, writes its file, and appends a `[[series]]` block to
+`sources/<class>.toml` with the fetch, how late the source publishes and how old a value may be
+for that source, and a threshold drawn from the series' own last year: the 25th and 75th
+percentiles by default (`--band 10` draws the 10th and 90th, `--days` sets the window). The block
+says where the lines came from, and they are yours to move.
+
+One thing it cannot work out is which side is good for the trade, so it asks: `--high bullish`
+when a high value supports a long, `--high bearish` when it argues against one. Some are settled
+(a high US yield weighs on crypto), some are a view (one desk reads high greed as momentum,
+another as a warning), and the choice is yours either way. A paid vendor goes in
+the same way with `--from http --url ... --rows ... --ts ... --value ... --key-env ...`.
+
 ## A series about one asset
 
 A chain figure belongs to a chain. Bitcoin's exchange flows say a good deal about a Bitcoin trade and
