@@ -310,6 +310,18 @@ class Keeper:
         # Only this position's fills: its entry side before the first exit, and exits up to its
         # size. A later entry on the same instrument is the next position's, not this one's
         # (seen on 2026-10-05: the next entry's fee was counted against the trade it followed).
+        try:
+            unit = _contract_unit(hand)
+        except Exception as exc:
+            # Fills in contracts cannot be turned into a result without the contract size, and a
+            # guess would write a wrong figure into the record the auditors read.
+            trip["note"] = f"the contract size is unknown ({exc.__class__.__name__}), so no result"
+            if pending:
+                _write(self.root, ROUND_TRIPS, trip)
+            return trip
+        # The venue's fills are in contracts; the entry and the record are in the base.
+        fills = [{**f, "amount": Decimal(str(f.get("amount") or 0)) * unit} for f in fills]
+        exits = [f for f in fills if f.get("side") == exit_side]
         ordered = sorted(fills, key=lambda f: f.get("timestamp") or 0)
         first_exit = next(
             (f.get("timestamp") or 0 for f in ordered if f.get("side") == exit_side), None
@@ -389,6 +401,12 @@ def _how(closed: Mapping[str, Any]) -> str:
     if closed.get("closed"):
         return f"{closed.get('side')} {closed.get('size')} reduce-only"
     return str(closed.get("error") or closed.get("note") or "not closed")
+
+
+def _contract_unit(hand: Any) -> Decimal:
+    """How much of the base one of the venue's contracts is; 1 for a hand that does not say."""
+    size = getattr(hand, "contract_size", None)
+    return Decimal(1) if size is None else Decimal(size())
 
 
 def _quote_of(symbol: str) -> str:

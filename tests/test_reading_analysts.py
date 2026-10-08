@@ -310,6 +310,9 @@ def test_a_series_about_another_asset_counts_for_less_on_this_one(tmp_path: Path
     )
     series = load_all(path)
     assert base_of("ZECUSDT") == "ZEC" and base_of("BTCUSD") == "BTC" and base_of("USDT") == "USDT"
+    # Other venues' spellings of the same perpetual.
+    assert base_of("BTC-USDT-SWAP") == "BTC" and base_of("BTC/USDC:USDC") == "BTC"
+    assert base_of("BTC_USDT") == "BTC" and base_of("ZECUSDC") == "ZEC"
 
     own = context_brief(onchain_analyst.ROLE, snapshot(), series=series)
     assert own["series"][0]["asset"] == "BTC" and "counts" not in own["series"][0]

@@ -278,6 +278,27 @@ def test_a_position_the_venue_closed_is_recorded_with_its_result(tmp_path: Path)
     assert venue.orders == []
 
 
+class ContractVenue(Venue):
+    """The same account on a venue where one contract is 0.01 of the base."""
+
+    def market(self, symbol: str) -> dict[str, Any]:
+        return {**super().market(symbol), "contractSize": "0.01", "contract": True}
+
+
+def test_fills_reported_in_contracts_are_written_up_in_the_base(tmp_path: Path) -> None:
+    entry_cycle(tmp_path, "2026-10-04T17-55-13Z-BTCUSDT")
+    # 0.2 contracts of 0.01 is the 0.002 the entry holds.
+    venue = ContractVenue(
+        position="0",
+        fills=[
+            {"side": "buy", "amount": 0.2, "price": 85298.9, "fee": {"cost": 0.034}},
+            {"side": "sell", "amount": 0.2, "price": 87005.2, "fee": {"cost": 0.096}},
+        ],
+    )
+    said = keeper(tmp_path, venue, at=datetime(2026, 10, 5, 3, 0, tzinfo=UTC)).run()
+    assert "net 3.2826 USDT" in said[0]
+
+
 def test_the_kill_switch_flattens_and_cancels(tmp_path: Path) -> None:
     entry_cycle(tmp_path, "2026-10-05T02-00-00Z-BTCUSDT")
     venue = Venue(position="0.002")

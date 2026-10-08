@@ -8,6 +8,15 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- An instrument is named by base and settlement currency (`BTCUSDT`, `ZECUSDC`) and resolved on the
+  venue orders go to, as a linear perpetual. On OKX, Gate, KuCoin and Hyperliquid, whose ids are
+  spelled differently, the same name now reaches the right market, and a name that is also spot on
+  Binance or Bitget is no longer read as spot. Discovery names markets the same way.
+- Orders and positions are converted between the base and the venue's contracts. Before, a size in
+  the base went out as an amount in contracts, which is wrong on every venue whose contract is not
+  one unit of the base (OKX Bitcoin is 0.01, Gate 0.0001, OKX PEPE ten million). Discovery reports
+  steps and minimums in the base. A venue that does not report its contract size is refused.
+- The correlation reference is Bitcoin on whatever venue is traded, not the name `BTCUSDT`.
 - The documentation is a VitePress site (`docs/`), published to docs.bijectivelabs.dev from
   `master` through GitHub Pages (`.github/workflows/docs.yml`). The pages that lived in `docs/` as
   plain Markdown moved to `docs/opensource/`, with a new introduction, quick start, command

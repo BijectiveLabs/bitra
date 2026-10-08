@@ -184,7 +184,7 @@ def test_a_venue_id_is_looked_up_and_the_perpetual_wins() -> None:
     assert client.seen[0][1][0] == "ETH/USDT:USDT"
 
     blank = source(FakeCcxt(), now_ms=OPEN_AT)
-    with pytest.raises(SourceError, match="no market for 'SOLUSDT'"):
+    with pytest.raises(SourceError, match="no linear perpetual named 'SOLUSDT'"):
         blank.fetch("funding", "SOLUSDT")
 
 

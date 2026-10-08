@@ -322,6 +322,11 @@ QUOTE_SUFFIXES = ("USDT", "USDC", "BUSD", "USD", "PERP")
 def base_of(instrument: str) -> str:
     """The asset an instrument is on: BTCUSDT is BTC. A name with no known quote is its own base."""
     name = instrument.upper()
+    if "/" in name:
+        return name.partition("/")[0]
+    for separator in ("-", "_"):
+        if separator in name:
+            return name.partition(separator)[0]
     for quote in QUOTE_SUFFIXES:
         if name.endswith(quote) and len(name) > len(quote):
             return name[: -len(quote)]

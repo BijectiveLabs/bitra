@@ -574,6 +574,72 @@ def test_a_size_on_the_venues_step_goes_out_as_it_is() -> None:
     assert placed["sent"] is True and venue.orders[0]["amount"] == 0.04
 
 
+class ContractVenue(SteppedExchange):
+    """A venue whose contract is a fraction of the base, the way ccxt reports one."""
+
+    def __init__(self, unit: str, step: str = "1", **kwargs: Any) -> None:
+        super().__init__(step, **kwargs)
+        self.unit = unit
+
+    def market(self, symbol: str) -> dict[str, Any]:
+        return {"contractSize": self.unit, "contract": True, "limits": {"amount": {"min": "1"}}}
+
+
+def _contract_hand(venue: FakeExchange) -> VenueHand:
+    return VenueHand(
+        venue="bybit",
+        symbol="BTC/USDT:USDT",
+        instrument="BTCUSDT",
+        max_notional=Decimal(5000),
+        keys=("BYBIT_API_KEY", "BYBIT_API_SECRET"),
+        client=venue,
+    )
+
+
+def test_a_size_in_the_base_is_sent_as_contracts() -> None:
+    # 0.04 BTC on a venue where one contract is 0.01 BTC is four contracts, not 0.04 of one.
+    venue = ContractVenue("0.01", answer={"id": "order-1", "status": "closed", "filled": 4})
+    placed = _contract_hand(venue)({**LONG, "size": "0.04"})
+    assert placed["sent"] is True and venue.orders[0]["amount"] == 4.0
+    assert (
+        placed["size"] == "0.04"
+        and placed["contracts"] == "4"
+        and placed["contract_size"] == "0.01"
+    )
+    # What the venue says it filled comes back in the base, which is what the record holds.
+    assert Decimal(placed["filled"]) == Decimal("0.04")
+
+
+def test_a_size_that_is_not_a_whole_number_of_contracts_is_refused() -> None:
+    venue = ContractVenue("0.01")
+    placed = _contract_hand(venue)({**LONG, "size": "0.045"})
+    assert placed["sent"] is False and "contracts of 0.01" in placed["refused"]
+    assert venue.orders == []
+
+
+def test_a_contract_larger_than_the_base_unit_is_not_a_million_times_the_size() -> None:
+    # A token whose contract is ten million of it: 20 million tokens is two contracts.
+    venue = ContractVenue("10000000", answer={"id": "order-1", "status": "closed", "filled": 2})
+    placed = _contract_hand(venue)({**LONG, "size": "20000000", "mid": "0.00001"})
+    assert placed["sent"] is True and venue.orders[0]["amount"] == 2.0
+
+
+def test_the_position_a_venue_reports_in_contracts_is_read_in_the_base() -> None:
+    venue = ContractVenue("0.01", position={"contracts": 4, "side": "short"})
+    assert _contract_hand(venue).position() == Decimal("-0.04")
+
+
+def test_a_venue_that_will_not_say_its_contract_size_is_not_guessed() -> None:
+    class Silent(ContractVenue):
+        def market(self, symbol: str) -> dict[str, Any]:
+            return {"contract": True, "limits": {"amount": {"min": None}}}
+
+    venue = Silent("1")
+    placed = _contract_hand(venue)({**LONG, "size": "0.04"})
+    assert placed["sent"] is False and "does not say how large one" in placed["refused"]
+    assert venue.orders == []
+
+
 def test_an_interrupt_while_an_order_rests_takes_it_off_the_book_first() -> None:
     venue = FakeExchange()
 

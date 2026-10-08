@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from trading_research_agents.agents import market_screener
-from trading_research_agents.agents.briefs import bars_of
+from trading_research_agents.agents.briefs import bars_of, base_of
 from trading_research_agents.agents.cited import figures_of as figures_of_row
 from trading_research_agents.agents.cited import survived
 from trading_research_agents.agents.progress import (
@@ -63,8 +63,9 @@ LIVE_PROMPT = "market_screener_live"
 # What the look costs: the book to price the spread, the bars to see the window's range. Funding and
 # open interest are a cycle's business, not a screen's.
 KINDS = ("orderbook", "ohlcv")
-# What every other instrument's correlation is measured against.
-REFERENCE = "BTCUSDT"
+# What every other instrument's correlation is measured against: Bitcoin, whatever the venue
+# calls it or settles it in.
+REFERENCE_BASE = "BTC"
 
 
 def figures_of(snapshot: Snapshot, *, now: float | None = None) -> dict[str, Any]:
@@ -372,12 +373,13 @@ def _uncorrelated(
 def _with_btc(candidates: list[Candidate], moves: Mapping[str, list[float]]) -> list[Candidate]:
     """Each instrument's correlation with BTC over this pass's bars: how much of its move is the
     market's and how much its own."""
-    anchor = moves.get(REFERENCE)
+    reference = next((name for name in moves if base_of(name) == REFERENCE_BASE), None)
+    anchor = moves.get(reference) if reference else None
     if not anchor:
         return candidates
     out = []
     for candidate in candidates:
-        if candidate.instrument == REFERENCE:
+        if candidate.instrument == reference:
             out.append(candidate)
             continue
         measured_r = correlation(moves.get(candidate.instrument, []), anchor)

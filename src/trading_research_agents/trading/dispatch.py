@@ -318,7 +318,12 @@ class VenueHand:
                 "open_orders": resting,
             }
 
-        off_step = self._off_step(size)
+        try:
+            unit = self.contract_size()
+        except DispatchError as exc:
+            return {"sent": False, "refused": str(exc)}
+        contracts = size / unit
+        off_step = self._off_step(contracts, size, unit)
         if off_step:
             return {"sent": False, "refused": off_step}
 
@@ -373,12 +378,13 @@ class VenueHand:
                 self.symbol,
                 "limit",
                 side,
-                float(size),
+                float(contracts),
                 float(price),
                 params,
             )
         except Exception as exc:
             raise DispatchError(self._clean(f"{exc.__class__.__name__}: {exc}")) from exc
+        order = self._in_base(order, unit)
         self.sent_count += 1
 
         placed: dict[str, Any] = {
@@ -390,6 +396,7 @@ class VenueHand:
             "role": self.role,
             "side": side,
             "size": str(size),
+            **({"contracts": str(contracts), "contract_size": str(unit)} if unit != 1 else {}),
             "price": None if price is None else str(price),
             "notional": str(notional),
             "client_order_id": order_id,
@@ -485,35 +492,78 @@ class VenueHand:
             f"{MAX_CLOCK_SKEW_MS} ms and a signature can fail mid-order. Sync the clock first"
         )
 
-    def _off_step(self, size: Decimal) -> str:
+    def contract_size(self) -> Decimal:
+        """How much of the base one contract is. 1 for a venue that quotes in the base itself.
+
+        Orders and positions are in contracts, and this package sizes in the base. One venue's
+        Bitcoin contract is 0.01 of a coin, another's is 0.0001, and a meme coin's can be ten
+        million tokens, so sending the base figure as an amount would be a hundred times too small
+        on one and a million times too large on another.
+        """
+        market = self._market()
+        raw = market.get("contractSize")
+        if raw in (None, ""):
+            if market.get("contract"):
+                raise DispatchError(
+                    f"{self.venue} does not say how large one {self.symbol} contract is, so a size "
+                    "in the base cannot be turned into an order"
+                )
+            return Decimal(1)
+        try:
+            unit = Decimal(str(raw))
+        except ArithmeticError:
+            unit = Decimal(0)
+        if not unit.is_finite() or unit <= 0:
+            raise DispatchError(
+                f"{self.venue} reports a contract size of {raw!r} for {self.symbol}"
+            )
+        return unit
+
+    def to_base(self, contracts: Any) -> Decimal:
+        """An amount the venue reports, in contracts, as a quantity of the base."""
+        return Decimal(str(contracts or 0)) * self.contract_size()
+
+    @staticmethod
+    def _in_base(order: Mapping[str, Any], unit: Decimal) -> dict[str, Any]:
+        """A venue's order with its quantities in the base, so nothing downstream sees contracts."""
+        out = dict(order)
+        if unit != 1:
+            for key in ("filled", "amount", "remaining"):
+                if out.get(key) is not None:
+                    out[key] = str(Decimal(str(out[key])) * unit)
+        return out
+
+    def _off_step(self, contracts: Decimal, size: Decimal, unit: Decimal) -> str:
         """Empty when the venue takes this size as it is; otherwise why it would not.
 
         ccxt rounds an amount to the market's precision before sending it. That is helpful
         everywhere except here: the cycle priced, risked and recorded one size, and a quietly
         rounded order is a different trade from the one on disk. So a size off the venue's own step,
-        or under its minimum, is refused with both figures rather than adjusted.
+        or under its minimum, is refused with both figures rather than adjusted. The step and the
+        minimum are in contracts, so the size is judged as contracts.
         """
         to_step = getattr(self.client, "amount_to_precision", None)
         if to_step is None:
             return ""
+        shown = f"{size} ({contracts} contracts of {unit})" if unit != 1 else f"{size}"
         try:
             load = getattr(self.client, "load_markets", None)
             if load is not None:
                 load()
-            stepped = Decimal(str(to_step(self.symbol, float(size))))
+            stepped = Decimal(str(to_step(self.symbol, float(contracts))))
             market = self.client.market(self.symbol) if hasattr(self.client, "market") else {}
         except Exception as exc:
             said = self._clean(f"{exc.__class__.__name__}: {exc}")[:200]
-            return f"{self.venue} will not take {size} of {self.symbol}: {said}"
-        if stepped != size:
+            return f"{self.venue} will not take {shown} of {self.symbol}: {said}"
+        if stepped != contracts:
             return (
-                f"{size} is off {self.venue}'s step for {self.symbol}, which would send {stepped}; "
-                "set [run].size_step for this instrument to the venue's increment"
+                f"{shown} is off {self.venue}'s step for {self.symbol}, which would send "
+                f"{stepped}; set [run].size_step for this instrument to the venue's increment"
             )
         limits = (market or {}).get("limits") or {}
         least = (limits.get("amount") or {}).get("min")
-        if least is not None and size < Decimal(str(least)):
-            return f"{size} is under {self.venue}'s minimum of {least} for {self.symbol}"
+        if least is not None and contracts < Decimal(str(least)):
+            return f"{shown} is under {self.venue}'s minimum of {least} for {self.symbol}"
         return ""
 
     def _can_attach(self) -> bool:
@@ -552,7 +602,7 @@ class VenueHand:
         contracts = held.get("contracts")
         if contracts is None:
             return Decimal(0)
-        signed = Decimal(str(contracts))
+        signed = Decimal(str(contracts)) * self.contract_size()
         return -signed if str(held.get("side", "")).lower() == "short" else signed
 
     def _ensure_leverage(self) -> str:
@@ -693,7 +743,12 @@ class VenueHand:
         side = "sell" if held > 0 else "buy"
         try:
             order = self.client.create_order(
-                self.symbol, "market", side, float(abs(held)), None, {"reduceOnly": True}
+                self.symbol,
+                "market",
+                side,
+                float(abs(held) / self.contract_size()),
+                None,
+                {"reduceOnly": True},
             )
         except Exception as exc:
             return {
@@ -865,7 +920,7 @@ class VenueHand:
             with suppress(Exception):
                 found = fetch(order_id, self.symbol)
             if found:
-                return dict(found)
+                return self._in_base(found, self.contract_size())
         return None
 
     def _cancel(self, order_id: str) -> str:

@@ -3371,7 +3371,36 @@ def _symbol_for(cfg: Any, project: Path, instrument: str = "") -> str:
             return str(mapped)
     if named in _DISCOVERED:
         return str(_DISCOVERED[named]["symbol"])
-    return str(named)
+    if "/" in named:
+        return str(named)
+    return _on_the_execution_venue(cfg, str(named))
+
+
+def _on_the_execution_venue(cfg: Any, name: str) -> str:
+    """The market `name` stands for on the venue orders go to, which is the venue that decides.
+
+    The same string can be a perpetual on one venue, spot on another and nothing on a third, so it
+    is read against the execution venue's own market list. When that list cannot be read the name
+    is returned as it was, and the venue hand still refuses anything that is not a linear
+    perpetual.
+    """
+    from trading_research_agents.data.sources.resolve import ResolveError, resolve
+
+    venue = cfg.execution.venue or cfg.run.venue_key.partition("/")[0]
+    try:
+        client = _DISCOVERY_CLIENTS.get(venue)
+        if client is None:
+            import ccxt
+
+            client = getattr(ccxt, venue)({"enableRateLimit": True})
+            _DISCOVERY_CLIENTS[venue] = client
+        if not getattr(client, "markets", None):
+            client.load_markets()
+        return resolve(name, client.markets_by_id, client.markets.values())
+    except ResolveError as exc:
+        raise ConfigError(f"{venue}: {exc}") from exc
+    except Exception:
+        return name
 
 
 def _agrees_across_files(cfg: Any, data: Any, bad: list[str]) -> list[str]:

@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from trading_research_agents.data.sources.resolve import slug_of
+
 BPS = Decimal(10_000)
 DAY_MS = 86_400_000
 # ccxt's precision modes: in TICK_SIZE the amount precision is the step itself; in the other two
@@ -65,10 +67,13 @@ class Listed:
     quote_volume: Decimal
     spread_bps: Decimal
     change_24h_pct: Decimal | None
+    # In base units. ccxt states both in contracts, and a contract is not always one unit of the
+    # base: OKX BTC is 0.01, Gate BTC 0.0001, OKX PEPE 10 million.
     step: Decimal
     min_size: Decimal | None
     max_leverage: Decimal | None
     listed_days: int | None
+    contract_size: Decimal = Decimal(1)
 
     def record(self) -> dict[str, Any]:
         return {
@@ -81,6 +86,7 @@ class Listed:
             "min_size": None if self.min_size is None else str(self.min_size),
             "max_leverage": None if self.max_leverage is None else str(self.max_leverage),
             "listed_days": self.listed_days,
+            "contract_size": str(self.contract_size),
         }
 
 
@@ -126,7 +132,14 @@ def discover(
     tick = getattr(client, "precisionMode", TICK_SIZE) == TICK_SIZE
     excluded = {name.upper() for name in rules.exclude}
     for symbol, market in perps.items():
-        instrument = str(market.get("id") or symbol)
+        # Named by base and settlement currency, which every venue can resolve, not by the id the
+        # venue happens to use: OKX says BTC-USDT-SWAP and Hyperliquid says 0.
+        instrument = slug_of(market) or str(market.get("id") or symbol)
+        if instrument in {x.instrument for x in kept}:
+            dropped["same name as another market"] = (
+                dropped.get("same name as another market", 0) + 1
+            )
+            continue
         why = _unfit(instrument, market, tickers.get(symbol) or {}, venue, rules, now_ms, excluded)
         if isinstance(why, str):
             dropped[why] = dropped.get(why, 0) + 1
@@ -156,7 +169,7 @@ def _unfit(
         kind = str((market.get("info") or {}).get(field_name) or "").lower()
         if kind in values:
             return "not crypto" if rules.crypto_only else f"{field_name} is {kind}"
-    volume = _dec(ticker.get("quoteVolume"))
+    volume = _quote_volume(ticker, market)
     if volume is None or volume < rules.min_quote_volume:
         return "too little volume"
     bid, ask = _dec(ticker.get("bid")), _dec(ticker.get("ask"))
@@ -183,12 +196,15 @@ def _listed(
     now_ms: float,
 ) -> Listed:
     precision = _dec((market.get("precision") or {}).get("amount"))
+    contract = _dec(market.get("contractSize"))
+    contract = contract if contract is not None and contract > 0 else Decimal(1)
     if precision is None:
         step = Decimal(1)
     elif tick:
         step = precision
     else:
         step = Decimal(1).scaleb(-int(precision))
+    least = _dec(((market.get("limits") or {}).get("amount") or {}).get("min"))
     created = market.get("created")
     leverage = _dec(((market.get("limits") or {}).get("leverage") or {}).get("max"))
     volume, spread, change = passed
@@ -198,11 +214,30 @@ def _listed(
         quote_volume=volume,
         spread_bps=spread,
         change_24h_pct=change,
-        step=step,
-        min_size=_dec(((market.get("limits") or {}).get("amount") or {}).get("min")),
+        step=step * contract,
+        min_size=None if least is None else least * contract,
         max_leverage=leverage,
         listed_days=None if not created else int((now_ms - float(created)) // DAY_MS),
+        contract_size=contract,
     )
+
+
+def _quote_volume(ticker: Mapping[str, Any], market: Mapping[str, Any]) -> Decimal | None:
+    """What traded in 24 hours, in quote currency.
+
+    Some venues leave quoteVolume empty on perpetuals and report baseVolume in contracts (seen on
+    OKX, 2026-10-08: baseVolume 6,712,915 for Bitcoin, which is 67,129 BTC at 0.01 a contract). That
+    is converted through the contract size and the last price rather than read as zero volume,
+    which would have dropped every market on the venue.
+    """
+    direct = _dec(ticker.get("quoteVolume"))
+    if direct is not None:
+        return direct
+    contracts, last = _dec(ticker.get("baseVolume")), _dec(ticker.get("last"))
+    unit = _dec(market.get("contractSize"))
+    if contracts is None or last is None or unit is None or unit <= 0:
+        return None
+    return contracts * unit * last
 
 
 def _dec(value: Any) -> Decimal | None:

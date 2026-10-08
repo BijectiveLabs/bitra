@@ -47,6 +47,53 @@ The default project (`tra init`) prices Bybit and Hyperliquid channels in `envel
 data from Bybit with Binance behind it in `data.toml`, and trades `bybit/taker-taker` in the
 sandbox, where nothing leaves the machine.
 
+## Where an order goes, and what an instrument is
+
+Two things are separate in a desk. `[execution].venue` (and the venue in `[run].venue_key`) is where
+orders go, where fees are priced, where positions are read and where discovery looks for
+instruments. The chains in `data.toml` are only where candles and books come from, and they may be
+other venues. The venue that executes decides what an instrument is; the data venues are asked for
+the same market and may refuse it.
+
+Pairs are not spelled alike, and on several venues one id names both a spot market and a
+perpetual; ccxt's own lookup of `BTCUSDT` returns the spot market on `binance` and on `bitget`.
+Read from ccxt 4.5.84 on 2026-10-08:
+
+| Venue (ccxt id) | Bitcoin perpetual id | Settles in | One contract is | The same id also lists a spot market |
+|---|---|---|---|---|
+| Bybit (`bybit`) | `BTCUSDT` | USDT, USDC | 1 BTC | yes |
+| Binance (`binance`, `binanceusdm`) | `BTCUSDT` | USDT, USDC | 1 BTC | yes on `binance`, no on `binanceusdm` |
+| Bitget (`bitget`) | `BTCUSDT` | USDT, USDC | 1 BTC | yes |
+| OKX (`okx`) | `BTC-USDT-SWAP` | USDT | 0.01 BTC | no |
+| Gate (`gate`) | `BTC_USDT` | USDT | 0.0001 BTC | yes |
+| KuCoin Futures (`kucoinfutures`) | `XBTUSDTM` | USDT, USDC | 0.001 BTC | no |
+| Hyperliquid (`hyperliquid`) | `0` | USDC only | 1 BTC | no |
+
+So the desk names an instrument by its base and settlement currency, `BTCUSDT` or `ZECUSDC`, and
+resolves that name on the venue it is about to ask: a unified symbol such as `BTC/USDT:USDT` as
+given, then the venue's own id, then base plus settle. Only linear perpetuals are candidates, so a
+name that is spot on one venue is never read as spot, and a name that matches nothing, or two
+markets, is refused rather than guessed. Discovery names what it finds the same way, so on OKX it
+lists `BTCUSDT`, not `BTC-USDT-SWAP`, and on Hyperliquid `BTCUSDC`.
+
+Two consequences to know:
+
+- **Settlement.** Hyperliquid has no USDT perpetuals. Set `[universe].quote = "USDC"` and name
+  instruments `BTCUSDC`.
+- **Scaled contracts.** A token that trades per thousand on one venue (`1000PEPE`) and per unit on
+  another (`PEPE`) is two different instruments. Data from one will not resolve on the other, and
+  the desk says so instead of mixing them.
+
+Sizes are in the base everywhere in the desk: caps, risk, conviction, the records. At the venue they
+become contracts, because that is what a venue's order and position are counted in: 0.04 BTC on OKX
+is 4 contracts, and 20 million PEPE where a contract is 10 million is 2. A size that is not a whole
+number of contracts is refused with both figures, a venue that does not report its contract size is
+refused, and what the venue reports back, fills and positions, is read in the base again.
+
+Only Bybit has been run end to end with real orders. The contract arithmetic and the name
+resolution for the other venues are tested against the shapes ccxt returns, not against those
+venues' accounts, so start any of them on its practice environment first.
+
 ## Adding a venue you trade on
 
 Four steps, and the command writes most of them for you.

@@ -32,6 +32,7 @@ from trading_research_agents.data.sources.base import (
     OrderBook,
     SourceError,
 )
+from trading_research_agents.data.sources.resolve import ResolveError, resolve
 
 TIMEFRAMES = {
     60: "1m",
@@ -146,16 +147,11 @@ class CcxtSource:
             except Exception as exc:
                 raise SourceError(f"{self.name}: cannot load markets: {exc}") from exc
             markets_by_id = getattr(self._client, "markets_by_id", None) or {}
-        found = markets_by_id.get(instrument) or []
-        if isinstance(found, dict):
-            found = [found]
-        # A venue id can map to several markets (spot and swap). Perpetuals first: this package
-        # is about perpetual futures, and an operator who wants spot declares the symbol.
-        for market in sorted(found, key=lambda m: 0 if m.get("swap") else 1):
-            symbol = market.get("symbol")
-            if symbol:
-                return str(symbol)
-        raise SourceError(f"{self.name}: no market for {instrument!r}; declare its symbol")
+        markets = getattr(self._client, "markets", None) or {}
+        try:
+            return resolve(instrument, markets_by_id, markets.values())
+        except ResolveError as exc:
+            raise SourceError(f"{self.name}: {exc}") from exc
 
     def _timeframe(self, interval_s: int) -> str:
         timeframe = TIMEFRAMES.get(interval_s)
