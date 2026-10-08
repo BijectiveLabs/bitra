@@ -48,10 +48,24 @@ def label(strength: float | None, move_bps: float | None, rule: RegimeRule) -> s
     return "mixed"
 
 
-def misfit(setup: str, target: str, regime: str) -> str:
-    """Why this setup does not belong in this regime, or empty when it does."""
-    if regime == "ranging" and setup in TREND_SETUPS:
-        return f"{setup} in a market measured as ranging; a trend setup needs a trend"
+def misfit(
+    setup: str,
+    target: str,
+    regime: str,
+    *,
+    zscore: float | None = None,
+    window_move_bps: float | None = None,
+    position_in_range: float | None = None,
+) -> str:
+    """Why this setup does not fit what code measured, or empty when it does.
+
+    Each setup is a claim about the market with a direction built into it, and the figures that
+    make the claim are in the brief. A setup whose direction contradicts its own figures is a
+    named shape on a trade that came from somewhere else, so it is refused by name. A figure
+    that was not measured does not refuse anything.
+    """
+    if setup in TREND_SETUPS and regime not in ("trending up", "trending down"):
+        return f"{setup} in a market measured as {regime}; a trend setup needs a measured trend"
     if regime in ("trending up", "trending down"):
         way = "long" if regime == "trending up" else "short"
         if setup in RANGE_SETUPS:
@@ -61,4 +75,34 @@ def misfit(setup: str, target: str, regime: str) -> str:
         if setup == "momentum_exhaustion" and target == way:
             # Exhaustion trades against the move; with it, it is a continuation under another name.
             return f"momentum_exhaustion {target} in a market measured as {regime}; that is with it"
+    # A range fade sells what is stretched up and buys what is stretched down.
+    if setup in RANGE_SETUPS and zscore is not None and not _points(target, -zscore):
+        return (
+            f"range_reversion {target} with the close at z-score {zscore:+.3f}; a fade goes "
+            "against the stretch"
+        )
+    if (
+        setup == "momentum_exhaustion"
+        and window_move_bps is not None
+        and not _points(target, -window_move_bps)
+    ):
+        return (
+            f"momentum_exhaustion {target} after a window move of {window_move_bps:+.2f} bps; "
+            "exhaustion trades against the move"
+        )
+    # A breakout trades the side of the range the close has left from.
+    if (
+        setup == "range_breakout"
+        and position_in_range is not None
+        and not _points(target, position_in_range - 0.5)
+    ):
+        return (
+            f"range_breakout {target} with the close at {position_in_range:.3f} of the range; "
+            "a breakout trades the side the close left from"
+        )
     return ""
+
+
+def _points(target: str, lean: float) -> bool:
+    """Whether a long leans up or a short leans down; a lean of zero points nowhere."""
+    return (target == "long" and lean > 0) or (target == "short" and lean < 0)

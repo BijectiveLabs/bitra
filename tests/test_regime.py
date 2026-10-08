@@ -63,7 +63,8 @@ def test_trend_strength_tells_a_trend_from_a_market_going_nowhere() -> None:
         ("momentum_exhaustion", "long", "trending up", True),
         ("range_breakout", "long", "ranging", False),
         ("volatility_expansion", "short", "trending up", False),
-        ("trend_continuation", "long", "mixed", False),
+        ("trend_continuation", "long", "mixed", True),
+        ("pullback_in_trend", "short", "mixed", True),
     ],
 )
 def test_a_setup_has_to_belong_in_the_regime_measured(
@@ -288,3 +289,26 @@ def test_a_short_reads_its_exits_as_gains_and_losses_to_the_position(
     assert "price +1.00%, the position -100.00 bps" in shown
     assert "2 : 1" in shown and "the desk asks 2.0x" in shown
     assert "not priced: fake:fake" in shown
+
+
+@pytest.mark.parametrize(
+    ("setup", "target", "figures", "refused"),
+    [
+        # Seen on 2026-10-08: pullback_in_trend short in a mixed market rising 53 bps.
+        ("pullback_in_trend", "short", {"window_move_bps": 53.41}, True),
+        ("range_reversion", "short", {"zscore": 1.4}, False),
+        ("range_reversion", "short", {"zscore": -0.4}, True),
+        ("range_reversion", "long", {"zscore": -1.8}, False),
+        ("range_reversion", "long", {"zscore": 0.0}, True),
+        ("momentum_exhaustion", "short", {"window_move_bps": 80.0}, False),
+        ("momentum_exhaustion", "short", {"window_move_bps": -80.0}, True),
+        ("range_breakout", "long", {"position_in_range": 0.97}, False),
+        ("range_breakout", "long", {"position_in_range": 0.2}, True),
+        ("volatility_expansion", "long", {"zscore": -2.0, "window_move_bps": -50.0}, False),
+        ("range_reversion", "short", {}, False),
+    ],
+)
+def test_a_setup_trades_the_direction_its_own_figures_point(
+    setup: str, target: str, figures: dict[str, float], refused: bool
+) -> None:
+    assert bool(misfit(setup, target, "mixed", **figures)) is refused

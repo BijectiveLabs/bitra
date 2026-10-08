@@ -272,13 +272,23 @@ range_below = 1.0                  # at or below this is a range; between the tw
 setups_must_fit = true             # false: a misfit is written down and the trade goes on
 ```
 
-**A setup has to fit the regime.** On the decision timeframe, code refuses a trend setup
-(`trend_continuation`, `pullback_in_trend`) in a market measured as ranging, a `range_reversion`
-against a trend, a trend setup pointing against the trend, and a `momentum_exhaustion` that goes
-with the move it says is exhausted. A breakout and a volatility expansion are allowed anywhere,
-since they are about a regime changing. A short setup against a higher timeframe's trend is left
-to the analyst to weigh, because fading the hourly on the minute chart is sometimes the whole
-trade; the reason has to say so. `tra check` prints the lines and the timeframes in use.
+**A setup has to fit what code measured.** Each setup is a claim with a direction built into it,
+and the figures that make the claim are in the brief. On the decision timeframe, code refuses:
+
+| Setup | Refused when |
+|---|---|
+| `trend_continuation`, `pullback_in_trend` | the market is not measured as trending (ranging or mixed), or the trade points against the trend |
+| `range_reversion` | the market is trending, or the trade does not fade the stretch: a long with the close at or above the window's mean (z-score 0 or more), a short at or below it |
+| `momentum_exhaustion` | the trade goes with the move it says is exhausted: with the trend, or with the window's move |
+| `range_breakout` | the trade is on the other side from where the close sits: a long with the close in the lower half of the range, a short in the upper half |
+| `volatility_expansion` | never on direction: it is about a regime changing, not which way |
+
+The rule came from a live cycle on 2026-10-08: a `pullback_in_trend` short in a market measured as
+mixed and rising 53 bps over the window, which the earlier rule let through because it only
+checked trends it could measure. A short setup against a higher timeframe's trend is still left to
+the analyst to weigh, because fading the hourly on the minute chart is sometimes the whole trade;
+the reason has to say so. With `setups_must_fit = false` a misfit is written down and the trade
+goes on. `tra check` prints the lines and the timeframes in use.
 
 The macro analyst's regime is a different thing: risk-on or risk-off is about the world outside the
 chart, and it can disagree with what price is doing. Both are kept. The analyst sees the declared

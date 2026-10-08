@@ -158,9 +158,12 @@ def analyst_answer(
     target: str = "long",
     confidence: float = 0.9,
     horizon: int = 30,
-    setup: str = "range_reversion",
+    setup: str = "",
     cited: list[dict[str, str]] | None = None,
 ) -> str:
+    # The fixture's closes end at the top of their range, stretched up: a long that fits them is a
+    # breakout and a short that fits them is a fade.
+    setup = setup or ("range_breakout" if target == "long" else "range_reversion")
     return json.dumps(
         {
             "target": target,

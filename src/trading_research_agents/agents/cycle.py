@@ -715,7 +715,14 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         announce(cfg.watch, "technical", REFUSED, "no setup")
         _finish(cfg, where, result)
         return result
-    misfit_why = misfit(analyst.setup, analyst.target, technical.regime)
+    misfit_why = misfit(
+        analyst.setup,
+        analyst.target,
+        technical.regime,
+        zscore=technical.features.zscore,
+        window_move_bps=technical.features.window_move_bps,
+        position_in_range=technical.features.position_in_range,
+    )
     if misfit_why and cfg.regime.setups_must_fit:
         result.refusals.append(f"regime: {misfit_why} ([regime].setups_must_fit)")
         announce(cfg.watch, "technical", REFUSED, "the setup does not fit the regime")

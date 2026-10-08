@@ -13,8 +13,11 @@ timeframes the operator declared, with the net move, z-score and position in ran
 `book_imbalance`, resting bids against resting asks near the touch, from -1 to 1;
 `open_interest`, its change since the previous snapshot; and `readings`, what the operator's own
 thresholds say on the macro and other series this cycle, before any analyst reads them. A setup
-has to belong in the regime: a trend setup in a ranging market, a range fade or a pullback against
-a trend are refused by code. A short-timeframe setup against a higher timeframe's trend is yours
+has to belong in the regime and point the way its own figures point, and code refuses one that
+does not: a trend setup needs a measured trend (trending up or down) and trades with it, so not in
+a ranging or mixed market; range_reversion fades the stretch, long below the window's mean and
+short above it; momentum_exhaustion trades against the window's move; range_breakout trades the
+side of the range the close has left. A short-timeframe setup against a higher timeframe's trend is yours
 to weigh, and the reason should say how you weighed it.
 
 You answer with a target - long, short or flat - and the setup you recognised, named from

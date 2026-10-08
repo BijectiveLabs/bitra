@@ -8,6 +8,10 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- A setup has to point the way its own figures point. A trend setup needs a measured trend, so it is
+  refused in a mixed market as in a ranging one; a range fade must fade the stretch; an exhaustion
+  trade must go against the move; a breakout trades the side the close left from. Seen live: a
+  pullback-in-trend short in a mixed market rising 53 bps.
 - A venue that answers "no position" by raising (OKX through ccxt raises `NullResponse`) is read as a
   flat account, not as an account that cannot be read.
 - The clock check takes three readings and believes the quickest. The first request on a new
