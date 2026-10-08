@@ -8,6 +8,7 @@ validate), 2 for a usage error. Errors go to stderr; results go to stdout, as te
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -2173,40 +2174,163 @@ def _account_fees(
     args: argparse.Namespace, able: Any, keys: list[str]
 ) -> tuple[tuple[Decimal, Decimal] | None, str]:
     """The account's own fees, when the keys are at hand; otherwise why not. Read only."""
-    from trading_research_agents.data.sources.resolve import ResolveError, resolve
-    from trading_research_agents.trading.dispatch import DispatchError, account_fees, hand_for
-
     if able.level == "data":
         return None, ""
     env = _environment(args.env_file, beside=args.config.resolve().parent)
-    missing = [k for k in keys if not env.get(k)]
-    if missing:
-        return None, f"not read: {', '.join(missing)} not set; fill the fees yourself"
     environment = args.environment or (
         "demo" if able.demo else "testnet" if able.testnet else "mainnet"
     )
+    fees, said = _read_fees(able.venue, keys, env, environment, args.instrument)
+    return fees, said if fees is not None else f"not read: {said}; fill the fees yourself"
+
+
+def _read_fees(
+    venue: str, keys: list[str], env: Mapping[str, str], environment: str, instrument: str
+) -> tuple[tuple[Decimal, Decimal] | None, str]:
+    """Maker and taker in bps: the account's own, else the venue's standard tier, else nothing.
+
+    The account's figure is the true one, and it is asked for first. Some practice accounts do not
+    report fees at all (one demo answers every fee request with a parameter error), and a
+    desk without keys yet has no account to ask. Then the venue's standard tier from its own
+    market list is used and said to be: it is the base tier, the one a new account pays, so an
+    account on a better tier pays less than the gate prices, never more.
+    """
+    from trading_research_agents.data.sources.resolve import ResolveError, resolve
+    from trading_research_agents.trading.dispatch import DispatchError, account_fees, hand_for
+
     try:
-        probe = hand_for(
-            venue=able.venue,
-            symbol="",
-            max_notional=Decimal(1),
-            env=env,
-            environment=environment,
-        )
-        probe.client.load_markets()
-        symbol = resolve(args.instrument, probe.client.markets_by_id, probe.client.markets.values())
-        fees = account_fees(
-            able.venue,
-            symbol=symbol,
-            env=env,
-            environment=environment,
-            client=probe.client,
-        )
-    except (DispatchError, ResolveError) as exc:
-        return None, f"not read: {exc}; fill the fees yourself"
+        import ccxt
+
+        public = getattr(ccxt, venue)({"enableRateLimit": True})
+        public.load_markets()
+        symbol = resolve(instrument, public.markets_by_id, public.markets.values())
+    except (ResolveError, ImportError, AttributeError) as exc:
+        return None, str(exc)
     except Exception as exc:
-        return None, f"not read: {exc.__class__.__name__}: {exc}; fill the fees yourself"
-    return fees, f"read from your {environment} account for {symbol}"
+        return None, f"{exc.__class__.__name__}: {exc}"
+    missing = [k for k in keys if not env.get(k)]
+    why = f"{', '.join(missing)} not set" if missing else ""
+    if not missing:
+        try:
+            probe = hand_for(
+                venue=venue,
+                symbol=symbol,
+                max_notional=Decimal(1),
+                env=env,
+                environment=environment,
+            )
+            fees = account_fees(
+                venue, symbol=symbol, env=env, environment=environment, client=probe.client
+            )
+            return fees, f"read from your {environment} account for {symbol}"
+        except DispatchError as exc:
+            why = str(exc)
+        except Exception as exc:
+            why = f"{exc.__class__.__name__}: {exc}"
+    market = public.markets.get(symbol) or {}
+    maker, taker = market.get("maker"), market.get("taker")
+    if maker is None or taker is None:
+        return None, f"your account did not report them ({why}) and {venue} lists none"
+    return (Decimal(str(maker)) * BPS_PER_UNIT, Decimal(str(taker)) * BPS_PER_UNIT), (
+        f"{venue}'s standard tier from its market list, because your account did not report "
+        f"its own ({why}); an account on a better tier pays less"
+    )
+
+
+BPS_PER_UNIT = Decimal(10_000)
+
+
+FEE_LINE = re.compile(r"^\s*(entry|exit)_fee_bps\s*=\s*([^#]*?)\s*(#.*)?$")
+
+
+STANDARD_MARK = "standard tier"
+
+
+def _fill_account_fees(
+    envelope: Path, cfg: Any, env: Mapping[str, str], when: datetime
+) -> tuple[list[str], list[str]]:
+    """The fees of the venue orders go to, filled in for the operator and kept up to date.
+
+    A blank fee line is filled: from the account when it reports its fees, otherwise from the
+    venue's standard tier, and the comment on the line says which. A line this filled from the
+    standard tier is replaced by the account's own figure as soon as the account reports one. A
+    fee the operator wrote is never replaced; when it is below what the account pays, that is
+    reported, because the cost gate would then price trades cheaper than they are.
+    """
+    from trading_research_agents.trading.dispatch import credentials_for
+
+    if not envelope.is_file() or cfg is None:
+        return [], []
+    venue = cfg.execution.venue or cfg.run.venue_key.partition("/")[0]
+    lines = envelope.read_text(encoding="utf-8").splitlines()
+    blanks: list[tuple[int, str]] = []
+    ours: list[tuple[int, str]] = []
+    written: list[tuple[str, str, Decimal]] = []
+    current_venue, current_name = "", ""
+    for number, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped == "[[channel]]":
+            current_venue, current_name = "", ""
+        elif stripped.startswith("venue") and "=" in stripped:
+            current_venue = stripped.partition("=")[2].split("#")[0].strip().strip('"')
+        elif stripped.startswith("name") and "=" in stripped:
+            current_name = stripped.partition("=")[2].split("#")[0].strip().strip('"')
+        found = FEE_LINE.match(line)
+        if not found or current_venue != venue:
+            continue
+        side, value, comment = found.group(1), found.group(2), found.group(3) or ""
+        roles = current_name.split("-")
+        role = roles[0] if side == "entry" else roles[-1]
+        if role not in ("maker", "taker"):
+            continue
+        if not value:
+            blanks.append((number, role))
+        elif STANDARD_MARK in comment:
+            ours.append((number, role))
+        else:
+            with contextlib.suppress(ArithmeticError, ValueError):
+                written.append((current_name, role, Decimal(value)))
+    if not blanks and not ours and not written:
+        return [], []
+    keys = list(credentials_for(venue).values())
+    if not blanks and not ours and any(not env.get(k) for k in keys):
+        # Nothing to fill, and no account to check a written fee against: no call is worth making.
+        return [], []
+    fees, said = _read_fees(venue, keys, env, _declared_environment(cfg), cfg.run.instrument)
+    good: list[str] = []
+    bad: list[str] = []
+    if fees is None:
+        if blanks:
+            bad.append(f"fees: not read for {venue} ({said}); the blank lines stay")
+        return good, bad
+    from_account = said.startswith("read from your")
+    by_role = {"maker": fees[0], "taker": fees[1]}
+    to_fill = blanks + (ours if from_account else [])
+    if to_fill:
+        stamp = f"{when:%Y-%m-%d}"
+        origin = (
+            f"read from your {venue} account on {stamp}"
+            if from_account
+            else f"{venue} {STANDARD_MARK}, {stamp}; replaced once your account reports its own"
+        )
+        for number, role in to_fill:
+            side = lines[number].split("=")[0].rstrip()
+            lines[number] = f"{side} = {_bps(by_role[role])}   # your {role} fee, {origin}"
+        envelope.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        good.append(
+            f"fees: maker {_bps(fees[0])} bps, taker {_bps(fees[1])} bps, {said}; "
+            f"written into {envelope.name}"
+        )
+    for name, role, declared in written:
+        if from_account and declared < by_role[role]:
+            bad.append(
+                f"fees: {envelope.name} prices {venue}/{name} {role} at {_bps(declared)} bps "
+                f"and your account pays {_bps(by_role[role])}; the cost gate would price trades "
+                "too cheap"
+            )
+    if written and not bad and from_account:
+        good.append(f"fees: {envelope.name} matches or exceeds what your {venue} account pays")
+    return good, bad
 
 
 def _bps(value: Decimal) -> str:
@@ -2416,8 +2540,9 @@ def _for_venue(name: str, text: str, able: Any, keys: list[str], starter: str) -
         return chr(10).join(
             [
                 "# What a round trip costs on your venue, per side in basis points (0.05% is 5).",
-                f"# `tra venues {venue} --setup` reads them from your account once keys are set.",
-                "# Until a fee is written the file will not load, and it says which line.",
+                "# Left blank, `tra check` fills them: from your account when it reports them,",
+                "# otherwise the venue's standard tier, labelled and replaced once it does.",
+                "# A fee you write yourself is kept, and checked against your account.",
                 "",
                 "[envelope]",
                 "order_latency_ms = 5.5",
@@ -2702,6 +2827,9 @@ def run_cycle_command(args: argparse.Namespace) -> int:
     cfg = load_strategy_config(args.config)
     if cfg.agents is None:
         raise ConfigError("a cycle needs [strategy].agent and [agents] in strategy.toml")
+    filled, _ = _fill_account_fees(args.envelope, cfg, dict(os.environ), datetime.now(UTC))
+    if filled and not args.json:
+        sys.stdout.write("\n".join(filled) + "\n")
     a = cfg.agents
     magnitude = a.magnitude_bps
     if magnitude is None:
@@ -3534,6 +3662,10 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
     except (ConfigError, OSError, ValueError) as exc:
         bad.append(f"{args.config}: {exc}")
     channels: tuple[Any, ...] = ()
+    if cfg is not None:
+        filled, refused = _fill_account_fees(args.envelope, cfg, env, datetime.now(UTC))
+        good.extend(filled)
+        bad.extend(refused)
     try:
         envelope = load_envelope(args.envelope)
         channels = tuple(envelope.channels)

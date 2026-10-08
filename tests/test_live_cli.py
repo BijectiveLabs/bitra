@@ -435,3 +435,99 @@ def test_models_lists_what_the_key_can_use_and_init_takes_a_default_model(
     )
     assert main(["init", str(tmp_path / "b"), "--agent", "groq"]) != 0
     assert "tra models groq" in capsys.readouterr().err
+
+
+def test_blank_fees_are_read_from_the_account_and_written_ones_are_checked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+
+    from trading_research_agents.cli import main as package_main  # noqa: F401
+    from trading_research_agents.envelope.load import load_envelope
+
+    cli = __import__("importlib").import_module("trading_research_agents.cli.main")
+    envelope = tmp_path / "envelope.toml"
+    envelope.write_text(
+        "\n".join(
+            [
+                "[[channel]]",
+                'venue = "okx"',
+                'name = "taker-taker"',
+                "entry_fee_bps =                  # your taker fee",
+                "exit_fee_bps =                   # your taker fee",
+                "",
+                "[[channel]]",
+                'venue = "okx"',
+                'name = "maker-taker"',
+                "entry_fee_bps = 1",
+                "exit_fee_bps =                   # your taker fee",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = SimpleNamespace(
+        execution=SimpleNamespace(venue="okx", environment="testnet"),
+        run=SimpleNamespace(venue_key="okx/taker-taker", instrument="BTCUSDT"),
+        live=None,
+    )
+    monkeypatch.setattr(
+        cli,
+        "_read_fees",
+        lambda *a: ((Decimal("2"), Decimal("5")), "read from your testnet account"),
+    )
+    good, bad = cli._fill_account_fees(envelope, cfg, {}, datetime(2026, 10, 8, tzinfo=UTC))
+    channels = load_envelope(envelope).channels
+    assert [(c.entry_fee_bps, c.exit_fee_bps) for c in channels] == [
+        (Decimal("5"), Decimal("5")),
+        (Decimal("1"), Decimal("5")),
+    ]
+    assert "written into envelope.toml" in good[0]
+    # The maker fee written by hand is kept, and it is below what the account pays: said so.
+    assert "prices okx/maker-taker maker at 1 bps and your account pays 2" in bad[0]
+
+    monkeypatch.setattr(cli, "_read_fees", lambda *a: (None, "OKX_API_PASSPHRASE not set"))
+    blank = tmp_path / "blank.toml"
+    blank.write_text(
+        '[[channel]]\nvenue = "okx"\nname = "taker-taker"\nentry_fee_bps =\nexit_fee_bps =\n',
+        encoding="utf-8",
+    )
+    _, bad = cli._fill_account_fees(blank, cfg, {}, datetime(2026, 10, 8, tzinfo=UTC))
+    assert "OKX_API_PASSPHRASE not set" in bad[0]
+
+
+def test_a_standard_tier_fee_is_replaced_by_the_accounts_own_once_it_reports_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+
+    from trading_research_agents.envelope.load import load_envelope
+
+    cli = __import__("importlib").import_module("trading_research_agents.cli.main")
+    envelope = tmp_path / "envelope.toml"
+    envelope.write_text(
+        '[[channel]]\nvenue = "okx"\nname = "taker-taker"\nentry_fee_bps =\nexit_fee_bps =\n',
+        encoding="utf-8",
+    )
+    cfg = SimpleNamespace(
+        execution=SimpleNamespace(venue="okx", environment="testnet"),
+        run=SimpleNamespace(venue_key="okx/taker-taker", instrument="BTCUSDT"),
+        live=None,
+    )
+    when = datetime(2026, 10, 8, tzinfo=UTC)
+    monkeypatch.setattr(
+        cli, "_read_fees", lambda *a: ((Decimal("2"), Decimal("5")), "okx's standard tier ...")
+    )
+    cli._fill_account_fees(envelope, cfg, {}, when)
+    assert "standard tier" in envelope.read_text(encoding="utf-8")
+    assert load_envelope(envelope).channels[0].entry_fee_bps == Decimal("5")
+
+    monkeypatch.setattr(
+        cli, "_read_fees", lambda *a: ((Decimal("1.5"), Decimal("4")), "read from your account")
+    )
+    good, _ = cli._fill_account_fees(envelope, cfg, {}, when)
+    assert load_envelope(envelope).channels[0].entry_fee_bps == Decimal("4")
+    assert "read from your okx account" in envelope.read_text(encoding="utf-8")
+    assert "written into envelope.toml" in good[0]

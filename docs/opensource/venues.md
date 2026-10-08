@@ -108,18 +108,23 @@ the first thing to try.
 tra init my-desk --profile autonomous --venue okx      # data, orders and fees wired for OKX
 cd my-desk
 # put OKX_API_KEY, OKX_API_SECRET and OKX_API_PASSPHRASE in .env, and your model key
-tra venues okx --setup                                # reads your fees from the account
-tra check
+tra check                                             # fills the fees, then says what is left
 tra keys --probe                                      # reads the account, sends nothing
 ```
 
 What `--venue` does: the data chains read from that venue, `[run].venue_key` and
 `[execution].venue` name it, `[execution].environment` is its practice account where it has one,
 the order mode stays `sandbox`, and `.env.example` lists the keys that venue signs with. Sizes use
-the venue's own step, so there is no table of increments to copy. The fee lines are left blank
-until you paste them, because the fee is the account's and it is the largest figure in the cost
-gate; `tra venues okx --setup` reads them from your account when the keys are set, and a blank
-line is reported with its line number rather than as a TOML error.
+the venue's own step, so there is no table of increments to copy.
+
+Fees are filled in for you. `tra check` (and `tra run`) asks the account for its maker and taker
+fee and writes them on the blank lines of `envelope.toml`, with a comment that says where they came
+from. When the account cannot report them (no keys yet, or a practice account that does not
+answer: Bybit's demo returns a parameter error for every fee request), the venue's standard tier
+from its market list is written instead and labelled so; it is the base tier, the one a new
+account pays, so an account on a better tier pays less than the gate prices, never more. Those lines are replaced
+by the account's own figure as soon as it reports one. A fee you write yourself is never replaced,
+and `tra check` warns when it is below what your account pays.
 
 OKX's demo trading is reached through ccxt's sandbox switch, so in this project it is
 `environment = "testnet"`. A demo key only works on the demo.

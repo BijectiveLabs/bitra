@@ -8,6 +8,11 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- Fees fill themselves. `tra check` and `tra run` read the maker and taker fee from the account
+  and write them on blank `envelope.toml` lines, labelled. Without keys, or on a practice account
+  that does not report fees, the venue's standard tier from its market list is written instead,
+  labelled, and replaced by the account's own once it reports one. A fee the operator wrote is kept
+  and checked: one below what the account pays is reported.
 - `tra models <provider>` lists the models the key can use, from the vendor's own list; no
   prompt is sent. `tra init --agent` takes a provider's default model when it has one.
 - `tra sources add <class> <name> --from <preset> --high bullish|bearish` puts a fetched series on
