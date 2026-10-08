@@ -192,14 +192,12 @@ def _unfit(
     return volume, spread, None if change is None else change.quantize(Decimal("0.0001"))
 
 
-def _listed(
-    instrument: str,
-    symbol: str,
-    market: Mapping[str, Any],
-    passed: tuple[Decimal, Decimal, Decimal | None],
-    tick: bool,
-    now_ms: float,
-) -> Listed:
+def market_step(market: Mapping[str, Any], *, tick: bool) -> Decimal:
+    """The smallest size the venue takes for this market, in the base.
+
+    ccxt states it in contracts, as a step or as a count of decimal places by venue, so it is
+    converted through the contract size. Sizes are always in the base inside the desk.
+    """
     precision = _dec((market.get("precision") or {}).get("amount"))
     contract = _dec(market.get("contractSize"))
     contract = contract if contract is not None and contract > 0 else Decimal(1)
@@ -209,6 +207,19 @@ def _listed(
         step = precision
     else:
         step = Decimal(1).scaleb(-int(precision))
+    return step * contract
+
+
+def _listed(
+    instrument: str,
+    symbol: str,
+    market: Mapping[str, Any],
+    passed: tuple[Decimal, Decimal, Decimal | None],
+    tick: bool,
+    now_ms: float,
+) -> Listed:
+    contract = _dec(market.get("contractSize"))
+    contract = contract if contract is not None and contract > 0 else Decimal(1)
     least = _dec(((market.get("limits") or {}).get("amount") or {}).get("min"))
     created = market.get("created")
     leverage = _dec(((market.get("limits") or {}).get("leverage") or {}).get("max"))
@@ -219,7 +230,7 @@ def _listed(
         quote_volume=volume,
         spread_bps=spread,
         change_24h_pct=change,
-        step=step * contract,
+        step=market_step(market, tick=tick),
         min_size=None if least is None else least * contract,
         max_leverage=leverage,
         listed_days=None if not created else int((now_ms - float(created)) // DAY_MS),

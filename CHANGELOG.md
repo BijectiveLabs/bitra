@@ -8,6 +8,14 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- `tra init --venue <ccxt id>` writes a desk for that exchange: data chains, venue key, execution
+  venue and practice environment, the keys that venue signs with, and a fee file of its own.
+  Orders stay in sandbox mode.
+- `tra venues <venue> --setup` reads your maker and taker fees from the account when the keys are
+  set, in basis points, and no longer prints a `[live]` table for a venue that has no live-session
+  plugin or a size increment to copy. `--environment` picks the account it reads.
+- Sizes use the venue's own step when `[run].size_step` is not declared, converted to the base.
+- A blank fee in `envelope.toml` is reported with its line and what to write, not as a TOML error.
 - `[execution].environment` (`demo`, `testnet` or `mainnet`) says where orders go. It falls back to
   `[live].environment`, then `demo`. A `[live]` table for a venue with no live-session plugin no
   longer breaks `tra check` and `tra keys`.

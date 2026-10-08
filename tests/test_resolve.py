@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+from importlib import import_module
 from typing import Any
 
 import pytest
@@ -75,3 +77,29 @@ def test_a_name_that_could_be_two_markets_is_refused() -> None:
     twice = venue(market("X", "ABC", "USDT"), market("Y", "ABC", "USDT", quote="USDC"))
     with pytest.raises(ResolveError, match="declare which"):
         resolve("ABCUSDT", *twice)
+
+
+def test_a_step_with_no_declaration_is_what_the_venue_states_in_the_base() -> None:
+    from types import SimpleNamespace
+
+    cli = import_module("trading_research_agents.cli.main")
+
+    btc = {**market("BTC-USDT-SWAP", "BTC", "USDT"), "precision": {"amount": 0.01}}
+    btc["contractSize"] = 0.01
+    client = SimpleNamespace(
+        precisionMode=4,
+        markets={btc["symbol"]: btc},
+        markets_by_id={btc["id"]: [btc]},
+        load_markets=lambda: None,
+    )
+    cli._DISCOVERY_CLIENTS["okx"] = client
+    try:
+        cfg = SimpleNamespace(
+            execution=SimpleNamespace(venue="okx"),
+            run=SimpleNamespace(venue_key="okx/taker-taker"),
+        )
+        # 0.01 of a contract that is 0.01 of a coin: 0.0001 of the base.
+        assert cli._venue_step(cfg, "BTCUSDT") == Decimal("0.0001")
+        assert cli._venue_step(cfg, "NOPEUSDT") is None
+    finally:
+        cli._DISCOVERY_CLIENTS.pop("okx", None)

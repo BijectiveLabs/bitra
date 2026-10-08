@@ -99,21 +99,34 @@ Only Bybit has been run end to end with real orders. The contract arithmetic and
 resolution for the other venues are tested against the shapes ccxt returns, not against those
 venues' accounts, so start any of them on its practice environment first.
 
-## Trying OKX on its demo
+## Trading on another exchange
+
+The route is the same for any venue ccxt can take orders on. OKX is the example, and its demo is
+the first thing to try.
+
+```bash
+tra init my-desk --profile autonomous --venue okx      # data, orders and fees wired for OKX
+cd my-desk
+# put OKX_API_KEY, OKX_API_SECRET and OKX_API_PASSPHRASE in .env, and your model key
+tra venues okx --setup                                # reads your fees from the account
+tra check
+tra keys --probe                                      # reads the account, sends nothing
+```
+
+What `--venue` does: the data chains read from that venue, `[run].venue_key` and
+`[execution].venue` name it, `[execution].environment` is its practice account where it has one,
+the order mode stays `sandbox`, and `.env.example` lists the keys that venue signs with. Sizes use
+the venue's own step, so there is no table of increments to copy. The fee lines are left blank
+until you paste them, because the fee is the account's and it is the largest figure in the cost
+gate; `tra venues okx --setup` reads them from your account when the keys are set, and a blank
+line is reported with its line number rather than as a TOML error.
 
 OKX's demo trading is reached through ccxt's sandbox switch, so in this project it is
-`environment = "testnet"`. A demo key only works on the demo, and a live key is refused there.
+`environment = "testnet"`. A demo key only works on the demo.
 
-1. Create a demo API key in OKX's demo trading mode with trade permission, and put `OKX_API_KEY`,
-   `OKX_API_SECRET` and `OKX_API_PASSPHRASE` in `.env`.
-2. Run `tra venues okx --setup` and paste the blocks it prints. Set `[execution].venue = "okx"` and
-   `[execution].environment = "testnet"`, and fill your demo account's fees in `envelope.toml`. The
-   `[live]` table is for `tra live`, which has a plugin only for Bybit, so an OKX desk leaves it out.
-3. Put `ccxt:okx` first in each chain in `data.toml`. Take out any `params` written for another
-   venue, such as the open interest bucket Bybit wants.
-4. Set the account's position mode to one-way (net). In long/short mode the desk refuses to send,
-   because it holds one position per instrument.
-5. `tra check`, then `tra keys --probe`, then one `tra run --now`, and read `placed.json`.
+Two things only you can do: set the account's position mode to one-way (net), because the desk
+refuses long/short mode, and turn venue mode on when you are ready (`tra mandate`, your signature,
+the ladder, then `mode = "venue"`).
 
 What the desk does for OKX that it does not need to for Bybit: margin mode and leverage are applied
 as isolated (ccxt would otherwise default to cross), the client order id is letters and digits only

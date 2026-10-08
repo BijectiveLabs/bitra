@@ -993,6 +993,42 @@ def _client_id(intent: Mapping[str, Any]) -> str:
     return f"tra{body}"[:32]
 
 
+def account_fees(
+    venue: str,
+    *,
+    symbol: str,
+    env: Mapping[str, str],
+    environment: str,
+    client: Any = None,
+) -> tuple[Decimal, Decimal]:
+    """The maker and taker fee in basis points, as this account reports them for one market.
+
+    The fee is the largest figure in the cost gate and it depends on the account's own tier, so it
+    is read from the account rather than copied from a fee page. Read only: nothing is sent.
+    """
+    hand = hand_for(
+        venue=venue,
+        symbol=symbol,
+        max_notional=Decimal(1),
+        env=env,
+        environment=environment,
+        client=client,
+    )
+    read = getattr(hand.client, "fetch_trading_fee", None)
+    if read is None or not (getattr(hand.client, "has", {}) or {}).get("fetchTradingFee", True):
+        raise DispatchError(f"{venue} does not report account fees through ccxt")
+    try:
+        got = read(hand.symbol) or {}
+        maker, taker = got.get("maker"), got.get("taker")
+        if maker is None or taker is None:
+            raise DispatchError(f"{venue} answered without a maker and a taker fee")
+        return Decimal(str(maker)) * BPS, Decimal(str(taker)) * BPS
+    except DispatchError:
+        raise
+    except Exception as exc:
+        raise DispatchError(hand._clean(f"{exc.__class__.__name__}: {exc}")) from exc
+
+
 def hand_for(
     *,
     venue: str,

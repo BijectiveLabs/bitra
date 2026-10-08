@@ -650,6 +650,59 @@ def test_the_environment_orders_go_to_is_declared_where_orders_are() -> None:
         _mandate({"execution": {"environment": "paper"}}, "bybit/taker-taker")
 
 
+def test_the_account_fees_are_read_in_basis_points() -> None:
+    from trading_research_agents.trading.dispatch import account_fees
+
+    class Fees(FakeExchange):
+        def __init__(self) -> None:
+            super().__init__()
+            self.has["fetchTradingFee"] = True
+
+        def fetch_trading_fee(self, symbol: str) -> dict[str, Any]:
+            return {"maker": 0.0002, "taker": 0.0005}
+
+    maker, taker = account_fees(
+        "bybit", symbol="BTC/USDT:USDT", env={}, environment="demo", client=Fees()
+    )
+    assert maker == Decimal("2") and taker == Decimal("5")
+
+
+def test_a_blank_fee_says_which_line_and_what_to_write() -> None:
+    from trading_research_agents.envelope.load import parse_envelope
+    from trading_research_agents.envelope.model import EnvelopeError
+
+    text = chr(10).join(
+        [
+            "[[channel]]",
+            'venue = "okx"',
+            'name = "taker-taker"',
+            "entry_fee_bps =   # your fee",
+            "exit_fee_bps = 5",
+        ]
+    )
+    with pytest.raises(EnvelopeError, match=r"line 4: entry_fee_bps has no value"):
+        parse_envelope(text)
+
+
+def test_the_setup_for_a_venue_without_a_live_plugin_has_no_live_table() -> None:
+    from trading_research_agents.cli.main import venue_setup
+    from trading_research_agents.data.sources.capability import capability_of
+    from trading_research_agents.envelope.load import parse_envelope
+
+    able = capability_of("okx")
+    text = venue_setup(
+        able,
+        ["OKX_API_KEY"],
+        fees=(Decimal("2.0"), Decimal("5.0")),
+        fees_note="read from your testnet account for BTC/USDT:USDT",
+    )
+    assert "[live]" not in text and 'environment = "testnet"' in text
+    assert "size_step" not in text.split("# 3.")[1].split("# 4.")[0].replace("[run].size_step", "")
+    channels = text.split("[[channel]]", 1)[1].split("# 2.")[0]
+    envelope = parse_envelope("[[channel]]" + channels)
+    assert [c.entry_fee_bps for c in envelope.channels] == [Decimal("5"), Decimal("2")]
+
+
 def test_the_client_order_id_is_letters_and_digits_within_thirty_two() -> None:
     from trading_research_agents.trading.dispatch import _client_id
 

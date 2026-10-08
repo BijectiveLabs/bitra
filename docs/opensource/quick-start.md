@@ -22,6 +22,10 @@ for every OpenAI-compatible provider (Groq, DeepSeek, xAI, OpenRouter, a local s
 for datasets. Add `--with 'anthropic>=1'` or `--with 'google-genai>=1'` for those providers.
 Without uv, `pip install -e '.[ccxt,openai,data]'` in a virtual environment does the same.
 
+Trading on another exchange: add `--venue okx` (or any ccxt id) to `tra init`, and the data, the
+orders, the practice environment and the keys are wired for that venue. See
+[Venues](/opensource/venues).
+
 ## What a fresh desk says
 
 A project made by `tra init --profile autonomous` checks out like this before you touch it

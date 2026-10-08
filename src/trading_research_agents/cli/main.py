@@ -118,7 +118,7 @@ from trading_research_agents.trading import (
 )
 from trading_research_agents.trading import run as run_trading
 from trading_research_agents.trading.canary import CanaryError, CanaryGuard
-from trading_research_agents.trading.config import load_funding
+from trading_research_agents.trading.config import RunSettings, load_funding
 from trading_research_agents.trading.feed import FeedError
 from trading_research_agents.trading.feeds import UnknownFeedError, live_feed
 from trading_research_agents.trading.venues import (
@@ -448,6 +448,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="default",
         help="autonomous lays the cycle down wired: the shelf, the gates and the ladder, live",
     )
+    init_cmd.add_argument(
+        "--venue",
+        metavar="VENUE",
+        help="the exchange (its ccxt id) the desk reads and trades on",
+    )
     init_cmd.add_argument("--json", action="store_true")
 
     signals = top.add_parser(
@@ -619,6 +624,17 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="print what to paste into envelope.toml, data.toml, strategy.toml and .env",
     )
+    venues_cmd.add_argument(
+        "--environment",
+        choices=("demo", "testnet", "mainnet"),
+        help="with --setup: where to read your fees; default is the venue's practice account",
+    )
+    venues_cmd.add_argument(
+        "--instrument", default="BTCUSDT", help="with --setup: the market to read fees for"
+    )
+    venues_cmd.add_argument(
+        "--env-file", type=Path, default=None, help="where the keys are read from"
+    )
     venues_cmd.add_argument("--config", type=Path, default=Path("strategy.toml"))
     venues_cmd.add_argument("--json", action="store_true")
 
@@ -642,7 +658,14 @@ def build_parser() -> argparse.ArgumentParser:
     show_ladder = ladder.add_parser("show")
     show_ladder.add_argument("--path", type=Path, default=Path("ladder.json"))
     show_ladder.add_argument("--json", action="store_true")
-    promote = ladder.add_parser("promote", help="one step up, with evidence and a signature")
+    promote = ladder.add_parser(
+        "promote",
+        help="one step up, with evidence and a signature",
+        epilog=(
+            'example: tra ladder promote --signed-by "your name" '
+            '--evidence "sandbox cycle on live data: gates and records verified"'
+        ),
+    )
     promote.add_argument("--path", type=Path, default=Path("ladder.json"))
     promote.add_argument("--evidence", required=True)
     promote.add_argument("--signed-by", required=True)
@@ -1995,19 +2018,70 @@ def show_venues(args: argparse.Namespace) -> int:
         lines.append(f"  keys        {', '.join(keys)}")
         lines.append(f"  verdict     {able.verdict()}")
         if args.setup:
-            snippet = venue_setup(able, keys)
+            fees, said = _account_fees(args, able, keys)
+            snippet = venue_setup(able, keys, fees=fees, fees_note=said)
             found[-1]["setup"] = snippet
             lines.extend(["", *snippet.splitlines(), ""])
     emit({"venues": found}, args.json, lines)
     return CLEARED
 
 
-def venue_setup(able: Any, keys: list[str]) -> str:
+def _account_fees(
+    args: argparse.Namespace, able: Any, keys: list[str]
+) -> tuple[tuple[Decimal, Decimal] | None, str]:
+    """The account's own fees, when the keys are at hand; otherwise why not. Read only."""
+    from trading_research_agents.data.sources.resolve import ResolveError, resolve
+    from trading_research_agents.trading.dispatch import DispatchError, account_fees, hand_for
+
+    if able.level == "data":
+        return None, ""
+    env = _environment(args.env_file, beside=args.config.resolve().parent)
+    missing = [k for k in keys if not env.get(k)]
+    if missing:
+        return None, f"not read: {', '.join(missing)} not set; fill the fees yourself"
+    environment = args.environment or (
+        "demo" if able.demo else "testnet" if able.testnet else "mainnet"
+    )
+    try:
+        probe = hand_for(
+            venue=able.venue,
+            symbol="",
+            max_notional=Decimal(1),
+            env=env,
+            environment=environment,
+        )
+        probe.client.load_markets()
+        symbol = resolve(args.instrument, probe.client.markets_by_id, probe.client.markets.values())
+        fees = account_fees(
+            able.venue,
+            symbol=symbol,
+            env=env,
+            environment=environment,
+            client=probe.client,
+        )
+    except (DispatchError, ResolveError) as exc:
+        return None, f"not read: {exc}; fill the fees yourself"
+    except Exception as exc:
+        return None, f"not read: {exc.__class__.__name__}: {exc}; fill the fees yourself"
+    return fees, f"read from your {environment} account for {symbol}"
+
+
+def _bps(value: Decimal) -> str:
+    return format(value.quantize(Decimal("0.001")).normalize(), "f")
+
+
+def venue_setup(
+    able: Any,
+    keys: list[str],
+    *,
+    fees: tuple[Decimal, Decimal] | None = None,
+    fees_note: str = "",
+) -> str:
     """The blocks an operator pastes to trade on a venue, shaped by what the venue can do.
 
-    The fees are left blank on purpose. A fee is the largest figure in the cost gate, it depends on
-    the account's own tier, and a placeholder number would price every trade at a rate nobody
-    checked; a blank one makes the file refuse to load until somebody writes theirs in.
+    Fees are the account's own, read when the keys are at hand. Otherwise they are left blank on
+    purpose: a fee is the largest figure in the cost gate, and a placeholder number would price
+    every trade at a rate nobody checked. A blank one makes the file refuse to load, and says why.
     """
     name = able.venue
     serves = list(able.serves_data)
@@ -2019,33 +2093,34 @@ def venue_setup(able: Any, keys: list[str]) -> str:
             f'# put "ccxt:{name}" in the chain of: {", ".join(serves) or "nothing this reads"}.',
         ]
         return "\n".join(out)
+    maker, taker = ("", "") if fees is None else (_bps(fees[0]), _bps(fees[1]))
     out += [
         "",
-        "# 1. envelope.toml: what a round trip costs here. Write your own account's fees, in bps",
-        "#    (0.055% is 5.5); the file will not load while they are blank.",
+        "# 1. envelope.toml: what a round trip costs here, in bps (0.055% is 5.5).",
+        *([f"#    Fees {fees_note}."] if fees_note else []),
+        "#    Until they are written, the file will not load.",
         "[[channel]]",
         f'venue = "{name}"',
         'name = "taker-taker"',
-        "entry_fee_bps =                  # your taker fee",
-        "exit_fee_bps =                   # your taker fee",
+        f"entry_fee_bps = {taker}" + ("" if fees else "                  # your taker fee"),
+        f"exit_fee_bps = {taker}" + ("" if fees else "                   # your taker fee"),
         "",
         "[[channel]]",
         f'venue = "{name}"',
         'name = "maker-taker"',
-        "entry_fee_bps =                  # your maker fee",
-        "exit_fee_bps =                   # your taker fee",
+        f"entry_fee_bps = {maker}" + ("" if fees else "                  # your maker fee"),
+        f"exit_fee_bps = {taker}" + ("" if fees else "                   # your taker fee"),
         "",
         f'# 2. data.toml: put "ccxt:{name}" first in the chain of {", ".join(serves)}.',
         "#    Each instrument may need its ccxt symbol under [data].symbols.",
         "",
-        "# 3. strategy.toml",
+        "# 3. strategy.toml. Sizes use the venue's own step; [run].size_step only overrides it.",
         "[run]",
         f'venue_key = "{name}/taker-taker"',
-        "size_step = { BTCUSDT = 0.001 }   # this venue's increment per instrument; an order off",
-        "                                 # it is refused, and the refusal names the right step",
         "",
         "[execution]",
         f'venue = "{name}"',
+        f'environment = "{environment}"      # where orders go; {_environment_words(able)}',
         "leverage = 3                     # yours to choose; applied at the venue and read back",
         'margin_mode = "isolated"         # isolated keeps one position from drawing on the rest',
     ]
@@ -2054,12 +2129,22 @@ def venue_setup(able: Any, keys: list[str]) -> str:
             'exits = "none"                   # this venue cannot attach a stop to the entry;',
             "                                 # you carry the stop and take profit yourself",
         ]
-    out += ["", "[live]", f'environment = "{environment}"']
     if environment == "mainnet":
         out.append("# no practice environment through ccxt: the first order here is real money")
+    if _has_live_plugin(name):
+        out += ["", "# only for `tra live`, which has a plugin for this venue", "[live]"]
+        out.append(f'environment = "{environment}"')
     out += ["", "# 4. .env beside the config, never in a file you commit", *(f"{k}=" for k in keys)]
     out += ["", f"# Then: tra check, and tra keys --probe to prove the keys reach {name}."]
     return "\n".join(out)
+
+
+def _environment_words(able: Any) -> str:
+    if able.demo:
+        return "this venue's demo account"
+    if able.testnet:
+        return "ccxt's sandbox switch, which is this venue's demo or testnet"
+    return "this venue has no practice environment through ccxt"
 
 
 def show_mandate(args: argparse.Namespace) -> int:
@@ -2080,6 +2165,20 @@ def init_project(args: argparse.Namespace) -> int:
     if existing:
         raise ValueError(f"{target}: already has {existing}; init never overwrites")
     autonomous = args.profile == "autonomous"
+    able: Any = None
+    keys: list[str] = []
+    starter = ""
+    if args.venue:
+        found = re.search(
+            r'venue_key = "([^/"]+)/',
+            templates.joinpath("strategy.toml").read_text(encoding="utf-8"),
+        )
+        starter = found.group(1) if found else ""
+        from trading_research_agents.data.sources.capability import capability_of
+        from trading_research_agents.trading.dispatch import credentials_for
+
+        able = capability_of(args.venue)
+        keys = list(credentials_for(able.venue).values())
     if args.agent and not args.model:
         raise ValueError("--agent needs --model")
     if args.agent:
@@ -2098,8 +2197,12 @@ def init_project(args: argparse.Namespace) -> int:
             text = text.replace("\n[data]\n", AUTONOMOUS_GATES + "[data]\n", 1)
         if name == "README.md" and autonomous:
             text = text.rstrip() + FIRST_HOUR
+        if args.venue:
+            text = _for_venue(name, text, able, keys, starter)
         out.write_text(text, encoding="utf-8")
     lines = [f"{target}: {len(TEMPLATE_FILES)} files", *(f"  {n}" for n in TEMPLATE_FILES)]
+    if args.venue:
+        lines.append(_venue_next(able, keys))
     if args.agent:
         key = provider(args.agent).key_env
         if key:
@@ -2113,6 +2216,94 @@ def init_project(args: argparse.Namespace) -> int:
         lines.append("next: cd there, `tra data get BTCUSDT 2025-01-01`, then `tra backtest`")
     emit({"directory": str(target), "files": list(TEMPLATE_FILES)}, args.json, lines)
     return CLEARED
+
+
+def _for_venue(name: str, text: str, able: Any, keys: list[str], starter: str) -> str:
+    """One template file, written for the venue the desk reads from and trades on.
+
+    `starter` is the venue the templates were written for. Nothing here guesses a number that
+    belongs to the venue or the account: sizes use the venue's own step, the fees are the account's
+    and are left blank until read or written, and the environment is the venue's own practice
+    account where it has one. Orders stay in sandbox mode until the operator turns venue mode on,
+    which has its own door.
+    """
+    venue = able.venue
+    if name == "data.toml":
+        text = re.sub(r'"ccxt:[a-z0-9_]+"(?:, "ccxt:[a-z0-9_]+")*', f'"ccxt:{venue}"', text)
+        start = text.find("# Measured on ")
+        if start != -1:
+            text = text[:start].rstrip("\n") + "\n"
+        return text
+    if able.level == "data":
+        return text
+    environment = "demo" if able.demo else "testnet" if able.testnet else "mainnet"
+    if name == "strategy.toml":
+        text = text.replace(
+            f'venue_key = "{starter}/taker-taker"', f'venue_key = "{venue}/taker-taker"'
+        )
+        text = re.sub(
+            r"size_step = [0-9.]+ +# the venue's size increment.*",
+            "# size_step is left out: sizes use the venue's own step. Declare it to override.",
+            text,
+        )
+        text = text.replace(
+            f"{starter.upper()}_API_KEY / {starter.upper()}_API_SECRET", " / ".join(keys)
+        )
+        text = text.replace(f'venue = "{starter}"', f'venue = "{venue}"')
+        stanza = (
+            f'venue = "{venue}"\nenvironment = "{environment}"      # {_environment_words(able)}\n'
+        )
+        if 'mode = "sandbox"\n' in text:
+            text = text.replace('mode = "sandbox"\n', 'mode = "sandbox"\n' + stanza, 1)
+        else:
+            text = text.replace(
+                "\n[data]\n", f'\n[execution]\nmode = "sandbox"\n{stanza}\n[data]\n', 1
+            )
+        return text
+    if name == "envelope.toml":
+        return chr(10).join(
+            [
+                "# What a round trip costs on your venue, per side in basis points (0.05% is 5).",
+                f"# `tra venues {venue} --setup` reads them from your account once keys are set.",
+                "# Until a fee is written the file will not load, and it says which line.",
+                "",
+                "[envelope]",
+                "order_latency_ms = 5.5",
+                "",
+                "[[channel]]",
+                f'venue = "{venue}"',
+                'name = "taker-taker"',
+                "entry_fee_bps =                  # your taker fee",
+                "exit_fee_bps =                   # your taker fee",
+                "",
+                "[[channel]]",
+                f'venue = "{venue}"',
+                'name = "maker-taker"',
+                "entry_fee_bps =                  # your maker fee",
+                "exit_fee_bps =                   # your taker fee",
+                "",
+            ]
+        )
+    if name == ".env.example":
+        kept = [
+            line
+            for line in text.splitlines()
+            if not line.startswith((f"{starter.upper()}_API_", "# A trade key:"))
+        ]
+        return "\n".join([*kept, "", f"# {venue}", *(f"{k}=" for k in keys)]) + "\n"
+    return text
+
+
+def _venue_next(able: Any, keys: list[str]) -> str:
+    if able.level == "data":
+        return (
+            f"{able.venue} feeds this desk's data; it cannot take orders through ccxt "
+            f"({able.verdict()})"
+        )
+    return (
+        f"{able.venue}: put {', '.join(keys)} in .env, then `tra venues {able.venue} --setup` "
+        "reads your fees; orders stay in sandbox until you turn venue mode on"
+    )
 
 
 # What `tra init --profile autonomous` writes where the operator's own provider goes. `tra check`
@@ -2752,7 +2943,26 @@ def _step_for(cfg: Any, instrument: str) -> Decimal:
     found = _DISCOVERED.get(instrument)
     if found is not None:
         return Decimal(found["step"])
+    if cfg.run.size_step == RunSettings.__dataclass_fields__["size_step"].default:
+        # Nothing declared for this instrument: ask the venue orders go to what its step is.
+        stated = _venue_step(cfg, instrument)
+        if stated is not None:
+            return stated
     return Decimal(cfg.run.step_for(instrument))
+
+
+def _venue_step(cfg: Any, instrument: str) -> Decimal | None:
+    """The step in the base the execution venue states for this instrument, or nothing."""
+    from trading_research_agents.data.sources.discover import market_step
+
+    venue = cfg.execution.venue or cfg.run.venue_key.partition("/")[0]
+    try:
+        symbol = _on_the_execution_venue(cfg, instrument)
+        client = _DISCOVERY_CLIENTS[venue]
+        tick = getattr(client, "precisionMode", 4) == 4
+        return market_step(client.markets[symbol], tick=tick)
+    except Exception:
+        return None
 
 
 def _sweep(

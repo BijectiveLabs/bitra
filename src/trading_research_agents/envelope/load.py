@@ -15,6 +15,18 @@ from typing import Any
 from trading_research_agents.envelope.model import Channel, Envelope, EnvelopeError
 
 
+def _blank_fee(text: str) -> str:
+    """A fee line with nothing after the equals sign, which is what `tra venues --setup` leaves."""
+    for number, line in enumerate(text.splitlines(), start=1):
+        body = line.split("#", 1)[0].strip()
+        if body.endswith("=") and body.partition("=")[0].strip().endswith("_fee_bps"):
+            return (
+                f"envelope line {number}: {body.partition('=')[0].strip()} has no value. Write "
+                "your account's fee in basis points (0.05% is 5), as your venue shows it"
+            )
+    return ""
+
+
 def load_envelope(path: Path | str) -> Envelope:
     text = Path(path).read_text(encoding="utf-8")
     return parse_envelope(text)
@@ -24,6 +36,9 @@ def parse_envelope(text: str) -> Envelope:
     try:
         raw = tomllib.loads(text, parse_float=Decimal)
     except tomllib.TOMLDecodeError as exc:
+        blank = _blank_fee(text)
+        if blank:
+            raise EnvelopeError(blank) from exc
         raise EnvelopeError(f"envelope is not valid TOML: {exc}") from exc
 
     channels_raw = raw.get("channel")

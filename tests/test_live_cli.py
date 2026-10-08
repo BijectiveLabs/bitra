@@ -390,3 +390,29 @@ def test_check_says_what_the_three_files_add_up_to(
     main(["check"])
     said = capsys.readouterr().out
     assert "at the other's fee" in said
+
+
+def test_init_for_a_venue_wires_data_orders_and_fees_for_that_venue(tmp_path: Path) -> None:
+    from trading_research_agents.data.sources.config import load_data_config
+    from trading_research_agents.trading.config import load_strategy_config
+
+    target = tmp_path / "okx-desk"
+    assert main(["init", str(target), "--profile", "autonomous", "--venue", "okx"]) == 0
+
+    data = (target / "data.toml").read_text(encoding="utf-8")
+    assert "bybit" not in data and "ccxt:okx" in data and "intervalTime" not in data
+    load_data_config(target / "data.toml")
+
+    strategy = (target / "strategy.toml").read_text(encoding="utf-8")
+    assert 'venue_key = "okx/taker-taker"' in strategy and "[live]" not in strategy.replace(
+        "# [live]", ""
+    )
+    config = load_strategy_config(target / "strategy.toml")
+    assert config.execution.venue == "okx" and config.execution.environment == "testnet"
+    assert config.execution.mode == "sandbox"
+    assert config.run.size_step == Decimal("0.000001")
+
+    envelope = (target / "envelope.toml").read_text(encoding="utf-8")
+    assert "bybit" not in envelope and 'venue = "okx"' in envelope
+    example = (target / ".env.example").read_text(encoding="utf-8")
+    assert "OKX_API_PASSPHRASE=" in example and "BYBIT" not in example
