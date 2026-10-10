@@ -152,7 +152,10 @@ it, the value is still shown in the brief, in the cycle's `series read` table an
 marked `stale`, and it is left out of the declared state, the confluence matrix and conviction. A
 role whose every series is stale, with no dated text either, is not asked at all: there would be
 nothing for it to read that could count. The default is four days; set it to what your feed
-actually delivers.
+actually delivers. A stale series never stops the desk: `tra check` lists it as a note, not
+something to fix, and a fetched series is pulled again by the next `tra run`. A weekly series such as
+the broad dollar index needs a `max_age` of at least a week plus its publication lag, or it will be
+stale for part of every week.
 
 `publish_lag` is the other half: how long after the moment it describes a value became knowable.
 A daily yield posted after the close is `1d`; a monthly print released two weeks later is `14d`. A

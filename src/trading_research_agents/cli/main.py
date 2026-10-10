@@ -4374,9 +4374,16 @@ def _source_lines(declarations: Iterable[Path]) -> tuple[list[str], list[str]]:
             elif seen["counted"]:
                 good.append(f"{head}; last {seen['last'][:16]}, {seen['age_h']}h old")
             else:
-                stale.append(
+                # Old data never blocks a cycle: the series is shown and not counted. Only a file
+                # that cannot be read is something to fix.
+                then = (
+                    "`tra run` fetches it again before a cycle"
+                    if spec.fetch is not None
+                    else "refresh the file to count it"
+                )
+                good.append(
                     f"{head}; last {seen['last'][:16]}, {seen['age_h']}h old, past max_age "
-                    f"{seen['max_age']}: not counted until it is refreshed"
+                    f"{seen['max_age']}: shown but not counted until a newer value arrives; {then}"
                 )
     return good, stale
 

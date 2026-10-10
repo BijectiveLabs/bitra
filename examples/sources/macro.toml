@@ -57,7 +57,7 @@
 # unit = "index"
 # publish_lag = "1d"
 # source = "FRED DTWEXBGS, nominal broad US dollar index"
-# max_age = "7d"                     # posted weekly
+# max_age = "10d"                    # a daily series posted once a week, to the Friday before
 # fetch = { from = "fred", id = "DTWEXBGS" }
 # no threshold until you have drawn one from its history: shown, not counted
 
