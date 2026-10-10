@@ -84,6 +84,7 @@ from trading_research_agents.execution.mandate import MODES as MANDATE_MODES
 from trading_research_agents.execution.pretrade import PreTradeVerdict, admit
 from trading_research_agents.execution.regime import RegimeRule, misfit
 from trading_research_agents.execution.risk import RiskVerdict, within_risk
+from trading_research_agents.execution.stops import Placement, StopError, VolatilityExit
 from trading_research_agents.execution.targets import (
     Targets,
     TargetVerdict,
@@ -216,6 +217,8 @@ class CycleConfig:
     # Code computes them from the operator's own fractions; no model is asked where a stop goes.
     stop_frac: Decimal | None = None
     take_frac: Decimal | None = None
+    # [exit].mode = "volatility": each trade's stop measured from the decision timeframe's range.
+    volatility_exit: VolatilityExit | None = None
     # [agents].validators: the stances to ask once there is a proposal worth arguing about. Each
     # stance is one more call, so an operator turns them on deliberately.
     validators: tuple[str, ...] = ()
@@ -321,7 +324,7 @@ class CycleResult:
     # a cycle that asked nobody, because the next cycle measures its move against it.
     seen: dict[str, Any] = field(default_factory=dict)
     # Where the entry, the stop and the take profit sit, as prices and as distances from the entry.
-    exits: dict[str, str] = field(default_factory=dict)
+    exits: dict[str, Any] = field(default_factory=dict)
     # The higher timeframes' candles, kept with the snapshot as this cycle's raw inputs.
     frames: dict[int, Fetched] = field(default_factory=dict)
     wake: Wake | None = None
@@ -847,8 +850,34 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
             return result
         size = stake.size
 
-    exits = _exits(cfg, costs.cost.mid, analyst.target)
-    result.exits = _exit_view(costs.cost.mid, analyst.target, exits)
+    try:
+        exits, placement = _exits(
+            cfg,
+            costs.cost.mid,
+            analyst.target,
+            snapshot=snapshot,
+            horizon_bars=_held_bars(cfg, analyst.horizon_bars),
+        )
+    except StopError as exc:
+        # A measured stop that cannot be measured is not replaced by a guess.
+        result.refusals.append(f"exit: {exc}")
+        announce(cfg.watch, "exit", REFUSED, "no stop could be measured")
+        _finish(cfg, where, result)
+        return result
+    view: dict[str, Any] = dict(_exit_view(costs.cost.mid, analyst.target, exits))
+    if placement is not None:
+        view["measured"] = placement.record()
+    result.exits = view
+    take_pnl = view.get("take_pnl_bps")
+    if take_pnl is not None and Decimal(take_pnl) <= costs.cost.round_trip_bps:
+        # A take profit inside the round trip turns the trade's best outcome into a loss.
+        result.refusals.append(
+            f"exit: the take profit is {take_pnl} bps away and the round trip costs "
+            f"{costs.cost.round_trip_bps:.2f} bps, so a winner would lose money"
+        )
+        announce(cfg.watch, "exit", REFUSED, "take profit inside the round trip")
+        _finish(cfg, where, result)
+        return result
     stop_at = exits.get("stop_price")
     if cfg.max_risk_per_trade_bps is not None and stop_at is None:
         # A declared risk limit that cannot be computed is not a limit. Fail closed and say which
@@ -1008,7 +1037,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         # The touch this cycle saw, so an order that rests on the book rests where the cost was
         # priced rather than wherever the book has moved to by the time it is sent.
         **_touch(snapshot),
-        **_exits(cfg, costs.cost.mid, analyst.target),
+        **exits,
         "channel": cfg.venue_key,
         "entry_role": _channel(cfg).entry_role,
     }
@@ -1405,22 +1434,48 @@ def _said(analyst: Any) -> dict[str, Any]:
     return out
 
 
-def _exits(cfg: CycleConfig, mid: Decimal, target: str) -> dict[str, str]:
-    """Where the stop and the take profit sit, from the operator's own fractions and this price.
+def _exits(
+    cfg: CycleConfig,
+    mid: Decimal,
+    target: str,
+    *,
+    snapshot: Snapshot | None = None,
+    horizon_bars: int = 1,
+) -> tuple[dict[str, str], Placement | None]:
+    """Where the stop and the take profit sit, and what measured them when the market did.
 
     A position without an exit is not a trade, so these travel with the intent and, in venue mode,
-    go to the venue attached to the entry. Nothing here asks a model where a stop belongs. Each half
-    is computed on its own: a desk that declared a stop and no take profit still gets its stop.
+    go to the venue attached to the entry. Nothing here asks a model where a stop belongs. Fixed
+    mode uses the operator's fractions, each half on its own; volatility mode measures both from
+    the decision timeframe's closed candles.
     """
     if mid <= 0:
-        return {}
+        return {}, None
+    stop_frac, take_frac, placement = cfg.stop_frac, cfg.take_frac, None
+    if cfg.volatility_exit is not None:
+        candles = _candles(snapshot)
+        if not candles:
+            raise StopError("no closed candles in this snapshot to measure a stop from")
+        placement = cfg.volatility_exit.place(candles, horizon_bars=horizon_bars)
+        stop_frac, take_frac = placement.stop_frac, placement.take_frac
     away = Decimal(1) if target == "long" else Decimal(-1)
     out: dict[str, str] = {}
-    if cfg.stop_frac is not None:
-        out["stop_price"] = str((mid * (Decimal(1) - away * cfg.stop_frac)).quantize(mid))
-    if cfg.take_frac is not None:
-        out["take_price"] = str((mid * (Decimal(1) + away * cfg.take_frac)).quantize(mid))
-    return out
+    if stop_frac is not None:
+        out["stop_price"] = str((mid * (Decimal(1) - away * stop_frac)).quantize(mid))
+    if take_frac is not None:
+        out["take_price"] = str((mid * (Decimal(1) + away * take_frac)).quantize(mid))
+    return out, placement
+
+
+def _candles(snapshot: Snapshot | None) -> list[Any]:
+    """The decision timeframe's closed candles, oldest first, or none."""
+    if snapshot is None:
+        return []
+    try:
+        value = snapshot.get("ohlcv").value
+    except KeyError:
+        return []
+    return list(value) if isinstance(value, list | tuple) else []
 
 
 def _position_cap(cfg: CycleConfig, mid: Decimal, base: Decimal) -> Decimal:

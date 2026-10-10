@@ -21,6 +21,7 @@ from decimal import Decimal
 from enum import StrEnum
 
 from trading_research_agents.data.schema import Direction
+from trading_research_agents.execution.stops import VolatilityExit
 from trading_research_agents.strategy.core import Bar
 
 BPS = Decimal(10_000)
@@ -155,6 +156,9 @@ class ExitRule:
     mechanism_bound: str
     take_profit_frac: Decimal | None = None
     slip_bps: Decimal = Decimal("5.0")
+    # mode = "volatility": the agent cycle measures each trade's stop from the market. stop_frac
+    # then holds the widest stop that rule can place, for the paths that need one number up front.
+    volatility: VolatilityExit | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.stop_frac, Decimal) or self.stop_frac <= 0:

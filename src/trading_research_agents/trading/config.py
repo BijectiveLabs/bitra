@@ -20,6 +20,7 @@ from trading_research_agents.execution.cost import CostError, FundingSchedule
 from trading_research_agents.execution.desk import Desk, DeskError
 from trading_research_agents.execution.mandate import Mandate, MandateError
 from trading_research_agents.execution.regime import REGIME_KEYS, RegimeError, RegimeRule
+from trading_research_agents.execution.stops import MODES, StopError, VolatilityExit
 from trading_research_agents.execution.targets import TargetError, Targets
 from trading_research_agents.execution.trigger import Trigger, TriggerError
 from trading_research_agents.execution.universe import Universe, UniverseError
@@ -285,10 +286,16 @@ def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> S
     ):
         if old in exit_raw and new not in exit_raw:
             exit_raw[new] = exit_raw.pop(old)
+    volatility = _volatility_exit(exit_raw)
     run_raw = _table(raw, "run")
     controls_raw = _table(raw, "controls")
 
     agents = _agents(raw, strategy_raw)
+    if volatility is not None and agents is None:
+        raise ConfigError(
+            '[exit].mode = "volatility" is placed by the agent cycle on each decision; a code '
+            'core is simulated bar by bar on mode = "fixed"'
+        )
     strategy = _build_strategy(strategy_raw, base) if agents is None else _placeholder(agents)
     exit_rule = ExitRule(
         stop_frac=_dec(exit_raw, "stop_frac"),
@@ -298,6 +305,7 @@ def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> S
             _dec(exit_raw, "take_profit_frac") if "take_profit_frac" in exit_raw else None
         ),
         slip_bps=_dec(exit_raw, "slip_bps") if "slip_bps" in exit_raw else Decimal("5.0"),
+        volatility=volatility,
     )
     limits = Limits(
         max_risk_per_trade_bps=_dec(controls_raw, "max_risk_per_trade_bps"),
@@ -814,6 +822,7 @@ def _targets(raw: dict[str, Any], exit_rule: ExitRule) -> Targets:
     if unknown:
         raise ConfigError(f"[targets]: unknown {unknown}; have {list(TARGET_KEYS)}")
     if "min_reward_risk" in table and exit_rule.take_profit_frac is None:
+        # Fixed mode only: a measured take profit always carries the declared reward to risk.
         raise ConfigError(
             "[targets].min_reward_risk needs [exit].take_profit_frac; "
             "a ratio without a take profit is not a ratio"
@@ -1212,6 +1221,57 @@ def _table(raw: dict[str, Any], key: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ConfigError(f"[{key}] table is required")
     return value
+
+
+EXIT_KEYS = (
+    "mode",
+    "stop_frac",
+    "take_profit_frac",
+    "timeout_bars",
+    "mechanism_bound",
+    "slip_bps",
+)
+VOLATILITY_KEYS = ("stop_atr", "reward_to_risk", "min_stop_frac", "max_stop_frac", "atr_bars")
+
+
+def _volatility_exit(exit_raw: dict[str, Any]) -> VolatilityExit | None:
+    """[exit].mode and what it brings. Fixed is one fraction of price for every trade."""
+    unknown = sorted(set(exit_raw) - set(EXIT_KEYS) - set(VOLATILITY_KEYS))
+    if unknown:
+        raise ConfigError(f"[exit]: unknown {unknown}; have {list(EXIT_KEYS + VOLATILITY_KEYS)}")
+    mode = str(exit_raw.get("mode", "fixed"))
+    if mode not in MODES:
+        raise ConfigError(f"[exit].mode is one of {list(MODES)}, not {mode!r}")
+    given = sorted(key for key in VOLATILITY_KEYS if key in exit_raw)
+    if mode == "fixed":
+        if given:
+            raise ConfigError(f'[exit]: {given} apply with mode = "volatility" and this is fixed')
+        return None
+    fixed = sorted(key for key in ("stop_frac", "take_profit_frac") if key in exit_raw)
+    if fixed:
+        # Both would be read by someone and only one would be used. Say so rather than ignore it.
+        raise ConfigError(
+            f"[exit]: {fixed} are the fixed mode's exits; with mode = \"volatility\" each trade's "
+            "stop is measured from the market, so remove them"
+        )
+    plain = VolatilityExit()
+
+    def number(key: str) -> Decimal:
+        return _dec(exit_raw, key) if key in exit_raw else getattr(plain, key)
+
+    try:
+        rule = VolatilityExit(
+            stop_atr=number("stop_atr"),
+            reward_to_risk=number("reward_to_risk"),
+            min_stop_frac=number("min_stop_frac"),
+            max_stop_frac=number("max_stop_frac"),
+            atr_bars=_int(exit_raw, "atr_bars") if "atr_bars" in exit_raw else plain.atr_bars,
+        )
+    except StopError as exc:
+        raise ConfigError(str(exc)) from exc
+    exit_raw["stop_frac"] = rule.max_stop_frac
+    exit_raw["take_profit_frac"] = rule.max_stop_frac * rule.reward_to_risk
+    return rule
 
 
 def _dec(table: dict[str, Any], key: str) -> Decimal:

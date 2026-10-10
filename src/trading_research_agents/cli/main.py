@@ -2628,9 +2628,26 @@ def _without_commented(text: str, marker: str) -> str:
     return text[:start] + "".join(lines[taken:]).lstrip("\n")
 
 
+FIXED_EXIT = (
+    "stop_frac = 0.01             # 1 percent of price, on the adverse side\n"
+    "take_profit_frac = 0.02\n"
+)
+VOLATILITY_EXIT = (
+    'mode = "volatility"          # each trade stop measured from the range of its market\n'
+    "stop_atr = 1.5               # the stop in average true ranges, grown with the horizon\n"
+    "reward_to_risk = 2.0         # the take profit is twice the stop\n"
+    "min_stop_frac = 0.002        # never tighter than 0.2 percent of price\n"
+    "max_stop_frac = 0.03         # never wider than 3 percent\n"
+    "# atr_bars = 14              # candles the average true range is measured over\n"
+    '# mode = "fixed" with stop_frac and take_profit_frac puts every trade at one distance\n'
+)
+
+
 def _agent_config(text: str, provider_name: str, model: str) -> str:
     """The template with the technical analyst as the core and the [agents] table live."""
     text = text[: text.index("[strategy]")] + AGENT_HEAD + text[text.index("[exit]") :]
+    # An agent desk trades many instruments at many speeds; one fraction of price fits none of them.
+    text = text.replace(FIXED_EXIT, VOLATILITY_EXIT, 1)
     text = _without_commented(text, "# [agents]")
     agents = (
         "[agents]\n"
@@ -2956,6 +2973,7 @@ def run_cycle_command(args: argparse.Namespace) -> int:
         ),
         stop_frac=cfg.exit_rule.stop_frac,
         take_frac=cfg.exit_rule.take_profit_frac,
+        volatility_exit=cfg.exit_rule.volatility,
         data_options={declared.kind: dict(declared.options) for declared in data_cfg.kinds},
         series=series,
         news=news,
@@ -3616,6 +3634,13 @@ def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], l
                 pnl = shown.get(f"{name}_pnl_bps", shown[f"{name}_bps"])
                 said.append(f"{label} {shown[f'{name}_price']} (position {pnl} bps)")
         lines.append(", ".join(said))
+        measured = shown.get("measured")
+        if measured:
+            held = f", held at {measured['clamped_to']}" if measured["clamped_to"] else ""
+            lines.append(
+                f"exits measured: ATR {measured['atr_bps']} bps over {measured['horizon_bars']} "
+                f"bar(s) put the stop at {measured['measured_stop_bps']} bps{held}"
+            )
     if result.targets is not None:
         met = result.targets
         lines.append(
@@ -4219,6 +4244,7 @@ def _gate_lines(
             "reads as zero whatever the models spend; put what you were quoted in "
             "[agents.pricing.<model>] or drop the target"
         )
+    good.extend(_exit_notes(cfg, bad))
     good.extend(_risk_notes(cfg, bad))
     good.extend(_trigger_notes(cfg))
     good.extend(_spend_notes(cfg))
@@ -4657,6 +4683,34 @@ def _spend_notes(cfg: Any) -> list[str]:
         + "; [agents.pricing.<model>] is where a quote goes"
     )
     return out
+
+
+def _exit_notes(cfg: Any, bad: list[str]) -> list[str]:
+    """Where each trade's stop and take profit will sit, in words."""
+    rule = cfg.exit_rule
+    scale = rule.volatility
+    if scale is None:
+        take = (
+            "no take profit"
+            if rule.take_profit_frac is None
+            else (f"take profit {_bps(rule.take_profit_frac * 10_000)} bps")
+        )
+        return [
+            f"exits: fixed, stop {_bps(rule.stop_frac * 10_000)} bps and {take} on every trade; "
+            '[exit].mode = "volatility" sizes them to the range of each market'
+        ]
+    agents = getattr(cfg, "agents", None)
+    lookback = getattr(agents, "lookback_bars", None)
+    if lookback is not None and lookback < scale.atr_bars + 1:
+        bad.append(
+            f"[exit].atr_bars is {scale.atr_bars} and [agents].lookback_bars is {lookback}; the "
+            f"average true range needs {scale.atr_bars + 1} closed candles"
+        )
+    return [
+        f"exits: measured per trade, stop {scale.stop_atr} x ATR({scale.atr_bars}) grown with the "
+        f"horizon, held between {_bps(scale.min_stop_frac * 10_000)} and "
+        f"{_bps(scale.max_stop_frac * 10_000)} bps; take profit {scale.reward_to_risk} x the stop"
+    ]
 
 
 def _risk_notes(cfg: Any, bad: list[str]) -> list[str]:

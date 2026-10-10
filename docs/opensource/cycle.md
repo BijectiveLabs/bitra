@@ -719,7 +719,71 @@ trades today   0 before this one
 ```
 
 Each exit shows two numbers because a short gains when price falls: the price's move, and what that
-move does to the position. The exits come from `[exit]` as fractions of the entry price.
+move does to the position.
+
+### Where the stop and the take profit sit
+
+`[exit].mode` picks one of two ways, and code places both prices either way.
+
+**Volatility** is what `tra init --agent` writes. The stop is measured on every trade from the
+market it is in:
+
+```
+stop        = stop_atr x ATR(atr_bars) / price x sqrt(horizon bars), held in [min_stop_frac, max_stop_frac]
+take profit = reward_to_risk x stop
+```
+
+```toml
+[exit]
+mode = "volatility"
+stop_atr = 1.5               # the stop in average true ranges
+reward_to_risk = 2.0         # take profit against stop
+min_stop_frac = 0.002        # never tighter than 0.2 percent of price
+max_stop_frac = 0.03         # never wider than 3 percent
+atr_bars = 14                # the default
+```
+
+ATR is Wilder's average true range on the decision timeframe's closed candles, the same figure a
+charting terminal shows, so any stop can be checked against one. A trade meant to last longer gets
+room to match: the square root of the analyst's horizon (capped by `[exit].timeout_bars` when the
+desk closes on time) is how far a market usually wanders in that many bars. Read off OKX's
+one-minute candles on 2026-10-10 with the defaults and a five-bar horizon:
+
+| Instrument | ATR | Stop | Take profit |
+|---|---|---|---|
+| BTCUSDT | 1.4 bps | 20 bps (the floor) | 40 bps |
+| SOLUSDT, 30 bars | 4.6 bps | 37 bps | 75 bps |
+| FILUSDT | 10.8 bps | 36 bps | 72 bps |
+| FILUSDT, 30 bars | 10.8 bps | 88 bps | 177 bps |
+
+A wider stop does not mean a bigger loss. `[controls].max_risk_per_trade_bps` cuts the size until
+the loss at the stop fits, so a volatile coin with a wide stop puts the same share of equity at risk
+as BTC with a tight one, on a smaller position. The cycle record keeps the ATR, the horizon, the
+stop it measured and the bound that held it under `exits.measured`, and the cycle output says it in
+one line.
+
+When the candles cannot give a range (fewer than `atr_bars + 1` closed, or a market that did not
+move), the trade is refused with the reason. A guessed stop is not a stop. Volatility mode is for
+agent desks; a code core is simulated bar by bar and stays on fixed. Outside the agent cycle, where
+one number is needed up front, the widest stop the rule can place stands in, which overstates the
+risk rather than understating it.
+
+**Fixed** puts every trade at the same distance:
+
+```toml
+[exit]
+mode = "fixed"               # the default when mode is left out
+stop_frac = 0.01             # 1 percent of price, on the adverse side
+take_profit_frac = 0.02
+```
+
+It is simple and it is the same for every market, which is the problem: 1 percent is wide for BTC
+over a few minutes and narrow for a coin that moves that much in an hour. The two modes do not mix;
+a volatility key in a fixed table, or `stop_frac` in a volatility one, is refused rather than half
+read.
+
+Either way, a take profit closer than the round trip is refused (`exit: ... a winner would lose
+money`): the best outcome the trade can have would still lose.
 
 The expected edge is a different thing from the take profit, on purpose. The take profit and the
 stop say where this position closes; the edge is what the desk expects to earn a trade on
@@ -918,8 +982,9 @@ setting, every check in order, the arithmetic and the records.
 ### What happens after the order
 
 The stop and the take profit go to the venue **attached to the entry**, in the same call. Code
-computes both from `[exit].stop_frac` and `[exit].take_profit_frac` against the price
-the cost gate priced on, so no model is ever asked where a stop belongs. A filled position with no
+computes both against the price the cost gate priced on, from the market's own range or from
+the fixed fractions ([where they sit](#where-the-stop-and-the-take-profit-sit)), so no model is
+ever asked where a stop belongs. A filled position with no
 exit is the one state this software must never create, because it is the state that survives our
 process dying - and if the venue cannot take them with the entry, the order is not sent at all. An
 operator who carries the exits in their own system says so with `[execution].exits = "none"`, and
@@ -951,6 +1016,8 @@ open two.
 | `technical: ... with no setup named` | a direction nobody could name the shape of is not a trade |
 | `technical: not one figure ... survived` | the direction could not point at a figure in its own brief |
 | `technical: confidence ... below` | the answer was under `[agents].min_confidence` |
+| `exit: ... closed candle(s); an average true range over ... needs ...` | volatility mode could not measure a range; raise `[agents].lookback_bars` or lower `[exit].atr_bars` |
+| `exit: the take profit is ... a winner would lose money` | the take profit sits inside the round trip cost |
 | `risk: ... bps of equity at the stop` | the smallest size the venue takes still risks more than `[controls].max_risk_per_trade_bps` |
 | `desk: ... bps of equity is already at risk` | what the book already carries plus this trade is over `[desk].max_open_risk_bps` |
 | `desk: ... has at risk is not on the record` | a position is open whose risk nobody can state, so the desk's total cannot be stated either |

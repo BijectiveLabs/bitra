@@ -161,6 +161,8 @@ def test_init_with_an_agent_makes_the_analyst_the_core(
 
     cfg = load_strategy_config(project / "strategy.toml")
     assert cfg.agents is not None and cfg.agents.magnitude_bps == 20
+    # An agent desk starts with stops measured from each market rather than one fraction.
+    assert cfg.exit_rule.volatility is not None and "stop_frac = 0.01" not in text
     monkeypatch.chdir(project)
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     assert main(["check"]) == 1
