@@ -332,7 +332,7 @@ README was written.
 | 2. Shadow | `tra paper --minutes 30` | the live public feed, decisions recorded, nothing sent | nothing |
 | 3. Canary | `tra live` | a small live session behind hard caps and the ladder | a venue key, a promotion with evidence |
 | 4. Agents | `tra run` | the cycle above instead of a code core; sandbox until you say otherwise | a model key |
-| 5. Venue mode | `tra run` with `[execution].mode = "venue"` | one order per decision, exits attached, positions looked after | a signed `MANDATE.md`, the canary tier, caps, a leverage, venue keys |
+| 5. Venue mode | `tra run` with `[execution].mode = "venue"` | one order per decision, exits attached, positions looked after | a signed `MANDATE.md`, a leverage, a cap per order, venue keys; on mainnet also the canary tier |
 
 The replay of that day printed `net -294.19 bps` for the example core, and it is shown as it came
 out: a backtest that only shows good news is one nobody should believe.

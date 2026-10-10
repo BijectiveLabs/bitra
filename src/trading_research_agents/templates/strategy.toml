@@ -40,6 +40,8 @@ max_position = 0.05
 #                                  # needed with [universe].discover, where coins differ in price
 max_orders_per_minute = 6
 daily_loss_limit_bps = 300
+max_drawdown_bps = 1000            # from the highest equity, across days; no new entry past it
+# on_drawdown = "flatten"         # also flatten and stop, through the kill switch below
 kill_switch = "KILL"               # touch this file to flatten and stop
 
 # ---- live tier (T3 canary). Keys never live here: BYBIT_API_KEY / BYBIT_API_SECRET come from
@@ -177,7 +179,6 @@ kill_switch = "KILL"               # touch this file to flatten and stop
 # acknowledged_by = "your name"
 # acknowledged_on = "2026-09-28"
 # max_notional = 200               # one order, in quote currency
-# max_orders_per_cycle = 1         # always 1: one decision sends at most one order
 # exits = "attached"               # the stop and take profit go to the venue with the entry;
 #                                  # "none" only if you carry them in your own system
 # limit_timeout_s = 30             # a resting order that has not filled by then is cancelled

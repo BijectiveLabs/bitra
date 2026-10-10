@@ -63,7 +63,7 @@ def tighten_limits(current: Limits, proposed: dict[str, Any]) -> Tightened:
             raise ActionRefusedError(
                 f"{key} must stay positive; a zero limit is a halt, not a limit"
             )
-        if new > have:
+        if have is not None and new > have:
             raise ActionRefusedError(
                 f"{key}: {new} is larger than the {have} in force; only tighter is allowed"
             )

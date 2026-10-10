@@ -8,8 +8,8 @@ words, where the decisions are made and by whom, so that nobody is surprised lat
   key is read, no order leaves the machine, and every figure the gates produce is a figure
   about recorded data. Most of what this project is for happens here.
 - **Live orders need what you supply.** A trade key you created on the venue and placed in your
-  environment, a signed `MANDATE.md` for venue mode, and a ladder you promoted to the canary tier
-  with evidence and your signature. The package never holds a key, never connects to a venue
+  environment, a signed `MANDATE.md` for venue mode, and on mainnet a ladder you promoted to the
+  canary tier with evidence and your signature. The package never holds a key, never connects to a venue
   unless you run it in live or venue mode, and never operates execution for anyone.
 - **Promotion is a human act.** Every step up the ladder is a receipt naming the evidence and
   the operator who signed it. Steps down happen on a reason, and a role may take them. No role,

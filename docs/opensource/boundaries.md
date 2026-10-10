@@ -52,8 +52,8 @@ there; where the two meet, the guarantee wins and the feature finds another shap
 
 ## Safety and responsibility
 
-Venue mode needs a mandate the operator wrote and signed in their own project, the ladder at its
-canary tier, the caps declared, and keys in the environment. Nothing here is advice: the licence is
+Venue mode needs a mandate the operator wrote and signed in their own project, a leverage and a
+cap per order, keys in the environment, and on mainnet the ladder at its canary tier. Nothing here is advice: the licence is
 MIT with no warranty, and a verdict from a gate is a statement about a dataset and a registration,
 not a recommendation to trade. Compliance, reporting, jurisdiction, and whether you may run this at
 all are the operator's to settle. [Liability](/opensource/liability) says where responsibility sits, in plain words.

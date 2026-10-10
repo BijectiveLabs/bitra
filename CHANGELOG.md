@@ -14,6 +14,15 @@ All notable changes to this project are recorded here. The format follows
   `reward_to_risk` times the stop. `tra init --agent` writes it. Fixed fractions stay as
   `mode = "fixed"`, the default. The record carries the ATR, the horizon and any bound that held.
 - A take profit inside the round trip cost refuses the trade.
+- `[controls].max_drawdown_bps`: no new entry once equity is that far below its highest reading,
+  across days; `on_drawdown = "flatten"` also arms the kill switch. Wakes the quant auditor once a
+  day. `tra init` writes 1000.
+- Simpler setup. `[controls]` figures have standard defaults (risk per trade 50 bps, daily loss
+  300 bps, 6 orders a minute; `max_position` optional). An agent desk can leave out `[exit]`
+  (volatility stops, 240-bar timeout) and the research cost figures in `[run]`. Venue mode on a
+  demo or testnet account no longer waits on the ladder, and no longer needs a `[canary]` table,
+  which only `tra live` reads. `[execution].max_orders_per_cycle` is out of the template.
+- Unknown keys in `[controls]` are refused.
 - The quant auditor wakes on a clock (`[audit].quant_every = "24h"`, kept across restarts),
   when `[controls].daily_loss_limit_bps` is reached (once per UTC day, no longer a technical
   alarm), and after `[audit].losing_streak` losing round trips in a row (3 by default).

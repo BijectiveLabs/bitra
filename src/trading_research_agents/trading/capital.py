@@ -14,10 +14,11 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from trading_research_agents.records import append_line
+from trading_research_agents.records import append_line, write_json
 
 BPS = Decimal(10_000)
 EQUITY_LOG = "equity.jsonl"
+EQUITY_PEAK = "equity_peak.json"
 
 
 class CapitalError(ValueError):
@@ -148,3 +149,24 @@ def day_loss_bps(root: Path, now: datetime, equity: Decimal) -> Decimal:
     if start <= 0:
         return Decimal(0)
     return max(Decimal(0), (start - equity) / start * BPS).quantize(Decimal("0.01"))
+
+
+def drawdown_bps(root: Path, now: datetime, equity: Decimal) -> tuple[Decimal, Decimal]:
+    """How far equity sits below the highest reading this desk has seen, in bps, and that peak.
+
+    The peak is kept in its own file and only ever rises. Deleting the file starts the measure
+    again from the next reading, which is how an operator says the drawdown has been looked at.
+    """
+    path = Path(root) / EQUITY_PEAK
+    peak: Decimal | None = None
+    if path.is_file():
+        try:
+            peak = _dec(json.loads(path.read_text(encoding="utf-8")).get("peak"))
+        except (ValueError, AttributeError):
+            peak = None
+    if peak is None or equity > peak:
+        write_json(path, {"peak": str(equity), "at": now.isoformat()}, durable=True)
+        return Decimal(0), equity
+    if peak <= 0:
+        return Decimal(0), peak
+    return ((peak - equity) / peak * BPS).quantize(Decimal("0.01")), peak

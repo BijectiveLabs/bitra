@@ -73,6 +73,47 @@ Type `tra` on its own inside the desk and you get the console: the cockpit, then
 every command. [What you see](/opensource/what-you-see) walks through the screens in the order they
 appear.
 
+## What you decide, and what has a default
+
+The software measures what it can measure, uses the common standard where one exists, and asks you
+only for what nobody else can decide. `tra check` says, in plain words, what every setting below
+will do in your project, defaults included.
+
+**You decide:**
+
+| What | Where | Why it is yours |
+|---|---|---|
+| What to trade | `[run].instrument`, `[run].venue_key` | |
+| How much per trade | `[run].size` or `[run].size_quote` | your money |
+| Which model | `[agents].provider`, `[agents].model` (`tra init --agent` writes both) | your account and your bill |
+| What the analyst reasons from | `[agents].mechanism` | one sentence, your thesis |
+| Leverage | `[execution].leverage` | only you know what you can carry |
+| The most one order may be worth | `[execution].max_notional` | the cap on a defect's cost |
+| That you take the losses on | `MANDATE.md`, `acknowledged_by`, `acknowledged_on` | venue mode only |
+
+**Already set, change any of it:**
+
+| Setting | Default | What it does |
+|---|---|---|
+| `[controls].max_risk_per_trade_bps` | `50` | the most one trade may lose at its stop, in bps of equity |
+| `[controls].daily_loss_limit_bps` | `300` | no new entry once equity is down this far on the UTC day |
+| `[controls].max_orders_per_minute` | `6` | across the whole desk |
+| `[controls].max_position` | none | a cap in units; the risk per trade already bounds every size |
+| `[controls].max_drawdown_bps` | none (`tra init` writes `1000`) | no new entry once equity is this far below its peak |
+| `[exit]` | measured from the market | see [where the stop and take profit sit](/opensource/cycle#where-the-stop-and-the-take-profit-sit) |
+| `[exit].timeout_bars` | `240` | a position closes by time after this many bars |
+| `[run].bar_interval_s` | `60` | the decision timeframe |
+| `[run].settlement_interval_s` | `28800` | the venue's funding clock |
+| `[execution].environment` | `demo` | where orders go: `demo`, `testnet` or `mainnet` |
+
+A code core (`[strategy].file`) is research, so it declares its own exit and cost figures:
+`[exit].stop_frac`, `timeout_bars` and `mechanism_bound`, and `[run].spread_cost_bps`, `latency_ms`
+and `slippage_bps`. A default there would be a cost the research never measured.
+
+What stays strict, and why: a setting nobody recognises is refused rather than ignored, because a
+typo in a risk setting should stop the desk at `tra check`, not at the venue; and the few things
+above that are yours are asked for, never guessed.
+
 ## From a replay to real orders
 
 You can stop at any of these steps. Each is one command.
@@ -83,7 +124,7 @@ You can stop at any of these steps. Each is one command.
 | 2. Shadow | `tra paper --minutes 30` | the live public feed, decisions recorded, nothing sent | nothing |
 | 3. Canary | `tra live` | a small live session behind hard caps and the ladder | a venue key, a promotion with evidence |
 | 4. Agents | `tra run` | the autonomous cycle instead of a code core; sandbox until you say otherwise | a model key |
-| 5. Venue mode | `tra run` with `[execution].mode = "venue"` | one order per decision, exits attached, positions looked after | a signed `MANDATE.md`, the canary tier, caps, a leverage, venue keys |
+| 5. Venue mode | `tra run` with `[execution].mode = "venue"` | one order per decision, exits attached, positions looked after | a signed `MANDATE.md`, a leverage, a cap per order, venue keys; on mainnet also the canary tier |
 
 Venue mode is the only mode that can lose money, so it has a door in front of it. `tra mandate`
 prints the text you have to keep in your project word for word, and `tra check` names every missing

@@ -27,7 +27,7 @@ from trading_research_agents.execution.universe import Universe, UniverseError
 from trading_research_agents.strategy.core import Strategy
 from trading_research_agents.strategy.exits import ExitRule
 from trading_research_agents.trading.canary import CanaryError, CanaryLimits
-from trading_research_agents.trading.controls import Limits
+from trading_research_agents.trading.controls import ControlError, Limits
 
 # Keys never live in a config file. A setting whose name reads like a credential is refused by
 # name - but only after the table's own settings are accounted for, because `key_ip_unbound_ok` is
@@ -288,7 +288,8 @@ def load_strategy_config(path: Path) -> StrategyConfig:
 
 def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> StrategyConfig:
     strategy_raw = _table(raw, "strategy")
-    exit_raw = dict(_table(raw, "exit"))
+    # [exit] and [controls] may be left out: both have standard defaults on an agent desk.
+    exit_raw = dict(raw.get("exit") or {})
     # The names a desk written before 0.6.0 used. They said sigma and meant a fraction of price.
     for old, new in (
         ("stop_sigma_frac", "stop_frac"),
@@ -296,53 +297,56 @@ def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> S
     ):
         if old in exit_raw and new not in exit_raw:
             exit_raw[new] = exit_raw.pop(old)
-    volatility = _volatility_exit(exit_raw)
     run_raw = _table(raw, "run")
-    controls_raw = _table(raw, "controls")
-
+    controls_raw = dict(raw.get("controls") or {})
     agents = _agents(raw, strategy_raw)
+    # An agent desk measures its costs from the book and states its mechanism in [agents], so the
+    # research figures a code core must declare have standard defaults here.
+    agent = agents is not None
+    if agent and "mode" not in exit_raw and "stop_frac" not in exit_raw:
+        exit_raw["mode"] = "volatility"
+    volatility = _volatility_exit(exit_raw)
     if volatility is not None and agents is None:
         raise ConfigError(
             '[exit].mode = "volatility" is placed by the agent cycle on each decision; a code '
             'core is simulated bar by bar on mode = "fixed"'
         )
     strategy = _build_strategy(strategy_raw, base) if agents is None else _placeholder(agents)
+    if "stop_frac" not in exit_raw:
+        raise ConfigError(
+            '[exit].stop_frac is the stop on every trade; or mode = "volatility" on an agent desk'
+        )
     exit_rule = ExitRule(
         stop_frac=_dec(exit_raw, "stop_frac"),
-        timeout_bars=_int(exit_raw, "timeout_bars"),
-        mechanism_bound=str(exit_raw.get("mechanism_bound", "")),
+        timeout_bars=_or_int(exit_raw, "timeout_bars", 240 if agent else None),
+        mechanism_bound=str(exit_raw.get("mechanism_bound", AGENT_EXIT_BOUND if agent else "")),
         take_profit_frac=(
             _dec(exit_raw, "take_profit_frac") if "take_profit_frac" in exit_raw else None
         ),
         slip_bps=_dec(exit_raw, "slip_bps") if "slip_bps" in exit_raw else Decimal("5.0"),
         volatility=volatility,
     )
-    limits = Limits(
-        max_risk_per_trade_bps=_dec(controls_raw, "max_risk_per_trade_bps"),
-        max_position=_dec(controls_raw, "max_position"),
-        max_orders_per_minute=_int(controls_raw, "max_orders_per_minute"),
-        daily_loss_limit_bps=_dec(controls_raw, "daily_loss_limit_bps"),
-        max_position_quote=(
-            _dec(controls_raw, "max_position_quote")
-            if "max_position_quote" in controls_raw
-            else None
-        ),
-    )
+    limits = _limits(controls_raw)
     kill = controls_raw.get("kill_switch")
+    if limits.on_drawdown == "flatten" and not kill:
+        raise ConfigError(
+            '[controls].on_drawdown = "flatten" works through the kill switch; declare '
+            '[controls].kill_switch = "KILL"'
+        )
     run = RunSettings(
         instrument=str(run_raw.get("instrument", "")),
         venue_key=str(run_raw.get("venue_key", "")),
-        bar_interval_s=_int(run_raw, "bar_interval_s"),
+        bar_interval_s=_or_int(run_raw, "bar_interval_s", 60),
         size=_dec(run_raw, "size") if "size" in run_raw else Decimal(0),
         size_quote=_dec(run_raw, "size_quote") if "size_quote" in run_raw else None,
-        spread_cost_bps=_dec(run_raw, "spread_cost_bps"),
+        spread_cost_bps=_or_dec(run_raw, "spread_cost_bps", "3.0" if agent else None),
         equity=_dec(run_raw, "equity") if "equity" in run_raw else None,
-        latency_ms=_dec(run_raw, "latency_ms"),
-        slippage_bps=_dec(run_raw, "slippage_bps"),
-        settlement_interval_s=_int(run_raw, "settlement_interval_s"),
+        latency_ms=_or_dec(run_raw, "latency_ms", "50" if agent else None),
+        slippage_bps=_or_dec(run_raw, "slippage_bps", "1.0" if agent else None),
+        settlement_interval_s=_or_int(run_raw, "settlement_interval_s", 28_800),
         **_steps(run_raw.get("size_step")),
         context_intervals=_context_intervals(
-            run_raw.get("context_intervals"), _int(run_raw, "bar_interval_s")
+            run_raw.get("context_intervals"), _or_int(run_raw, "bar_interval_s", 60)
         ),
     )
     if not run.instrument or not run.venue_key:
@@ -1300,6 +1304,65 @@ def _volatility_exit(exit_raw: dict[str, Any]) -> VolatilityExit | None:
     exit_raw["stop_frac"] = rule.max_stop_frac
     exit_raw["take_profit_frac"] = rule.max_stop_frac * rule.reward_to_risk
     return rule
+
+
+AGENT_EXIT_BOUND = (
+    "A position closes at its stop, its take profit or its time limit, whichever comes first."
+)
+CONTROLS_KEYS = (
+    "max_risk_per_trade_bps",
+    "max_position",
+    "max_position_quote",
+    "max_orders_per_minute",
+    "daily_loss_limit_bps",
+    "max_drawdown_bps",
+    "on_drawdown",
+    "kill_switch",
+)
+
+
+def _limits(table: dict[str, Any]) -> Limits:
+    """[controls], every figure with a standard default, so a desk starts protected."""
+    unknown = sorted(set(table) - set(CONTROLS_KEYS))
+    _no_secrets(unknown, "[controls]")
+    if unknown:
+        raise ConfigError(f"[controls]: unknown {unknown}; have {list(CONTROLS_KEYS)}")
+    plain = Limits()
+
+    def optional(key: str) -> Decimal | None:
+        return _dec(table, key) if key in table else None
+
+    try:
+        return Limits(
+            max_risk_per_trade_bps=_or_dec(
+                table, "max_risk_per_trade_bps", str(plain.max_risk_per_trade_bps)
+            ),
+            max_position=optional("max_position"),
+            max_orders_per_minute=_or_int(
+                table, "max_orders_per_minute", plain.max_orders_per_minute
+            ),
+            daily_loss_limit_bps=_or_dec(
+                table, "daily_loss_limit_bps", str(plain.daily_loss_limit_bps)
+            ),
+            max_position_quote=optional("max_position_quote"),
+            max_drawdown_bps=optional("max_drawdown_bps"),
+            on_drawdown=str(table.get("on_drawdown", "stop")),
+        )
+    except ControlError as exc:
+        raise ConfigError(f"[controls]: {exc}") from exc
+
+
+def _or_dec(table: dict[str, Any], key: str, default: str | None) -> Decimal:
+    """The declared figure, or the default; no default means the figure is required."""
+    if key in table or default is None:
+        return _dec(table, key)
+    return Decimal(default)
+
+
+def _or_int(table: dict[str, Any], key: str, default: int | None) -> int:
+    if key in table or default is None:
+        return _int(table, key)
+    return default
 
 
 def _dec(table: dict[str, Any], key: str) -> Decimal:

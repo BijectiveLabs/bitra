@@ -34,7 +34,7 @@ from trading_research_agents.agents import (
     technical_analyst,
     validator,
 )
-from trading_research_agents.agents.alarms import DAILY_LOSS_MARK
+from trading_research_agents.agents.alarms import DAILY_LOSS_MARK, DRAWDOWN_MARK
 from trading_research_agents.agents.briefs import (
     BriefError,
     context_brief,
@@ -124,7 +124,12 @@ from trading_research_agents.store.snapshot import (
     inputs_record,
     take_snapshot,
 )
-from trading_research_agents.trading.capital import day_loss_bps, sizing_equity
+from trading_research_agents.trading.capital import (
+    EQUITY_PEAK,
+    day_loss_bps,
+    drawdown_bps,
+    sizing_equity,
+)
 
 # The third mode sends orders, and it only exists when the caller hands the cycle something to
 # send them with. That hand is built by the CLI, and only after the mandate has cleared.
@@ -208,6 +213,10 @@ class CycleConfig:
     # the smaller of this and [run].equity, and the day's loss is measured from it.
     account: Callable[[], Any] | None = None
     daily_loss_limit_bps: Decimal | None = None
+    # [controls].max_drawdown_bps, from the desk's highest equity; with on_drawdown = "flatten"
+    # the kill switch file is written, and the next pass flattens and stops the run.
+    max_drawdown_bps: Decimal | None = None
+    drawdown_kill: Path | None = None
     # What the models have already cost since this desk last wrote an intent. A day of refusals is
     # paid for by whatever trade the day produces, so the caller carries the figure across cycles.
     carried_spend: Decimal = Decimal(0)
@@ -564,6 +573,25 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
                     f"{DAILY_LOSS_MARK} {down} bps since the day began, at or past "
                     f"[controls].daily_loss_limit_bps {cfg.daily_loss_limit_bps}; no new entry "
                     "today, and open positions keep their exits"
+                )
+                return _stop_before_asking(cfg, where, result, why, step="capital")
+        if cfg.max_drawdown_bps is not None:
+            fallen, peak = drawdown_bps(cfg.root, cfg.clock(), held_now.equity)
+            result.briefs["equity"]["drawdown_bps"] = str(fallen)
+            result.briefs["equity"]["peak"] = str(peak)
+            if fallen >= cfg.max_drawdown_bps:
+                then = "open positions keep their exits"
+                if cfg.drawdown_kill is not None:
+                    cfg.drawdown_kill.parent.mkdir(parents=True, exist_ok=True)
+                    cfg.drawdown_kill.write_text(
+                        f"armed by [controls].max_drawdown_bps at {cfg.clock().isoformat()}\n",
+                        encoding="utf-8",
+                    )
+                    then = f"the kill switch at {cfg.drawdown_kill} is armed to flatten and stop"
+                why = (
+                    f"{DRAWDOWN_MARK} of {fallen} bps from the peak of {peak}, at or past "
+                    f"[controls].max_drawdown_bps {cfg.max_drawdown_bps}; no new entry until "
+                    f"the peak file {EQUITY_PEAK} is cleared, and {then}"
                 )
                 return _stop_before_asking(cfg, where, result, why, step="capital")
         announce(cfg.watch, "capital", DONE, f"equity {held_now.equity:.2f}, used {equity}")

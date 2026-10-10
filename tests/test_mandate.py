@@ -142,15 +142,14 @@ def test_venue_mode_names_everything_standing_in_the_way(tmp_path: Path) -> None
     assert any("names the live venue" in s for s in stops)
     assert any("max_notional" in s for s in stops)
     assert any("ladder is at SHADOW" in s for s in stops)
-    assert any("[canary] limits" in s for s in stops)
+    # A practice account is where the ladder's evidence is earned, so it does not wait on it.
+    practice = blocking(Mandate(mode="venue"), project=tmp_path, tier="SHADOW", practice=True)
+    assert not any("ladder" in s for s in practice)
 
 
 def test_a_signed_project_at_the_canary_tier_may_run(tmp_path: Path) -> None:
     project = project_with_mandate(tmp_path)
-    assert (
-        blocking(SIGNED, project=project, tier="CANARY", canary_declared=True, missing_keys=())
-        == ()
-    )
+    assert blocking(SIGNED, project=project, tier="CANARY", missing_keys=()) == ()
 
 
 def test_the_text_has_to_be_there_word_for_word(tmp_path: Path) -> None:
@@ -177,7 +176,6 @@ def test_a_missing_key_is_named_rather_than_discovered_at_the_venue(tmp_path: Pa
         SIGNED,
         project=project_with_mandate(tmp_path),
         tier="CANARY",
-        canary_declared=True,
         missing_keys=("BYBIT_API_SECRET",),
     )
     assert stops and "BYBIT_API_SECRET" in stops[0]

@@ -120,13 +120,15 @@ identity, and nothing about it changes what a trade earned.
 
 The per-strategy tier of the circuit-breaker hierarchy, independent of the strategy:
 
-| Control | Behaviour |
-|---|---|
-| `max_risk_per_trade_bps` | stop distance times notional over equity; unknown equity refuses |
-| `max_position` | size cap per order |
-| `max_orders_per_minute` | rate limit at the venue layer, so an order storm from a strategy bug is refused there |
-| `daily_loss_limit_bps` | once tripped, no new entries that UTC day |
-| kill switch | a file or a call; once armed it stays armed, the position is flattened, and the run stops |
+| Control | Default | Behaviour |
+|---|---|---|
+| `max_risk_per_trade_bps` | `50` | stop distance times notional over equity; unknown equity refuses |
+| `max_position` | none | size cap per order, in units; `max_position_quote` says it in quote currency |
+| `max_orders_per_minute` | `6` | rate limit at the venue layer, so an order storm from a strategy bug is refused there |
+| `daily_loss_limit_bps` | `300` | once tripped, no new entries that UTC day |
+| `max_drawdown_bps` | none | from the highest equity across days; no new entries until the peak file is cleared |
+| `on_drawdown` | `stop` | `flatten` also arms the kill switch: positions flattened, run stopped |
+| kill switch | `KILL` in the template | a file or a call; once armed it stays armed, the position is flattened, and the run stops |
 
 Flattening is always admitted, kill switch included. A control that blocks the exit is a trap.
 A clock that goes backwards refuses rather than evaluating.

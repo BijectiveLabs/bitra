@@ -29,12 +29,16 @@ DATA = "data"
 VENUE = "venue"
 # What the account is doing, rather than what broke. These wake the quant auditor.
 DAILY_LOSS = "daily_loss"
+DRAWDOWN = "drawdown"
 LOSING_STREAK = "losing_streak"
-KINDS = (STOPPED, PROVIDER, DATA, VENUE, DAILY_LOSS, LOSING_STREAK)
-QUANT_KINDS = (DAILY_LOSS, LOSING_STREAK)
+KINDS = (STOPPED, PROVIDER, DATA, VENUE, DAILY_LOSS, DRAWDOWN, LOSING_STREAK)
+QUANT_KINDS = (DAILY_LOSS, DRAWDOWN, LOSING_STREAK)
+# Reported once per UTC day: they hold all day once reached, and one look is enough.
+DAILY_KINDS = (DAILY_LOSS, DRAWDOWN)
 
-# How a cycle words the daily loss limit, so the record can be read for it without guessing.
+# How a cycle words its two loss limits, so the record can be read for them without guessing.
 DAILY_LOSS_MARK = "capital: equity is down"
+DRAWDOWN_MARK = "capital: drawdown"
 
 
 @dataclass(frozen=True)
@@ -74,6 +78,8 @@ def alarms_of(record: Mapping[str, Any]) -> tuple[Alarm, ...]:
     if stopped and str(stopped).startswith(DAILY_LOSS_MARK):
         # The limit doing its job is not a breakage, but a day that hit it deserves a look.
         add(DAILY_LOSS, str(stopped))
+    elif stopped and str(stopped).startswith(DRAWDOWN_MARK):
+        add(DRAWDOWN, str(stopped))
     elif stopped:
         add(STOPPED, str(stopped))
 

@@ -923,20 +923,22 @@ Three modes, and the distance between them is deliberate.
 |---|---|---|
 | `sandbox` | written into the cycle's own directory | nothing; this is the default |
 | `signals` | written for execution somewhere else, by someone else's system | nothing |
-| `venue` | sent to the venue, with real capital behind it | a mandate, the canary tier, the caps, the keys |
+| `venue` | sent to the venue, with real capital behind it | a mandate, a leverage, a cap per order, the keys; on mainnet the canary tier |
 
 Venue mode does not start until all of this is true, and `tra check` names whatever is not:
 
 1. `MANDATE.md` is in the project and carries the mandate text word for word. Print it with
    `tra mandate > MANDATE.md`, and read it before you do - it says that the losses are yours.
 2. `[execution].acknowledged_by` and `acknowledged_on` name who signed it and when.
-3. `[execution].max_notional` caps one order. There is no default.
-4. The ladder stands at `CANARY`, promoted with evidence and a signature.
-5. `[canary]` limits are declared.
-6. The venue's keys are in the environment: the shell, an `--env-file` you name, or the `.env`
+3. `[execution].max_notional` caps one order, and `[execution].leverage` is chosen. Neither has
+   a default: both are what a defect would cost you.
+4. On mainnet, the ladder stands at `CANARY`, promoted with evidence and a signature. A demo or
+   testnet account holds no capital, so it is where that evidence is earned and does not wait on
+   the ladder.
+5. The venue's keys are in the environment: the shell, an `--env-file` you name, or the `.env`
    beside `strategy.toml`, never `strategy.toml` itself. They are read by the execution layer alone,
    and they never appear in a brief, a prompt, a record or a log.
-7. `[live].environment` (`demo` when `[live]` is absent) says which of the venue's environments an order goes to: `demo`, `testnet`
+6. `[execution].environment` (else `[live].environment`, else `demo`) says which of the venue's environments an order goes to: `demo`, `testnet`
    or `mainnet`. These are three different places with three different accounts, and a key for one
    is rejected by the others. A cycle that cannot route to the environment it was told refuses
    rather than sending somewhere close.

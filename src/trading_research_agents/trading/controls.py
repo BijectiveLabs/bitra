@@ -24,24 +24,37 @@ class ControlError(ValueError):
     """The limits themselves are not usable."""
 
 
+DRAWDOWN_ACTIONS = ("stop", "flatten")
+
+
 @dataclass(frozen=True)
 class Limits:
-    max_risk_per_trade_bps: Decimal
-    max_position: Decimal
-    max_orders_per_minute: int
-    daily_loss_limit_bps: Decimal
+    max_risk_per_trade_bps: Decimal = Decimal(50)
+    # None: no cap in units; the risk per trade and the order cap still bound every size.
+    max_position: Decimal | None = None
+    max_orders_per_minute: int = 6
+    daily_loss_limit_bps: Decimal = Decimal(300)
     # The same cap said in quote currency, for a desk whose instruments are priced too differently
     # for one count of units: converted at each cycle's own mid.
     max_position_quote: Decimal | None = None
+    # From the highest equity this desk has seen, across days. The daily limit starts again each
+    # morning; this one does not, so a week of daily losses cannot pass unnoticed.
+    max_drawdown_bps: Decimal | None = None
+    on_drawdown: str = "stop"
 
     def __post_init__(self) -> None:
         for label, value in (
             ("max_risk_per_trade_bps", self.max_risk_per_trade_bps),
             ("max_position", self.max_position),
             ("daily_loss_limit_bps", self.daily_loss_limit_bps),
+            ("max_drawdown_bps", self.max_drawdown_bps),
         ):
+            if value is None and label in ("max_position", "max_drawdown_bps"):
+                continue
             if not isinstance(value, Decimal) or not value.is_finite() or value <= 0:
                 raise ControlError(f"{label} must be a positive finite Decimal")
+        if self.on_drawdown not in DRAWDOWN_ACTIONS:
+            raise ControlError(f"on_drawdown is one of {list(DRAWDOWN_ACTIONS)}")
         if self.max_position_quote is not None and (
             not self.max_position_quote.is_finite() or self.max_position_quote <= 0
         ):
@@ -125,7 +138,7 @@ class Controls:
                 False,
                 f"risk {risk_bps} bps exceeds max {self.limits.max_risk_per_trade_bps} bps",
             )
-        if size > self.limits.max_position:
+        if self.limits.max_position is not None and size > self.limits.max_position:
             return Admission(False, f"size {size} exceeds max position {self.limits.max_position}")
         while self._orders and ts_ns - self._orders[0] >= NS_PER_MINUTE:
             self._orders.popleft()

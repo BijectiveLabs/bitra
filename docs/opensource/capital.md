@@ -31,13 +31,14 @@ decides how much margin that size ties up and how far away liquidation sits.
 | `[execution].liquidation_buffer_bps` | `50` | how far beyond the stop the estimated liquidation must sit |
 | `[execution].max_slippage_bps` | `20` | how far through the touch a taker entry may fill |
 | `[execution].max_drift_bps` | none | refuse when the mid moved this far against the trade since it was priced |
-| `[execution].max_orders_per_cycle` | `1` | always 1: one decision sends at most one order; any other value is refused |
 | `[execution].max_decision_age_s` | `120` | refuse a decision older than this, counted from the start of its cycle to the moment of sending |
 | `[execution].hold_limit` | `timeout` | `timeout`, `horizon` or `none`: when time closes a position |
 | `[execution].max_notional` | none: required | the most one order may be worth |
 | `[run].equity` | none | the most equity you allow this desk; sizing uses the smaller of this and the account |
-| `[controls].daily_loss_limit_bps` | required | no new entry once equity has fallen this far on the day |
-| `[controls].max_orders_per_minute` | required | counted across every order the desk sends |
+| `[controls].daily_loss_limit_bps` | `300` | no new entry once equity has fallen this far on the day |
+| `[controls].max_drawdown_bps` | none; `tra init` writes `1000` | no new entry once equity has fallen this far from its highest reading, across days |
+| `[controls].on_drawdown` | `stop` | `flatten` also arms the kill switch, which flattens every position and stops the run |
+| `[controls].max_orders_per_minute` | `6` | counted across every order the desk sends |
 
 `tra check` prints what each of these will do in your project, in plain words, before anything
 runs. `tra venues NAME --setup` writes the leverage lines for a new venue.
@@ -56,7 +57,18 @@ At the start of every cycle in venue mode, before any model is asked:
   before any model is asked. Open positions keep their exits. Deposits and withdrawals move equity
   too, so they count as gains and losses here.
 
-The figures are in `cycle.json` under `equity`: declared, venue, free, used, and the day's loss.
+- **Drawdown.** The highest equity reading is kept in `equity_peak.json` and only ever rises.
+  Once equity sits `max_drawdown_bps` below it, the cycle stops before any model is asked, every
+  cycle after it too, across days. Open positions keep their exits. To start again, look at what
+  happened, then delete `runs/cycles/equity_peak.json`: the next reading is the new peak. With
+  `on_drawdown = "flatten"` the cycle also writes the kill switch file, and the next pass flattens
+  every position and stops the run. Stop is the default because flattening in a fast market
+  locks in the worst price of the move; flatten is there for a desk that would rather be out.
+
+The daily loss limit and the drawdown limit each wake the quant auditor once per UTC day.
+
+The figures are in `cycle.json` under `equity`: declared, venue, free, used, the day's loss, and the
+drawdown with its peak.
 
 ## When it is sent: the order
 

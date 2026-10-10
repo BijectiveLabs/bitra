@@ -12,8 +12,8 @@ in a config file, and it is not something this package can do on anyone's behalf
 be in a file the operator put there, word for word, or venue mode does not start.
 
 Everything else the third mode needs is already in the project and already refuses on its own: the
-ladder at its canary tier, the canary limits written down, the keys in the environment rather than
-in a file, and every gate in the cycle passed before there is an intent at all.
+ladder at its canary tier on mainnet, the keys in the environment rather than in a file, and every
+gate in the cycle passed before there is an intent at all.
 """
 
 from __future__ import annotations
@@ -192,7 +192,7 @@ def blocking(
     project: Path,
     tier: str,
     missing_keys: Sequence[str] = (),
-    canary_declared: bool = False,
+    practice: bool = False,
 ) -> tuple[str, ...]:
     """Everything standing between this mandate and a live order, each named in full.
 
@@ -220,12 +220,12 @@ def blocking(
             "[execution].leverage is yours to declare (3 is a common start); it is applied at the "
             "venue before the first order and checked against the stop on every order"
         )
-    if tier != LIVE_TIER:
+    if tier != LIVE_TIER and not practice:
+        # A demo or testnet account holds no capital, so it is where the evidence is earned.
         stops.append(
-            f"the ladder is at {tier}; venue mode needs {LIVE_TIER}, promoted with evidence"
+            f"the ladder is at {tier}; venue mode on mainnet needs {LIVE_TIER}, promoted with "
+            "evidence; a demo or testnet account does not"
         )
-    if not canary_declared:
-        stops.append("[canary] limits are not declared; a live session has no defaults")
     if missing_keys:
         stops.append(
             f"missing {', '.join(missing_keys)}: not in the shell and not in the .env beside "

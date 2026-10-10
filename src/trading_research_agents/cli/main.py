@@ -2966,6 +2966,9 @@ def run_cycle_command(args: argparse.Namespace) -> int:
         held=_held_reader(cfg, out, mode, args, beside),
         wait_while_open=mode == "venue" and not cfg.execution.adopt_open_position,
         daily_loss_limit_bps=cfg.limits.daily_loss_limit_bps if mode == "venue" else None,
+        max_drawdown_bps=cfg.limits.max_drawdown_bps if mode == "venue" else None,
+        # Flattening is the kill switch's job; the cycle only arms it.
+        drawdown_kill=cfg.kill_switch if cfg.limits.on_drawdown == "flatten" else None,
         trigger=cfg.trigger,
         forced=bool(args.now),
         max_risk_per_trade_bps=cfg.limits.max_risk_per_trade_bps,
@@ -3153,7 +3156,12 @@ class Auditing:
 
     def due(self, record: Mapping[str, Any], ran: int) -> tuple[tuple[str, ...], tuple[Any, ...]]:
         """Which auditors to ask after this cycle, and the alarms that asked for one."""
-        from trading_research_agents.agents.alarms import QUANT_KINDS, Reported, alarms_of
+        from trading_research_agents.agents.alarms import (
+            DAILY_KINDS,
+            QUANT_KINDS,
+            Reported,
+            alarms_of,
+        )
 
         now = self.clock()
         reported = Reported(self.runs.parent / "audits" / "reported.json")
@@ -3171,8 +3179,8 @@ class Auditing:
             if any(a.kind in QUANT_KINDS for a in fired):
                 who.append("quant_auditor")
             for alarm in fired:
-                if alarm.kind == "daily_loss":
-                    reported.write(daily_loss_day=_utc_day(now))
+                if alarm.kind in DAILY_KINDS:
+                    reported.write(**{f"{alarm.kind}_day": _utc_day(now)})
                 elif alarm.kind == "losing_streak":
                     reported.write(streak_trip=alarm.at)
         every = self.policy.quant_every_cycles
@@ -3193,8 +3201,10 @@ class Auditing:
 
     @staticmethod
     def _first_time(alarm: Any, state: Mapping[str, Any], now: float) -> bool:
-        """A daily loss is reported once per UTC day; any other kind is left to the cooldown."""
-        return alarm.kind != "daily_loss" or state.get("daily_loss_day") != _utc_day(now)
+        """A loss limit is reported once per UTC day; any other kind is left to the cooldown."""
+        from trading_research_agents.agents.alarms import DAILY_KINDS
+
+        return alarm.kind not in DAILY_KINDS or state.get(f"{alarm.kind}_day") != _utc_day(now)
 
     def _streak(self, record: Mapping[str, Any], state: Mapping[str, Any]) -> Any:
         """An alarm when the newest round trip took a losing run to the threshold or past it."""
@@ -3960,7 +3970,7 @@ def _venue_hand(
         project=project,
         tier=Ladder(args.ladder).tier.name,
         missing_keys=[k for k in keys if not env.get(k)],
-        canary_declared=cfg.canary is not None,
+        practice=_declared_environment(cfg) in ("demo", "testnet"),
     )
     if stops and authorise:
         raise ConfigError("venue mode is not authorised here: " + "; ".join(stops))
@@ -4180,7 +4190,7 @@ def _gate_lines(
             project=project,
             tier=tier,
             missing_keys=[k for k in keys if not env.get(k)],
-            canary_declared=cfg.canary is not None,
+            practice=_declared_environment(cfg) in ("demo", "testnet"),
         )
         if stops:
             bad.extend(f"execution: {stop}" for stop in stops)
@@ -4528,6 +4538,7 @@ def _capital_notes(cfg: Any) -> list[str]:
         f"may use at most {mandate.max_margin_share} of the free margin",
         f"capital: no new entry once equity is down {cfg.limits.daily_loss_limit_bps} bps on the "
         f"day; at most {cfg.limits.max_orders_per_minute} orders a minute",
+        _drawdown_line(cfg.limits),
         f"orders: a taker entry is a limit IOC at most {mandate.max_slippage_bps} bps through the "
         "touch, never a naked market order",
         f"orders: a decision older than {mandate.max_decision_age_s:.0f}s is not sent; the book is "
@@ -4675,7 +4686,7 @@ def _audit_notes(cfg: Any) -> list[str]:
             if policy.losing_streak
             else ""
         )
-        said.append(f"the quant auditor wakes when the daily loss limit is reached{streak}")
+        said.append(f"the quant auditor wakes when a loss limit is reached{streak}")
     if policy.quant_every_cycles is not None:
         said.append(f"the quant auditor runs every {policy.quant_every_cycles} cycles")
     if policy.quant_every_s is not None:
@@ -4747,6 +4758,23 @@ def _spend_notes(cfg: Any) -> list[str]:
         + "; [agents.pricing.<model>] is where a quote goes"
     )
     return out
+
+
+def _drawdown_line(limits: Any) -> str:
+    if limits.max_drawdown_bps is None:
+        return (
+            "capital: no drawdown limit across days; [controls].max_drawdown_bps stops new entries "
+            "once equity falls that far from its peak"
+        )
+    then = (
+        "and the kill switch flattens and stops the run"
+        if limits.on_drawdown == "flatten"
+        else "until runs/cycles/equity_peak.json is cleared; open positions keep their exits"
+    )
+    return (
+        f"capital: no new entry once equity is {limits.max_drawdown_bps} bps below its peak, "
+        + then
+    )
 
 
 def _exit_notes(cfg: Any, bad: list[str]) -> list[str]:
