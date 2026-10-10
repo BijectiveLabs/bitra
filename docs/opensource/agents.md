@@ -15,7 +15,7 @@ code, tested and failing closed, and a role acts through them, not around them.
 | Role | Holds | May write | Cadence |
 |---|---|---|---|
 | `market_screener` | in a cycle, one live snapshot per instrument in the universe; in a session, the data gate, the envelope and the cost floor | nothing; it may only take an instrument out of a list code already admitted | once per pass, or once per session |
-| `technical_analyst` | the recorded trades and bars, the registered mechanism | a `Signal`, as the decision core of a run: a direction, a setup named from a closed list, and the figures it read | once per closed bar, within its budget |
+| `technical_analyst` | the recorded trades and bars, the registered mechanism | a `Signal`, as the decision core of a run: a direction, a setup named from a closed list, the figures it read, and in `tra run` the stop and target prices that bound the idea, held by code inside your `[exit]` bounds | once per closed bar, within its budget |
 | `macro_analyst` | series the operator mapped in (events, cross-venue funding, sentiment) | nothing | every cycle in `tra run`; once per session in a session, when series are given |
 | `onchain_analyst` | on-chain series the operator mapped in | nothing | every cycle in `tra run`; once per session in a session, when series are given |
 | `sentiment_analyst` | dated scores and dated notes the operator curates, through the same series engine | `negative`, `neutral`, `positive`, or `not declared` when nothing was mapped in | reads only; nothing is scraped |

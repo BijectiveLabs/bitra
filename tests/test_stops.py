@@ -206,3 +206,158 @@ def test_the_intent_says_what_share_of_trades_must_win_to_break_even(
     assert Decimal(result.intent["break_even_win_rate"]) == expected
     # A 2:1 bracket needs a third of trades to win before costs, and more once they are paid.
     assert expected > Decimal("0.334")
+
+
+def analyst_rule(**keys: Any) -> VolatilityExit:
+    base: dict[str, Any] = {
+        "stop_atr": Decimal(1),
+        "min_stop_frac": Decimal("0.002"),
+        "max_stop_frac": Decimal("0.05"),
+        "atr_bars": 3,
+        "analyst_levels": True,
+    }
+    return VolatilityExit(**{**base, **keys})
+
+
+def test_the_analysts_levels_are_used_inside_the_operators_bounds() -> None:
+    rule = analyst_rule()
+    mid = Decimal(100)
+    named = rule.place(
+        BARS,
+        horizon_bars=1,
+        mid=mid,
+        side="long",
+        stop_price=Decimal(98),
+        target_price=Decimal(105),
+    )
+    assert named.source == "analyst" and named.stop_frac == Decimal("0.02")
+    assert named.take_frac == Decimal("0.05") and named.clamped_to is None
+    assert named.record()["proposed_stop_bps"] == "200.00"
+
+    short = rule.place(
+        BARS,
+        horizon_bars=1,
+        mid=mid,
+        side="short",
+        stop_price=Decimal(101),
+        target_price=Decimal(97),
+    )
+    assert short.stop_frac == Decimal("0.01") and short.take_frac == Decimal("0.03")
+
+    tight = rule.place(
+        BARS,
+        horizon_bars=1,
+        mid=mid,
+        side="long",
+        stop_price=Decimal("99.95"),
+        target_price=Decimal("100.5"),
+    )
+    # 5 bps is inside the floor: the stop is widened to it, so the position will be smaller.
+    assert tight.stop_frac == Decimal("0.002") and tight.clamped_to == "min_stop_frac"
+
+    far = rule.place(
+        BARS,
+        horizon_bars=1,
+        mid=mid,
+        side="long",
+        stop_price=Decimal(99),
+        target_price=Decimal(120),
+    )
+    assert far.take_frac == Decimal("0.04") and "max_reward_to_risk" in far.notes[0]
+
+    open_ended = rule.place(
+        BARS, horizon_bars=1, mid=mid, side="long", stop_price=Decimal(99), target_price=None
+    )
+    assert open_ended.take_frac == Decimal("0.02")
+
+
+def test_levels_on_the_wrong_side_or_too_close_are_not_taken_as_given() -> None:
+    rule = analyst_rule()
+    mid = Decimal(100)
+    wrong = rule.place(
+        BARS,
+        horizon_bars=1,
+        mid=mid,
+        side="long",
+        stop_price=Decimal(101),
+        target_price=Decimal(105),
+    )
+    # A long's stop above the price is no stop: the market's measured one stands.
+    assert wrong.source == "measured" and "no stop named" in wrong.notes[0]
+    with pytest.raises(StopError, match="min_reward_to_risk"):
+        rule.place(
+            BARS,
+            horizon_bars=1,
+            mid=mid,
+            side="long",
+            stop_price=Decimal(99),
+            target_price=Decimal(101),
+        )
+    # Volatility mode ignores whatever the analyst named.
+    measured = analyst_rule(analyst_levels=False).place(
+        BARS, horizon_bars=1, mid=mid, side="long", stop_price=Decimal(98)
+    )
+    assert measured.source == "measured" and measured.mode == "volatility"
+
+
+def test_a_cycle_uses_the_analysts_levels_and_refuses_a_trade_its_costs_cannot_carry(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    rule = analyst_rule(max_stop_frac=Decimal("0.5"))
+    cfg, _, _ = cycle_config(
+        tmp_path,
+        envelope,
+        [analyst_answer(horizon=4, stop_price=100.0, target_price=108.0)],
+        chains=chains(closes=SWINGING),
+        lookback_bars=8,
+        volatility_exit=rule,
+    )
+    result = run_cycle(cfg)
+    assert result.intent is not None, result.refusals
+    assert result.exits["measured"]["source"] == "analyst"
+    assert Decimal(result.intent["stop_price"]) == Decimal("100.00")
+    assert Decimal(result.intent["take_price"]) == Decimal("108.00")
+
+    thin, _, _ = cycle_config(
+        tmp_path / "thin",
+        envelope,
+        [analyst_answer(horizon=4, stop_price=101.8, target_price=102.4)],
+        chains=chains(closes=SWINGING),
+        lookback_bars=8,
+        volatility_exit=rule,
+    )
+    refused = run_cycle(thin)
+    assert refused.intent is None
+    assert any("max_break_even_win_rate" in r for r in refused.refusals), refused.refusals
+
+
+def test_the_analyst_mode_is_read_and_is_the_agent_desk_default() -> None:
+    cfg = parse_strategy_config(agent_raw(exit=exit_table(mode="analyst", min_reward_to_risk=2)))
+    rule = cfg.exit_rule.volatility
+    assert rule is not None and rule.analyst_levels and rule.min_reward_to_risk == 2
+    assert cfg.exit_rule.take_profit_frac == rule.max_stop_frac * 2
+    raw = agent_raw()
+    raw["exit"] = {}
+    default = parse_strategy_config(raw).exit_rule.volatility
+    assert default is not None and default.analyst_levels
+    with pytest.raises(ConfigError, match='apply with mode = "analyst"'):
+        parse_strategy_config(agent_raw(exit=exit_table(mode="volatility", max_reward_to_risk=3)))
+    with pytest.raises(ConfigError, match="max_break_even_win_rate"):
+        parse_strategy_config(agent_raw(targets={"max_break_even_win_rate": 0}))
+
+
+def test_the_analyst_answer_carries_levels_or_none() -> None:
+    import json
+
+    from trading_research_agents.agents.technical_analyst.role import parse
+    from trading_research_agents.llm.form import FormError
+
+    base = json.loads(analyst_answer())
+    assert parse(json.dumps(base)).stop_price is None
+    del base["stop_price"], base["target_price"]
+    # An answer that leaves the levels out is read as naming none.
+    assert parse(json.dumps(base)).target_price is None
+    with pytest.raises(FormError, match="above zero"):
+        parse(json.dumps({**base, "stop_price": -1, "target_price": None}))
+    levels = parse(json.dumps({**base, "stop_price": 99.5, "target_price": 103}))
+    assert levels.stop_price == Decimal("99.5") and levels.target_price == Decimal("103")

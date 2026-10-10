@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any
 
 from trading_research_agents.agents.cited import FIGURES_SCHEMA, Figure, figures_used
 from trading_research_agents.llm.form import (
+    FormError,
+    _decimal,
     _enum,
     _posint,
     _text,
@@ -37,8 +40,20 @@ SCHEMA: dict[str, Any] = {
         "figures_used": FIGURES_SCHEMA,
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
         "horizon_bars": {"type": "integer", "minimum": 1},
+        # Where the idea is wrong and where it is done, as prices; null when the bars show neither.
+        "stop_price": {"type": ["number", "null"]},
+        "target_price": {"type": ["number", "null"]},
     },
-    "required": ["target", "setup", "reason", "figures_used", "confidence", "horizon_bars"],
+    "required": [
+        "target",
+        "setup",
+        "reason",
+        "figures_used",
+        "confidence",
+        "horizon_bars",
+        "stop_price",
+        "target_price",
+    ],
     "additionalProperties": False,
 }
 
@@ -51,10 +66,18 @@ class TechnicalAnalyst:
     figures_used: tuple[Figure, ...]
     confidence: float
     horizon_bars: int
+    stop_price: Decimal | None = None
+    target_price: Decimal | None = None
+
+
+# Strict providers need every field listed as required; an answer that leaves the two levels out is
+# still read, as no levels, because the measured stop is the fallback either way.
+LEVELS = ("stop_price", "target_price")
+READ: dict[str, Any] = {**SCHEMA, "required": [k for k in SCHEMA["required"] if k not in LEVELS]}
 
 
 def parse(text: str) -> TechnicalAnalyst:
-    data = parse_object(text, SCHEMA)
+    data = parse_object(text, READ)
     target = _enum(data.get("target"), "target", TARGETS)
     setup = _enum(data.get("setup"), "setup", SETUPS)
     reason = _text(data.get("reason"), "reason")
@@ -62,6 +85,8 @@ def parse(text: str) -> TechnicalAnalyst:
     confidence = _unit(data.get("confidence"), "confidence")
     horizon_bars = _posint(data.get("horizon_bars"), "horizon_bars")
     return TechnicalAnalyst(
+        stop_price=_price(data.get("stop_price"), "stop_price"),
+        target_price=_price(data.get("target_price"), "target_price"),
         target=target,
         setup=setup,
         reason=reason,
@@ -69,3 +94,12 @@ def parse(text: str) -> TechnicalAnalyst:
         confidence=confidence,
         horizon_bars=horizon_bars,
     )
+
+
+def _price(value: Any, label: str) -> Decimal | None:
+    if value is None:
+        return None
+    price = _decimal(value, label)
+    if price <= 0:
+        raise FormError(f"{label} is a price above zero, or null")
+    return price

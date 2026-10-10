@@ -100,7 +100,8 @@ will do in your project, defaults included.
 | `[controls].max_orders_per_minute` | `6` | across the whole desk |
 | `[controls].max_position` | none | a cap in units; the risk per trade already bounds every size |
 | `[controls].max_drawdown_bps` | none (`tra init` writes `1000`) | no new entry once equity is this far below its peak |
-| `[exit]` | measured from the market | see [where the stop and take profit sit](/opensource/cycle#where-the-stop-and-the-take-profit-sit) |
+| `[exit]` | the analyst's stop and target, held inside bounds | see [where the stop and take profit sit](/opensource/cycle#where-the-stop-and-the-take-profit-sit) |
+| `[targets].max_break_even_win_rate` | `0.5` | refuse a trade that would need more than half its kind to win to cover the stops and the costs |
 | `[exit].timeout_bars` | `240` | a position closes by time after this many bars |
 | `[run].bar_interval_s` | `60` | the decision timeframe |
 | `[run].settlement_interval_s` | `28800` | the venue's funding clock |

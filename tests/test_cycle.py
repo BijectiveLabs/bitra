@@ -160,6 +160,8 @@ def analyst_answer(
     horizon: int = 30,
     setup: str = "",
     cited: list[dict[str, str]] | None = None,
+    stop_price: float | None = None,
+    target_price: float | None = None,
 ) -> str:
     # The fixture's closes end at the top of their range, stretched up: a long that fits them is a
     # breakout and a short that fits them is a fade.
@@ -174,6 +176,8 @@ def analyst_answer(
             "figures_used": [{"figure": "interval_s", "value": "60"}] if cited is None else cited,
             "confidence": confidence,
             "horizon_bars": horizon,
+            "stop_price": stop_price,
+            "target_price": target_price,
         }
     )
 
@@ -301,6 +305,9 @@ def test_the_briefs_are_computed_by_code_and_name_their_sources(envelope: Envelo
     assert record["bars"] == 5 and record["mechanism"] == "reversion"
     assert record["spread_bps"] == "9.80" and record["funding_rate"] == "0.0001"
     assert "zscore" in record and "ret_1_bps" in record and record["age_s"] == 0.0
+    # Price levels, so an analyst naming a stop or a target names it against figures it was given.
+    assert record["range_high"] == "102" and record["range_low"] == "99"
+    assert record["atr"] is not None and record["atr_bps"] is not None
 
     costs = cost_brief(
         snap,

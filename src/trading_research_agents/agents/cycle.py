@@ -886,11 +886,13 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
             analyst.target,
             snapshot=snapshot,
             horizon_bars=_held_bars(cfg, analyst.horizon_bars),
+            stop_price=analyst.stop_price,
+            target_price=analyst.target_price,
         )
     except StopError as exc:
-        # A measured stop that cannot be measured is not replaced by a guess.
+        # A stop that cannot be placed inside the operator's bounds is not replaced by a guess.
         result.refusals.append(f"exit: {exc}")
-        announce(cfg.watch, "exit", REFUSED, "no stop could be measured")
+        announce(cfg.watch, "exit", REFUSED, str(exc))
         _finish(cfg, where, result)
         return result
     view: dict[str, Any] = dict(_exit_view(costs.cost.mid, analyst.target, exits))
@@ -905,6 +907,17 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
             f"{costs.cost.round_trip_bps:.2f} bps, so a winner would lose money"
         )
         announce(cfg.watch, "exit", REFUSED, "take profit inside the round trip")
+        _finish(cfg, where, result)
+        return result
+    even = _break_even(view, costs.cost.round_trip_bps)
+    bound = cfg.targets.max_break_even_win_rate
+    if even is not None and Decimal(even) > bound:
+        result.refusals.append(
+            f"exit: {Decimal(even) * 100:.1f}% of trades like this would have to reach the take "
+            f"profit to cover the stops and the {costs.cost.round_trip_bps:.2f} bps round trip; "
+            f"[targets].max_break_even_win_rate is {bound * 100:.0f}%"
+        )
+        announce(cfg.watch, "exit", REFUSED, f"break even at {Decimal(even) * 100:.1f}%")
         _finish(cfg, where, result)
         return result
     stop_at = exits.get("stop_price")
@@ -1471,6 +1484,8 @@ def _exits(
     *,
     snapshot: Snapshot | None = None,
     horizon_bars: int = 1,
+    stop_price: Decimal | None = None,
+    target_price: Decimal | None = None,
 ) -> tuple[dict[str, str], Placement | None]:
     """Where the stop and the take profit sit, and what measured them when the market did.
 
@@ -1486,7 +1501,14 @@ def _exits(
         candles = _candles(snapshot)
         if not candles:
             raise StopError("no closed candles in this snapshot to measure a stop from")
-        placement = cfg.volatility_exit.place(candles, horizon_bars=horizon_bars)
+        placement = cfg.volatility_exit.place(
+            candles,
+            horizon_bars=horizon_bars,
+            mid=mid,
+            side=target,
+            stop_price=stop_price,
+            target_price=target_price,
+        )
         stop_frac, take_frac = placement.stop_frac, placement.take_frac
     away = Decimal(1) if target == "long" else Decimal(-1)
     out: dict[str, str] = {}

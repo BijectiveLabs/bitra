@@ -304,12 +304,12 @@ def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> S
     # research figures a code core must declare have standard defaults here.
     agent = agents is not None
     if agent and "mode" not in exit_raw and "stop_frac" not in exit_raw:
-        exit_raw["mode"] = "volatility"
+        exit_raw["mode"] = "analyst"
     volatility = _volatility_exit(exit_raw)
     if volatility is not None and agents is None:
         raise ConfigError(
-            '[exit].mode = "volatility" is placed by the agent cycle on each decision; a code '
-            'core is simulated bar by bar on mode = "fixed"'
+            f'[exit].mode = "{volatility.mode}" is placed by the agent cycle on each decision; '
+            'a code core is simulated bar by bar on mode = "fixed"'
         )
     strategy = _build_strategy(strategy_raw, base) if agents is None else _placeholder(agents)
     if "stop_frac" not in exit_raw:
@@ -625,6 +625,7 @@ TARGET_KEYS = (
     "min_reward_risk",
     "max_research_bps",
     "max_round_trips_per_day",
+    "max_break_even_win_rate",
 )
 TRIGGER_KEYS = ("min_move_bps", "max_spread_bps", "cooldown_s", "widen_after", "look_valid_for")
 AUDIT_KEYS = (
@@ -865,6 +866,7 @@ def _targets(raw: dict[str, Any], exit_rule: ExitRule) -> Targets:
                 if "max_round_trips_per_day" in table
                 else None
             ),
+            max_break_even_win_rate=_or_dec(table, "max_break_even_win_rate", "0.5"),
         )
     except TargetError as exc:
         raise ConfigError(str(exc)) from exc
@@ -1264,13 +1266,15 @@ EXIT_KEYS = (
     "slip_bps",
 )
 VOLATILITY_KEYS = ("stop_atr", "reward_to_risk", "min_stop_frac", "max_stop_frac", "atr_bars")
+ANALYST_KEYS = ("min_reward_to_risk", "max_reward_to_risk")
 
 
 def _volatility_exit(exit_raw: dict[str, Any]) -> VolatilityExit | None:
     """[exit].mode and what it brings. Fixed is one fraction of price for every trade."""
-    unknown = sorted(set(exit_raw) - set(EXIT_KEYS) - set(VOLATILITY_KEYS))
+    known = EXIT_KEYS + VOLATILITY_KEYS + ANALYST_KEYS
+    unknown = sorted(set(exit_raw) - set(known))
     if unknown:
-        raise ConfigError(f"[exit]: unknown {unknown}; have {list(EXIT_KEYS + VOLATILITY_KEYS)}")
+        raise ConfigError(f"[exit]: unknown {unknown}; have {list(known)}")
     mode = str(exit_raw.get("mode", "fixed"))
     if mode not in MODES:
         raise ConfigError(f"[exit].mode is one of {list(MODES)}, not {mode!r}")
@@ -1279,12 +1283,15 @@ def _volatility_exit(exit_raw: dict[str, Any]) -> VolatilityExit | None:
         if given:
             raise ConfigError(f'[exit]: {given} apply with mode = "volatility" and this is fixed')
         return None
+    levels = sorted(key for key in ANALYST_KEYS if key in exit_raw)
+    if mode == "volatility" and levels:
+        raise ConfigError(f'[exit]: {levels} apply with mode = "analyst" and this is volatility')
     fixed = sorted(key for key in ("stop_frac", "take_profit_frac") if key in exit_raw)
     if fixed:
         # Both would be read by someone and only one would be used. Say so rather than ignore it.
         raise ConfigError(
-            f"[exit]: {fixed} are the fixed mode's exits; with mode = \"volatility\" each trade's "
-            "stop is measured from the market, so remove them"
+            f"[exit]: {fixed} are the fixed mode's exits; with mode = \"{mode}\" each trade's "
+            "stop is placed per trade, so remove them"
         )
     plain = VolatilityExit()
 
@@ -1298,11 +1305,16 @@ def _volatility_exit(exit_raw: dict[str, Any]) -> VolatilityExit | None:
             min_stop_frac=number("min_stop_frac"),
             max_stop_frac=number("max_stop_frac"),
             atr_bars=_int(exit_raw, "atr_bars") if "atr_bars" in exit_raw else plain.atr_bars,
+            analyst_levels=mode == "analyst",
+            min_reward_to_risk=number("min_reward_to_risk"),
+            max_reward_to_risk=number("max_reward_to_risk"),
         )
     except StopError as exc:
         raise ConfigError(str(exc)) from exc
+    # Where one number is needed up front: the widest stop, and the least reward a trade may carry.
+    floor = rule.min_reward_to_risk if rule.analyst_levels else rule.reward_to_risk
     exit_raw["stop_frac"] = rule.max_stop_frac
-    exit_raw["take_profit_frac"] = rule.max_stop_frac * rule.reward_to_risk
+    exit_raw["take_profit_frac"] = rule.max_stop_frac * floor
     return rule
 
 

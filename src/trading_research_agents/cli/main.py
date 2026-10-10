@@ -2675,13 +2675,14 @@ FIXED_EXIT = (
     "take_profit_frac = 0.02\n"
 )
 VOLATILITY_EXIT = (
-    'mode = "volatility"          # each trade stop measured from the range of its market\n'
-    "stop_atr = 1.5               # the stop in average true ranges, grown with the horizon\n"
-    "reward_to_risk = 2.0         # the take profit is twice the stop\n"
-    "min_stop_frac = 0.002        # never tighter than 0.2 percent of price\n"
-    "max_stop_frac = 0.03         # never wider than 3 percent\n"
-    "# atr_bars = 14              # candles the average true range is measured over\n"
-    '# mode = "fixed" with stop_frac and take_profit_frac puts every trade at one distance\n'
+    'mode = "analyst"             # the analyst names its stop and target, held in bounds\n'
+    "min_stop_frac = 0.002        # a stop never tighter than 0.2 percent of price\n"
+    "max_stop_frac = 0.03         # and never wider than 3 percent\n"
+    "min_reward_to_risk = 1.5     # a target closer than 1.5x the stop is refused\n"
+    "max_reward_to_risk = 4.0     # a target past 4x the stop is brought in\n"
+    "stop_atr = 1.5               # with no level named: the stop in average true ranges\n"
+    "reward_to_risk = 2.0         # and the take profit at twice it\n"
+    '# mode = "volatility" measures every stop; mode = "fixed" puts every trade at one distance\n'
 )
 
 
@@ -3750,10 +3751,21 @@ def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], l
         measured = shown.get("measured")
         if measured:
             held = f", held at {measured['clamped_to']}" if measured["clamped_to"] else ""
-            lines.append(
-                f"exits measured: ATR {measured['atr_bps']} bps over {measured['horizon_bars']} "
-                f"bar(s) put the stop at {measured['measured_stop_bps']} bps{held}"
-            )
+            if measured.get("source") == "analyst":
+                lines.append(
+                    f"exits from the analyst: stop named {measured['proposed_stop_bps']} bps away"
+                    f"{held}, take profit {measured['take_bps']} bps; the market's own range "
+                    f"(ATR {measured['atr_bps']} bps) would have put the stop at "
+                    f"{measured['measured_stop_bps']} bps"
+                )
+            else:
+                lines.append(
+                    f"exits measured: ATR {measured['atr_bps']} bps over "
+                    f"{measured['horizon_bars']} bar(s) put the stop at "
+                    f"{measured['measured_stop_bps']} bps{held}"
+                )
+            for note in measured.get("notes") or ():
+                lines.append(f"  {note}")
     if result.targets is not None:
         met = result.targets
         lines.append(
@@ -4854,9 +4866,20 @@ def _exit_notes(cfg: Any, bad: list[str]) -> list[str]:
             f"average true range needs {scale.atr_bars + 1} closed candles"
         )
     return [
-        f"exits: measured per trade, stop {scale.stop_atr} x ATR({scale.atr_bars}) grown with the "
-        f"horizon, held between {_bps(scale.min_stop_frac * 10_000)} and "
-        f"{_bps(scale.max_stop_frac * 10_000)} bps; take profit {scale.reward_to_risk} x the stop"
+        (
+            f"exits: the analyst names its stop and target; the stop is held between "
+            f"{_bps(scale.min_stop_frac * 10_000)} and {_bps(scale.max_stop_frac * 10_000)} bps, "
+            f"the target between {scale.min_reward_to_risk}x and {scale.max_reward_to_risk}x the "
+            f"stop; with no level named, {scale.stop_atr} x ATR({scale.atr_bars}) and "
+            f"{scale.reward_to_risk}x"
+        )
+        if scale.analyst_levels
+        else (
+            f"exits: measured per trade, stop {scale.stop_atr} x ATR({scale.atr_bars}) grown with "
+            f"the horizon, held between {_bps(scale.min_stop_frac * 10_000)} and "
+            f"{_bps(scale.max_stop_frac * 10_000)} bps; take profit "
+            f"{scale.reward_to_risk} x the stop"
+        )
     ]
 
 

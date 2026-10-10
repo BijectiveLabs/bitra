@@ -49,8 +49,13 @@ class Targets:
     min_reward_risk: Decimal | None = None
     max_research_bps: Decimal | None = None
     max_round_trips_per_day: int | None = None
+    # The share of trades like this one that must reach the take profit to cover the stops and the
+    # round trip. Arithmetic on the trade's own levels and costs; 1 turns the bound off.
+    max_break_even_win_rate: Decimal = Decimal("0.5")
 
     def __post_init__(self) -> None:
+        if not Decimal(0) < self.max_break_even_win_rate <= Decimal(1):
+            raise TargetError("[targets].max_break_even_win_rate is in (0, 1]; 1 turns it off")
         if self.min_net_bps is not None and self.min_net_bps < 0:
             raise TargetError("[targets].min_net_bps is not negative")
         if self.min_edge_multiple is not None and self.min_edge_multiple < 1:
@@ -86,6 +91,7 @@ class Targets:
                 None if self.max_research_bps is None else str(self.max_research_bps)
             ),
             "max_round_trips_per_day": self.max_round_trips_per_day,
+            "max_break_even_win_rate": str(self.max_break_even_win_rate),
         }
 
 

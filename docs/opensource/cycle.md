@@ -723,10 +723,38 @@ move does to the position.
 
 ### Where the stop and the take profit sit
 
-`[exit].mode` picks one of two ways, and code places both prices either way.
+`[exit].mode` picks one of three ways. The analyst proposes, code bounds, and you set the bounds.
 
-**Volatility** is what `tra init --agent` writes. The stop is measured on every trade from the
-market it is in:
+**Analyst** is what `tra init --agent` writes, and what an agent desk uses when `[exit]` is left
+out. The technical analyst names two prices with its decision: `stop_price`, where its reading is
+wrong (beyond the swing or the range edge the setup leans on), and `target_price`, where the
+mechanism is done. It is handed the window's `range_high`, `range_low` and `atr` to name them
+from. Code then:
+
+| Check | What happens |
+|---|---|
+| a level on the wrong side of the price (a long's stop above it) | set aside; the measured stop below stands, and the record says why |
+| the stop tighter than `min_stop_frac` or wider than `max_stop_frac` | held to that bound |
+| the target closer than `min_reward_to_risk` times the stop | the trade is refused; moving the analyst's target out would be inventing one |
+| the target past `max_reward_to_risk` times the stop | brought in to it; a far target makes the break even look easy and is rarely reached |
+| no stop named | the volatility stop below; no target named, `reward_to_risk` times the stop |
+
+```toml
+[exit]
+mode = "analyst"
+min_stop_frac = 0.002        # a stop never tighter than 0.2 percent of price
+max_stop_frac = 0.03         # and never wider than 3 percent
+min_reward_to_risk = 1.5     # a target closer than 1.5x the stop is refused
+max_reward_to_risk = 4.0     # a target past 4x the stop is brought in
+stop_atr = 1.5               # with no level named: the measured stop
+reward_to_risk = 2.0         # and the take profit at twice it
+```
+
+Size still comes from `[controls].max_risk_per_trade_bps` against the stop that was placed, so an
+analyst who names a wide stop gets a smaller position, never a bigger loss.
+
+**Volatility** measures the stop on every trade from the market it is in, whatever the analyst
+named:
 
 ```
 stop        = stop_atr x ATR(atr_bars) / price x sqrt(horizon bars), held in [min_stop_frac, max_stop_frac]
@@ -787,9 +815,11 @@ money`): the best outcome the trade can have would still lose.
 
 #### Why it is built this way
 
-- **Code places the exits, never a model.** A stop is arithmetic on figures anyone can check. A
-  model asked where a stop goes would give a different answer on the same chart, and nobody could
-  say afterwards why it was there.
+- **The analyst proposes, code bounds.** Where an idea is wrong and where it is done is a reading
+  of the chart, which is the analyst's job. How far that may be, how much it may risk and whether
+  the costs leave it worth taking is arithmetic on your limits, which is code's. A model left to
+  place stops on its own gives a different answer on the same chart; a model whose levels are
+  held inside your bounds cannot hurt you by it.
 - **The range, not a percentage.** The average true range is the most common way a trading desk
   measures how far a market moves in one bar, and it is the figure every charting terminal
   publishes, so a stop in this record can be checked by hand against one.
@@ -815,6 +845,11 @@ come out even, `(stop + round trip) / (take profit + stop)`. It is arithmetic on
 priced, with no guess at the odds. A 2:1 bracket needs a third of its trades to win before costs;
 with a 20 bps stop and a 13 bps round trip it needs 55 percent. Compare it with the win rate your
 round trips actually reach.
+
+`[targets].max_break_even_win_rate` (0.5 by default) refuses a trade whose own stop, target and
+round trip would need more than that share of winners. It is the bound on the analyst's levels and
+on the measured ones alike, and it is why a one-minute desk refuses many trades a fifteen-minute
+desk takes: the round trip does not shrink with the timeframe. Set it to 1 to turn it off.
 
 The expected edge is a different thing from the take profit, on purpose. The take profit and the
 stop say where this position closes; the edge is what the desk expects to earn a trade on
@@ -1055,6 +1090,8 @@ open two.
 | `technical: confidence ... below` | the answer was under `[agents].min_confidence` |
 | `exit: ... closed candle(s); an average true range over ... needs ...` | volatility mode could not measure a range; raise `[agents].lookback_bars` or lower `[exit].atr_bars` |
 | `exit: the take profit is ... a winner would lose money` | the take profit sits inside the round trip cost |
+| `exit: ...% of trades like this would have to reach the take profit ...` | the break even is above `[targets].max_break_even_win_rate` |
+| `exit: the analyst's target is ...x its stop ...` | the analyst's own target is closer than `[exit].min_reward_to_risk` allows |
 | `risk: ... bps of equity at the stop` | the smallest size the venue takes still risks more than `[controls].max_risk_per_trade_bps` |
 | `desk: ... bps of equity is already at risk` | what the book already carries plus this trade is over `[desk].max_open_risk_bps` |
 | `desk: ... has at risk is not on the record` | a position is open whose risk nobody can state, so the desk's total cannot be stated either |
