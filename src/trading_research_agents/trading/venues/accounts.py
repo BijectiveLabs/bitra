@@ -15,6 +15,10 @@ from typing import Any
 def _okx(client: Any) -> str:
     """OKX's account mode. Spot mode (acctLv 1) cannot trade perpetuals at all.
 
+    OKX's help centre says the mode is set on the website or app and cannot be changed through the
+    API, and its API reference says the first switch to any mode has to be made there. So this
+    only names the setting; it does not try to change it.
+
     Seen on the demo on 2026-10-08: every order came back with sCode 51010, "You can't complete
     this request under your current account mode".
     """
@@ -27,8 +31,9 @@ def _okx(client: Any) -> str:
         return ""
     if str(config.get("acctLv", "")) == "1":
         return (
-            "the OKX account is in Spot mode, which cannot trade perpetuals; switch it to Spot "
-            "and futures (or a margin mode) under Trade, settings, Account mode, then run again"
+            "the OKX account is in Spot mode, which cannot trade perpetuals. Switch it to Futures "
+            "mode in the OKX app or website (Menu, Settings, Trading mode), in Demo trading for a "
+            "demo key; OKX does not let an API key make this change"
         )
     return ""
 
