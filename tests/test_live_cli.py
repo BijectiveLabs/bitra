@@ -401,6 +401,8 @@ def test_init_for_a_venue_wires_data_orders_and_fees_for_that_venue(tmp_path: Pa
 
     data = (target / "data.toml").read_text(encoding="utf-8")
     assert "bybit" not in data and "ccxt:okx" in data and "intervalTime" not in data
+    # The book comes from the practice account the orders go to.
+    assert 'chain = ["ccxt:okx@testnet"]' in data
     load_data_config(target / "data.toml")
 
     strategy = (target / "strategy.toml").read_text(encoding="utf-8")

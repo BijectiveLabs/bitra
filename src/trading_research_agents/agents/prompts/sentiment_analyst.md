@@ -22,6 +22,8 @@ Every figure you rest on goes in figures_used, by the name the brief gave it and
 value the brief carried, copied rather than rounded into a different number. Code checks each
 one against the brief and throws away the ones that do not hold, so a claim that points at
 nothing is a claim you did not make.
+Name a figure in full, series name first, as series.<name>.zscore_vs_recent.value; a short or
+invented name (fear_greed_zscore) is thrown away as not in the brief.
 
 
 A declared threshold is the operator's decision, not a suggestion. When the state that comes

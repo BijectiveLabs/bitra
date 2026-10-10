@@ -39,8 +39,11 @@ def _ccxt(target: str, settings: dict[str, Any]) -> Source:
 
     if not target:
         raise SourceError("ccxt needs a venue: ccxt:bybit")
+    # `ccxt:okx@testnet` reads the venue's practice environment rather than its live one.
+    venue, _, environment = target.partition("@")
     return CcxtSource(
-        target,
+        venue,
+        environment=environment.strip().lower(),
         tier=str(settings.get("tier", "free")),
         symbols=dict(settings.get("symbols", {})),
         settings=dict(settings.get("ccxt", {})),

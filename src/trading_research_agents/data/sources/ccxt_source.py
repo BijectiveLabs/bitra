@@ -80,10 +80,19 @@ class CcxtSource:
         symbols: dict[str, str] | None = None,
         clock: Any = time.time,
         settings: dict[str, Any] | None = None,
+        environment: str = "",
     ) -> None:
         if not venue.strip():
             raise ValueError("a ccxt source names its venue")
+        if environment not in ("", "mainnet", "demo", "testnet"):
+            raise SourceError(
+                f"a ccxt source environment is demo, testnet or mainnet, not {environment!r}"
+            )
         self.venue = venue.strip()
+        # A practice account has its own order book, which can sit apart from the live one (OKX's
+        # demo FIL book was 6 bps wide against 1 live on 2026-10-10). A desk that trades there
+        # prices on the book its orders meet, so the drift and slippage it measures are real.
+        self.environment = "" if environment == "mainnet" else environment
         self.symbols = dict(symbols or {})
         self.clock = clock
         self._tier = tier
@@ -102,11 +111,16 @@ class CcxtSource:
         if factory is None:
             raise SourceError(f"ccxt has no exchange named {self.venue!r}")
         # Public data only: no key, no secret, and the library's own rate limiter on.
-        return factory({"enableRateLimit": True, **settings})
+        client = factory({"enableRateLimit": True, **settings})
+        if self.environment == "demo":
+            client.enable_demo_trading(True)
+        elif self.environment == "testnet":
+            client.set_sandbox_mode(True)
+        return client
 
     @property
     def name(self) -> str:
-        return f"ccxt:{self.venue}"
+        return f"ccxt:{self.venue}" + (f"@{self.environment}" if self.environment else "")
 
     @property
     def tier(self) -> str:

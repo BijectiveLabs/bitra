@@ -2513,6 +2513,13 @@ def _for_venue(name: str, text: str, able: Any, keys: list[str], starter: str) -
     venue = able.venue
     if name == "data.toml":
         text = re.sub(r'"ccxt:[a-z0-9_]+"(?:, "ccxt:[a-z0-9_]+")*', f'"ccxt:{venue}"', text)
+        practice = "demo" if able.demo else "testnet" if able.testnet else ""
+        if practice and able.level != "data":
+            # The book is priced where orders meet it: a practice account's book is its own.
+            text = text.replace(
+                f'[data.orderbook]{chr(10)}chain = ["ccxt:{venue}"]',
+                f'[data.orderbook]{chr(10)}chain = ["ccxt:{venue}@{practice}"]',
+            )
         start = text.find("# Measured on ")
         if start != -1:
             text = text[:start].rstrip("\n") + "\n"
@@ -3992,7 +3999,7 @@ def _agrees_across_files(cfg: Any, data: Any, bad: list[str]) -> list[str]:
             f"symbols: {instrument} is not mapped in data.toml, so each source looks it up itself"
         )
     named = {
-        source.partition(":")[2]
+        source.partition(":")[2].partition("@")[0]
         for kind in data.kinds
         for source in kind.chain
         if source.startswith("ccxt:")

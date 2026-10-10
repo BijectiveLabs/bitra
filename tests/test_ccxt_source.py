@@ -224,3 +224,24 @@ def test_the_adapter_says_what_it_does_not_serve() -> None:
 
     with pytest.raises(SourceError, match="does not serve sentiment"):
         src.fetch("sentiment", "BTCUSDT")
+
+
+def test_a_source_can_read_the_practice_environment_orders_go_to() -> None:
+    from trading_research_agents.data.sources.registry import build
+
+    class Switchable(FakeCcxt):
+        def __init__(self) -> None:
+            super().__init__()
+            self.sandbox = False
+
+        def set_sandbox_mode(self, on: bool) -> None:
+            self.sandbox = on
+
+    src = CcxtSource("okx", client=Switchable(), environment="testnet")
+    assert src.name == "ccxt:okx@testnet"
+    with pytest.raises(SourceError, match="demo, testnet or mainnet"):
+        CcxtSource("okx", client=Switchable(), environment="paper")
+    built = build("ccxt:okx@testnet", {"ccxt": {}})
+    assert isinstance(built, CcxtSource) and built.name == "ccxt:okx@testnet"
+    # OKX reaches its demo through ccxt's sandbox switch, which sets this header.
+    assert built._client.headers.get("x-simulated-trading") == "1"

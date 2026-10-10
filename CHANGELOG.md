@@ -8,6 +8,11 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- A ccxt data source can read a venue's practice environment: `ccxt:okx@testnet`, `ccxt:bybit@demo`.
+  `tra init --venue` points the order book there, so a desk trading a practice account prices,
+  checks drift and measures slippage on the book its orders meet. Seen on OKX's demo: 9.22 bps of
+  "drift" that was the gap between the live and the demo book.
+- The sentiment prompt asks for figures named in full, as the macro and on-chain ones do.
 - `[execution].max_orders_per_cycle` was accepted and never enforced; the venue hand always sends at
   most one order per decision. Any value other than 1 is now refused instead of implying more.
 - Removed code nothing called: a parallel helper, a refusal property, a bootstrap property, an

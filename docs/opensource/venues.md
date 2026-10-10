@@ -129,6 +129,12 @@ and `tra check` warns when it is below what your account pays.
 OKX's demo trading is reached through ccxt's sandbox switch, so in this project it is
 `environment = "testnet"`. A demo key only works on the demo.
 
+A practice account has its own order book, and it can sit apart from the live one: on 2026-10-10
+OKX's demo FIL book was 6 bps wide against 1 bps live. So `--venue` points the order book chain at
+the practice environment (`ccxt:okx@testnet`, `ccxt:bybit@demo`), and the drift check, the spread
+and the slippage a desk records are measured on the book its orders meet. Candles, funding and open
+interest stay on the live market. Any `ccxt:<venue>` source takes `@demo` or `@testnet`.
+
 Three things only you can do, in the OKX app or website (in Demo trading for a demo key): set the
 account mode to Futures mode (Menu, Settings, Trading mode), because an account in Spot mode cannot
 trade perpetuals at all and OKX does not let an API key change it; set the position mode to
