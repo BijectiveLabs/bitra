@@ -14,6 +14,7 @@ All notable changes to this project are recorded here. The format follows
   `reward_to_risk` times the stop. `tra init --agent` writes it. Fixed fractions stay as
   `mode = "fixed"`, the default. The record carries the ATR, the horizon and any bound that held.
 - A take profit inside the round trip cost refuses the trade.
+- Docs: why the exits are built the way they are, and a table of when each auditor is asked.
 - Unknown keys in `[exit]` are refused.
 - A ccxt data source can read a venue's practice environment: `ccxt:okx@testnet`, `ccxt:bybit@demo`.
   `tra init --venue` points the order book there, so a desk trading a practice account prices,

@@ -785,6 +785,30 @@ read.
 Either way, a take profit closer than the round trip is refused (`exit: ... a winner would lose
 money`): the best outcome the trade can have would still lose.
 
+#### Why it is built this way
+
+- **Code places the exits, never a model.** A stop is arithmetic on figures anyone can check. A
+  model asked where a stop goes would give a different answer on the same chart, and nobody could
+  say afterwards why it was there.
+- **The range, not a percentage.** The average true range is the most common way a trading desk
+  measures how far a market moves in one bar, and it is the figure every charting terminal
+  publishes, so a stop in this record can be checked by hand against one.
+- **The square root of the horizon.** A market that wanders one ATR in a bar usually wanders about
+  the square root of N ATRs in N bars. A trade the analyst expects to last 30 bars needs more room
+  than one meant to last 5, or the stop is hit by ordinary noise before the idea has had its time.
+- **A floor and a ceiling.** On a very quiet minute the measured stop can sit inside the spread and
+  the fees; on a violent one it can be wider than anyone meant to risk. The bounds are yours, and
+  the record says when one of them held.
+- **The edge stays declared.** The take profit is where a trade closes when it goes right; the edge
+  is what the desk expects to earn on average, across the winners, the losers and the timeouts.
+  Reading the edge off the take profit would count every trade as a winner and quietly loosen the
+  cost gate, so `[agents].magnitude_bps` stays the number the gate weighs.
+- **No guessed stop.** When the candles cannot give a range, the trade is refused. Falling back to
+  some default would put a stop on the venue that nothing measured.
+- **One mode at a time.** A table holding both `stop_frac` and `stop_atr` would be read by a person
+  one way and by the software another, so it is refused, as is any key `[exit]` does not know. A
+  typo in an exit setting should stop the desk at `tra check`, not at the venue.
+
 The expected edge is a different thing from the take profit, on purpose. The take profit and the
 stop say where this position closes; the edge is what the desk expects to earn a trade on
 average, across the ones that hit the stop, the take profit or the time limit. The cost gate and

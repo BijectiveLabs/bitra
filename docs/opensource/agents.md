@@ -191,6 +191,22 @@ is the software working, and waking an auditor for it would be paying to be told
 Whether the desk is earning what it costs is a question about a stretch of time, so the quant auditor
 runs on a count of cycles instead.
 
+| Situation | Who is asked | Notes |
+|---|---|---|
+| A model call failed after the vendor's retries and every fallback (a rate limit that did not clear, a timeout, a key refused) | technical auditor | a rate limit a retry or a fallback absorbed is not an alarm, because the cycle got its answer |
+| A cycle stopped before it finished, a spent budget included | technical auditor | |
+| A data chain ran out, or a kind was used stale | technical auditor | |
+| The venue refused or failed an order | technical auditor | |
+| The same kind fires again inside `alarm_cooldown_s` | nobody | one look per kind per cooldown; a different kind still wakes it |
+| Every `quant_every_cycles` cycles | quant auditor | a count of cycles run, not a clock: at `--every 5m`, 12 cycles is about an hour |
+| Both on the same cycle | both, in one audit | one report, one ledger entry per call |
+| A gate refused (cost, risk, regime, trigger) | nobody | the software working as declared |
+| Any time you want | whoever you name | `tra audit` |
+
+The defaults: `on_alarm` is on even with no `[audit]` table, and the quant auditor is off until you
+give it a count. Auditors are asked between the cycles of `tra run`, single or `--every`. The count
+and the cooldowns live in the running process, so a restart starts both again.
+
 Neither one gains anything by waking this way. They read the same records, answer in the same shape,
 cite the same way, and change nothing; the only difference is that a person no longer has to be the
 one who notices. An auditor that fails - the same rate limit, most likely - is a line in the run's
