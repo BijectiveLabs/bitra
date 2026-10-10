@@ -107,8 +107,12 @@ class Mandate:
             raise MandateError(f"[execution].mode is one of {list(MODES)}")
         if self.max_notional is not None and self.max_notional <= 0:
             raise MandateError("[execution].max_notional is positive")
-        if self.max_orders_per_cycle < 1:
-            raise MandateError("[execution].max_orders_per_cycle is at least 1")
+        if self.max_orders_per_cycle != 1:
+            # One decision, at most one order, is a guarantee, and the venue hand holds to it
+            # whatever is written here; a value that suggests otherwise would be a promise unkept.
+            raise MandateError(
+                "[execution].max_orders_per_cycle is 1: one decision sends at most one order"
+            )
         if self.exits not in ("attached", "none"):
             raise MandateError('[execution].exits is "attached" or "none"')
         if self.limit_timeout_s <= 0:
@@ -228,10 +232,3 @@ def blocking(
             "strategy.toml, the only two places keys are read from"
         )
     return tuple(stops)
-
-
-def require(mandate: Mandate, **checks: Any) -> None:
-    """The same test, as a refusal. Used where a caller cannot carry on without the mandate."""
-    stops = blocking(mandate, **checks)
-    if stops:
-        raise MandateError("; ".join(stops))

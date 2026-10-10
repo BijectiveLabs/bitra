@@ -31,6 +31,8 @@ directory before any order is sent.
 ## During the session
 
 - **One order at a time.** A second intent while one is pending is refused, as in simulation.
+- **Polling.** An order's state is asked for at most every `[live].poll_interval_ms` (250 by
+  default), so a session does not spend the venue's rate limit on a fill it already knows.
 - **Idempotent submission.** Every order carries `orderLinkId = tra-<run>-<seq>`. A lost
   response is retried with the same id; the venue answering "duplicate" means the first attempt
   landed, and the adapter polls that order rather than sending another.

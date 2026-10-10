@@ -101,9 +101,6 @@ class Ledger:
                         f"{self.path}:{number}: unreadable ledger row: {exc}"
                     ) from exc
 
-    def ids(self) -> set[str]:
-        return {e.entry_id for e in self.entries()}
-
     def append(self, entry: LedgerEntry) -> None:
         existing = list(self.entries())
         known = {e.entry_id for e in existing}

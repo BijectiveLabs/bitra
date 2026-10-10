@@ -128,10 +128,6 @@ class Interval:
     block_length: int
     n_resamples: int
 
-    @property
-    def spans_zero(self) -> bool:
-        return self.lower <= 0 <= self.upper
-
 
 def block_bootstrap_ci(
     series: NDArray[np.float64],

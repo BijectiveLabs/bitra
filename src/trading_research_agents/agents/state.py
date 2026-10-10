@@ -21,10 +21,6 @@ class Outcome(StrEnum):
     REFUSED_LAYER_3 = "refused_layer_3"
     REGISTERED = "registered"
 
-    @property
-    def is_refusal(self) -> bool:
-        return self.value.startswith("refused_")
-
 
 @dataclass(frozen=True)
 class Exchange:

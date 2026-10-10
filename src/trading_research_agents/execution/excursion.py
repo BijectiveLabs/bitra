@@ -38,11 +38,6 @@ class Excursion:
     bars_to_mae: int
     bars: int
 
-    @property
-    def gave_back_bps(self) -> Decimal:
-        """What the position was in front by and did not keep, when the exit is the last bar."""
-        return self.mfe_bps
-
     def record(self) -> dict[str, Any]:
         return {
             "mfe_bps": str(self.mfe_bps.quantize(QUANTUM)),

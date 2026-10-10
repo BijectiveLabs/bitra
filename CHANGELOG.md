@@ -8,6 +8,13 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- `[execution].max_orders_per_cycle` was accepted and never enforced; the venue hand always sends at
+  most one order per decision. Any value other than 1 is now refused instead of implying more.
+- Removed code nothing called: a parallel helper, a refusal property, a bootstrap property, an
+  excursion property, a ledger id list, a mandate wrapper used only by its own test, and a contract
+  conversion helper superseded by the round-trip path.
+- README: banner, then the title and line centred, then the badges with an insights badge, then
+  the text.
 - A decision older than `[execution].max_decision_age_s` (default 120 s, from the start of its cycle)
   is not sent. Each sent order records `decision_age_s`, `send_ms` and `slippage_bps`, measured
   live, and the cycle output prints them.

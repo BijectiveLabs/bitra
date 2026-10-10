@@ -592,10 +592,6 @@ class VenueHand:
             )
         return unit
 
-    def to_base(self, contracts: Any) -> Decimal:
-        """An amount the venue reports, in contracts, as a quantity of the base."""
-        return Decimal(str(contracts or 0)) * self.contract_size()
-
     @staticmethod
     def _in_base(order: Mapping[str, Any], unit: Decimal) -> dict[str, Any]:
         """A venue's order with its quantities in the base, so nothing downstream sees contracts."""

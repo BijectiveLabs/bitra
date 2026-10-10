@@ -13,7 +13,7 @@ declare, no scheduler to configure, and the checkpoint is a file on disk.
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -153,8 +153,3 @@ def run_tasks(
                 outcomes[outcome.name] = outcome
     # Fixed order, so a report of the same cycle reads the same way every time.
     return FanOut(outcomes=[outcomes[name] for name in sorted(outcomes)])
-
-
-def answers_of(fan: FanOut, wanted: Mapping[str, str]) -> dict[str, Any]:
-    """The answers a caller needs, keyed as the caller names them, missing ones left out."""
-    return {label: fan.answers[name] for name, label in wanted.items() if name in fan.answers}

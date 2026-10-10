@@ -177,7 +177,7 @@ kill_switch = "KILL"               # touch this file to flatten and stop
 # acknowledged_by = "your name"
 # acknowledged_on = "2026-09-28"
 # max_notional = 200               # one order, in quote currency
-# max_orders_per_cycle = 1
+# max_orders_per_cycle = 1         # always 1: one decision sends at most one order
 # exits = "attached"               # the stop and take profit go to the venue with the entry;
 #                                  # "none" only if you carry them in your own system
 # limit_timeout_s = 30             # a resting order that has not filled by then is cancelled

@@ -31,6 +31,7 @@ decides how much margin that size ties up and how far away liquidation sits.
 | `[execution].liquidation_buffer_bps` | `50` | how far beyond the stop the estimated liquidation must sit |
 | `[execution].max_slippage_bps` | `20` | how far through the touch a taker entry may fill |
 | `[execution].max_drift_bps` | none | refuse when the mid moved this far against the trade since it was priced |
+| `[execution].max_orders_per_cycle` | `1` | always 1: one decision sends at most one order; any other value is refused |
 | `[execution].max_decision_age_s` | `120` | refuse a decision older than this, counted from the start of its cycle to the moment of sending |
 | `[execution].hold_limit` | `timeout` | `timeout`, `horizon` or `none`: when time closes a position |
 | `[execution].max_notional` | none: required | the most one order may be worth |

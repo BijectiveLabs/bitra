@@ -23,7 +23,6 @@ from trading_research_agents.execution.mandate import (
     MandateError,
     blocking,
     digest,
-    require,
     signed_in,
 )
 from trading_research_agents.trading.dispatch import DispatchError, VenueHand, hand_for
@@ -152,7 +151,6 @@ def test_a_signed_project_at_the_canary_tier_may_run(tmp_path: Path) -> None:
         blocking(SIGNED, project=project, tier="CANARY", canary_declared=True, missing_keys=())
         == ()
     )
-    require(SIGNED, project=project, tier="CANARY", canary_declared=True)
 
 
 def test_the_text_has_to_be_there_word_for_word(tmp_path: Path) -> None:
@@ -184,23 +182,15 @@ def test_a_missing_key_is_named_rather_than_discovered_at_the_venue(tmp_path: Pa
     )
     assert stops and "BYBIT_API_SECRET" in stops[0]
 
-    with pytest.raises(MandateError, match="BYBIT_API_SECRET"):
-        require(
-            SIGNED,
-            project=project_with_mandate(tmp_path),
-            tier="CANARY",
-            canary_declared=True,
-            missing_keys=("BYBIT_API_SECRET",),
-        )
-
 
 def test_a_mandate_that_cannot_be_applied_is_refused_when_it_is_written() -> None:
     with pytest.raises(MandateError, match="mode is one of"):
         Mandate(mode="fire")
     with pytest.raises(MandateError, match="max_notional is positive"):
         Mandate(max_notional=Decimal(0))
-    with pytest.raises(MandateError, match="at least 1"):
-        Mandate(max_orders_per_cycle=0)
+    for count in (0, 3):
+        with pytest.raises(MandateError, match="one decision sends at most one order"):
+            Mandate(max_orders_per_cycle=count)
     with pytest.raises(MandateError, match="is a date"):
         Mandate(acknowledged_on="last tuesday")
     with pytest.raises(MandateError, match="not in the future"):
