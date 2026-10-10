@@ -40,6 +40,8 @@ from trading_research_agents.agents.context import (
 )
 from trading_research_agents.agents.cycle import CycleError, budget_spent
 from trading_research_agents.agents.pipeline import read_refusals
+from trading_research_agents.agents.risk_manager.run import Overrides as RiskOverrides
+from trading_research_agents.agents.roles import prompt
 from trading_research_agents.agents.session import SessionError
 from trading_research_agents.chain import (
     EraLeakageError,
@@ -100,7 +102,7 @@ from trading_research_agents.llm.providers import (
     providers,
 )
 from trading_research_agents.llm.providers.anthropic import DEFAULT_MODEL
-from trading_research_agents.records import write_json
+from trading_research_agents.records import append_line, write_json
 from trading_research_agents.strategy import ExitError
 from trading_research_agents.trading import (
     ConfigError,
@@ -3031,7 +3033,14 @@ def run_cycle_command(args: argparse.Namespace) -> int:
     spine = _cycle_steps(cycle_cfg)
     # The auditors keep their own ledger, so what the desk spent deciding stays separable from what
     # it spent looking at itself.
-    audits = Auditing(policy=cfg.audit, settings=a, config=args.config, runs=out)
+    audits = Auditing(
+        policy=cfg.audit,
+        settings=a,
+        config=args.config,
+        runs=out,
+        limits=cfg.limits,
+        kill_switch=cfg.kill_switch,
+    )
     ran = 0
     cleared = CLEARED
     # What the models have already cost since this desk last wrote an intent, per instrument. A
@@ -3080,6 +3089,17 @@ def run_cycle_command(args: argparse.Namespace) -> int:
                 result: Any = None
                 stop = ""
                 for instrument in chosen:
+                    moment = datetime.now(UTC)
+                    guard = RiskOverrides.load(out, moment)
+                    paused = guard.pause_of(instrument, moment)
+                    if paused is not None:
+                        emit(
+                            {"instrument": instrument, "paused_until": paused.isoformat()},
+                            args.json,
+                            [f"risk manager: {instrument} paused until {paused:%H:%M}Z; not asked"],
+                        )
+                        continue
+                    multiple = guard.multiple(moment)
                     before = usage.cost
                     held = carried.get(instrument, Decimal(0))
                     sends = (
@@ -3093,6 +3113,14 @@ def run_cycle_command(args: argparse.Namespace) -> int:
                             cycle_cfg,
                             instrument=instrument,
                             size_step=_step_for(cfg, instrument),
+                            # The risk manager's cut, if one is in force; the client's caps apply
+                            # after it as always.
+                            size=cycle_cfg.size * multiple,
+                            size_quote=(
+                                None
+                                if cycle_cfg.size_quote is None
+                                else cycle_cfg.size_quote * multiple
+                            ),
                             # A unit cap was written for [run].instrument; with a quote cap
                             # declared, other instruments are held to that one alone.
                             max_position=(
@@ -3190,6 +3218,8 @@ class Auditing:
     runs: Path
     watch: Any = None
     clock: Callable[[], float] = wall_clock
+    limits: Any = None
+    kill_switch: Path | None = None
 
     def __post_init__(self) -> None:
         from trading_research_agents.agents.alarms import Watch
@@ -3240,7 +3270,13 @@ class Auditing:
         if "quant_auditor" in who and clock is not None:
             # Any look restarts the clock: a review that just happened is the one the clock wanted.
             reported.write(quant_at=now)
+        if "quant_auditor" in who and getattr(self.policy, "risk_manager", False):
+            # The auditor reports; the risk manager is the one who can act on the same figures.
+            who.insert(0, "risk_manager")
         return tuple(who), fired
+
+    def _risk(self, out: Path, fired: tuple[Any, ...]) -> list[str]:
+        return _risk_decision(self, out, fired)
 
     @staticmethod
     def _first_time(alarm: Any, state: Mapping[str, Any], now: float) -> bool:
@@ -3281,6 +3317,13 @@ class Auditing:
         ]
         for alarm in fired:
             said.append(f"  alarm {alarm.kind}: {alarm.detail}")
+        if "risk_manager" in who:
+            said.extend(self._risk(out, fired))
+            who = tuple(w for w in who if w != "risk_manager")
+        if not who:
+            if not as_json:
+                print(plain_text("\n".join(said)), flush=True)
+            return said
         try:
             usage = UsageLedger(out / "usage.jsonl")
             audit = AuditConfig(
@@ -3306,6 +3349,68 @@ class Auditing:
         if not as_json:
             print(plain_text("\n".join(said)), flush=True)
         return said
+
+
+def _risk_decision(auditing: Any, out: Path, fired: tuple[Any, ...]) -> list[str]:
+    """Ask the risk manager, put what it decided in force one way only, and say so."""
+    from trading_research_agents.agents.risk_manager import run as risk
+    from trading_research_agents.llm.usage import UsageLedger
+
+    now = datetime.fromtimestamp(auditing.clock(), tz=UTC)
+    held = risk.Overrides.load(auditing.runs, now)
+    try:
+        usage = UsageLedger(out / "usage.jsonl")
+        ask = _metered_roles(auditing.settings, usage, floor=REPORT_HEADROOM)(risk.ROLE)
+        done = ask.complete(
+            system=prompt(risk.PROMPT),
+            user=json.dumps(
+                risk.brief(
+                    auditing.runs,
+                    limits=auditing.limits,
+                    overrides=held,
+                    alarms=[a.record() for a in fired],
+                    now=now,
+                ),
+                default=str,
+            ),
+            schema=risk.SCHEMA,
+        )
+        decision = risk.parse(done.text)
+    except Exception as exc:
+        # A risk manager that cannot answer leaves the client's limits exactly where they were.
+        return [f"  risk manager: no decision ({exc.__class__.__name__}: {exc}); limits unchanged"]
+    append_line(
+        auditing.runs / "risk_decisions.jsonl",
+        {
+            "at": now.isoformat(),
+            "decision": decision.decision,
+            "size_multiple": None
+            if decision.size_multiple is None
+            else str(decision.size_multiple),
+            "pause_instruments": list(decision.pause_instruments),
+            "hold_hours": decision.hold_hours,
+            "reason": decision.reason,
+            "triggers": list(decision.triggers),
+        },
+        durable=True,
+    )
+    said = [f"  risk manager: {decision.decision}, {decision.reason}"]
+    if decision.decision == "halt":
+        if auditing.kill_switch is not None:
+            auditing.kill_switch.write_text(
+                f"armed by the risk manager at {now.isoformat()}: {decision.reason}\n",
+                encoding="utf-8",
+            )
+            said.append(f"  the kill switch at {auditing.kill_switch} is armed: flatten and stop")
+        else:
+            # No kill switch declared: the nearest one-way step is to take no new entry anywhere.
+            pause_all = risk.RunDecision(
+                "pause", None, ("*",), decision.hold_hours, decision.reason, decision.triggers
+            )
+            said.extend(f"  {line}" for line in held.apply(pause_all, now))
+        return said
+    said.extend(f"  {line}" for line in held.apply(decision, now))
+    return said
 
 
 def _utc_day(now: float) -> str:
@@ -4758,7 +4863,12 @@ def _audit_notes(cfg: Any) -> list[str]:
         said.append(f"the quant auditor runs every {policy.quant_every_cycles} cycles")
     if policy.quant_every_s is not None:
         said.append(f"the quant auditor runs every {_span_s(policy.quant_every_s)}")
-    return ["auditors: " + "; ".join(said) + "; neither one can act on what it finds"]
+    if policy.risk_manager:
+        said.append(
+            "the risk manager is asked with the quant auditor and may only cut size, pause an "
+            "instrument or halt, each for a stated number of hours"
+        )
+    return ["auditors: " + "; ".join(said) + "; the auditors report and never act"]
 
 
 def _spend_notes(cfg: Any) -> list[str]:

@@ -20,7 +20,7 @@ code, tested and failing closed, and a role acts through them, not around them.
 | `onchain_analyst` | on-chain series the operator mapped in | nothing | every cycle in `tra run`; once per session in a session, when series are given |
 | `sentiment_analyst` | dated scores and dated notes the operator curates, through the same series engine | `negative`, `neutral`, `positive`, or `not declared` when nothing was mapped in | reads only; nothing is scraped |
 | `validator` | `figures_of`, `checked` over the brief the deciding analyst was given | one stance (pro, contra, neutral): the proposal, the figures it was built from, the declared states, and what the round trip costs; every claim it makes has to cite one of those figures with its value, and code discards the ones that do not | once per cycle, when `[agents].validators` is set |
-| `risk_manager` | the limits, the canary caps, the ladder, measured against declared latency, net against the registration | `tighten_limits`, `demote`, `arm_kill_switch` | after the runs, never inside one |
+| `risk_manager` | in `tra run`: the client's limits, what is in force, the alarms, the round trips by instrument; in a session: the limits, the canary caps, the ladder, latency, net against the registration | in `tra run`: `reduce` (size multiple below 1), `pause` (instruments), `halt` (the kill switch), each for `hold_hours`; in a session: `tighten_limits`, `demote`, `arm_kill_switch` | in `tra run`, between cycles whenever the quant auditor is asked; in a session, after the runs |
 | `executor` | the venue, the rate limits, the allocation across instruments | an allocation, fractions summing to at most one | after the risk decision |
 | `auditor` | the ledger, every run, `usage.jsonl`, the ladder | `audit.json` | last |
 
@@ -206,12 +206,35 @@ the daily loss limit was reached, or several round trips in a row lost money.
 | Every `quant_every_cycles` cycles | quant auditor | a count of cycles run: at `--every 5m`, 12 cycles is about an hour |
 | Every `quant_every` (for example `"24h"`) | quant auditor | a clock: the first cycle starts it, any quant look restarts it |
 | Both on the same cycle | both, in one audit | one report, one ledger entry per call |
+| The quant auditor is asked, for any reason | the risk manager as well, first | it may cut size, pause instruments or halt, never loosen; `[audit].risk_manager = false` leaves the account to your limits alone |
 | A gate refused (cost, risk, regime, trigger) | nobody | the software working as declared |
 | Any time you want | whoever you name | `tra audit` |
 
 The defaults: `on_alarm` is on even with no `[audit]` table, and with it the daily loss and the
 losing streak alarms; the scheduled quant look is off until you give it a count or a clock. Auditors
 are asked between the cycles of `tra run`, single or `--every`.
+
+### The risk manager in `tra run`
+
+The auditors report; the risk manager is the one role that can act on the same figures, and only
+toward caution. It is handed what code measured from the run's own files (round trips over the last
+twenty, wins, the losing streak, the result per instrument), the alarms that woke it, your limits
+and anything it already put in force, and it answers one of:
+
+| Decision | What code does |
+|---|---|
+| `continue` | nothing |
+| `reduce` | every new entry trades `size_multiple` (above 0, below 1) of its size for `hold_hours` |
+| `pause` | the named instruments take no new entry for `hold_hours` |
+| `halt` | writes the kill switch file, so the next pass flattens and stops; with no kill switch declared, every instrument is paused instead |
+
+Each decision lapses after `hold_hours` (at most 72) back to your own settings, and two reductions
+compound downward: a milder one never undoes a deeper cut. What is in force is in
+`runs/cycles/risk.json`, every decision with its reason and triggers in
+`runs/cycles/risk_decisions.jsonl`; delete `risk.json` to lift it early. An answer that does not
+fit the schema, a size multiple of 1 or more, or a model that does not answer at all leaves your
+limits exactly where they were. Your limits in `[controls]` are applied after the risk manager's,
+whatever it decides.
 
 What survives a restart is kept in `audits/reported.json`: the clock's last look, the day whose loss
 limit was reported, and the round trip that last extended a losing streak, so restarting the desk

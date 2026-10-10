@@ -107,6 +107,9 @@ class AuditPolicy:
     quant_every_s: int | None = None
     # Losing round trips in a row that wake the quant auditor; 0 turns it off.
     losing_streak: int = 3
+    # The risk manager is asked whenever the quant auditor is, and may only make the desk more
+    # careful; false leaves the account to the client's limits alone.
+    risk_manager: bool = True
 
     def __post_init__(self) -> None:
         if self.alarm_cooldown_s < 0:
@@ -634,6 +637,7 @@ AUDIT_KEYS = (
     "quant_every_cycles",
     "quant_every",
     "losing_streak",
+    "risk_manager",
 )
 MIN_QUANT_EVERY_S = 300
 UNIVERSE_KEYS = (
@@ -971,6 +975,7 @@ def _audit(raw: dict[str, Any]) -> AuditPolicy:
         ),
         quant_every_s=_every(table),
         losing_streak=_count(table, "losing_streak") if "losing_streak" in table else 3,
+        risk_manager=bool(table.get("risk_manager", True)),
     )
 
 

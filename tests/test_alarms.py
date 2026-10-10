@@ -109,7 +109,9 @@ def test_the_scheduler_asks_the_right_auditor_for_the_right_reason(tmp_path: Pat
 
     clock = [1000.0]
     audits = Auditing(
-        policy=AuditPolicy(on_alarm=True, alarm_cooldown_s=900, quant_every_cycles=3),
+        policy=AuditPolicy(
+            on_alarm=True, alarm_cooldown_s=900, quant_every_cycles=3, risk_manager=False
+        ),
         settings=None,
         config=tmp_path / "strategy.toml",
         runs=tmp_path / "runs" / "cycles",
@@ -146,7 +148,7 @@ def auditing(tmp_path: Path, clock: list[float], **policy: Any) -> Any:
     from trading_research_agents.trading.config import AuditPolicy
 
     return Auditing(
-        policy=AuditPolicy(**policy),
+        policy=AuditPolicy(**{"risk_manager": False, **policy}),
         settings=None,
         config=tmp_path / "strategy.toml",
         runs=tmp_path / "runs" / "cycles",
@@ -238,3 +240,14 @@ def test_the_new_audit_settings_are_read_and_checked() -> None:
         parse_strategy_config(agent_raw(audit={"quant_every": "daily"}))
     with pytest.raises(ConfigError, match="non-negative"):
         parse_strategy_config(agent_raw(audit={"losing_streak": -1}))
+
+
+def test_the_risk_manager_is_asked_whenever_the_quant_auditor_is(tmp_path: Path) -> None:
+    from trading_research_agents.agents.alarms import DAILY_LOSS_MARK
+
+    clock = [DAY + 3600]
+    audits = auditing(tmp_path, clock, risk_manager=True)
+    limit = record(stopped_by=f"{DAILY_LOSS_MARK} 310 bps since the day began")
+    assert audits.due(limit, 1)[0] == ("risk_manager", "quant_auditor")
+    # A breakage is the technical auditor's alone; nobody is asked to act on it.
+    assert audits.due(record(stopped_by="technical: ProviderError"), 2)[0] == ("tech_auditor",)

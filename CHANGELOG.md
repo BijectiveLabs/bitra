@@ -23,6 +23,10 @@ All notable changes to this project are recorded here. The format follows
   demo or testnet account no longer waits on the ladder, and no longer needs a `[canary]` table,
   which only `tra live` reads. `[execution].max_orders_per_cycle` is out of the template.
 - Unknown keys in `[controls]` are refused.
+- The risk manager acts in `tra run`: asked with the quant auditor, it may `reduce` size, `pause`
+  instruments or `halt` through the kill switch, each for `hold_hours`, never loosen. State in
+  `runs/cycles/risk.json`, decisions in `risk_decisions.jsonl`; `[audit].risk_manager = false`
+  turns it off.
 - `[exit].mode = "analyst"`, the agent-desk default: the technical analyst names `stop_price` and
   `target_price`; code holds the stop inside `min_stop_frac`/`max_stop_frac`, refuses a target
   closer than `min_reward_to_risk`, brings in one past `max_reward_to_risk`, and falls back to the
