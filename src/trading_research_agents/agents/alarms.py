@@ -13,16 +13,28 @@ run, because an auditor that can act is a second desk nobody declared.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from decimal import Decimal, InvalidOperation
+from pathlib import Path
 from typing import Any
+
+from trading_research_agents.records.files import write_json
 
 # One word per kind of thing that goes wrong, so a cooldown and a report can both be keyed by it.
 STOPPED = "stopped"
 PROVIDER = "provider"
 DATA = "data"
 VENUE = "venue"
-KINDS = (STOPPED, PROVIDER, DATA, VENUE)
+# What the account is doing, rather than what broke. These wake the quant auditor.
+DAILY_LOSS = "daily_loss"
+LOSING_STREAK = "losing_streak"
+KINDS = (STOPPED, PROVIDER, DATA, VENUE, DAILY_LOSS, LOSING_STREAK)
+QUANT_KINDS = (DAILY_LOSS, LOSING_STREAK)
+
+# How a cycle words the daily loss limit, so the record can be read for it without guessing.
+DAILY_LOSS_MARK = "capital: equity is down"
 
 
 @dataclass(frozen=True)
@@ -59,7 +71,10 @@ def alarms_of(record: Mapping[str, Any]) -> tuple[Alarm, ...]:
         found.append(Alarm(kind=kind, detail=detail, at=at))
 
     stopped = record.get("stopped_by")
-    if stopped:
+    if stopped and str(stopped).startswith(DAILY_LOSS_MARK):
+        # The limit doing its job is not a breakage, but a day that hit it deserves a look.
+        add(DAILY_LOSS, str(stopped))
+    elif stopped:
         add(STOPPED, str(stopped))
 
     for key in ("agents", "validators"):
@@ -106,3 +121,46 @@ class Watch:
             self.last[alarm.kind] = now
             out.append(alarm)
         return tuple(out)
+
+
+def losing_streak(round_trips: Path) -> tuple[int, str]:
+    """How many closed round trips in a row lost money, newest last, and the newest one's id.
+
+    A trip with no result (its contract size was unknown) is skipped rather than counted either
+    way: it is neither a loss nor a reason to forget the ones before it.
+    """
+    if not round_trips.is_file():
+        return 0, ""
+    streak, newest = 0, ""
+    for line in round_trips.read_text(encoding="utf-8").splitlines():
+        try:
+            trip = json.loads(line)
+            net = Decimal(str(trip["net"]))
+        except (ValueError, KeyError, TypeError, InvalidOperation):
+            continue
+        newest = f"{trip.get('at', '')}|{trip.get('order_id', '')}"
+        streak = streak + 1 if net < 0 else 0
+    return streak, newest
+
+
+@dataclass
+class Reported:
+    """What has already woken an auditor, kept on disk so a restart does not ask twice.
+
+    The quant auditor's last look, the UTC day whose loss limit was reported, and the round trip
+    that last extended a losing streak past the threshold.
+    """
+
+    path: Path
+
+    def read(self) -> dict[str, Any]:
+        try:
+            value = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        return value if isinstance(value, dict) else {}
+
+    def write(self, **fields: Any) -> None:
+        state = self.read()
+        state.update(fields)
+        write_json(self.path, state, durable=True)

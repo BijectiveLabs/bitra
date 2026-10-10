@@ -34,6 +34,7 @@ from trading_research_agents.agents import (
     technical_analyst,
     validator,
 )
+from trading_research_agents.agents.alarms import DAILY_LOSS_MARK
 from trading_research_agents.agents.briefs import (
     BriefError,
     context_brief,
@@ -560,7 +561,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
             result.briefs["equity"]["day_loss_bps"] = str(down)
             if down >= cfg.daily_loss_limit_bps:
                 why = (
-                    f"capital: equity is down {down} bps since the day began, at or past "
+                    f"{DAILY_LOSS_MARK} {down} bps since the day began, at or past "
                     f"[controls].daily_loss_limit_bps {cfg.daily_loss_limit_bps}; no new entry "
                     "today, and open positions keep their exits"
                 )

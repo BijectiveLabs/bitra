@@ -2727,6 +2727,8 @@ widen_after = 6
 on_alarm = true
 alarm_cooldown_s = 1800            # per kind of alarm, not overall
 quant_every_cycles = 20
+# quant_every = "24h"              # or on a clock, kept across restarts
+losing_streak = 3                  # losing round trips in a row that wake the quant auditor
 
 # What this desk watches. Left out, every cycle is [run].instrument. Declared, a pass looks at each
 # instrument for one data pull and no tokens, applies [trigger] to each, and spends its cycles on
@@ -3127,11 +3129,13 @@ def run_cycle_command(args: argparse.Namespace) -> int:
 
 @dataclass
 class Auditing:
-    """Waking the auditors between cycles: one on an alarm, one on a count.
+    """Waking the auditors between cycles: on an alarm, on a count, and on a clock.
 
-    Something breaking is an event and belongs to the technical auditor; whether the desk is earning
-    what it costs is a stretch of time and belongs to the quant auditor. Neither can act on what it
-    finds, and neither is allowed to end a run: an auditor that fails is a line in the report.
+    Something breaking is an event and belongs to the technical auditor. Whether the desk is
+    earning what it costs belongs to the quant auditor, which wakes on a count of cycles, on a
+    clock, and when the account says so: the daily loss limit reached, or a run of losing round
+    trips. Neither can act on what it finds, and neither may end a run: an auditor that fails is
+    a line in the report.
     """
 
     policy: Any
@@ -3149,18 +3153,65 @@ class Auditing:
 
     def due(self, record: Mapping[str, Any], ran: int) -> tuple[tuple[str, ...], tuple[Any, ...]]:
         """Which auditors to ask after this cycle, and the alarms that asked for one."""
-        from trading_research_agents.agents.alarms import alarms_of
+        from trading_research_agents.agents.alarms import QUANT_KINDS, Reported, alarms_of
 
+        now = self.clock()
+        reported = Reported(self.runs.parent / "audits" / "reported.json")
+        state = reported.read()
         who: list[str] = []
         fired: tuple[Any, ...] = ()
         if self.policy.on_alarm:
-            fired = self.watch.due(alarms_of(record), self.clock())
-            if fired:
+            found = [a for a in alarms_of(record) if self._first_time(a, state, now)]
+            streak = self._streak(record, state)
+            if streak is not None:
+                found.append(streak)
+            fired = self.watch.due(tuple(found), now)
+            if any(a.kind not in QUANT_KINDS for a in fired):
                 who.append("tech_auditor")
+            if any(a.kind in QUANT_KINDS for a in fired):
+                who.append("quant_auditor")
+            for alarm in fired:
+                if alarm.kind == "daily_loss":
+                    reported.write(daily_loss_day=_utc_day(now))
+                elif alarm.kind == "losing_streak":
+                    reported.write(streak_trip=alarm.at)
         every = self.policy.quant_every_cycles
-        if every is not None and ran % every == 0:
+        if every is not None and ran % every == 0 and "quant_auditor" not in who:
             who.append("quant_auditor")
+        clock = self.policy.quant_every_s
+        if clock is not None:
+            last = state.get("quant_at")
+            if not isinstance(last, int | float):
+                # The first run starts the clock rather than paying for a look at nothing.
+                reported.write(quant_at=now)
+            elif now - last >= clock and "quant_auditor" not in who:
+                who.append("quant_auditor")
+        if "quant_auditor" in who and clock is not None:
+            # Any look restarts the clock: a review that just happened is the one the clock wanted.
+            reported.write(quant_at=now)
         return tuple(who), fired
+
+    @staticmethod
+    def _first_time(alarm: Any, state: Mapping[str, Any], now: float) -> bool:
+        """A daily loss is reported once per UTC day; any other kind is left to the cooldown."""
+        return alarm.kind != "daily_loss" or state.get("daily_loss_day") != _utc_day(now)
+
+    def _streak(self, record: Mapping[str, Any], state: Mapping[str, Any]) -> Any:
+        """An alarm when the newest round trip took a losing run to the threshold or past it."""
+        from trading_research_agents.agents.alarms import LOSING_STREAK, Alarm, losing_streak
+        from trading_research_agents.trading.positions import ROUND_TRIPS
+
+        threshold = self.policy.losing_streak
+        if threshold < 1:
+            return None
+        count, newest = losing_streak(self.runs / ROUND_TRIPS)
+        if count < threshold or newest == state.get("streak_trip"):
+            return None
+        return Alarm(
+            kind=LOSING_STREAK,
+            detail=f"{count} losing round trips in a row, the newest at {newest.partition('|')[0]}",
+            at=newest,
+        )
 
     def after(self, record: Mapping[str, Any], ran: int, *, as_json: bool = False) -> list[str]:
         """Ask whoever is due, and say what they found. Never raises into the run."""
@@ -3202,6 +3253,10 @@ class Auditing:
         if not as_json:
             print(plain_text("\n".join(said)), flush=True)
         return said
+
+
+def _utc_day(now: float) -> str:
+    return datetime.fromtimestamp(now, tz=UTC).date().isoformat()
 
 
 # What discovery found in this process, per instrument: the venue's own symbol and its size step.
@@ -4614,8 +4669,17 @@ def _audit_notes(cfg: Any) -> list[str]:
             f"the technical auditor wakes on an alarm, at most once per kind every "
             f"{policy.alarm_cooldown_s}s"
         )
+    if policy.on_alarm:
+        streak = (
+            f" or after {policy.losing_streak} losing round trips in a row"
+            if policy.losing_streak
+            else ""
+        )
+        said.append(f"the quant auditor wakes when the daily loss limit is reached{streak}")
     if policy.quant_every_cycles is not None:
         said.append(f"the quant auditor runs every {policy.quant_every_cycles} cycles")
+    if policy.quant_every_s is not None:
+        said.append(f"the quant auditor runs every {_span_s(policy.quant_every_s)}")
     return ["auditors: " + "; ".join(said) + "; neither one can act on what it finds"]
 
 

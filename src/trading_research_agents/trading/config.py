@@ -103,16 +103,26 @@ class AuditPolicy:
     on_alarm: bool = True
     alarm_cooldown_s: int = 1800
     quant_every_cycles: int | None = None
+    # A clock, for a review that lands daily whatever the cadence; kept on disk across restarts.
+    quant_every_s: int | None = None
+    # Losing round trips in a row that wake the quant auditor; 0 turns it off.
+    losing_streak: int = 3
 
     def __post_init__(self) -> None:
         if self.alarm_cooldown_s < 0:
             raise ConfigError("[audit].alarm_cooldown_s is not negative")
         if self.quant_every_cycles is not None and self.quant_every_cycles < 1:
             raise ConfigError("[audit].quant_every_cycles counts cycles, so it is at least 1")
+        if self.quant_every_s is not None and self.quant_every_s < MIN_QUANT_EVERY_S:
+            # Each look is a paid model call over the whole record; minutes apart it reads the
+            # same trades again.
+            raise ConfigError("[audit].quant_every is at least 5m")
+        if self.losing_streak < 0:
+            raise ConfigError("[audit].losing_streak counts round trips; 0 turns it off")
 
     @property
     def idle(self) -> bool:
-        return not self.on_alarm and self.quant_every_cycles is None
+        return not self.on_alarm and self.quant_every_cycles is None and self.quant_every_s is None
 
 
 @dataclass(frozen=True)
@@ -613,7 +623,14 @@ TARGET_KEYS = (
     "max_round_trips_per_day",
 )
 TRIGGER_KEYS = ("min_move_bps", "max_spread_bps", "cooldown_s", "widen_after", "look_valid_for")
-AUDIT_KEYS = ("on_alarm", "alarm_cooldown_s", "quant_every_cycles")
+AUDIT_KEYS = (
+    "on_alarm",
+    "alarm_cooldown_s",
+    "quant_every_cycles",
+    "quant_every",
+    "losing_streak",
+)
+MIN_QUANT_EVERY_S = 300
 UNIVERSE_KEYS = (
     "instruments",
     "max_per_cycle",
@@ -946,7 +963,18 @@ def _audit(raw: dict[str, Any]) -> AuditPolicy:
         quant_every_cycles=(
             _count(table, "quant_every_cycles") if "quant_every_cycles" in table else None
         ),
+        quant_every_s=_every(table),
+        losing_streak=_count(table, "losing_streak") if "losing_streak" in table else 3,
     )
+
+
+def _every(table: dict[str, Any]) -> int | None:
+    if "quant_every" not in table:
+        return None
+    try:
+        return int(parse_duration(str(table["quant_every"])))
+    except DataConfigError as exc:
+        raise ConfigError(f"[audit].quant_every: {exc}") from exc
 
 
 def _trigger(raw: dict[str, Any]) -> Trigger:

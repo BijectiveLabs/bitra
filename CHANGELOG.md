@@ -14,6 +14,9 @@ All notable changes to this project are recorded here. The format follows
   `reward_to_risk` times the stop. `tra init --agent` writes it. Fixed fractions stay as
   `mode = "fixed"`, the default. The record carries the ATR, the horizon and any bound that held.
 - A take profit inside the round trip cost refuses the trade.
+- The quant auditor wakes on a clock (`[audit].quant_every = "24h"`, kept across restarts),
+  when `[controls].daily_loss_limit_bps` is reached (once per UTC day, no longer a technical
+  alarm), and after `[audit].losing_streak` losing round trips in a row (3 by default).
 - Docs: why the exits are built the way they are, and a table of when each auditor is asked.
 - Unknown keys in `[exit]` are refused.
 - A ccxt data source can read a venue's practice environment: `ccxt:okx@testnet`, `ccxt:bybit@demo`.

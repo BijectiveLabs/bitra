@@ -180,6 +180,8 @@ differently, because they answer different questions:
 on_alarm = true                  # the technical auditor, when a cycle reports something broken
 alarm_cooldown_s = 1800          # per kind of alarm, not overall
 quant_every_cycles = 20          # the quant auditor, on a count of cycles
+quant_every = "24h"              # and/or on a clock, kept across restarts (at least 5m)
+losing_streak = 3                # losing round trips in a row that wake the quant auditor; 0 is off
 ```
 
 Something breaking is an event. `agents/alarms.py` reads a cycle's own record for four kinds -
@@ -189,23 +191,32 @@ per kind, no more often than the cooldown. A gate refusing is **not** an alarm: 
 is the software working, and waking an auditor for it would be paying to be told the desk is fine.
 
 Whether the desk is earning what it costs is a question about a stretch of time, so the quant auditor
-runs on a count of cycles instead.
+runs on a count of cycles or a clock instead, and also wakes when the account itself says something:
+the daily loss limit was reached, or several round trips in a row lost money.
 
 | Situation | Who is asked | Notes |
 |---|---|---|
 | A model call failed after the vendor's retries and every fallback (a rate limit that did not clear, a timeout, a key refused) | technical auditor | a rate limit a retry or a fallback absorbed is not an alarm, because the cycle got its answer |
 | A cycle stopped before it finished, a spent budget included | technical auditor | |
+| `[controls].daily_loss_limit_bps` reached | quant auditor | once per UTC day; the limit working is not a breakage, so the technical auditor is not asked |
+| `losing_streak` losing round trips in a row (3 by default) | quant auditor | once for each new loss while the run lasts; a winner ends it; a trip with no result is skipped |
 | A data chain ran out, or a kind was used stale | technical auditor | |
 | The venue refused or failed an order | technical auditor | |
 | The same kind fires again inside `alarm_cooldown_s` | nobody | one look per kind per cooldown; a different kind still wakes it |
-| Every `quant_every_cycles` cycles | quant auditor | a count of cycles run, not a clock: at `--every 5m`, 12 cycles is about an hour |
+| Every `quant_every_cycles` cycles | quant auditor | a count of cycles run: at `--every 5m`, 12 cycles is about an hour |
+| Every `quant_every` (for example `"24h"`) | quant auditor | a clock: the first cycle starts it, any quant look restarts it |
 | Both on the same cycle | both, in one audit | one report, one ledger entry per call |
 | A gate refused (cost, risk, regime, trigger) | nobody | the software working as declared |
 | Any time you want | whoever you name | `tra audit` |
 
-The defaults: `on_alarm` is on even with no `[audit]` table, and the quant auditor is off until you
-give it a count. Auditors are asked between the cycles of `tra run`, single or `--every`. The count
-and the cooldowns live in the running process, so a restart starts both again.
+The defaults: `on_alarm` is on even with no `[audit]` table, and with it the daily loss and the
+losing streak alarms; the scheduled quant look is off until you give it a count or a clock. Auditors
+are asked between the cycles of `tra run`, single or `--every`.
+
+What survives a restart is kept in `audits/reported.json`: the clock's last look, the day whose loss
+limit was reported, and the round trip that last extended a losing streak, so restarting the desk
+does not pay for the same look twice. The cycle count and the per-kind cooldowns live in the running
+process and start again.
 
 Neither one gains anything by waking this way. They read the same records, answer in the same shape,
 cite the same way, and change nothing; the only difference is that a person no longer has to be the
