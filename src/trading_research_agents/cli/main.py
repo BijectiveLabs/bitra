@@ -2688,11 +2688,25 @@ VOLATILITY_EXIT = (
 )
 
 
+AGENT_TIMEFRAME_FROM = (
+    "bar_interval_s = 60\n"
+    '# context_intervals = ["15m", "1h"] # higher timeframes the technical analyst '
+    "reads as context\n"
+)
+AGENT_TIMEFRAME = (
+    "bar_interval_s = 900                # the decision timeframe: 15m; run with --every 15m\n"
+    'context_intervals = ["1h", "4h"]    # higher timeframes the analyst reads as context\n'
+)
+
+
 def _agent_config(text: str, provider_name: str, model: str) -> str:
     """The template with the technical analyst as the core and the [agents] table live."""
     text = text[: text.index("[strategy]")] + AGENT_HEAD + text[text.index("[exit]") :]
     # An agent desk trades many instruments at many speeds; one fraction of price fits none of them.
     text = text.replace(FIXED_EXIT, VOLATILITY_EXIT, 1)
+    # A round trip costs the same on any timeframe, so the move it is weighed against should be
+    # worth it: fifteen-minute bars, with the hour and four hours as context. Theirs to change.
+    text = text.replace(AGENT_TIMEFRAME_FROM, AGENT_TIMEFRAME, 1)
     text = _without_commented(text, "# [agents]")
     agents = (
         "[agents]\n"

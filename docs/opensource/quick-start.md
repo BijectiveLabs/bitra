@@ -64,8 +64,9 @@ lists every provider, the key each one reads and how well it has been tested.
 
 ## Keep it running
 
-`tra run` decides once. `tra run --every 5m` keeps deciding: the first pass runs now, then one every
-five minutes on the clock (:00, :05, :10 and so on). The wait after a pass is whatever is left to the
+`tra run` decides once. `tra run --every 15m` keeps deciding: the first pass runs now, then one
+every fifteen minutes on the clock (:00, :15, :30 and so on), which is the decision timeframe
+`tra init --agent` writes. The wait after a pass is whatever is left to the
 next mark, and the desk tells you the time it ends at, for example `next pass at 14:30:00 UTC, in
 10m 57s`. [The cycle](/opensource/cycle) explains why it lands on the clock.
 
@@ -103,7 +104,7 @@ will do in your project, defaults included.
 | `[exit]` | the analyst's stop and target, held inside bounds | see [where the stop and take profit sit](/opensource/cycle#where-the-stop-and-the-take-profit-sit) |
 | `[targets].max_break_even_win_rate` | `0.5` | refuse a trade that would need more than half its kind to win to cover the stops and the costs |
 | `[exit].timeout_bars` | `240` | a position closes by time after this many bars |
-| `[run].bar_interval_s` | `60` | the decision timeframe |
+| `[run].bar_interval_s` | `60`; `tra init --agent` writes `900` with 1h and 4h as context | the decision timeframe; the round trip costs the same on any of them, so a longer one leaves more of the move |
 | `[run].settlement_interval_s` | `28800` | the venue's funding clock |
 | `[execution].environment` | `demo` | where orders go: `demo`, `testnet` or `mainnet` |
 

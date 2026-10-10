@@ -109,8 +109,8 @@ todo  [agents].provider is still the placeholder; name the provider you have a k
 ```
 
 Name your provider and model in `strategy.toml` (see [Models and providers](#models-and-providers))
-and `tra run` decides once. `tra run --every 5m` keeps deciding: the first pass runs now, then one
-every five minutes on the clock (:00, :05, :10 and so on), so the wait after a pass is whatever is
+and `tra run` decides once. `tra run --every 15m` keeps deciding: the first pass runs now, then one
+every fifteen minutes on the clock (:00, :15, :30 and so on), so the wait after a pass is whatever is
 left to the next mark, and the desk tells you the time it ends at.
 
 Type `tra` on its own inside the desk and you get the console, which is the next section.

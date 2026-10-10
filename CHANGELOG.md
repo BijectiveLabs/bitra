@@ -23,6 +23,7 @@ All notable changes to this project are recorded here. The format follows
   demo or testnet account no longer waits on the ladder, and no longer needs a `[canary]` table,
   which only `tra live` reads. `[execution].max_orders_per_cycle` is out of the template.
 - Unknown keys in `[controls]` are refused.
+- `tra init --agent` writes a 15-minute decision timeframe with 1h and 4h as context.
 - The risk manager acts in `tra run`: asked with the quant auditor, it may `reduce` size, `pause`
   instruments or `halt` through the kill switch, each for `hold_hours`, never loosen. State in
   `runs/cycles/risk.json`, decisions in `risk_decisions.jsonl`; `[audit].risk_manager = false`
