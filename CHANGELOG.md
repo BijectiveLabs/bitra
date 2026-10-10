@@ -8,6 +8,9 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- A decision older than `[execution].max_decision_age_s` (default 120 s, from the start of its cycle)
+  is not sent. Each sent order records `decision_age_s`, `send_ms` and `slippage_bps`, measured
+  live, and the cycle output prints them.
 - Account settings ccxt does not unify are checked before the first order and in `tra keys --probe`
   (`trading/venues/accounts.py`). The first: an OKX account in Spot mode, which refuses every
   perpetual order with sCode 51010, is named with the setting to change.

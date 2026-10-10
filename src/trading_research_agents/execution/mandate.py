@@ -82,6 +82,10 @@ class Mandate:
     # How far the mid may have moved against the trade between the snapshot it was priced on and
     # the moment it is sent. Undeclared means no bound, and the move is still recorded.
     max_drift_bps: Decimal | None = None
+    # How old a decision may be, from the start of its cycle to the moment of sending. The drift
+    # check above catches a market that moved; this catches one that did not move but whose figures
+    # are no longer the ones the decision was made on.
+    max_decision_age_s: float = 120.0
     # The capital side of an order. Leverage is the operator's to declare and code's to apply and
     # verify; it never decides the size, only the margin a size ties up and where liquidation sits.
     leverage: Decimal | None = None
@@ -113,6 +117,8 @@ class Mandate:
             raise MandateError("[execution].price_offset_bps is not negative")
         if self.max_drift_bps is not None and self.max_drift_bps < 0:
             raise MandateError("[execution].max_drift_bps is not negative")
+        if self.max_decision_age_s <= 0:
+            raise MandateError("[execution].max_decision_age_s is positive")
         if self.leverage is not None and self.leverage < 1:
             raise MandateError("[execution].leverage is at least 1")
         if self.margin_mode not in MARGIN_MODES:
@@ -151,6 +157,7 @@ class Mandate:
             "limit_timeout_s": self.limit_timeout_s,
             "price_offset_bps": str(self.price_offset_bps),
             "max_drift_bps": None if self.max_drift_bps is None else str(self.max_drift_bps),
+            "max_decision_age_s": self.max_decision_age_s,
             "leverage": None if self.leverage is None else str(self.leverage),
             "margin_mode": self.margin_mode,
             "max_slippage_bps": str(self.max_slippage_bps),

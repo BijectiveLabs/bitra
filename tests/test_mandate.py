@@ -8,7 +8,7 @@ down, and the keys have to be in the environment. Every missing piece is named, 
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -30,13 +30,15 @@ from trading_research_agents.trading.dispatch import DispatchError, VenueHand, h
 
 # What a cycle hands the venue: the size the conviction rule chose, the touch it priced on, and the
 # exits code computed from [exit]. Everything the hand needs, and nothing a model wrote.
+# A cycle id the age check never refuses, however long the suite runs; the age has its own test.
+NOW_ID = "2099-01-01T00-00-00Z"
 LONG: dict[str, Any] = {
     "target": "long",
     "size": "0.01",
     "mid": "100000",
     "stop_price": "99000",
     "take_price": "102000",
-    "at": "2026-09-28T02-55-40Z",
+    "at": NOW_ID,
     "instrument": "BTCUSDT",
     "bid": "99999",
     "ask": "100001",
@@ -227,7 +229,7 @@ def test_the_hand_sends_one_order_and_records_what_came_back() -> None:
     assert sent["params"]["takeProfit"] == {"triggerPrice": 102000.0}
     assert placed["stop_price"] == "99000" and placed["exits"] == "attached"
     # One client id per cycle and instrument: the same cycle cannot open two positions.
-    assert sent["params"]["clientOrderId"] == "tra20260928T025540ZBTCUSDT"
+    assert sent["params"]["clientOrderId"] == "tra" + NOW_ID.replace("-", "") + "BTCUSDT"
     assert placed["client_order_id"] == sent["params"]["clientOrderId"]
 
     # One decision, one order: the same hand asked again refuses.
@@ -268,7 +270,8 @@ def test_a_maker_channel_rests_on_the_book_and_never_crosses_it() -> None:
 
 def test_a_resting_order_that_does_not_fill_is_cancelled_rather_than_chased() -> None:
     venue = FakeExchange()
-    ticks = iter([0.0, 0.0, 10.0, 40.0, 40.0])
+    # The decision age and the send are read first, then the wait for the fill.
+    ticks = iter([0.0, 0.0, 0.0, 0.0, 0.0, 10.0, 40.0, 40.0])
     hand = VenueHand(
         venue="bybit",
         symbol="BTC/USDT:USDT",
@@ -964,3 +967,26 @@ def test_an_okx_account_in_spot_mode_is_refused_before_anything_is_sent() -> Non
         keys=("K", "S"),
         client=Futures(),
     )(LONG)["sent"]
+
+
+def test_a_decision_older_than_its_bound_is_not_sent_and_a_fresh_one_is_measured() -> None:
+    venue = FakeExchange()
+    hand = VenueHand(
+        venue="bybit",
+        symbol="BTC/USDT:USDT",
+        max_notional=Decimal(2000),
+        keys=("K", "S"),
+        client=venue,
+        max_decision_age_s=60.0,
+    )
+    old = (datetime.now(UTC) - timedelta(minutes=5)).strftime("%Y-%m-%dT%H-%M-%SZ")
+    stale = hand({**LONG, "at": old})
+    assert stale["sent"] is False and "past [execution].max_decision_age_s 60" in stale["refused"]
+    assert venue.orders == []
+
+    fresh = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%SZ")
+    placed = hand({**LONG, "at": fresh})
+    assert placed["sent"] is True and placed["send_ms"] >= 0
+    assert placed["decision_age_s"] is not None and placed["decision_age_s"] < 60
+    # Filled at 100000.5 against a mid of 100000: half a basis point paid on a buy.
+    assert placed["slippage_bps"] == "0.05"

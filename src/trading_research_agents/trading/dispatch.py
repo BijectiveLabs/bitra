@@ -140,6 +140,7 @@ class VenueHand:
     adopt_open_position: bool = False
     params: Mapping[str, Any] = field(default_factory=dict)
     max_drift_bps: Decimal | None = None
+    max_decision_age_s: float = 120.0
     leverage: Decimal | None = None
     margin_mode: str = "isolated"
     max_slippage_bps: Decimal = Decimal(20)
@@ -304,6 +305,16 @@ class VenueHand:
                     f"notional {notional} is above [execution].max_notional {self.max_notional}"
                 ),
             }
+        age = _decision_age_s(intent, self.clock())
+        if age is not None and age > self.max_decision_age_s:
+            return {
+                "sent": False,
+                "refused": (
+                    f"the decision is {age:.0f}s old, past [execution].max_decision_age_s "
+                    f"{self.max_decision_age_s:.0f}; its figures are no longer the market's"
+                ),
+                "decision_age_s": round(age, 1),
+            }
         if not self.skew_checked:
             skew = self._skew()
             if skew:
@@ -397,6 +408,7 @@ class VenueHand:
             if price is None:
                 return {"sent": False, "refused": "no book to protect a taker order against"}
             params.setdefault("timeInForce", "IOC")
+        began = self.clock()
         try:
             order = self.client.create_order(
                 self.symbol,
@@ -408,6 +420,7 @@ class VenueHand:
             )
         except Exception as exc:
             raise DispatchError(self._clean(f"{exc.__class__.__name__}: {exc}")) from exc
+        send_ms = round((self.clock() - began) * 1000)
         order = self._in_base(order, unit)
         self.sent_count += 1
 
@@ -429,6 +442,8 @@ class VenueHand:
             "take_price": str(intent.get("take_price", "")) or None,
             "priced_mid": str(mid),
             "drift_bps": None if drift is None else str(drift.quantize(Decimal("0.01"))),
+            "decision_age_s": None if age is None else round(age, 1),
+            "send_ms": send_ms,
             "rested_at": "the book at send time" if fresh else "the snapshot's touch",
             "capital": carried,
             "order_id": str(order.get("id", "")),
@@ -441,6 +456,7 @@ class VenueHand:
             placed.update(self._settle(str(placed["order_id"])))
         elif placed["filled"] is None:
             placed.update(self._taken(str(placed["order_id"])))
+        placed["slippage_bps"] = _slippage_bps(placed.get("average"), mid, side)
         return placed
 
     def _taken(self, order_id: str, tries: int = 4) -> dict[str, Any]:
@@ -1008,6 +1024,30 @@ def _drift_bps(
     return moved if side == "buy" else -moved
 
 
+def _decision_age_s(intent: Mapping[str, Any], now: float) -> float | None:
+    """Seconds since the cycle that made this decision began, read from its id."""
+    from datetime import UTC, datetime
+
+    stamp = str(intent.get("at", ""))[:20]
+    try:
+        began = datetime.strptime(stamp, "%Y-%m-%dT%H-%M-%SZ").replace(tzinfo=UTC)
+    except ValueError:
+        return None
+    return now - began.timestamp()
+
+
+def _slippage_bps(average: Any, mid: Decimal, side: str) -> str | None:
+    """What the fill paid against the mid the trade was priced at; positive is worse."""
+    if average in (None, "") or mid <= 0:
+        return None
+    try:
+        paid = Decimal(str(average))
+    except ArithmeticError:
+        return None
+    moved = (paid - mid) / mid * BPS
+    return str((moved if side == "buy" else -moved).quantize(Decimal("0.01")))
+
+
 def _client_id(intent: Mapping[str, Any]) -> str:
     """One id per cycle and instrument, so a cycle run twice cannot open two positions.
 
@@ -1071,6 +1111,7 @@ def hand_for(
     env: Mapping[str, str] | None = None,
     client: Any = None,
     max_drift_bps: Decimal | None = None,
+    max_decision_age_s: float = 120.0,
     leverage: Decimal | None = None,
     margin_mode: str = "isolated",
     max_slippage_bps: Decimal = Decimal(20),
@@ -1095,6 +1136,7 @@ def hand_for(
         env=env if env is not None else os.environ,
         client=client,
         max_drift_bps=max_drift_bps,
+        max_decision_age_s=max_decision_age_s,
         leverage=leverage,
         margin_mode=margin_mode,
         max_slippage_bps=max_slippage_bps,

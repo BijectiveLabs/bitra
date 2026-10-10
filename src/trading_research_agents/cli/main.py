@@ -3643,6 +3643,7 @@ def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], l
                 f"placed: {placed.get('side')} {placed.get('size')} on {placed.get('venue')}"
                 f"{at}, stop {placed.get('stop_price')}, take {placed.get('take_price')}"
             )
+            lines.append(f"  timing: {execution_timing(placed)}")
             # Sent is not filled. What became of the order is the line an operator acts on.
             lines.append(f"  outcome: {order_outcome(placed)}")
         elif placed.get("refused"):
@@ -3839,6 +3840,18 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
     return good, bad, next_command
 
 
+def execution_timing(placed: Mapping[str, Any]) -> str:
+    """How old the decision was when sent, how long the venue took, and what the fill cost."""
+    said = []
+    if placed.get("decision_age_s") is not None:
+        said.append(f"sent {placed['decision_age_s']}s after the cycle began")
+    if placed.get("send_ms") is not None:
+        said.append(f"the venue answered in {placed['send_ms']} ms")
+    if placed.get("slippage_bps") is not None:
+        said.append(f"filled {placed['slippage_bps']} bps from the mid it was priced at")
+    return "; ".join(said) or "not measured"
+
+
 def _venue_hand(
     args: argparse.Namespace,
     cfg: Any,
@@ -3887,6 +3900,7 @@ def _venue_hand(
         adopt_open_position=mandate.adopt_open_position,
         params=mandate.params,
         max_drift_bps=mandate.max_drift_bps,
+        max_decision_age_s=mandate.max_decision_age_s,
         leverage=mandate.leverage,
         margin_mode=mandate.margin_mode,
         max_slippage_bps=mandate.max_slippage_bps,
@@ -4428,6 +4442,14 @@ def _capital_notes(cfg: Any) -> list[str]:
         f"day; at most {cfg.limits.max_orders_per_minute} orders a minute",
         f"orders: a taker entry is a limit IOC at most {mandate.max_slippage_bps} bps through the "
         "touch, never a naked market order",
+        f"orders: a decision older than {mandate.max_decision_age_s:.0f}s is not sent; the book is "
+        "read again just before sending"
+        + (
+            f", and an order is refused when the mid moved {mandate.max_drift_bps} bps against it"
+            if mandate.max_drift_bps is not None
+            else ""
+        )
+        + "; each order records its age, the venue's answer time and its slippage",
         f"positions: an open position is closed with a reduce-only order {hold}; the kill switch "
         "flattens every position before the run stops",
     ]

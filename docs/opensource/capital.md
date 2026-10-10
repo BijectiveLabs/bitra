@@ -31,6 +31,7 @@ decides how much margin that size ties up and how far away liquidation sits.
 | `[execution].liquidation_buffer_bps` | `50` | how far beyond the stop the estimated liquidation must sit |
 | `[execution].max_slippage_bps` | `20` | how far through the touch a taker entry may fill |
 | `[execution].max_drift_bps` | none | refuse when the mid moved this far against the trade since it was priced |
+| `[execution].max_decision_age_s` | `120` | refuse a decision older than this, counted from the start of its cycle to the moment of sending |
 | `[execution].hold_limit` | `timeout` | `timeout`, `horizon` or `none`: when time closes a position |
 | `[execution].max_notional` | none: required | the most one order may be worth |
 | `[run].equity` | none | the most equity you allow this desk; sizing uses the smaller of this and the account |
@@ -67,7 +68,8 @@ with a sentence naming the figure:
 4. the account holds no position on the symbol (unless `adopt_open_position`), and no order is
    working on it;
 5. the size is on the venue's step and above its minimum;
-6. the mid has not drifted against the trade past `max_drift_bps`, when that is declared;
+6. the decision is younger than `max_decision_age_s`, and the mid has not drifted against the trade
+   past `max_drift_bps`, when that is declared: the book is read again just before sending;
 7. **leverage and margin mode** are set at the venue and read back. A venue that answers "not
    modified" is fine, because success is judged by reading the setting back. A venue holding any
    other value refuses the order;
@@ -160,3 +162,12 @@ from what actually filled rather than from what was intended.
   account, not only the one being traded. Choose it with the whole account in mind.
 - **One desk, one venue.** Netting across venues, transfers between accounts and a book managed
   across a portfolio belong to a platform, not to this package ([Boundaries](/opensource/boundaries)).
+
+## What each order records about its timing
+
+Every sent order writes three figures into `placed.json`, measured live rather than declared:
+`decision_age_s` (from the start of the cycle to the moment of sending), `send_ms` (how long the
+venue took to answer the order), and `slippage_bps` (the average fill against the mid the trade was
+priced at; positive means it paid more). The cycle output prints them on a `timing:` line. The
+latency figures in `envelope.toml` and `[run]` are declarations used to price a trade before it
+exists; these are what actually happened.

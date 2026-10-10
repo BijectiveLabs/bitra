@@ -636,6 +636,7 @@ EXECUTION_KEYS = (
     "limit_timeout_s",
     "price_offset_bps",
     "max_drift_bps",
+    "max_decision_age_s",
     "leverage",
     "margin_mode",
     "max_slippage_bps",
@@ -676,6 +677,7 @@ def _mandate(raw: dict[str, Any], venue_key: str) -> Mandate:
             params=dict(table.get("params") or {}),
             environment=str(table.get("environment", "")),
             max_drift_bps=_dec(table, "max_drift_bps") if "max_drift_bps" in table else None,
+            max_decision_age_s=float(table.get("max_decision_age_s", 120.0)),
             leverage=_dec(table, "leverage") if "leverage" in table else None,
             margin_mode=str(table.get("margin_mode", "isolated")),
             max_slippage_bps=(

@@ -30,7 +30,7 @@ LONG: dict[str, Any] = {
     "ask": "100001",
     "stop_price": "99000",
     "take_price": "102000",
-    "at": "2026-10-05T03-00-00Z",
+    "at": "2099-01-01T00-00-00Z",  # never refused by the age check, which has its own test
     "instrument": "BTCUSDT",
 }
 

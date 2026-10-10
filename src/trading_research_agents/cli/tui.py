@@ -826,7 +826,17 @@ def cycle_view(record: Mapping[str, Any]) -> Group:
                     "venue",
                     Text(
                         f"sent, order {placed.get('order_id') or '?'}"
-                        + (f", filled {filled}" if filled not in (None, "") else ""),
+                        + (f", filled {filled}" if filled not in (None, "") else "")
+                        + (
+                            f", {placed['decision_age_s']}s after the cycle began"
+                            if placed.get("decision_age_s") is not None
+                            else ""
+                        )
+                        + (
+                            f", slippage {placed['slippage_bps']} bps"
+                            if placed.get("slippage_bps") is not None
+                            else ""
+                        ),
                         style="green",
                     ),
                 )
