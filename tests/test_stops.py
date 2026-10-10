@@ -184,3 +184,25 @@ def test_a_take_profit_inside_the_round_trip_refuses_the_trade(
 
     assert result.intent is None
     assert any("a winner would lose money" in r for r in result.refusals)
+
+
+def test_the_intent_says_what_share_of_trades_must_win_to_break_even(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    cfg, _, _ = cycle_config(
+        tmp_path,
+        envelope,
+        [analyst_answer()],
+        stop_frac=Decimal("0.003"),
+        take_frac=Decimal("0.006"),
+    )
+    result = run_cycle(cfg)
+    assert result.intent is not None
+    assert result.verdict is not None
+    cost = result.verdict.cost.round_trip_bps
+    take = Decimal(result.exits["take_pnl_bps"])
+    stop = -Decimal(result.exits["stop_pnl_bps"])
+    expected = ((stop + cost) / (take + stop)).quantize(Decimal("0.001"))
+    assert Decimal(result.intent["break_even_win_rate"]) == expected
+    # A 2:1 bracket needs a third of trades to win before costs, and more once they are paid.
+    assert expected > Decimal("0.334")

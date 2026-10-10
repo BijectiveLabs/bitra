@@ -1049,6 +1049,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         "cited": result.cited,
         "edge_bps": str(cfg.magnitude_bps),
         "edge_source": verdict.edge_source,
+        "break_even_win_rate": _break_even(result.exits, costs.cost.round_trip_bps),
         "net_bps": str(verdict.net_bps.quantize(Decimal("0.0001"))),
         "edge_multiple": (
             None
@@ -1523,6 +1524,19 @@ def _held_bars(cfg: CycleConfig, horizon: int) -> int:
     if cfg.hold_limit == "horizon":
         return min(horizon, cfg.timeout_bars)
     return max(horizon, cfg.timeout_bars)
+
+
+def _break_even(exits: Mapping[str, Any], round_trip_bps: Decimal) -> str | None:
+    """The share of trades that must reach the take profit for the stop, the take and the round
+    trip to come out even: (stop + cost) / (take + stop). Arithmetic on figures already priced,
+    with no guess at the odds."""
+    take, stop = exits.get("take_pnl_bps"), exits.get("stop_pnl_bps")
+    if take is None or stop is None:
+        return None
+    gain, loss = Decimal(take), -Decimal(stop)
+    if gain <= 0 or loss <= 0:
+        return None
+    return str(((loss + round_trip_bps) / (gain + loss)).quantize(Decimal("0.001")))
 
 
 def _exit_view(mid: Decimal, target: str, exits: Mapping[str, str]) -> dict[str, str]:

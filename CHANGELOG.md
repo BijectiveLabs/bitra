@@ -23,6 +23,8 @@ All notable changes to this project are recorded here. The format follows
   demo or testnet account no longer waits on the ladder, and no longer needs a `[canary]` table,
   which only `tra live` reads. `[execution].max_orders_per_cycle` is out of the template.
 - Unknown keys in `[controls]` are refused.
+- Every intent records `break_even_win_rate`, the share of trades that must reach the take profit
+  to cover the stops and the round trip; the cycle output prints it.
 - `tra mandate --sign "Your Name"`: writes `MANDATE.md` when the project has none and signs
   `[execution]` with the name and today's date (`--on` for another). Never overwrites a
   `MANDATE.md` someone wrote, puts the config back if the result does not load, and does not

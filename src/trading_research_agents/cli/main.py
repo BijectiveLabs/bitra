@@ -3741,6 +3741,12 @@ def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], l
                 pnl = shown.get(f"{name}_pnl_bps", shown[f"{name}_bps"])
                 said.append(f"{label} {shown[f'{name}_price']} (position {pnl} bps)")
         lines.append(", ".join(said))
+        even = (result.intent or {}).get("break_even_win_rate")
+        if even is not None:
+            lines.append(
+                f"break even: {Decimal(even) * 100:.1f}% of trades like this must reach the take "
+                "profit to cover the stops and the round trip"
+            )
         measured = shown.get("measured")
         if measured:
             held = f", held at {measured['clamped_to']}" if measured["clamped_to"] else ""

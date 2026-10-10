@@ -809,6 +809,13 @@ money`): the best outcome the trade can have would still lose.
   one way and by the software another, so it is refused, as is any key `[exit]` does not know. A
   typo in an exit setting should stop the desk at `tra check`, not at the venue.
 
+Every intent also records `break_even_win_rate`, and the cycle output says it in one line: the
+share of trades like this one that must reach the take profit for the stops and the round trip to
+come out even, `(stop + round trip) / (take profit + stop)`. It is arithmetic on figures already
+priced, with no guess at the odds. A 2:1 bracket needs a third of its trades to win before costs;
+with a 20 bps stop and a 13 bps round trip it needs 55 percent. Compare it with the win rate your
+round trips actually reach.
+
 The expected edge is a different thing from the take profit, on purpose. The take profit and the
 stop say where this position closes; the edge is what the desk expects to earn a trade on
 average, across the ones that hit the stop, the take profit or the time limit. The cost gate and
