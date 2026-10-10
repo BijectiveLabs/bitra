@@ -126,9 +126,10 @@ You can stop at any of these steps. Each is one command.
 | 4. Agents | `tra run` | the autonomous cycle instead of a code core; sandbox until you say otherwise | a model key |
 | 5. Venue mode | `tra run` with `[execution].mode = "venue"` | one order per decision, exits attached, positions looked after | a signed `MANDATE.md`, a leverage, a cap per order, venue keys; on mainnet also the canary tier |
 
-Venue mode is the only mode that can lose money, so it has a door in front of it. `tra mandate`
-prints the text you have to keep in your project word for word, and `tra check` names every missing
-piece. Read [Capital, orders and positions](/opensource/capital) before you open it.
+Venue mode is the only mode that can lose money, so it has a door in front of it. Read the
+mandate with `tra mandate`; when you accept it, `tra mandate --sign "Your Name"` keeps it in the
+project as `MANDATE.md` and signs `[execution]` with your name and today's date, in one step.
+Signing does not switch anything on. `tra check` names whatever else is missing. Read [Capital, orders and positions](/opensource/capital) before you open it.
 
 ```toml
 [execution]

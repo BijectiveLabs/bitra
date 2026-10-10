@@ -20,7 +20,7 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | `tra models groq` | the models your key can use on a provider, read from the vendor; no prompt sent |
 | `tra init my-desk --profile autonomous --venue okx` | a desk wired for one exchange: data, orders, practice account, keys |
 | `tra venues okx --setup` | what a venue can do, and the blocks to paste to trade on it |
-| `tra mandate` | the text venue mode requires: `tra mandate > MANDATE.md` |
+| `tra mandate` | the text venue mode requires; `--sign "Your Name"` keeps it as `MANDATE.md` and signs `[execution]` in one step |
 
 ## Running
 

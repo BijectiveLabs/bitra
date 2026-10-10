@@ -138,8 +138,8 @@ interest stay on the live market. Any `ccxt:<venue>` source takes `@demo` or `@t
 Three things only you can do, in the OKX app or website (in Demo trading for a demo key): set the
 account mode to Futures mode (Menu, Settings, Trading mode), because an account in Spot mode cannot
 trade perpetuals at all and OKX does not let an API key change it; set the position mode to
-one-way (net), because the desk refuses long/short mode; and turn venue mode on when you are ready (`tra mandate`, your signature,
-the ladder, then `mode = "venue"`).
+one-way (net), because the desk refuses long/short mode; and turn venue mode on when you are ready (`tra mandate --sign "Your Name"`,
+then `mode = "venue"`; on mainnet the ladder as well).
 
 What the desk does for OKX that it does not need to for Bybit: margin mode and leverage are applied
 as isolated (ccxt would otherwise default to cross), the client order id is letters and digits only

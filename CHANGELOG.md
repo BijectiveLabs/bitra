@@ -23,6 +23,10 @@ All notable changes to this project are recorded here. The format follows
   demo or testnet account no longer waits on the ladder, and no longer needs a `[canary]` table,
   which only `tra live` reads. `[execution].max_orders_per_cycle` is out of the template.
 - Unknown keys in `[controls]` are refused.
+- `tra mandate --sign "Your Name"`: writes `MANDATE.md` when the project has none and signs
+  `[execution]` with the name and today's date (`--on` for another). Never overwrites a
+  `MANDATE.md` someone wrote, puts the config back if the result does not load, and does not
+  switch venue mode on.
 - `tra check` no longer counts a stale series as something to fix: it is shown, not counted, and
   never stops the desk.
 - The quant auditor wakes on a clock (`[audit].quant_every = "24h"`, kept across restarts),

@@ -170,9 +170,9 @@ kill_switch = "KILL"               # touch this file to flatten and stop
 
 # What a cycle may do with an admitted intent. sandbox keeps it in the cycle's own directory,
 # signals writes it for your own executor, venue sends it to the venue with your capital behind it.
-# Venue mode does not start until MANDATE.md is in this project word for word (`tra mandate >
-# MANDATE.md`), you have signed it here, the ladder stands at CANARY, [canary] is declared, and the
-# keys are in the environment. `tra check` names whatever is missing.
+# Venue mode does not start until the mandate is in this project and signed: read it with
+# `tra mandate`, then `tra mandate --sign "Your Name"` does both. It also needs a leverage, a cap per
+# order, the keys in the environment, and on mainnet the ladder at CANARY. `tra check` names the rest.
 # [execution]
 # mode = "venue"
 # venue = "bybit"                  # a live venue; defaults to the venue half of [run].venue_key

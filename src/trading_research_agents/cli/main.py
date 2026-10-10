@@ -697,6 +697,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="print the execution mandate; venue mode needs it in the project, word for word",
     )
     mandate_cmd.set_defaults(command="mandate")
+    mandate_cmd.add_argument(
+        "--sign",
+        metavar="NAME",
+        default=None,
+        help="write MANDATE.md into the project and sign [execution] with this name and today",
+    )
+    mandate_cmd.add_argument(
+        "--on", type=date.fromisoformat, default=None, help="the signing date (default: today)"
+    )
+    mandate_cmd.add_argument("--config", type=Path, default=Path("strategy.toml"))
     mandate_cmd.add_argument("--json", action="store_true")
 
     check_cmd.set_defaults(command="check")
@@ -2425,10 +2435,42 @@ def show_mandate(args: argparse.Namespace) -> int:
     """The text venue mode needs, printed so an operator can read it and keep it."""
     from trading_research_agents.execution.mandate import DISCLAIMER, MANDATE_FILE
 
+    if args.sign is not None:
+        return sign_mandate(args)
     if args.json:
         emit({"mandate": DISCLAIMER, "file": MANDATE_FILE}, True, [])
         return CLEARED
     sys.stdout.write(DISCLAIMER)
+    return CLEARED
+
+
+def sign_mandate(args: argparse.Namespace) -> int:
+    """The mandate printed for reading, then kept in the project and signed in one step."""
+    from trading_research_agents.cli.sign import SignError, sign
+    from trading_research_agents.execution.mandate import DISCLAIMER
+
+    on = args.on or date.today()
+    try:
+        done = sign(args.config, args.sign, on)
+    except SignError as exc:
+        print(f"tra mandate: {exc}", file=sys.stderr)
+        return REFUSED
+    lines = [] if args.json else [DISCLAIMER.rstrip(), ""]
+    lines += [
+        f"{done.mandate}: " + ("written" if done.wrote_mandate else "already there, kept"),
+        f"{done.config}: [execution] signed by {args.sign.strip()} on {on.isoformat()}",
+        'venue mode is still off; [execution].mode = "venue" turns it on, then `tra check`',
+    ]
+    emit(
+        {
+            "mandate": str(done.mandate),
+            "wrote_mandate": done.wrote_mandate,
+            "signed_by": args.sign.strip(),
+            "signed_on": on.isoformat(),
+        },
+        args.json,
+        lines,
+    )
     return CLEARED
 
 

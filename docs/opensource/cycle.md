@@ -927,9 +927,13 @@ Three modes, and the distance between them is deliberate.
 
 Venue mode does not start until all of this is true, and `tra check` names whatever is not:
 
-1. `MANDATE.md` is in the project and carries the mandate text word for word. Print it with
-   `tra mandate > MANDATE.md`, and read it before you do - it says that the losses are yours.
-2. `[execution].acknowledged_by` and `acknowledged_on` name who signed it and when.
+1. `MANDATE.md` is in the project and carries the mandate text word for word, and
+   `[execution].acknowledged_by` and `acknowledged_on` name who signed it and when. Read it with
+   `tra mandate` - it says that the losses are yours - then `tra mandate --sign "Your Name"` does
+   both: it writes `MANDATE.md` when the project has none (one you wrote yourself is never
+   overwritten) and sets the two lines, with today's date or `--on YYYY-MM-DD`. Venue mode stays off
+   until you set `[execution].mode = "venue"`.
+2. The signature is yours alone: no role, model or tool on the MCP surface can sign.
 3. `[execution].max_notional` caps one order, and `[execution].leverage` is chosen. Neither has
    a default: both are what a defect would cost you.
 4. On mainnet, the ladder stands at `CANARY`, promoted with evidence and a signature. A demo or

@@ -337,9 +337,10 @@ README was written.
 The replay of that day printed `net -294.19 bps` for the example core, and it is shown as it came
 out: a backtest that only shows good news is one nobody should believe.
 
-Venue mode is the only mode that can lose money, so it has a door in front of it. `tra mandate`
-prints the text you have to keep in your project word for word, and `tra check` names every missing
-piece.
+Venue mode is the only mode that can lose money, so it has a door in front of it. Read the
+mandate with `tra mandate`; when you accept it, `tra mandate --sign "Your Name"` keeps it in the
+project as `MANDATE.md` and signs `[execution]` with your name and today's date, in one step.
+Signing does not switch anything on. `tra check` names whatever else is missing.
 
 ### Your money, your orders, your positions
 
@@ -422,7 +423,7 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | `tra models groq` | the models your key can use on a provider, read from the vendor; no prompt sent |
 | `tra init my-desk --profile autonomous --venue okx` | a desk wired for one exchange: data, orders, practice account, keys |
 | `tra venues okx --setup` | what a venue can do, and the blocks to paste to trade on it |
-| `tra mandate` | the text venue mode requires: `tra mandate > MANDATE.md` |
+| `tra mandate` | the text venue mode requires; `--sign "Your Name"` keeps it as `MANDATE.md` and signs `[execution]` in one step |
 
 **Running**
 
