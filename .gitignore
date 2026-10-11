@@ -1,5 +1,7 @@
-# Secret
+# Keys. The example is committed; the real file never is.
 .env
+.env.*
+!.env.example
 
 # Python
 __pycache__/
@@ -34,7 +36,11 @@ ledger.jsonl
 /data/
 /reference
 
-# Keys. The example is committed; the real file never is.
-.env
-.env.*
-!.env.example
+# Run directories are research artefacts; evidence is copied out deliberately.
+runs/
+.tra-history
+
+# Documentation site: dependencies and build output
+docs/node_modules/
+docs/.vitepress/cache/
+docs/.vitepress/dist/

@@ -1,0 +1,8 @@
+.env
+.tra-history
+KILL
+runs/
+data/
+*.parquet
+ledger.jsonl
+__pycache__/

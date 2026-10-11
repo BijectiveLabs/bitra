@@ -36,6 +36,14 @@ One intent per commit. A short imperative subject line, under 60 characters, tha
 changed. A body only when the reason is not obvious from the diff. No trailers, no tooling
 signatures.
 
+## Releases
+
+A release is a version bump, a dated section in `CHANGELOG.md`, a merge of `develop` into
+`master` and a tag `vX.Y.Z` on that merge. The tag runs the same checks as CI, builds the wheel
+and the source archive, refuses a tag that does not match the package version, attaches both to a
+GitHub release, and publishes the same files to PyPI through trusted publishing. No PyPI token is
+stored anywhere.
+
 ## Standards the code is held to
 
 **Money is never a float.** Prices, quantities, fees and costs are `decimal.Decimal`. Floats
@@ -49,15 +57,23 @@ written from the doctrine it implements, not from the code.
 entry that breaks a rule cannot be constructed.
 
 **Comments say why, not what.** If a comment explains what the next line does, the line
-should be clearer. Detail belongs in `docs/`.
+should be clearer. Detail belongs in the docs (`docs/opensource/`).
 
 **ASCII in source.** Non-ASCII characters are not used in `.py` files. A test checks.
 
 **Direction of dependency.** `ledger` and `envelope` import nothing else from this project.
-Arrows point only downward through the list in `docs/architecture.md`. Only `agent` may talk
-to a language model. A test checks that too.
+Arrows point only downward through the list in [Architecture](https://docs.bijectivelabs.dev/opensource/architecture). Only `llm/providers`
+imports a vendor SDK. A test checks that too.
 
 **English, professional register.** Identifiers, docstrings, docs and commit messages.
+
+## Extending what it can do
+
+Spot and other market types, decentralised venues, more than one account, routing and execution
+algorithms, portfolio accounting: [Boundaries](https://docs.bijectivelabs.dev/opensource/boundaries) lists each under "not built yet", with what
+it does today and what a contribution would need. Open an issue first with the design, so the shape
+is agreed before the code. A contribution may add any of them; it may not weaken a guarantee on the
+same page to get there, and the tests that hold those guarantees must keep passing unchanged.
 
 ## Adding a gate
 

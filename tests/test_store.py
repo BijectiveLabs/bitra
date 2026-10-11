@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from trading_research_agent.ledger import (
+from trading_research_agents.ledger import (
     Axis,
     Ledger,
     LedgerEntry,
@@ -16,7 +16,7 @@ from trading_research_agent.ledger import (
     Transferability,
     Verdict,
 )
-from trading_research_agent.ledger.store import from_record, to_record
+from trading_research_agents.ledger.store import from_record, to_record
 
 
 def closed_on_cost(entry_id: str, now: datetime) -> LedgerEntry:

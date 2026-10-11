@@ -4,18 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import json
+import tempfile
 from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any, TypeVar
 
 import pytest
 
-from trading_research_agent.trading import Ladder
+from trading_research_agents.trading import Ladder
 
 mcp_sdk = pytest.importorskip("mcp")
 from mcp import Client  # noqa: E402 - after the skip
 
-from trading_research_agent.mcp import build_server  # noqa: E402
+from trading_research_agents.mcp import build_server  # noqa: E402
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
 T = TypeVar("T")
@@ -25,8 +26,13 @@ def run(coro: Coroutine[Any, Any, T]) -> T:
     return asyncio.run(coro)
 
 
-async def call(name: str, arguments: dict[str, Any]) -> Any:
-    async with Client(build_server(), raise_exceptions=True) as client:
+# The tests write their files under the system's temporary directory and read the examples from
+# the repository, so those are the two roots this server is given.
+ROOTS = (EXAMPLES.parent, Path(tempfile.gettempdir()))
+
+
+async def call(name: str, arguments: dict[str, Any], roots: Any = ROOTS) -> Any:
+    async with Client(build_server(roots), raise_exceptions=True) as client:
         return await client.call_tool(name, arguments)
 
 
@@ -42,8 +48,11 @@ def test_the_server_lists_exactly_the_read_tools() -> None:
         "check_registration",
         "cost_floor_check",
         "ladder_show",
+        "ledger_search",
         "ledger_show",
+        "observe_events",
         "run_report",
+        "runs_index",
         "validate_trades",
     ]
     for name, note in annotations.items():
@@ -129,3 +138,16 @@ def test_audit_ladder_and_run_report_read_the_files(tmp_path: Path) -> None:
     report = run(call("run_report", {"run_dir": str(run_dir)}))
     assert report.structured_content["closed_round_trips"] == 2
     assert report.structured_content["label"] == "replay"
+
+
+def test_a_host_cannot_read_outside_its_roots_or_into_a_hidden_file(tmp_path: Path) -> None:
+    secret = tmp_path / ".env"
+    secret.write_text("GROQ_API_KEY=not-for-a-model\n", encoding="utf-8")
+    hidden = run(call("ledger_show", {"ledger_path": str(secret)}, roots=(tmp_path,)))
+    assert hidden.is_error and "hidden" in json.dumps(hidden.model_dump(), default=str)
+    assert "not-for-a-model" not in json.dumps(hidden.model_dump(), default=str)
+
+    elsewhere = run(
+        call("ladder_show", {"ladder_path": str(EXAMPLES / "x.json")}, roots=(tmp_path,))
+    )
+    assert elsewhere.is_error and "outside" in json.dumps(elsewhere.model_dump(), default=str)

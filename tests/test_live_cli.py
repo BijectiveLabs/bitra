@@ -13,12 +13,12 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
-from trading_research_agent.cli.main import main, read_env_file
-from trading_research_agent.data import Side, Trade
-from trading_research_agent.data.venues import archive_venue, register
-from trading_research_agent.data.venues.bybit import Bybit
-from trading_research_agent.trading import Ladder, LadderError, Tier
-from trading_research_agent.trading.config import load_funding, load_strategy_config
+from trading_research_agents.cli.main import main, read_env_file
+from trading_research_agents.data import Side, Trade
+from trading_research_agents.data.venues import archive_venue, register
+from trading_research_agents.data.venues.bybit import Bybit
+from trading_research_agents.trading import Ladder, LadderError, Tier
+from trading_research_agents.trading.config import load_funding, load_strategy_config
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
 MINUTE = 60 * 1_000_000_000
@@ -46,6 +46,13 @@ def test_init_writes_a_project_and_never_overwrites(
         "strategy.toml",
         "envelope.toml",
         "mapping.toml",
+        "data.toml",
+        "observation.toml",
+        "sources/macro.toml",
+        "sources/onchain.toml",
+        "sources/derivatives.toml",
+        "sources/sentiment.toml",
+        "sources/news.toml",
         "strategies/trailing_zscore.py",
         ".env.example",
         ".gitignore",
@@ -58,11 +65,45 @@ def test_init_writes_a_project_and_never_overwrites(
     assert "never overwrites" in capsys.readouterr().err
 
 
+def test_the_shelf_starts_empty_and_check_says_what_filling_it_in_does(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "proj"
+    assert main(["init", str(target)]) == 0
+    monkeypatch.chdir(target)
+    capsys.readouterr()
+
+    main(["check"])
+    out = capsys.readouterr().out
+    assert "nothing declared yet" in out
+    assert "ok    roster: technical_analyst; `tra run` asks these" in out
+
+    (target / "sources" / "macro.toml").write_text(
+        '[[series]]\nname = "us10y"\nfile = "macro/us10y.csv"\nts = "date"\n'
+        'ts_unit = "iso8601"\nvalue = "value"\n',
+        encoding="utf-8",
+    )
+    main(["check"])
+    # The export is declared but not on disk yet, so it is a todo rather than a silent skip.
+    assert "todo  sources/macro.toml: declared but not on disk: macro/us10y.csv" in (
+        capsys.readouterr().out
+    )
+
+    (target / "sources" / "macro").mkdir()
+    (target / "sources" / "macro" / "us10y.csv").write_text(
+        "date,value\n2026-09-20,4.10\n", encoding="utf-8"
+    )
+    main(["check"])
+    out = capsys.readouterr().out
+    assert "ok    sources/macro.toml: 1 declared (us10y)" in out
+    assert "ok    roster: technical_analyst, macro_analyst; `tra run` asks these" in out
+
+
 def test_backtest_is_trade_replay_by_another_name(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     pytest.importorskip("pyarrow")
-    from trading_research_agent.data.parquet import write_trades
+    from trading_research_agents.data.parquet import write_trades
 
     rows = [
         Trade(
@@ -265,3 +306,230 @@ def test_funding_pages_backwards_and_writes_the_schedule(
     assert code == 0 and payload["interval_s"] == 28800 and payload["count"] == 93
     schedule = load_funding(out, 28800)
     assert len(schedule.rates) == 93
+
+
+def test_the_autonomous_profile_lays_the_cycle_down_wired(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from trading_research_agents.trading.config import load_strategy_config
+
+    target = tmp_path / "desk"
+    assert main(["init", str(target), "--profile", "autonomous"]) == 0
+    said = capsys.readouterr().out
+    assert "the cycle is wired" in said and "name the provider" in said
+
+    cfg = load_strategy_config(target / "strategy.toml")
+    assert cfg.agents is not None and cfg.agents.role == "technical_analyst"
+    # The gates are live rather than commented, and they are the operator's to change.
+    assert not cfg.conviction.idle and cfg.conviction.min_score == Decimal("0.4")
+    assert [str(t.size_multiple) for t in cfg.conviction.ladder] == ["1.0", "0.5", "0.25"]
+    assert cfg.targets.min_net_bps == Decimal("5")
+    assert cfg.execution.mode == "sandbox"
+    # Nothing is required of the matrix yet: no source is declared, and a role nobody asked has
+    # agreed to nothing.
+    assert cfg.confluence.required == ()
+    assert cfg.conviction.weights == {"technical_analyst": Decimal("2.0")}
+
+    # The data section survived the rewrite that put [agents] in, and so did the shelf.
+    assert "[data]" in (target / "strategy.toml").read_text("utf-8")
+    assert (target / "sources" / "macro.toml").is_file()
+    assert "Your first hour" in (target / "README.md").read_text("utf-8")
+
+    monkeypatch.chdir(target)
+    capsys.readouterr()
+    main(["check"])
+    out = capsys.readouterr().out
+    assert "ok    conviction: floor 0.4" in out
+    assert "ok    execution: sandbox; nothing leaves the machine" in out
+    assert "todo  [agents].provider is still the placeholder" in out
+
+
+def test_the_default_profile_is_unchanged_and_agent_init_keeps_the_gates(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from trading_research_agents.trading.config import load_strategy_config
+
+    plain = tmp_path / "plain"
+    assert main(["init", str(plain)]) == 0
+    capsys.readouterr()
+    cfg = load_strategy_config(plain / "strategy.toml")
+    assert cfg.agents is None and cfg.conviction.idle and cfg.targets.idle
+
+    with_agent = tmp_path / "agent"
+    assert main(["init", str(with_agent), "--agent", "groq", "--model", "a-model"]) == 0
+    capsys.readouterr()
+    text = (with_agent / "strategy.toml").read_text("utf-8")
+    # The live [agents] table replaced the commented one without taking the rest of the page.
+    assert '[agents]\nprovider = "groq"' in text
+    assert "# [agents]" not in text
+    assert "[data]" in text and "# [conviction]" in text and "# [execution]" in text
+
+
+def test_check_says_what_the_three_files_add_up_to(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "desk"
+    assert main(["init", str(target), "--profile", "autonomous"]) == 0
+    monkeypatch.chdir(target)
+    capsys.readouterr()
+
+    main(["check"])
+    out = capsys.readouterr().out
+    assert "ok    symbols: BTCUSDT is BTC/USDT:USDT to the sources" in out
+    # The shipped chains fail over to a second venue, and a desk should know it prices only one.
+    assert "venues: fees are priced on bybit, data also comes from binance" in out
+
+    # An order that would go to one venue at another's fee is a refusal, not a note.
+    config = target / "strategy.toml"
+    config.write_text(
+        config.read_text("utf-8").replace(
+            'mode = "sandbox"', 'mode = "venue"\nvenue = "binance"', 1
+        ),
+        "utf-8",
+    )
+    main(["check"])
+    said = capsys.readouterr().out
+    assert "at the other's fee" in said
+
+
+def test_init_for_a_venue_wires_data_orders_and_fees_for_that_venue(tmp_path: Path) -> None:
+    from trading_research_agents.data.sources.config import load_data_config
+    from trading_research_agents.trading.config import load_strategy_config
+
+    target = tmp_path / "okx-desk"
+    assert main(["init", str(target), "--profile", "autonomous", "--venue", "okx"]) == 0
+
+    data = (target / "data.toml").read_text(encoding="utf-8")
+    assert "bybit" not in data and "ccxt:okx" in data and "intervalTime" not in data
+    # The book comes from the practice account the orders go to.
+    assert 'chain = ["ccxt:okx@testnet"]' in data
+    load_data_config(target / "data.toml")
+
+    strategy = (target / "strategy.toml").read_text(encoding="utf-8")
+    assert 'venue_key = "okx/taker-taker"' in strategy and "[live]" not in strategy.replace(
+        "# [live]", ""
+    )
+    config = load_strategy_config(target / "strategy.toml")
+    assert config.execution.venue == "okx" and config.execution.environment == "testnet"
+    assert config.execution.mode == "sandbox"
+    assert config.run.size_step == Decimal("0.000001")
+
+    envelope = (target / "envelope.toml").read_text(encoding="utf-8")
+    assert "bybit" not in envelope and 'venue = "okx"' in envelope
+    example = (target / ".env.example").read_text(encoding="utf-8")
+    assert "OKX_API_PASSPHRASE=" in example and "BYBIT" not in example
+
+
+def test_models_lists_what_the_key_can_use_and_init_takes_a_default_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from trading_research_agents.llm.providers import registry
+
+    monkeypatch.setenv("GROQ_API_KEY", "k" * 40)
+    monkeypatch.setattr(registry, "model_ids", lambda name, base_url=None: ["a-20b", "b-120b"])
+    assert main(["models", "groq", "--filter", "120", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["models"] == ["b-120b"]
+
+    # A provider with a default model needs no --model; one without says where to look.
+    assert main(["init", str(tmp_path / "a"), "--agent", "anthropic"]) == 0
+    assert 'provider = "anthropic"' in (tmp_path / "a" / "strategy.toml").read_text(
+        encoding="utf-8"
+    )
+    assert main(["init", str(tmp_path / "b"), "--agent", "groq"]) != 0
+    assert "tra models groq" in capsys.readouterr().err
+
+
+def test_blank_fees_are_read_from_the_account_and_written_ones_are_checked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+
+    from trading_research_agents.cli import main as package_main  # noqa: F401
+    from trading_research_agents.envelope.load import load_envelope
+
+    cli = __import__("importlib").import_module("trading_research_agents.cli.main")
+    envelope = tmp_path / "envelope.toml"
+    envelope.write_text(
+        "\n".join(
+            [
+                "[[channel]]",
+                'venue = "okx"',
+                'name = "taker-taker"',
+                "entry_fee_bps =                  # your taker fee",
+                "exit_fee_bps =                   # your taker fee",
+                "",
+                "[[channel]]",
+                'venue = "okx"',
+                'name = "maker-taker"',
+                "entry_fee_bps = 1",
+                "exit_fee_bps =                   # your taker fee",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = SimpleNamespace(
+        execution=SimpleNamespace(venue="okx", environment="testnet"),
+        run=SimpleNamespace(venue_key="okx/taker-taker", instrument="BTCUSDT"),
+        live=None,
+    )
+    monkeypatch.setattr(
+        cli,
+        "_read_fees",
+        lambda *a: ((Decimal("2"), Decimal("5")), "read from your testnet account"),
+    )
+    good, bad = cli._fill_account_fees(envelope, cfg, {}, datetime(2026, 10, 8, tzinfo=UTC))
+    channels = load_envelope(envelope).channels
+    assert [(c.entry_fee_bps, c.exit_fee_bps) for c in channels] == [
+        (Decimal("5"), Decimal("5")),
+        (Decimal("1"), Decimal("5")),
+    ]
+    assert "written into envelope.toml" in good[0]
+    # The maker fee written by hand is kept, and it is below what the account pays: said so.
+    assert "prices okx/maker-taker maker at 1 bps and your account pays 2" in bad[0]
+
+    monkeypatch.setattr(cli, "_read_fees", lambda *a: (None, "OKX_API_PASSPHRASE not set"))
+    blank = tmp_path / "blank.toml"
+    blank.write_text(
+        '[[channel]]\nvenue = "okx"\nname = "taker-taker"\nentry_fee_bps =\nexit_fee_bps =\n',
+        encoding="utf-8",
+    )
+    _, bad = cli._fill_account_fees(blank, cfg, {}, datetime(2026, 10, 8, tzinfo=UTC))
+    assert "OKX_API_PASSPHRASE not set" in bad[0]
+
+
+def test_a_standard_tier_fee_is_replaced_by_the_accounts_own_once_it_reports_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+
+    from trading_research_agents.envelope.load import load_envelope
+
+    cli = __import__("importlib").import_module("trading_research_agents.cli.main")
+    envelope = tmp_path / "envelope.toml"
+    envelope.write_text(
+        '[[channel]]\nvenue = "okx"\nname = "taker-taker"\nentry_fee_bps =\nexit_fee_bps =\n',
+        encoding="utf-8",
+    )
+    cfg = SimpleNamespace(
+        execution=SimpleNamespace(venue="okx", environment="testnet"),
+        run=SimpleNamespace(venue_key="okx/taker-taker", instrument="BTCUSDT"),
+        live=None,
+    )
+    when = datetime(2026, 10, 8, tzinfo=UTC)
+    monkeypatch.setattr(
+        cli, "_read_fees", lambda *a: ((Decimal("2"), Decimal("5")), "okx's standard tier ...")
+    )
+    cli._fill_account_fees(envelope, cfg, {}, when)
+    assert "standard tier" in envelope.read_text(encoding="utf-8")
+    assert load_envelope(envelope).channels[0].entry_fee_bps == Decimal("5")
+
+    monkeypatch.setattr(
+        cli, "_read_fees", lambda *a: ((Decimal("1.5"), Decimal("4")), "read from your account")
+    )
+    good, _ = cli._fill_account_fees(envelope, cfg, {}, when)
+    assert load_envelope(envelope).channels[0].entry_fee_bps == Decimal("4")
+    assert "read from your okx account" in envelope.read_text(encoding="utf-8")
+    assert "written into envelope.toml" in good[0]

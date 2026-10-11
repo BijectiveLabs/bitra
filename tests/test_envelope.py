@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
-from trading_research_agent.envelope import Channel, Envelope, EnvelopeError, parse_envelope
+from trading_research_agents.envelope import Channel, Envelope, EnvelopeError, parse_envelope
 
 
 def test_example_envelope_reproduces_the_published_schedule(envelope: Envelope) -> None:
@@ -75,3 +76,48 @@ def test_snapshot_is_flat_strings_for_the_ledger(envelope: Envelope) -> None:
     assert snap["bybit/taker-taker/measured_round_trip_bps"] == "15.02"
     assert snap["order_latency_ms"] == "5.5"
     assert all(isinstance(k, str) and isinstance(v, str) for k, v in envelope.snapshot())
+
+
+def test_a_channel_says_how_it_gets_in_and_out() -> None:
+    from trading_research_agents.envelope.model import Channel
+
+    maker = Channel(
+        venue="bybit", name="maker-taker", entry_fee_bps=Decimal(2), exit_fee_bps=Decimal("5.5")
+    )
+    assert maker.roles == ("maker", "taker")
+    assert maker.entry_role == "maker" and maker.exit_role == "taker"
+
+    taker = Channel(
+        venue="bybit", name="TAKER-TAKER", entry_fee_bps=Decimal(5), exit_fee_bps=Decimal(5)
+    )
+    assert taker.entry_role == "taker"
+
+    # A name that does not say is not guessed at, because the fee beside it depends on the answer.
+    odd = Channel(venue="dex", name="flat", entry_fee_bps=Decimal(1), exit_fee_bps=Decimal(1))
+    assert odd.roles == ("undeclared", "undeclared")
+
+
+def test_a_channel_may_carry_the_chains_own_cost(tmp_path: Path) -> None:
+    from trading_research_agents.envelope import load_envelope
+    from trading_research_agents.envelope.model import Channel, EnvelopeError
+
+    (tmp_path / "envelope.toml").write_text(
+        "[[channel]]\n"
+        'venue = "some-dex"\n'
+        'name = "taker-taker"\n'
+        "entry_fee_bps = 3\n"
+        "exit_fee_bps = 3\n"
+        "gas_quote = 1.40\n",
+        encoding="utf-8",
+    )
+    (channel,) = load_envelope(tmp_path / "envelope.toml").channels
+    assert channel.gas_quote == Decimal("1.40")
+
+    with pytest.raises(EnvelopeError, match="gas_quote"):
+        Channel(
+            venue="d",
+            name="taker-taker",
+            entry_fee_bps=Decimal(1),
+            exit_fee_bps=Decimal(1),
+            gas_quote=Decimal(-1),
+        )

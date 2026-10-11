@@ -10,10 +10,10 @@ from typing import Any
 
 import pytest
 
-from trading_research_agent.data import Side
-from trading_research_agent.trading.feed import FeedError
-from trading_research_agent.trading.feeds import UnknownFeedError, live_feed, live_feeds
-from trading_research_agent.trading.feeds.bybit import BybitPublicFeed, parse_public_trade
+from trading_research_agents.data import Side
+from trading_research_agents.trading.feed import FeedError
+from trading_research_agents.trading.feeds import UnknownFeedError, live_feed, live_feeds
+from trading_research_agents.trading.feeds.bybit import BybitPublicFeed, parse_public_trade
 
 pytest.importorskip("websockets")
 
@@ -113,7 +113,7 @@ def test_an_unacknowledged_subscribe_is_not_a_subscription() -> None:
         thread = threading.Thread(target=srv.serve_forever, daemon=True)
         thread.start()
         port = srv.socket.getsockname()[1]
-        import trading_research_agent.trading.feeds.bybit as module
+        import trading_research_agents.trading.feeds.bybit as module
 
         original = module.SUBSCRIBE_ACK_TIMEOUT_S
         module.SUBSCRIBE_ACK_TIMEOUT_S = 0.5

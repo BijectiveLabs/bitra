@@ -1,0 +1,68 @@
+# On-chain series this desk reads: dated chain figures. Venue flows, supply held by cohorts, active
+# addresses, whatever your provider gives you and you trust.
+#
+# The point of a file per class is that the vendor is a line, not a format. A free public endpoint
+# you export by hand and a paid subscription you dump nightly are declared the same way here, and
+# the on-chain analyst cannot tell which is which. That is deliberate: it keeps the desk portable
+# when a free tier dies or a subscription starts.
+#
+# publish_lag matters more here than anywhere else: chain aggregates are usually published hours
+# after the blocks they describe, and a figure used before it was knowable is a look-ahead.
+
+# A paid subscription is one fetch line: { from = "http", url = "https://...", ... } with the path,
+# the field names and the key's place taken from your vendor's docs (macro.toml lists the fields).
+# Set max_age to what the vendor actually delivers, so a feed that stops is noticed, not trusted.
+
+# Two free feeds need no key: Coin Metrics community (many assets; exchange flows, active
+# addresses, supply) and Blockchain.com charts (Bitcoin). The first two entries below use Coin
+# Metrics and fill their own files; set the lines from your own look at the history.
+
+# Nothing is switched on yet. Uncomment an entry, put the file where it points, and the on-chain
+# analyst joins the roster on the next run. Left as it is, that role is not asked at all.
+
+# [[series]]
+# name = "btc_exchange_net_flow"
+# file = "onchain/btc_exchange_net_flow.csv"   # BTC arriving on exchanges, less BTC leaving
+# ts = "date"
+# ts_unit = "iso8601"
+# value = "value"
+# unit = "BTC"
+# publish_lag = "28h"                  # a day is posted about 3 to 4 hours after it closes
+# source = "Coin Metrics community, FlowInExNtv less FlowOutExNtv"
+# max_age = "3d"
+# fetch = { from = "coinmetrics", id = "FlowInExNtv", minus = "FlowOutExNtv" }
+# threshold = { bearish_above = 2800, bullish_below = -6300 }
+
+# [[series]]
+# name = "btc_active_addresses"
+# file = "onchain/btc_active_addresses.csv"
+# ts = "date"
+# ts_unit = "iso8601"
+# value = "value"
+# unit = "addresses"
+# publish_lag = "28h"
+# source = "Coin Metrics community, AdrActCnt"
+# max_age = "3d"
+# fetch = { from = "coinmetrics", id = "AdrActCnt" }
+# threshold = { bullish_above = 711000, bearish_below = 544000 }
+
+# [[series]]
+# name = "venue_net_flow"
+# file = "onchain/venue_net_flow.csv"   # columns: date,value  (positive: coins arriving on venues)
+# ts = "date"
+# ts_unit = "iso8601"
+# value = "value"
+# unit = "coins"
+# publish_lag = "6h"
+# source = "your export"
+# threshold = { bearish_above = 1500, bullish_below = 0 }
+
+# [[series]]
+# name = "supply_held_1y"
+# file = "onchain/supply_held_1y.csv"
+# ts = "date"
+# ts_unit = "iso8601"
+# value = "value"
+# unit = "coins"
+# publish_lag = "24h"
+# source = "your subscription"

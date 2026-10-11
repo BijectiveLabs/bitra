@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from trading_research_agent.ledger import (
+from trading_research_agents.ledger import (
     Axis,
     LedgerEntry,
     LedgerError,

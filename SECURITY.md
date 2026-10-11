@@ -2,15 +2,21 @@
 
 ## Scope
 
-This library reads public market data archives, computes verdicts, and writes local files.
-It holds no exchange credentials, opens no trading connection, and places no orders. A
-report that it does any of those things is a bug report of the highest severity.
+This package reads market data, asks language models for opinions, computes verdicts and writes
+local files. In venue mode, which is off until you sign a mandate and meet its conditions, it also
+holds your venue keys in memory and sends orders. Models never see a key and cannot send, change or
+cancel an order; only the venue hand does, after every gate.
 
 Things that are in scope for a security report:
 
-- A path where a value from an untrusted file (a ledger row, an envelope, a dataset manifest)
-  is executed, deserialised unsafely, or used to reach outside the intended directory.
+- A path where a credential reaches a log, a record, a brief, a model or a message in clear text.
+- A path where a model's answer, or a value from an untrusted file (a ledger row, an envelope, a
+  dataset manifest, a fetched series), is executed, deserialised unsafely, or used to reach outside
+  the intended directory.
+- A way to send an order without the mandate, the ladder tier, the caps or the gates that are
+  supposed to stand in front of it, or to loosen a control from inside a model's answer.
 - A gate that can be made to issue a verdict its rules forbid, or to skip a rule silently.
+- A fetch that follows a redirect off https or sends a key to a host the operator did not name.
 - A dependency with a known vulnerability that this project pins.
 
 ## Reporting

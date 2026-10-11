@@ -1,7 +1,8 @@
 """Dependency direction and the adoption rules, checked from the source rather than trusted.
 
 ledger and envelope are vocabulary and import nothing else from this project. Arrows only
-point down the list in docs/architecture.md. Nothing imports a language model outside agent.
+point down the list in docs.bijectivelabs.dev/opensource/architecture. Nothing imports a language
+model outside agent.
 No strategy ships inside the package, and no core module names a venue: both live behind
 the plugin directories or in examples/.
 """
@@ -13,43 +14,52 @@ from pathlib import Path
 
 import pytest
 
-SRC = Path(__file__).resolve().parent.parent / "src" / "trading_research_agent"
-PACKAGE = "trading_research_agent"
+SRC = Path(__file__).resolve().parent.parent / "src" / "trading_research_agents"
+PACKAGE = "trading_research_agents"
 
-ALLOWED: dict[str, set[str]] = {
+GATES = {"ledger", "envelope", "data", "chain", "execution", "strategy", "trading"}
+
+# How records reach the disk is beneath everything: any package may write one, and it imports none.
+_ALLOWED: dict[str, set[str]] = {
+    "records": set(),
     "ledger": set(),
     "envelope": set(),
+    # The model layer sits beside the gates, not above them: it knows nothing about markets.
+    "llm": set(),
     "data": {"ledger", "envelope"},
     "chain": {"ledger", "envelope", "data"},
     "execution": {"ledger", "envelope", "data", "chain"},
     "strategy": {"ledger", "envelope", "data", "chain", "execution"},
     "trading": {"ledger", "envelope", "data", "chain", "execution", "strategy"},
-    "agent": {"ledger", "envelope", "data", "chain", "execution"},
-    "mcp": {"ledger", "envelope", "data", "chain", "execution", "strategy", "trading"},
-    "cli": {
-        "ledger",
-        "envelope",
-        "data",
-        "chain",
-        "execution",
-        "strategy",
-        "trading",
-        "agent",
-        "mcp",
-    },
+    "store": GATES | {"llm"},
+    "surface": GATES,
+    "agents": GATES | {"llm", "store", "surface"},
+    "mcp": GATES | {"surface"},
+    "cli": GATES | {"llm", "store", "surface", "agents", "mcp"},
+}
+ALLOWED = {
+    name: deps | ({"records"} if name != "records" else set()) for name, deps in _ALLOWED.items()
 }
 
 LLM_CLIENTS = {"anthropic", "openai", "langchain", "langgraph", "litellm", "ollama"}
 
 # Plugin directories are the only places a venue may be named in the package. Templates are
 # copies of examples/ that `tra init` writes into a project; they are never imported.
-PLUGIN_DIRS = {SRC / "data" / "venues", SRC / "trading" / "feeds", SRC / "trading" / "venues"}
+PLUGIN_DIRS = {
+    SRC / "data" / "venues",
+    SRC / "data" / "sources",
+    SRC / "trading" / "feeds",
+    SRC / "trading" / "venues",
+}
 TEMPLATES = SRC / "templates"
 EXAMPLES = SRC.parent.parent / "examples"
 VENUE_NAMES = ("bybit", "binance", "hyperliquid", "okx", "coinbase", "deribit", "kraken")
 
-# A decision core is a class with these methods, however it is spelled.
+# A decision core is a class with these methods, however it is spelled. Two classes carry the
+# methods without carrying a rule about the market: the agent core, where a model decides
+# from the operator's mechanism, and the config placeholder that stands in for it.
 STRATEGY_METHODS = {"on_bar"}
+MECHANISMS = {"agents/strategy.py:AgentStrategy", "trading/config.py:_Pending"}
 FITTED_CORE_METHODS = {"fit", "entry", "exit", "mark"}
 
 
@@ -83,12 +93,12 @@ def test_subpackage_only_reaches_downward(subpackage: str) -> None:
 
 
 @pytest.mark.parametrize("subpackage", _subpackages())
-def test_only_agent_talks_to_a_language_model(subpackage: str) -> None:
+def test_only_the_llm_layer_talks_to_a_language_model(subpackage: str) -> None:
     for path in (SRC / subpackage).rglob("*.py"):
-        if subpackage == "agent" and path.parent.name == "providers":
+        if subpackage == "llm" and path.parent.name == "providers":
             continue
         roots = {n.split(".")[0] for n in _imports(path)}
-        assert roots.isdisjoint(LLM_CLIENTS), f"{path}: vendor SDKs live only in agent/providers"
+        assert roots.isdisjoint(LLM_CLIENTS), f"{path}: vendor SDKs live only in llm/providers"
 
 
 def test_nothing_reaches_into_a_private_platform() -> None:
@@ -145,7 +155,9 @@ def test_no_strategy_ships_inside_the_package() -> None:
             methods = _methods(cls)
             strategy = methods >= STRATEGY_METHODS and _names_itself(cls)
             if strategy or methods >= FITTED_CORE_METHODS:
-                offenders.append(f"{path.relative_to(SRC)}:{cls.name}")
+                label = f"{path.relative_to(SRC).as_posix()}:{cls.name}"
+                if label not in MECHANISMS:
+                    offenders.append(label)
     assert not offenders, f"decision cores belong in examples/ or your own package: {offenders}"
 
 
@@ -171,7 +183,17 @@ def test_examples_are_not_importable_from_the_package() -> None:
 
 
 def test_templates_are_the_examples_with_the_core_beside_the_config() -> None:
-    same = {"envelope.toml": "envelope.toml", "mapping.toml": "mapping.toml"}
+    same = {
+        "envelope.toml": "envelope.toml",
+        "mapping.toml": "mapping.toml",
+        "observation.toml": "observation.toml",
+        "data.toml": "data.toml",
+        "sources/macro.toml": "sources/macro.toml",
+        "sources/onchain.toml": "sources/onchain.toml",
+        "sources/derivatives.toml": "sources/derivatives.toml",
+        "sources/sentiment.toml": "sources/sentiment.toml",
+        "sources/news.toml": "sources/news.toml",
+    }
     for template, example in same.items():
         assert (TEMPLATES / template).read_text(encoding="utf-8") == (EXAMPLES / example).read_text(
             encoding="utf-8"

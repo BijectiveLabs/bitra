@@ -1,0 +1,86 @@
+# Macro series this desk reads: dated levels and rates. One file per class of data, never one file
+# per vendor, so swapping a provider is an edit here and nothing else moves.
+#
+# Every entry names a local file. Either you keep it (an export, a vendor's dump, your own
+# recorder) or `fetch` keeps it fresh from an endpoint. Either way the analyst reads only the file,
+# and no agent ever sees a URL or a key.
+#
+#   ts_unit      s | ms | us | ns | iso8601. A bare date (2026-09-26) is read as UTC midnight.
+#   publish_lag  how long after the observation the figure was actually knowable. A monthly print
+#                released two weeks later is "14d", and a value is never used before that moment.
+#   threshold    yours. It is labelled a declaration in every brief, and it is what the gate reads.
+#   max_age      a value older than this, from the moment it describes, is shown and not counted.
+#                Default 4d. `tra check` and `tra sources show` say which series are past it.
+#   fetch        where to refresh the file from. Leave it out and you keep the file by hand.
+#                  { from = "fred", id = "DGS10" }      FRED, free key in FRED_API_KEY
+#                  { from = "alternative.me" }          Crypto Fear & Greed Index, no key
+#                  { from = "http", url = "https://...", rows = "data", ts = "t", ts_unit = "s",
+#                    value = "v", key_env = "VENDOR_KEY", key_param = "api_key" }
+#                the last form is any vendor that answers JSON over https: a paid on-chain or
+#                derivatives subscription, your own service. The key's place comes from the
+#                vendor's docs: key_param puts it in the query, key_header (with key_prefix,
+#                such as "Bearer ") in a header. The key stays in your environment.
+#   refresh      how often `tra run` refreshes a fetched file. Default 1h. `tra sources pull`
+#                refreshes all of them now.
+#
+# The correlation of each series with the instrument's returns is measured on your own data and
+# carries its sample size. It is never a constant in this file. A daily series held flat across a
+# window of minute bars has nothing to correlate, and the brief says so rather than print a zero.
+#
+# What reaches crypto from outside the chart, all daily and free from FRED: the dollar (DTWEXBGS),
+# real yields (DFII10), nominal yields (DGS10, DGS2) and risk appetite (VIXCLS). Read them as the
+# regime around a trade; at minute scale they are context, not a signal.
+
+# Nothing is switched on yet. Uncomment an entry, put the file where it points, and the macro
+# analyst joins the roster on the next run. Left as it is, that role is not asked and not paid
+# for.
+
+# [[series]]
+# name = "us10y"
+# file = "macro/us10y.csv"             # columns: date,value
+# ts = "date"
+# ts_unit = "iso8601"
+# value = "value"
+# unit = "percent"
+# publish_lag = "1d"                   # FRED posts the daily yield after the close
+# source = "FRED DGS10, 10-year Treasury constant maturity"
+# max_age = "5d"                       # a long weekend is three days without a print
+# fetch = { from = "fred", id = "DGS10" }
+# threshold = { bullish_below = 3.5, bearish_above = 4.25 }
+
+# [[series]]
+# name = "usd_broad"
+# file = "macro/usd_broad.csv"
+# ts = "date"
+# ts_unit = "iso8601"
+# value = "value"
+# unit = "index"
+# publish_lag = "1d"
+# source = "FRED DTWEXBGS, nominal broad US dollar index"
+# max_age = "10d"                    # a daily series posted once a week, to the Friday before
+# fetch = { from = "fred", id = "DTWEXBGS" }
+# no threshold until you have drawn one from its history: shown, not counted
+
+# [[series]]
+# name = "vix"
+# file = "macro/vix.csv"
+# ts = "date"
+# ts_unit = "iso8601"
+# value = "value"
+# unit = "index"
+# publish_lag = "1d"
+# source = "FRED VIXCLS, CBOE volatility index"
+# max_age = "5d"
+# fetch = { from = "fred", id = "VIXCLS" }
+# threshold = { bullish_below = 15, bearish_above = 25 }
+
+# [[series]]
+# name = "cpi_yoy"
+# file = "macro/cpi_yoy.csv"
+# ts = "date"
+# ts_unit = "iso8601"
+# value = "value"
+# unit = "percent"
+# publish_lag = "14d"                # a monthly print lands about two weeks after the month
+# source = "statistics office"
+# threshold = { bearish_above = 3.0, bullish_below = 2.0 }

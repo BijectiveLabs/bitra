@@ -5,9 +5,9 @@ from decimal import Decimal
 
 import pytest
 
-from trading_research_agent.chain import FloorOutcome, cost_floor
-from trading_research_agent.envelope import Envelope
-from trading_research_agent.ledger import Axis, Transferability, Verdict
+from trading_research_agents.chain import FloorOutcome, cost_floor
+from trading_research_agents.envelope import Envelope
+from trading_research_agents.ledger import Axis, Transferability, Verdict
 
 
 def test_the_documented_case_three_bps_against_nine(envelope: Envelope) -> None:

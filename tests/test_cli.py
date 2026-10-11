@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from trading_research_agent.chain import (
+from trading_research_agents.chain import (
     CostModel,
     CostTerm,
     Era,
@@ -24,12 +24,12 @@ from trading_research_agent.chain import (
     SealedEra,
     Universe,
 )
-from trading_research_agent.chain.preregistration import to_record
-from trading_research_agent.cli import main
-from trading_research_agent.data import Rejection, Trade, read_manifest
-from trading_research_agent.data.parquet import read_trades
-from trading_research_agent.data.venues import register as register_venue
-from trading_research_agent.ledger import Ledger, Verdict
+from trading_research_agents.chain.preregistration import to_record
+from trading_research_agents.cli import main
+from trading_research_agents.data import Rejection, Trade, read_manifest
+from trading_research_agents.data.parquet import read_trades
+from trading_research_agents.data.venues import register as register_venue
+from trading_research_agents.ledger import Ledger, Verdict
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
 
@@ -317,9 +317,9 @@ def test_agent_propose_and_refusals(
 ) -> None:
     import importlib
 
-    from trading_research_agent.agent import FakeCompleter
+    from trading_research_agents.llm import FakeCompleter
 
-    cli_main = importlib.import_module("trading_research_agent.cli.main")
+    cli_main = importlib.import_module("trading_research_agents.cli.main")
 
     memo = {
         "mechanism": "Longs paying funding are forced by margin to reduce into settlement.",
@@ -419,9 +419,9 @@ def test_agent_propose_and_refusals(
 def test_chain_requirements_and_validate(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from trading_research_agent.chain import Preregistration
-    from trading_research_agent.chain.seal import day_start_ns
-    from trading_research_agent.data import Manifest, Source, write_manifest
+    from trading_research_agents.chain import Preregistration
+    from trading_research_agents.chain.seal import day_start_ns
+    from trading_research_agents.data import Manifest, Source, write_manifest
 
     prereg = Preregistration(
         name="funding settlement squeeze",
@@ -542,8 +542,8 @@ def test_chain_requirements_and_validate(
 
 def test_trade_replay_and_ladder(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     pytest.importorskip("pyarrow")
-    from trading_research_agent.data import Side, Trade
-    from trading_research_agent.data.parquet import write_trades
+    from trading_research_agents.data import Side, Trade
+    from trading_research_agents.data.parquet import write_trades
 
     base = 1_735_689_600 * 1_000_000_000
     minute = 60 * 1_000_000_000

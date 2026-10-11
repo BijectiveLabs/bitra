@@ -1,0 +1,297 @@
+# A run of the trading agent, declared once. Nothing in here is a constant inside the logic.
+
+[strategy]
+file = "strategies/trailing_zscore.py"            # an example, not a recommendation
+class = "TrailingZScore"
+# import = "your_package.module:YourStrategy"      # or a core installed as a package
+# registration_seal = "<64-character seal of the pre-registration this strategy implements>"
+
+[strategy.params]
+lookback = 60
+entry_z = 2.0
+exit_z = 0.5
+
+[exit]
+stop_frac = 0.01             # 1 percent of price, on the adverse side
+take_profit_frac = 0.02
+timeout_bars = 240
+mechanism_bound = "The dislocation the core trades resolves within a few hours; past that the mechanism is gone."
+slip_bps = 5.0
+
+[run]
+instrument = "BTCUSDT"
+venue_key = "bybit/taker-taker"    # a channel declared in envelope.toml
+bar_interval_s = 60
+# context_intervals = ["15m", "1h"] # higher timeframes the technical analyst reads as context
+size = 0.01                        # base units; or size_quote = 100 in quote currency, not both
+size_step = 0.001                  # the venue's size increment; sizes round down to it
+# size_step = { BTCUSDT = 0.001, ETHUSDT = 0.01 }   # one per instrument, for a desk on several
+spread_cost_bps = 3.0              # half-spread from the recorded book, declared here
+equity = 10000                     # in quote currency; leave out and every entry is refused
+latency_ms = 6                     # measured order round trip on a persistent connection
+slippage_bps = 1.0
+settlement_interval_s = 28800      # the venue's funding clock
+# funding = "funding.json"         # from `tra data funding`; absent means no settlement spanned
+
+[controls]
+max_risk_per_trade_bps = 50
+max_position = 0.05
+# max_position_quote = 800        # the same cap in quote currency, per instrument at its own price;
+#                                  # needed with [universe].discover, where coins differ in price
+max_orders_per_minute = 6
+daily_loss_limit_bps = 300
+max_drawdown_bps = 1000            # from the highest equity, across days; no new entry past it
+# on_drawdown = "flatten"         # also flatten and stop, through the kill switch below
+kill_switch = "KILL"               # touch this file to flatten and stop
+
+# ---- live tier (T3 canary). Keys never live here: BYBIT_API_KEY / BYBIT_API_SECRET come from
+# the environment or `--env-file`. Uncomment both tables to run `tra live`.
+# [live]
+# venue = "bybit"                  # a live venue plugin; defaults to the venue half of venue_key
+# environment = "demo"             # demo | testnet | mainnet
+# key_ip_unbound_ok = false        # accept a key with no IP binding, deliberately
+# adopt_open_position = false      # take over a position the venue already holds, deliberately
+# poll_interval_ms = 250
+
+# [canary]
+# max_notional = 200               # per order, in quote currency
+# max_round_trips = 5
+# session_loss_limit_bps = 100
+# max_session_minutes = 120
+
+# ---- the technical analyst as the core instead of a scripted strategy (docs.bijectivelabs.dev/opensource/agents). Replace the
+# [strategy] table with `agent = "technical_analyst"` and declare the budget:
+# [agents]
+# provider = "deepseek"            # any registered provider (docs.bijectivelabs.dev/opensource/providers)
+# model = "deepseek-flash"
+# mechanism = "positions forced to close into the settlement window"
+# lookback_bars = 60
+# min_confidence = 0.6
+# decide_every_bars = 5           # ask every fifth bar; exits still run on every bar
+# call_timeout_s = 60             # per request; the SDK retries 429s and 5xx with backoff
+# max_retries = 2
+#
+# How hard the models think. minimal | low | medium | high | xhigh | max, mapped onto whatever your
+# vendor takes - Anthropic's effort, Gemini's thinking level, OpenAI's reasoning_effort - and left
+# out of the request entirely when you do not set it, which is what every vendor's own default
+# means. Set it here for every role, override it per role below.
+# effort = "medium"
+#
+# Nothing here caps what a role may spend, and that is deliberate: an answer cut off halfway is a
+# wasted call and a worse decision, not a saving. Every call is written to usage.jsonl with its
+# tokens, its latency and its price, every cycle reports what it spent, and the auditors read those
+# records and propose where to spend less. If you want a hard ceiling anyway, declare one - and know
+# that it stops the desk rather than slowing it down:
+# token_budget = 200000           # tokens for the whole process, every role; unset means no ceiling
+# max_calls_per_hour = 60         # unset means no ceiling
+# min_interval_s = 0              # seconds one role waits between its own calls
+# max_output_tokens = 4096        # unset means the model's own maximum, which is what you want
+#
+# When a provider is rate limited or down, these are tried in order, with the same brief. A link is
+# built the first time it is needed, so naming a spare you have no key for costs nothing until the
+# day you need it. A spent budget is not a reason to fall through - it stops the chain.
+# fallback = ["google:gemini-flash-latest", "anthropic:claude-opus-5-5"]
+#
+# The roster, when you want to say it outright. Left out, a cycle asks the technical analyst and
+# whichever reading analysts have something declared on the shelf: sources/macro.toml,
+# sources/onchain.toml, sources/derivatives.toml, sources/sentiment.toml, sources/news.toml.
+# analysts = ["technical_analyst", "macro_analyst", "sentiment_analyst"]
+#
+# The stances that argue about a proposal once there is one. Each stance is one more call, so this
+# is off until you ask for it. Pro argues for, contra argues against, neutral weighs both. Every
+# claim they make has to cite a figure from the brief with its value, and the system throws away the ones
+# that do not: a verdict with no surviving claim becomes abstain.
+# validators = ["pro", "contra", "neutral"]
+# on_missing_validator = "refuse" # a declared stance no model answered refuses the trade;
+#                                  # "continue" trades on the votes that did come back
+# max_retry_wait_s = 15           # wait once for a provider that says "try again in N s"
+# reuse_reading_for = "1h"        # reuse a reading analyst's answer while its figures are
+#                                  # unchanged; new data always asks again; "off" asks every cycle
+#
+# A role that only reads and labels does not need the model that reasons over sixty bars, and the
+# difference is most of a token bill. Anything a role does not override it inherits from [agents],
+# so one line per role is usually all it takes. No vendor is assumed anywhere: provider, model and
+# effort are yours on every row.
+# [agents.roles.sentiment_analyst]
+# provider = "groq"
+# model = "a-cheaper-model"
+# effort = "low"                  # it labels a series; it does not need to think about it
+#
+# A whole cycle is several calls inside a minute. On a tier that limits tokens per minute, put the
+# validators on a second vendor so the calls split across two limits:
+# [agents.roles.validator]
+# provider = "google"
+# model = "gemini-flash-latest"
+# fallback = ["groq:openai/gpt-oss-120b"]
+#
+# What you were quoted, per million tokens. Leave it out and the spend is still counted in tokens
+# and reported - only the money column stays empty, and [targets].max_research_bps has nothing to
+# work from.
+# [agents.pricing.deepseek-flash]
+# input_per_million = 0.14
+# output_per_million = 0.28
+
+# ---- the two gates you declare and the system applies. Both are off as shipped: uncomment to use them.
+#
+# Does the context agree with the direction? The states here are the ones your own thresholds
+# produced in sources/*.toml, not the words a model wrote. A required role that produced no state
+# has agreed to nothing, and the cycle refuses: that is what on_missing = "refuse" means. Set it to
+# "ignore" if you mean to run on one leg, and the record will say you did.
+# [confluence]
+# required = ["macro_analyst", "onchain_analyst"]
+# long_states = ["bullish"]        # what a long needs from each required role
+# short_states = ["bearish"]
+# on_missing = "refuse"            # refuse | ignore
+# min_support = 1                  # validators that must support it (needs [agents].validators)
+# max_opposition = 0               # validators that may oppose it; 0 is the strictest there is
+#
+# How much goes behind the idea. Every voice counts as strong as it is: the deciding analyst by its
+# confidence, each reading analyst by how far its series sit past the lines you drew in sources/
+# (-1 to 1), each validator for or against. The score is their net over the weight they expressed:
+# agreement lifts it, opposition lowers it in proportion, and only opposition that outweighs the
+# case refuses the trade. docs.bijectivelabs.dev/opensource/cycle works four cases through. Nothing here can make a trade
+# larger than [controls] and [run].size already allow - it can only make it smaller.
+# [conviction]
+# weights = { technical_analyst = 2.0, onchain_analyst = 1.5, macro_analyst = 1.0, sentiment_analyst = 0.5 }
+# validator_weight = 1.0
+# min_score = 0.4                  # below this the desk does not trade, whatever the matrix said
+# max_leverage = 3.0               # notional against [run].equity; a ceiling, never a target
+#
+# The ladder from score to size. Written top down or bottom up, it is read from the top.
+# [[conviction.ladder]]
+# at_least = 0.75                  # everything agrees: the whole base size
+# size_multiple = 1.0
+# [[conviction.ladder]]
+# at_least = 0.55                  # mostly agreeing: half
+# size_multiple = 0.5
+# [[conviction.ladder]]
+# at_least = 0.4                   # thin but above the floor: a quarter
+# size_multiple = 0.25
+
+# What a cycle may do with an admitted intent. sandbox keeps it in the cycle's own directory,
+# signals writes it for your own executor, venue sends it to the venue with your capital behind it.
+# Venue mode does not start until the mandate is in this project and signed: read it with
+# `tra mandate`, then `tra mandate --sign "Your Name"` does both. It also needs a leverage, a cap per
+# order, the keys in the environment, and on mainnet the ladder at CANARY. `tra check` names the rest.
+# [execution]
+# mode = "venue"
+# venue = "bybit"                  # a live venue; defaults to the venue half of [run].venue_key
+# acknowledged_by = "your name"
+# acknowledged_on = "2026-09-28"
+# max_notional = 200               # one order, in quote currency
+# exits = "attached"               # the stop and take profit go to the venue with the entry;
+#                                  # "none" only if you carry them in your own system
+# limit_timeout_s = 30             # a resting order that has not filled by then is cancelled
+# price_offset_bps = 0             # how far off the touch a resting order sits; 0 is at it
+# leverage = 3                   # required in venue mode; applied at the venue, read back,
+#                                  # and checked against the stop on every order
+# margin_mode = "isolated"       # isolated | cross
+# max_slippage_bps = 20          # a taker entry is a limit IOC this far through the touch
+# max_margin_share = 0.5         # the most of the free margin one order may use
+# liquidation_buffer_bps = 50    # liquidation must sit this far beyond the stop
+# hold_limit = "timeout"         # timeout | horizon | none: when time closes a position
+# max_drift_bps = 10              # refuse when the book moved this far against the trade
+#                                  # between the snapshot it was priced on and sending it
+# adopt_open_position = false      # deliberately add to a position this desk did not open
+# params = { positionIdx = 0 }     # handed to the venue verbatim, like data.toml's params
+#
+# The order follows the channel. [run].venue_key names a channel in envelope.toml, and a channel
+# named maker-taker was priced at the maker fee, so its entry rests on the book as a post-only
+# limit; taker-taker crosses it with a limit IOC inside [execution].max_slippage_bps. The default is taker-taker: it always fills,
+# which is how most desks trade. maker-taker pays a lower entry fee and fills less often, because a
+# resting order can be left behind or rejected for touching the spread. A channel whose name says
+# neither is refused in venue mode rather than guessed at, because the fee you priced depends on it.
+
+# Is this the trade you said you wanted? Trading, not investing: what it has to be worth, and how
+# often you are willing to do it. The round trips are counted from the intents already on disk, so
+# a restarted process cannot forget what it has already done today.
+#
+# min_edge_multiple is the one that keeps a desk honest. A round trip costing 18 bps against a
+# claimed edge of 20 is not a two basis point trade: the fees are certain, the edge is a
+# probability, and slippage only ever moves one of them. Asking for the edge to be a multiple of
+# the cost is how that gets priced before the fills come in rather than after.
+#
+# max_research_bps prices the other real cost. It is every model call since the last intent,
+# against the notional of the trade those calls produced, so a day of refusals is paid for by
+# whatever the day eventually trades. It needs [agents.pricing.<model>] to mean anything.
+# [targets]
+# min_net_bps = 5                  # what must be left of the edge after every cost the gate priced
+# min_edge_multiple = 2.0          # the claimed edge, as a multiple of the round trip
+# min_reward_risk = 1.5            # take profit against stop, both from [exit]
+# max_research_bps = 25            # model spend since the last intent, against this notional
+# max_round_trips_per_day = 6
+
+# When the auditors are asked without you typing `tra audit`. They answer different questions and
+# so they wake differently: something breaking is an event, so the technical auditor wakes on an
+# alarm - a provider that stopped answering halfway through a run, a data chain that ran out, a
+# venue that refused - while whether the desk is earning what it costs is a stretch of time, so the
+# quant auditor runs on a count of cycles. Neither one can act on what it finds; both write
+# proposals a person applies.
+# [audit]
+# on_alarm = true                  # the default
+# alarm_cooldown_s = 1800          # per kind of alarm, not overall
+# quant_every_cycles = 20          # unset means only when you ask
+
+# Before any of that: has anything happened worth paying a model to look at? Everything here is
+# computed from the snapshot and the cycles already on disk, so a cycle that holds costs one data
+# pull and no tokens. This is how a scheduler on a five minute bar stops being a subscription.
+# [trigger]
+# min_move_bps = 15                # the mid has to have moved this far since the last cycle
+# max_spread_bps = 8               # a book wider than this cannot be traded through, whatever
+#                                  # anyone concludes
+# cooldown_s = 900                 # one decision per instrument in this window
+# widen_after = 6                  # after this many straight refusals with nothing changing, ask
+#                                  # for more movement each time; one real move brings it back
+
+# The regime the system measures on the decision timeframe, and whether a setup has to fit it: no
+# trend setup in a range, no range fade or pullback against a trend. Trend strength is the net move
+# over the path walked, scaled so a random walk sits near 1 on any window.
+# [regime]
+# trend_above = 2.0                # at or above: trending
+# range_below = 1.0                # at or below: ranging; in between: mixed
+# setups_must_fit = true           # false: a misfit is written down and the trade goes on
+
+# What this desk may be carrying across every instrument at once. Every limit above is about one
+# trade; these are about the book. A per-trade limit of fifty basis points is a different promise
+# when one position is open and when six are, and only the sum says which promise is being kept.
+#
+# What counts as open comes from the venue in venue mode, and from the intents on disk everywhere
+# else. Whichever it was is written into the cycle, so nobody has to guess how the figure was
+# reached - and a position whose risk is not on the record refuses the next trade rather than being
+# quietly left out of the sum.
+# [desk]
+# max_open_risk_bps = 150          # the sum of what every open position loses at its own stop
+# max_open_positions = 3           # how many instruments may be open at once
+# correlation_above = 0.7          # a candidate moving with something already open is one trade in
+#                                  # two names; measured on the bars the pass already pulled
+
+# What this desk watches. Left out, every cycle is [run].instrument and nothing else. Declared, a
+# pass looks at each instrument for the price of one data pull - no tokens - applies the [trigger]
+# above to each of them, orders what survives by how far it has moved against its own spread, and
+# spends its cycles on the top of that order. The order is set by the system, because it decides where capital
+# gets to be considered at all.
+#
+# screener asks the market screener to narrow what the system admitted, from the same figures. It can
+# only take an instrument out; it cannot add one, change the order, or say anything about a
+# direction or a size.
+# [universe]
+# instruments = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+# max_per_cycle = 1                # how many of them one pass runs a full cycle on
+# max_intents_per_day = 6          # across every instrument, not per one
+# screener = false                 # true: the screener chooses and orders what the system admitted
+#
+# Discovery: the system adds the venue's most traded perpetuals each pass (needs [run].size_quote).
+# `tra universe` shows what it would find now.
+# discover = true
+# top = 20
+# min_quote_volume = 10000000      # 24-hour volume, quote currency
+# max_spread_bps = 5
+# min_listed_days = 30
+# crypto_only = true
+# exclude = []
+# quote = "USDT"
+# type_field = "symbolType"        # another venue: its own field for what a market is,
+# exclude_types = ["stock", "etf", "commodity", "forex"]   # and the values to leave out
+
+[data]
+max_gap = "5m"                     # the longest silence the audit accepts for this instrument

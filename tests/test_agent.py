@@ -8,19 +8,19 @@ from typing import Any
 
 import pytest
 
-from trading_research_agent.agent import (
+from trading_research_agents.agents import (
     BoundBasis,
-    FakeCompleter,
     Outcome,
     RoleError,
     RunConfig,
     propose,
 )
-from trading_research_agent.agent.pipeline import read_refusals
-from trading_research_agent.agent.roles import parse_bound, parse_critique, parse_registration
-from trading_research_agent.chain.preregistration import from_record
-from trading_research_agent.envelope import Envelope
-from trading_research_agent.ledger import Axis, Ledger, Verdict
+from trading_research_agents.agents.pipeline import read_refusals
+from trading_research_agents.agents.roles import parse_bound, parse_critique, parse_registration
+from trading_research_agents.chain.preregistration import from_record
+from trading_research_agents.envelope import Envelope
+from trading_research_agents.ledger import Axis, Ledger, Verdict
+from trading_research_agents.llm import FakeCompleter
 
 IDEA = "Longs paying high funding into settlement get squeezed out before the payment."
 

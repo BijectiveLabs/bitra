@@ -9,9 +9,9 @@ from typing import Any
 import numpy as np
 import pytest
 
-from trading_research_agent.data import Direction
-from trading_research_agent.envelope import Envelope
-from trading_research_agent.strategy import (
+from trading_research_agents.data import Direction
+from trading_research_agents.envelope import Envelope
+from trading_research_agents.strategy import (
     Bar,
     BracketOutcome,
     ExitError,
@@ -174,7 +174,7 @@ def test_an_exit_rule_is_bound_to_its_mechanism() -> None:
         Decimal("0.01"),
         timeout_bars=24,
         mechanism_bound="Funding settles every eight hours; then the forced reduction is over.",
-        take_profit_sigma_frac=Decimal("0.02"),
+        take_profit_frac=Decimal("0.02"),
     )
     assert rule.stop_for(Decimal("100"), Direction.SHORT) == Decimal("101.00")
     assert rule.take_profit_for(Decimal("100"), Direction.SHORT) == Decimal("98.00")
