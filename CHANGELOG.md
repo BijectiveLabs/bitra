@@ -8,6 +8,9 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- The documentation, the README, the commented templates and the console say "the software"
+  where they used to say "code" for what the program itself does, and "scripted strategy" for
+  what was called a code core.
 - Stops sized by volatility: `[exit].mode = "volatility"` measures each trade's stop as
   `stop_atr` average true ranges on the decision timeframe, grown with the square root of the
   horizon and held between `min_stop_frac` and `max_stop_frac`; the take profit is
@@ -29,7 +32,7 @@ All notable changes to this project are recorded here. The format follows
   `runs/cycles/risk.json`, decisions in `risk_decisions.jsonl`; `[audit].risk_manager = false`
   turns it off.
 - `[exit].mode = "analyst"`, the agent-desk default: the technical analyst names `stop_price` and
-  `target_price`; code holds the stop inside `min_stop_frac`/`max_stop_frac`, refuses a target
+  `target_price`; the software holds the stop inside `min_stop_frac`/`max_stop_frac`, refuses a target
   closer than `min_reward_to_risk`, brings in one past `max_reward_to_risk`, and falls back to the
   measured stop. The brief now carries `range_high`, `range_low`, `atr` and `atr_bps`.
 - `[targets].max_break_even_win_rate` (default 0.5) refuses a trade whose stop, target and round

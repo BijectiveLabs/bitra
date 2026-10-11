@@ -2,31 +2,31 @@
 
 Agents here read a lot and decide very little. In a cycle each role gets the part of the brief
 its job needs and nothing else, answers once inside a closed schema, and holds no tools. The
-technical analyst proposes a direction; code prices it, sizes it, checks it against the book and
+technical analyst proposes a direction; the software prices it, sizes it, checks it against the book and
 decides whether it goes out. In a session the auditor also gets a small set of read tools, and the
 files those tools can open are fenced to the project.
 
 What no role holds is the authority to loosen a control. Limits can be tightened, never widened;
 the ladder can be stepped down, never up; the kill switch can be armed, never disarmed. Those are
-code, tested and failing closed, and a role acts through them, not around them.
+the software's own rules, tested and failing closed, and a role acts through them, not around them.
 
 ## The roster
 
 | Role | Holds | May write | Cadence |
 |---|---|---|---|
-| `market_screener` | in a cycle, one live snapshot per instrument in the universe; in a session, the data gate, the envelope and the cost floor | nothing; it may only take an instrument out of a list code already admitted | once per pass, or once per session |
-| `technical_analyst` | the recorded trades and bars, the registered mechanism | a `Signal`, as the decision core of a run: a direction, a setup named from a closed list, the figures it read, and in `tra run` the stop and target prices that bound the idea, held by code inside your `[exit]` bounds | once per closed bar, within its budget |
+| `market_screener` | in a cycle, one live snapshot per instrument in the universe; in a session, the data gate, the envelope and the cost floor | nothing; it may only take an instrument out of a list the software already admitted | once per pass, or once per session |
+| `technical_analyst` | the recorded trades and bars, the registered mechanism | a `Signal`, as the decision core of a run: a direction, a setup named from a closed list, the figures it read, and in `tra run` the stop and target prices that bound the idea, held by the software inside your `[exit]` bounds | once per closed bar, within its budget |
 | `macro_analyst` | series the operator mapped in (events, cross-venue funding, sentiment) | nothing | every cycle in `tra run`; once per session in a session, when series are given |
 | `onchain_analyst` | on-chain series the operator mapped in | nothing | every cycle in `tra run`; once per session in a session, when series are given |
 | `sentiment_analyst` | dated scores and dated notes the operator curates, through the same series engine | `negative`, `neutral`, `positive`, or `not declared` when nothing was mapped in | reads only; nothing is scraped |
-| `validator` | `figures_of`, `checked` over the brief the deciding analyst was given | one stance (pro, contra, neutral): the proposal, the figures it was built from, the declared states, and what the round trip costs; every claim it makes has to cite one of those figures with its value, and code discards the ones that do not | once per cycle, when `[agents].validators` is set |
+| `validator` | `figures_of`, `checked` over the brief the deciding analyst was given | one stance (pro, contra, neutral): the proposal, the figures it was built from, the declared states, and what the round trip costs; every claim it makes has to cite one of those figures with its value, and the software discards the ones that do not | once per cycle, when `[agents].validators` is set |
 | `risk_manager` | in `tra run`: the client's limits, what is in force, the alarms, the round trips by instrument; in a session: the limits, the canary caps, the ladder, latency, net against the registration | in `tra run`: `reduce` (size multiple below 1), `pause` (instruments), `halt` (the kill switch), each for `hold_hours`; in a session: `tighten_limits`, `demote`, `arm_kill_switch` | in `tra run`, between cycles whenever the quant auditor is asked; in a session, after the runs |
 | `executor` | the venue, the rate limits, the allocation across instruments | an allocation, fractions summing to at most one | after the risk decision |
 | `auditor` | the ledger, every run, `usage.jsonl`, the ladder | `audit.json` | last |
 
 Each role is a package under `trading_research_agents.agents`: a JSON schema the model must
 fill, a parser that refuses anything outside it, and a prompt that names venues nowhere. No
-role talks to another. The session hands each one what code computed plus what earlier roles
+role talks to another. The session hands each one what the software computed plus what earlier roles
 wrote, and records every answer as a numbered file in the session directory.
 
 ## A session
@@ -39,11 +39,11 @@ tra agent session --config strategy.toml --envelope envelope.toml \
 ```
 
 ```
-figures (code) -> screener -> [macro] -> [onchain] -> one replay per kept instrument,
+figures (software) -> screener -> [macro] -> [onchain] -> one replay per kept instrument,
                   the analyst as its core -> risk manager -> executor -> auditor
 ```
 
-Code measures each dataset first (rows, print rate, realised volatility, turnover, the cost
+The software measures each dataset first (rows, print rate, realised volatility, turnover, the cost
 floor for the claimed magnitude, and, when `observation.toml` sits beside the config or
 `--observation` names one, layer 1 on the same prints: whether the declared event recurs on
 that instrument, its counts per subperiod and its response) and the screener sees only those
@@ -83,7 +83,7 @@ output_per_million = 0.28
 ```
 
 The same `[strategy].agent` core runs under `tra backtest`, `tra paper` and `tra live`, so an
-agent that survived a session can be taken up the ladder like any code core.
+agent that survived a session can be taken up the ladder like any scripted strategy.
 
 ### The auditor reads before it answers
 
@@ -113,13 +113,13 @@ pass; the second adds only what it actually asked.
 
 ## What each role holds before it is asked
 
-A role does not start from a blank prompt. Code computes the figures first and the model reads
+A role does not start from a blank prompt. The software computes the figures first and the model reads
 a brief with the basis of every number in it: measured on the operator's data with a sample
 size, or declared by the operator and labelled as such.
 
 | Role | Tools (`agents/<role>/tools.py`) | What the brief carries |
 |---|---|---|
-| `market_screener` | `screen_figures` | per instrument: rows, print rate, realised volatility, first-lag autocorrelation, the 1:10 variance ratio, largest gap, last-hour volume against the average, turnover, the cost floor for the claimed edge, and a regime the code proposes from a written rule (`[agents.screen]` sets the two thresholds: `min_prints_per_minute`, `volatile_above_bps`) |
+| `market_screener` | `screen_figures` | per instrument: rows, print rate, realised volatility, first-lag autocorrelation, the 1:10 variance ratio, largest gap, last-hour volume against the average, turnover, the cost floor for the claimed edge, and a regime the software proposes from a written rule (`[agents.screen]` sets the two thresholds: `min_prints_per_minute`, `volatile_above_bps`) |
 | `technical_analyst` | `features` | on each closed bar: returns over 1, 5 and 20 bars, the close as a z-score of the window, the gap to VWAP, the last bar's volume and range against the window's, the position between the window's high and low, the net move and trend strength with the regime they give; the same on each higher timeframe in `[run].context_intervals`; the book imbalance, the open interest change since the last snapshot, and the declared state of the other series (see [the cycle](/opensource/cycle#the-market-around-the-decision)) |
 | `macro_analyst` | `macro_brief` over `data/series.py` | per series in `series.toml`: the value known at the time and when it became known (publication lag honoured), the state against the operator's declared threshold, the correlation and strongest lead-lag with the instrument's returns measured on the operator's data with n, the calendar events inside the horizon |
 | `onchain_analyst` | `onchain_brief` | the same engine, plus the net over a window and the last value as a z-score of its own history |
@@ -144,7 +144,7 @@ drawdown, which control keeps refusing. That is what `risk_manager` reads, once,
 and all it may do is tighten a limit, step the ladder down, or arm the kill switch. It cannot widen
 anything, and it is not in the path of a decision.
 
-So "where is the risk manager" has two answers: the decision it owns is code in every cycle, and the
+So "where is the risk manager" has two answers: the decision it owns is made by the software in every cycle, and the
 judgement it owns happens after the fact where a wrong answer costs a review rather than a position.
 
 ### The two auditors
@@ -160,7 +160,7 @@ of a cycle.
 
 Both answer in the same shape: findings, each tied to figures from the brief with their values, each
 carrying a proposal, and at most one proposed configuration change with the value it has now and the
-value proposed. Code checks every citation against the brief and every proposed key against the
+value proposed. The software checks every citation against the brief and every proposed key against the
 project's own tables, and discards what fails, keeping the reason. A report with nothing left says
 so rather than implying a finding.
 
@@ -217,11 +217,11 @@ are asked between the cycles of `tra run`, single or `--every`.
 ### The risk manager in `tra run`
 
 The auditors report; the risk manager is the one role that can act on the same figures, and only
-toward caution. It is handed what code measured from the run's own files (round trips over the last
+toward caution. It is handed what the software measured from the run's own files (round trips over the last
 twenty, wins, the losing streak, the result per instrument), the alarms that woke it, your limits
 and anything it already put in force, and it answers one of:
 
-| Decision | What code does |
+| Decision | What the software does |
 |---|---|
 | `continue` | nothing |
 | `reduce` | every new entry trades `size_multiple` (above 0, below 1) of its size for `hold_hours` |
@@ -253,13 +253,13 @@ A question worth answering plainly, because it decides where the token bill goes
 
 | Step | Who does it | What it may do |
 |---|---|---|
-| read one class of data and label it | a reading analyst | say what it sees, in its own vocabulary; the score it is weighed by is graded by code from the same figures against the operator's lines |
+| read one class of data and label it | a reading analyst | say what it sees, in its own vocabulary; the score it is weighed by is graded by the software from the same figures against the operator's lines |
 | propose a direction and a horizon | the technical analyst | one target, one confidence, one reason |
-| argue for or against that proposal | the validators | claims that cite figures from the brief; code discards the rest |
-| decide whether the context agrees | the confluence matrix, in code | admit or refuse, from declared states and vote counts |
-| decide how much goes behind it | the conviction rule, in code | weigh every voice by its strength (confidence, graded scores, votes) and pick a size multiple off the operator's ladder; it may only shrink the base size |
-| price the round trip | the cost gate, in code | refuse a claim that does not clear its own cost |
-| hold the desk's shape | the targets, in code | refuse a trade that is not worth what the operator said it must be worth |
+| argue for or against that proposal | the validators | claims that cite figures from the brief; the software discards the rest |
+| decide whether the context agrees | the confluence matrix, in the software | admit or refuse, from declared states and vote counts |
+| decide how much goes behind it | the conviction rule, in the software | weigh every voice by its strength (confidence, graded scores, votes) and pick a size multiple off the operator's ladder; it may only shrink the base size |
+| price the round trip | the cost gate, in the software | refuse a claim that does not clear its own cost |
+| hold the desk's shape | the targets, in the software | refuse a trade that is not worth what the operator said it must be worth |
 | watch what actually happened | the risk manager | continue, tighten, demote or halt from measured behaviour; it never enlarges anything |
 | read the machinery afterwards | the technology auditor | write findings tied to figures, and propose changes a person applies |
 | read the desk's own results afterwards | the quant auditor | the same, over decisions and round trips |
@@ -332,7 +332,7 @@ The short version for anyone reviewing this before putting money behind it:
 
 | Concern | How it is handled | Where |
 |---|---|---|
-| Memory | None between calls. Each call is one system prompt plus one brief built by code. Earlier cycles are files on disk, and only the auditors read them. | [Working with language models](/opensource/llm), `store/cycles.py` |
+| Memory | None between calls. Each call is one system prompt plus one brief built by the software. Earlier cycles are files on disk, and only the auditors read them. | [Working with language models](/opensource/llm), `store/cycles.py` |
 | What a role sees | Its own sections of the brief. Anything else is removed and the removal is recorded. | `agents/scope.py` |
 | What a role may say | A closed JSON schema per role. Extra fields, a wrong enum, or a number out of range are refused before anyone reads the answer. | `agents/<role>/role.py`, `llm/form.py` |
 | Whether its figures are real | Every cited figure is checked against the brief, value included. Citations that do not hold are discarded, and a deciding answer with nothing left is refused. | `agents/cited.py` |
@@ -352,4 +352,4 @@ newer book would mix two moments in one decision. The next cycle takes its own s
 on the surface; a role that asks for one is refused by name, every time, and the refusal is
 what it is told. Orders are not on the surface either: they leave the runtime through the
 controls, the canary caps and the ladder, or they do not leave at all. A model may decide;
-code executes and refuses.
+the software executes and refuses.

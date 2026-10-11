@@ -312,7 +312,7 @@ def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> S
     if volatility is not None and agents is None:
         raise ConfigError(
             f'[exit].mode = "{volatility.mode}" is placed by the agent cycle on each decision; '
-            'a code core is simulated bar by bar on mode = "fixed"'
+            'a scripted strategy is simulated bar by bar on mode = "fixed"'
         )
     strategy = _build_strategy(strategy_raw, base) if agents is None else _placeholder(agents)
     if "stop_frac" not in exit_raw:
@@ -561,7 +561,7 @@ def _agents(raw: dict[str, Any], strategy_raw: dict[str, Any]) -> AgentSettings 
     if role != "technical_analyst":
         raise ConfigError("[strategy].agent names a decision role; only technical_analyst decides")
     if strategy_raw.get("file") or strategy_raw.get("import"):
-        raise ConfigError("[strategy] names either a code core or an agent, not both")
+        raise ConfigError("[strategy] names either a scripted strategy or an agent, not both")
     table = raw.get("agents")
     if not isinstance(table, dict):
         raise ConfigError("[agents] is required when [strategy].agent is set")

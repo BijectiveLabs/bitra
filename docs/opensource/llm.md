@@ -1,6 +1,6 @@
 # Working with language models
 
-This project asks models to do one narrow thing: read figures that code computed and answer inside
+This project asks models to do one narrow thing: read figures that the software computed and answer inside
 a closed schema. Everything else people usually reach for a framework to get - orchestration,
 memory, caching, retries, continuity when a provider fails - is either already handled by that
 shape or is listed here with what we do instead.
@@ -22,7 +22,7 @@ between an operator and the reason their trade was refused.
 
 | What people mean by memory | What this project uses |
 |---|---|
-| conversation history in a thread | Nothing. Each role call is stateless: one system prompt, one brief built by code. |
+| conversation history in a thread | Nothing. Each role call is stateless: one system prompt, one brief built by the software. |
 | what happened in earlier cycles | The record on disk: `runs/cycles/*/cycle.json`, the intents, `usage.jsonl`, the ledger. The auditors read exactly that. |
 | a vector store of past decisions | Not used. A decision is retrieved by reading the cycle it belongs to, which is a file with a timestamp in its name. |
 | caching a fetched value | `store/cache.py`: a TTL-bounded file cache, and the data chain's own freshness window. |
@@ -57,7 +57,7 @@ next cycles go straight to the next link instead of paying the same failure in s
 does not wait for. When every link rests, the one waking soonest is asked anyway. Usage records the
 provider that actually answered. A link that cannot be reached is recorded with the vendor's own
 error class and the next one is tried **with the same brief** - there is no conversation to carry
-over, because the brief was built by code from the snapshot. A link is built the first time it is
+over, because the brief was built by the software from the snapshot. A link is built the first time it is
 needed, so naming a spare you have no key for costs nothing until the day you need it.
 
 One failure does not fall through: a spent budget. `token_budget`, `max_calls_per_hour` and
@@ -74,9 +74,9 @@ What happens next depends on the role, and none of it can make a trade larger:
 | Role | If no model answers | Why |
 |---|---|---|
 | technical analyst | the cycle stops; no trade | it is the only role that proposes a direction |
-| reading analyst (macro, on-chain, sentiment) | its label is missing; its score still counts | the score is code over your thresholds and never needed the model |
+| reading analyst (macro, on-chain, sentiment) | its label is missing; its score still counts | the score is arithmetic over your thresholds and never needed the model |
 | validator | the trade is refused (`[agents].on_missing_validator = "refuse"`, the default); with `"continue"` it goes on with the votes that came back | a check you declared that did not happen is not a check |
-| market screener | the instruments code admitted go on unfiltered | the screener can only remove, never add |
+| market screener | the instruments the software admitted go on unfiltered | the screener can only remove, never add |
 | auditor | a line in the report | auditors never act |
 
 Every failure is a refusal line in `cycle.json` with the vendor's own message, and a provider
@@ -182,7 +182,7 @@ Undeclared, the field is left out of the request entirely, which matters: most s
 sent nothing. A level a vendor cannot take is mapped rather than refused, because a fallback chain
 that dies on a spelling is a chain that does not help on the day it is needed.
 
-Roles that read a table code already computed (the screener, the macro, on-chain and sentiment
+Roles that read a table the software already computed (the screener, the macro, on-chain and sentiment
 analysts, the validators) take `low` when `[agents].effort` is declared and their own role table
 does not say otherwise; the technical analyst keeps `[agents].effort`. With nothing declared, no
 role is sent an effort at all, for the reason above.
@@ -200,10 +200,10 @@ reuse_reading_for = "1h"     # how long an unchanged reading stands; "off" asks 
 
 The key is the figures, without the clock: any new value, on any feed at any speed, asks again at
 once. The window only bounds how long an unchanged reading stands. The declared state is computed
-by code every cycle either way, and it is what decisions read. A reused answer is marked `reused`
+by the software every cycle either way, and it is what decisions read. A reused answer is marked `reused`
 with its age in the cycle's agents table and under `reused` in `cycle.json`.
 
-Two more things keep calls from being wasted. The validators are not asked when code is certain to
+Two more things keep calls from being wasted. The validators are not asked when the software is certain to
 refuse whatever they say: the desk with nothing added, the day's round trips, the declared reward to
 risk, or an edge that fails against the part of the round trip that does not grow with size. And
 briefs are sent as JSON without spaces, which are tokens that carry nothing.

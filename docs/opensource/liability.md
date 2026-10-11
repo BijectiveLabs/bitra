@@ -17,8 +17,8 @@ words, where the decisions are made and by whom, so that nobody is surprised lat
 - **The caps are yours.** The canary limits have no defaults; the session refuses to start until
   you have written them down. What they should be depends on what a defect would cost you, and
   only you know that.
-- **A model may decide; code executes and refuses.** The controls, the caps, the ladder and the
-  kill switch are code, tested, and they fail closed. An agent with full access acts through
+- **A model may decide; the software executes and refuses.** The controls, the caps, the ladder and the
+  kill switch are the software's own rules, tested, and they fail closed. An agent with full access acts through
   them. If they refuse, the refusal is recorded and nothing is sent.
 - **Nothing here is advice.** The example cores are examples of the mechanism, measured and
   closed in the research this project descends from. A verdict from a gate is a statement about

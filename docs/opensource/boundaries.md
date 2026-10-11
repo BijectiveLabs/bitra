@@ -2,7 +2,7 @@
 
 This page separates two things that are easy to confuse.
 
-- **Guarantees** are rules the code enforces and the tests check. They protect capital and keys,
+- **Guarantees** are rules the software enforces and the tests check. They protect capital and keys,
   and any change, including a contribution, has to keep them.
 - **Not built yet** is scope: things a trading system can do that this project does not do today.
   None of them is forbidden. Each one says what a contribution would need, and [Contributing](/opensource/contributing)
@@ -17,7 +17,7 @@ This page separates two things that are easy to confuse.
 | One decision sends at most one order, and a venue error is recorded, not retried | `trading/dispatch.py`; a retry around real capital is how one defect becomes ten orders |
 | An order goes out only after the mandate, the ladder tier, the caps, the cost gate, the risk and desk limits, and the venue checks (step, drift, margin, liquidation) have all passed | `execution/mandate.py`, `agents/cycle.py`, `trading/dispatch.py`; each refusal is named |
 | Missing or stale data is refused, never treated as zero or as current | the data chains' `ttl`, `max_age` on series, the snapshot's refusals |
-| Every figure an agent reads is computed by code and kept on disk with its source and age; a citation that does not match is discarded | `agents/scope.py`, `agents/cited.py`, `inputs.json.gz` and `tra runs verify` |
+| Every figure an agent reads is computed by the software and kept on disk with its source and age; a citation that does not match is discarded | `agents/scope.py`, `agents/cited.py`, `inputs.json.gz` and `tra runs verify` |
 | Keys live in your environment or the `.env` beside `strategy.toml`, never in a config file, a brief, a prompt or a record, and are blanked out of errors | `cli/credentials.py`, `llm/completer.py`, `data/pull.py` |
 | Sandbox is the default, and there is no production tier | `execution/mandate.py`, the ladder |
 | The research chain does not select among variants: a claim that only survives after many tries has not survived | `chain/`; the walk-forward harness ships, an optimiser that feeds the chain does not |

@@ -9,7 +9,7 @@ forbids skipping forward.
 |---|---|---|---|---|
 | 0 | Cost floor | plausible magnitude below the cheapest round trip | minutes | implemented |
 | 1 | Market observation | the phenomenon does not recur | minutes | implemented |
-| 2 | Mechanism memo | nobody can be named who is structurally forced to lose | minutes | 0.2 (language model writes it, code checks the form) |
+| 2 | Mechanism memo | nobody can be named who is structurally forced to lose | minutes | 0.2 (language model writes it, the software checks the form) |
 | 3 | Pre-registration | the claim cannot be stated so that data could refute it | hours | implemented |
 | 4 | Data requirements | no available instrument can measure the premise | hours to days | implemented |
 | 5 | Statistical validation | interval spans zero, loses to a matched null, or lives in one subperiod | days | implemented |

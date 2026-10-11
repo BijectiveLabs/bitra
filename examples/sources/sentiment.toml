@@ -2,7 +2,7 @@
 # own model produces. Numbers with dates, nothing else.
 #
 # Dated text belongs in news.toml, not here. They are different shapes and they are read by
-# different code: a score goes through the series engine and gets a threshold and a correlation, a
+# different parts of the software: a score goes through the series engine and gets a threshold and a correlation, a
 # headline goes through the calendar reader and keeps its words.
 #
 # With nothing declared here, the sentiment analyst answers "not declared" rather than "neutral".

@@ -77,32 +77,32 @@ changing the size; name it in `required` and its disagreement starts refusing th
 in that order, each one visible in `tra check` before it costs a token.
 
 ```
-the universe (code: one data pull each, the trigger per instrument, ordered by movement over cost)
+the universe (software: one data pull each, the trigger per instrument, ordered by movement over cost)
   -> the instrument this pass takes
   -> snapshot (engine)
-  -> trigger             (code: has anything moved? nothing below here runs if not)
-  -> briefs (code, each role's own sections only)
+  -> trigger             (software: has anything moved? nothing below here runs if not)
+  -> briefs (software, each role's own sections only)
   -> technical analyst + reading analysts   (parallel)
-  -> the round trip priced (code)
+  -> the round trip priced (software)
   -> validators                             (parallel, when configured)
-  -> confluence matrix   (code: declared states and votes)   -> whether to trade at all
-  -> conviction          (code: the same voices, weighted)    -> how much the desk wants on
-  -> risk per trade      (code: the loss at the stop, against equity) -> how much it can afford
-  -> the desk            (code: what the whole book is already carrying) -> whether it fits
-  -> cost gate           (code: the claim against the cost)
-  -> targets             (code: net bps, the edge over the cost, reward-to-risk, research, count)
+  -> confluence matrix   (software: declared states and votes)   -> whether to trade at all
+  -> conviction          (software: the same voices, weighted)    -> how much the desk wants on
+  -> risk per trade      (software: the loss at the stop, against equity) -> how much it can afford
+  -> the desk            (software: what the whole book is already carrying) -> whether it fits
+  -> cost gate           (software: the claim against the cost)
+  -> targets             (software: net bps, the edge over the cost, reward-to-risk, research, count)
   -> intent, or a refusal that names the figure that refused it
 ```
 
-Nothing in that line is optional and nothing in it is reordered. The engine fetches; code
-computes; models read figures and answer inside a schema; code prices the round trip and decides
+Nothing in that line is optional and nothing in it is reordered. The engine fetches; the software
+computes; models read figures and answer inside a schema; the software prices the round trip and decides
 whether the claim clears it. In the default mode the intent is written to the cycle's own
 directory and no order leaves the machine.
 
 ## Which instrument, before any of this
 
 A desk that watches one instrument runs it. A desk that declares a universe takes the cheap look
-first, and only then spends a cycle. The work is split on purpose: **code finds and measures, the
+first, and only then spends a cycle. The work is split on purpose: **the software finds and measures, the
 screener chooses.**
 
 ```toml
@@ -120,11 +120,11 @@ quote = "USDT"                   # the settlement currency to look in
 # exclude_types = ["stock", "etf", "commodity", "forex"]   # and the values to leave out
 max_per_cycle = 1                # how many one pass runs a full cycle on
 max_intents_per_day = 6          # across every instrument, not per one
-screener = true                  # the screener chooses and orders; without it, code's order
+screener = true                  # the screener chooses and orders; without it, the software's order
 ```
 
-**Discovery (code, every pass).** One market list and one ticker call cover every linear perpetual
-the venue lists in `quote` (USDT by default). Code removes what cannot be traded: too little
+**Discovery (software, every pass).** One market list and one ticker call cover every linear perpetual
+the venue lists in `quote` (USDT by default). The software removes what cannot be traded: too little
 volume, a book wider than `max_spread_bps`, listed too recently, not crypto, or a maximum leverage
 below `[execution].leverage`. Bybit marks its stock, ETF, commodity and currency perpetuals, and
 that is the default there; for any other venue, `type_field` and `exclude_types` name the venue's
@@ -139,7 +139,7 @@ and `[controls].max_position` (units) still applies to `[run].instrument`, the o
 for. `tra universe` shows what discovery finds right now and what each
 filter took out.
 
-**Measurement (code).** Each instrument gets one data pull, the book and the recent bars, no tokens.
+**Measurement (software).** Each instrument gets one data pull, the book and the recent bars, no tokens.
 The same `[trigger]` and desk limits apply to each. What survives is measured: the move since the
 last look and its pressure against the spread, the window's move, z-score, trend strength and
 regime, volume against the window, where the close sits in its range, 24-hour volume and change,
@@ -147,14 +147,14 @@ and the correlation with BTC.
 
 **Choice (the screener).** With `screener = true` the market screener reads those rows and picks the
 instruments where the mechanism has the best chance now, best first, naming the setup it expects
-and citing the figures behind each pick. Code checks every pick: it must be an instrument code
+and citing the figures behind each pick. The software checks every pick: it must be an instrument the software
 admitted, and at least one citation from that instrument's own row must hold, or the pick is
 thrown away. The screener cannot add an instrument, and it says nothing about direction or size;
 the technical analyst decides those later from a fuller brief. A screener that cannot answer leaves
-code's order, the move against the spread, in place.
+the software's order, the move against the spread, in place.
 
 Both orders are kept in `runs/screens/<time>.json` (`code_order` and each candidate's `pick_rank`),
-so once trades have closed the audit can say whether the screener's choices did better than code's.
+so once trades have closed the audit can say whether the screener's choices did better than the software's.
 
 Each instrument keeps its own history: its own trigger streak, its own carried research spend, its
 own daily round trips. A position on an instrument discovery stops listing is still counted by the
@@ -240,13 +240,13 @@ The technical brief carries returns over several horizons, the close as a z-scor
 the distance from VWAP, the volume and range ratios, where the close sits in the window's range,
 the current spread, the funding rate that stands, and the age of the candles it was built from.
 The model receives those numbers and answers with a target, a confidence, a horizon and a
-reason. It never adds anything up, so a wrong sum is a bug in code with a test, not a sentence in
+reason. It never adds anything up, so a wrong sum is a bug in the software with a test, not a sentence in
 a prompt.
 
 ### The market around the decision
 
 A desk decides on one timeframe and reads the bigger picture before it does. The brief carries
-that picture too, all of it computed by code from the snapshot:
+that picture too, all of it computed by the software from the snapshot:
 
 | Figure | What it says | Where it comes from |
 |---|---|---|
@@ -272,8 +272,8 @@ range_below = 1.0                  # at or below this is a range; between the tw
 setups_must_fit = true             # false: a misfit is written down and the trade goes on
 ```
 
-**A setup has to fit what code measured.** Each setup is a claim with a direction built into it,
-and the figures that make the claim are in the brief. On the decision timeframe, code refuses:
+**A setup has to fit what the software measured.** Each setup is a claim with a direction built into it,
+and the figures that make the claim are in the brief. On the decision timeframe, the software refuses:
 
 | Setup | Refused when |
 |---|---|
@@ -361,13 +361,13 @@ output cap, the timeout and the retries for that role alone, and anything it doe
 inherits. That is how a cheap model labels a regime while a stronger one reasons over the bars.
 
 A reading analyst whose model fails leaves a line in `cycle.json` and the cycle carries on. Its
-declared state is code over your thresholds, so it still counts in the confluence matrix and in
+declared state is arithmetic over your thresholds, so it still counts in the confluence matrix and in
 conviction; only the model's label is lost.
 
 ## Where a direction came from
 
 Two fields make the deciding analyst's answer reviewable a month later, and both are checked by
-code before anything downstream sees them.
+the software before anything downstream sees them.
 
 **The setup.** One name from a closed list - `trend_continuation`, `pullback_in_trend`,
 `range_reversion`, `range_breakout`, `momentum_exhaustion`, `volatility_expansion`, `no_setup`. A
@@ -376,7 +376,7 @@ nobody named, and a paragraph is not a shape. The name travels into the intent, 
 have paid for themselves this month" is a question the records can answer.
 
 **The figures.** Every role that says something about numbers answers with `figures_used` - each
-figure by the brief's own name, with the value it read - and code checks each one against the brief
+figure by the brief's own name, with the value it read - and the software checks each one against the brief
 it was handed. A figure that is not there, or a value that does not match, is discarded and the
 discard is recorded. For the reading analysts that is a mark on the record; the label was never what
 decides. For the analyst that does decide it has teeth: if not one citation survives, the cycle
@@ -400,8 +400,8 @@ places anything. Four things keep a role inside its job, and only the last is wo
 |---|---|
 | the brief | A role cannot reason about what it was never given. No reading analyst receives equity, size, the controls, the cost of the round trip or the exit distances. `agents/scope.py` filters every brief to that role's declared reads, and what it removed is written in the record. |
 | the schema | A closed schema with only that role's own fields. A macro analyst has nowhere to put a size, and a field outside the schema is a parse error rather than a surprise. |
-| the wiring | Nothing downstream reads a sentence. The confluence matrix and the conviction score read the declared state code derived from the operator's thresholds; the cost gate reads the snapshot's own book; the size comes from the operator's ladder and caps. |
-| the prompt | One line naming what is not this role's job, plus a small vocabulary code looks for in case it appears anyway. |
+| the wiring | Nothing downstream reads a sentence. The confluence matrix and the conviction score read the declared state the software derived from the operator's thresholds; the cost gate reads the snapshot's own book; the size comes from the operator's ladder and caps. |
+| the prompt | One line naming what is not this role's job, plus a small vocabulary the software looks for in case it appears anyway. |
 
 The last line needs care and gets the least authority. Pattern-matching prose is blunt, and "buy"
 and "sell" belong in a proper sentence about what a central bank did, so the vocabulary is only the
@@ -452,7 +452,7 @@ proposal's claimed edge and the cost included, rather than a narrower set it nev
  "reason": "..."}
 ```
 
-Code checks every claim against the brief. A figure that is not there is discarded, a value that
+The software checks every claim against the brief. A figure that is not there is discarded, a value that
 does not match is discarded, both are recorded, and a verdict with no surviving claim becomes
 `abstain` - a verdict resting on nothing is nothing. A claim may round the figure it cites: "-1.63"
 against a brief's "-1.631" is the same citation said with fewer digits, and it is kept. Then the
@@ -506,7 +506,7 @@ size_multiple = 0.25
 
 ### Each analyst's score
 
-Each reading analyst's score is computed by code from its own figures against the lines you drew in
+Each reading analyst's score is computed by the software from its own figures against the lines you drew in
 `sources/*.toml`, signed for the instrument and between -1 and 1:
 
 ```toml
@@ -520,7 +520,7 @@ A threshold with only one line declared has no band to measure against, so it co
 or -1 whenever it is crossed, and `tra check` says so.
 
 The model still reads the same figures and writes its own label and reason. Both go in the record,
-and when they disagree the record says so. The score code computed is what gets weighed, because it
+and when they disagree the record says so. The score the software computed is what gets weighed, because it
 comes out the same every time from the same figures.
 
 ### Adding them up
@@ -623,7 +623,7 @@ stop to make a trade fit is how a desk learns the wrong lesson from a loss. If t
 fit is below one step of the venue, the cycle refuses. The cut and the figures behind it go into the
 record and into the intent, so `risk_bps` is there beside the size for every trade the desk took.
 
-This is a code step, not a role. A model asked how much to risk answers differently on Tuesday than
+This is a fixed calculation, not a role. A model asked how much to risk answers differently on Tuesday than
 on Monday from the same figures, and the session runtime has always enforced this limit - a cycle
 that can send its own orders has to enforce it too. `tra check` refuses the combination that cannot
 be applied: a declared risk limit with no stop, or with no equity to measure against.
@@ -723,13 +723,13 @@ move does to the position.
 
 ### Where the stop and the take profit sit
 
-`[exit].mode` picks one of three ways. The analyst proposes, code bounds, and you set the bounds.
+`[exit].mode` picks one of three ways. The analyst proposes, the software bounds, and you set the bounds.
 
 **Analyst** is what `tra init --agent` writes, and what an agent desk uses when `[exit]` is left
 out. The technical analyst names two prices with its decision: `stop_price`, where its reading is
 wrong (beyond the swing or the range edge the setup leans on), and `target_price`, where the
 mechanism is done. It is handed the window's `range_high`, `range_low` and `atr` to name them
-from. Code then:
+from. The software then:
 
 | Check | What happens |
 |---|---|
@@ -792,7 +792,7 @@ one line.
 
 When the candles cannot give a range (fewer than `atr_bars + 1` closed, or a market that did not
 move), the trade is refused with the reason. A guessed stop is not a stop. Volatility mode is for
-agent desks; a code core is simulated bar by bar and stays on fixed. Outside the agent cycle, where
+agent desks; a scripted strategy is simulated bar by bar and stays on fixed. Outside the agent cycle, where
 one number is needed up front, the widest stop the rule can place stands in, which overstates the
 risk rather than understating it.
 
@@ -815,9 +815,9 @@ money`): the best outcome the trade can have would still lose.
 
 #### Why it is built this way
 
-- **The analyst proposes, code bounds.** Where an idea is wrong and where it is done is a reading
+- **The analyst proposes, the software bounds.** Where an idea is wrong and where it is done is a reading
   of the chart, which is the analyst's job. How far that may be, how much it may risk and whether
-  the costs leave it worth taking is arithmetic on your limits, which is code's. A model left to
+  the costs leave it worth taking is arithmetic on your limits, which is the software's job. A model left to
   place stops on its own gives a different answer on the same chart; a model whose levels are
   held inside your bounds cannot hurt you by it.
 - **The range, not a percentage.** The average true range is the most common way a trading desk
@@ -860,7 +860,7 @@ than counting them as free.
 
 ## The cost gate, and what each number is worth
 
-Before there is an intent, code prices the round trip on the book the snapshot is holding. Every
+Before there is an intent, the software prices the round trip on the book the snapshot is holding. Every
 component says how much we actually know:
 
 | Component | Certainty | Where it comes from |
@@ -1053,7 +1053,7 @@ setting, every check in order, the arithmetic and the records.
 
 ### What happens after the order
 
-The stop and the take profit go to the venue **attached to the entry**, in the same call. Code
+The stop and the take profit go to the venue **attached to the entry**, in the same call. The software
 computes both against the price the cost gate priced on, from the market's own range or from
 the fixed fractions ([where they sit](#where-the-stop-and-the-take-profit-sit)), so no model is
 ever asked where a stop belongs. A filled position with no

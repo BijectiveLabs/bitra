@@ -2648,7 +2648,7 @@ PLACEHOLDER_PROVIDER = "your-provider"
 AGENT_HEAD = (
     "[strategy]\n"
     'agent = "technical_analyst"          # the model decides on each closed bar\n'
-    "# file = ... / class = ...             # or a code core instead\n"
+    "# file = ... / class = ...             # or a scripted strategy instead\n"
     "#                                       # (docs.bijectivelabs.dev/opensource/trading)\n\n"
 )
 
@@ -4322,8 +4322,8 @@ def _gate_lines(
     if stances:
         weight = cfg.conviction.validator_weight
         good.append(
-            f"validators: {', '.join(stances)}; asked once there is a proposal and code has not "
-            "already refused it"
+            f"validators: {', '.join(stances)}; asked once there is a proposal and the software "
+            "has not already refused it"
             + (f"; each vote moves conviction by {weight}" if weight > 0 else "")
         )
     if matrix.idle:
@@ -4841,8 +4841,9 @@ def _universe_notes(cfg: Any, bad: list[str]) -> list[str]:
         )
     if universe.screener:
         said.append(
-            "universe: the screener picks and orders what code admitted, citing each instrument's "
-            "own figures; it cannot add an instrument, and code's order is kept beside its own"
+            "universe: the screener picks and orders what the software admitted, citing each "
+            "instrument's own figures; it cannot add an instrument, and the software's order "
+            "is kept beside its own"
         )
     if cfg.trigger.idle:
         bad.append(

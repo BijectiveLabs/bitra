@@ -108,7 +108,7 @@ will do in your project, defaults included.
 | `[run].settlement_interval_s` | `28800` | the venue's funding clock |
 | `[execution].environment` | `demo` | where orders go: `demo`, `testnet` or `mainnet` |
 
-A code core (`[strategy].file`) is research, so it declares its own exit and cost figures:
+A scripted strategy (`[strategy].file`) is research, so it declares its own exit and cost figures:
 `[exit].stop_frac`, `timeout_bars` and `mechanism_bound`, and `[run].spread_cost_bps`, `latency_ms`
 and `slippage_bps`. A default there would be a cost the research never measured.
 
@@ -125,7 +125,7 @@ You can stop at any of these steps. Each is one command.
 | 1. Replay | `tra data get BTCUSDT 2025-01-01`, then `tra backtest` | a day of the venue's own archive, checksum-verified and audited, replayed net of every cost | nothing |
 | 2. Shadow | `tra paper --minutes 30` | the live public feed, decisions recorded, nothing sent | nothing |
 | 3. Canary | `tra live` | a small live session behind hard caps and the ladder | a venue key, a promotion with evidence |
-| 4. Agents | `tra run` | the autonomous cycle instead of a code core; sandbox until you say otherwise | a model key |
+| 4. Agents | `tra run` | the autonomous cycle instead of a scripted strategy; sandbox until you say otherwise | a model key |
 | 5. Venue mode | `tra run` with `[execution].mode = "venue"` | one order per decision, exits attached, positions looked after | a signed `MANDATE.md`, a leverage, a cap per order, venue keys; on mainnet also the canary tier |
 
 Venue mode is the only mode that can lose money, so it has a door in front of it. Read the

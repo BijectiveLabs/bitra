@@ -24,8 +24,8 @@ steps through them live:
 
 ## 3. One cycle per instrument it takes
 
-Code found the candidates and measured them; the screener chose among them and cited each
-instrument's own figures; code's own order is kept beside the choice. The instruments taken get a
+The software found the candidates and measured them; the screener chose among them and cited each
+instrument's own figures; the software's own order is kept beside the choice. The instruments taken get a
 full cycle. The terminal shows the whole pipeline from the start and updates it as each step begins
 and ends. Steps that run at the same time spin at the same time, each with its own clock, and the
 line underneath says who is working right now:

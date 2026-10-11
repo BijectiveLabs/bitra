@@ -2,7 +2,7 @@
 
 This is what venue mode does with your money, step by step: what is read from the account, what
 is checked before an order goes out, and what happens to a position after it fills. All of it is
-code. No model reads an account, chooses a leverage, sizes a trade or closes a position.
+done by the software. No model reads an account, chooses a leverage, sizes a trade or closes a position.
 
 Everything here goes through ccxt's unified calls, so it behaves the same on any venue that answers
 them. A venue that cannot answer one gets a named refusal or a note in the record, never a guess.
@@ -11,12 +11,12 @@ them. A venue that cannot answer one gets a named refusal or a note in the recor
 
 | Decision | Who | How |
 |---|---|---|
-| direction, confidence, horizon | the technical analyst | inside its schema, from figures code computed |
+| direction, confidence, horizon | the technical analyst | inside its schema, from figures the software computed |
 | how much behind the idea | the conviction rule | your weights and ladder over every voice ([The cycle](/opensource/cycle)) |
 | the most it may lose at the stop | your risk rule | `[controls].max_risk_per_trade_bps` against equity |
 | leverage and margin mode | you | `[execution].leverage`, `[execution].margin_mode` |
 | when a position is closed by time | you | `[execution].hold_limit` |
-| whether the account can carry it | code | the checks below |
+| whether the account can carry it | the software | the checks below |
 
 Leverage never makes a trade bigger. The size comes from the risk at the stop. Leverage only
 decides how much margin that size ties up and how far away liquidation sits.

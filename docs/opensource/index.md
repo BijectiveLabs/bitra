@@ -9,12 +9,13 @@ description: Autonomous trading agents for crypto that cannot fudge their own re
 
 Language models are good at reading a market and saying what they think. They are bad at
 arithmetic, they don't know what a trade costs, and they will happily overrule a limit you set.
-This project uses them for the first part only. Code fetches the data and works out every figure.
-The agents read those figures and give an opinion. Then code prices the trade, applies your limits,
-sizes it, and either writes it down or sends one order with the stop attached. Every decision and
-every refusal is kept on disk with its reason, so you can check afterwards what happened and why.
+This project uses them for the first part only. The software itself, fixed rules with no model
+involved, fetches the data and works out every figure. The agents read those figures and give an
+opinion. Then the software prices the trade, applies your limits, sizes it, and either writes it
+down or sends one order with the stop attached. Every decision and every refusal is kept on disk
+with its reason, so you can check afterwards what happened and why.
 
-It is a pre-release. What works today: a universe of perpetuals found and measured by code, a
+It is a pre-release. What works today: a universe of perpetuals found and measured by the software, a
 screener that picks where to look, the full autonomous cycle on live data, four analysts and up to
 three validators, the gates that decide, sizing from your own rules, real orders on a venue's
 practice environment behind a mandate you sign, and two auditors that read the records.
@@ -25,7 +26,7 @@ The command is `tra`. Start with the [quick start](/opensource/quick-start).
 
 | The usual problem with trading agents | What happens here |
 |---|---|
-| The model invents or miscalculates a number | Models never compute. Every figure comes from code, and a figure a model cites is checked against its brief, value included. |
+| The model invents or miscalculates a number | Models never compute. Every figure comes from the software, and a figure a model cites is checked against its brief, value included. |
 | Nobody knows what a trade cost until it's done | The round trip (fees, spread, impact, funding, slippage) is priced before an order exists, and a trade whose claimed edge doesn't clear it is refused. |
 | The agent sizes its own position | Size comes from your conviction ladder and your risk limit. No model can make a trade bigger. |
 | A model "decides" to ignore your settings | Your declared thresholds decide. A model's opinion is recorded beside them, never instead of them. |
@@ -36,13 +37,13 @@ The command is `tra`. Start with the [quick start](/opensource/quick-start).
 
 ```mermaid
 flowchart TD
-    find[["code finds the universe and measures each instrument<br/>one data pull each; every value carries its source and age"]] --> wake
+    find[["the software finds the universe and measures each instrument<br/>one data pull each; every value carries its source and age"]] --> wake
     wake{"trigger<br/>has anything moved since the last look?"}
     wake -- "no" --> held["held: one data pull, no tokens spent"]
-    wake -- "yes" --> pick["the screener picks among what code admitted<br/>citing each instrument's own figures"]
+    wake -- "yes" --> pick["the screener picks among what the software admitted<br/>citing each instrument's own figures"]
     pick -- "none taken" --> held
     pick -- "taken" --> briefs
-    briefs["code writes the briefs<br/>each role sees only the figures its job needs"] --> round1
+    briefs["the software writes the briefs<br/>each role sees only the figures its job needs"] --> round1
     subgraph round1["asked at the same time"]
         direction LR
         tech["technical analyst<br/>a direction, a confidence, a horizon"]
@@ -50,7 +51,7 @@ flowchart TD
         chain["on-chain analyst"]
         mood["sentiment analyst"]
     end
-    round1 --> price["code prices the round trip<br/>fee, spread, impact, funding, slippage"]
+    round1 --> price["the software prices the round trip<br/>fee, spread, impact, funding, slippage"]
     price --> round2["validators, as many as you declare<br/>a claim that cites no figure is thrown away"]
     round2 --> matrix{"confluence<br/>do your declared states agree with the direction?"}
     matrix -- "no" --> refused["a refusal that names its figure"]
@@ -70,7 +71,7 @@ flowchart TD
 | macro analyst | dated rates and levels, dated text | risk-on, risk-off or neutral | propose a direction |
 | on-chain analyst | chain and derivatives figures | accumulation, distribution or neutral | propose a direction |
 | sentiment analyst | dated scores and notes you curate | negative, neutral, positive, or not declared | invent a mood no figure supports |
-| market screener | what code measured for each admitted instrument: move, spread, regime, volume, correlation to BTC | which instruments to take, in what order, citing their figures | add an instrument code did not admit |
+| market screener | what the software measured for each admitted instrument: move, spread, regime, volume, correlation to BTC | which instruments to take, in what order, citing their figures | add an instrument the software did not admit |
 | validators (pro, contra, neutral) | the proposal and the figures behind it | support, oppose or abstain, with cited claims | decide, or cite a figure it wasn't given |
 | technology and quant auditors | the cycles this desk recorded | findings and proposed changes | change anything |
 

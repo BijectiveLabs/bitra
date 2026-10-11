@@ -59,7 +59,7 @@ kill_switch = "KILL"               # touch this file to flatten and stop
 # session_loss_limit_bps = 100
 # max_session_minutes = 120
 
-# ---- the technical analyst as the core instead of a code core (docs.bijectivelabs.dev/opensource/agents). Replace the
+# ---- the technical analyst as the core instead of a scripted strategy (docs.bijectivelabs.dev/opensource/agents). Replace the
 # [strategy] table with `agent = "technical_analyst"` and declare the budget:
 # [agents]
 # provider = "deepseek"            # any registered provider (docs.bijectivelabs.dev/opensource/providers)
@@ -99,7 +99,7 @@ kill_switch = "KILL"               # touch this file to flatten and stop
 #
 # The stances that argue about a proposal once there is one. Each stance is one more call, so this
 # is off until you ask for it. Pro argues for, contra argues against, neutral weighs both. Every
-# claim they make has to cite a figure from the brief with its value, and code throws away the ones
+# claim they make has to cite a figure from the brief with its value, and the software throws away the ones
 # that do not: a verdict with no surviving claim becomes abstain.
 # validators = ["pro", "contra", "neutral"]
 # on_missing_validator = "refuse" # a declared stance no model answered refuses the trade;
@@ -131,7 +131,7 @@ kill_switch = "KILL"               # touch this file to flatten and stop
 # input_per_million = 0.14
 # output_per_million = 0.28
 
-# ---- the two gates you declare and code applies. Both are off as shipped: uncomment to use them.
+# ---- the two gates you declare and the software applies. Both are off as shipped: uncomment to use them.
 #
 # Does the context agree with the direction? The states here are the ones your own thresholds
 # produced in sources/*.toml, not the words a model wrote. A required role that produced no state
@@ -243,7 +243,7 @@ kill_switch = "KILL"               # touch this file to flatten and stop
 # widen_after = 6                  # after this many straight refusals with nothing changing, ask
 #                                  # for more movement each time; one real move brings it back
 
-# The regime code measures on the decision timeframe, and whether a setup has to fit it: no
+# The regime the software measures on the decision timeframe, and whether a setup has to fit it: no
 # trend setup in a range, no range fade or pullback against a trend. Trend strength is the net move
 # over the path walked, scaled so a random walk sits near 1 on any window.
 # [regime]
@@ -268,19 +268,19 @@ kill_switch = "KILL"               # touch this file to flatten and stop
 # What this desk watches. Left out, every cycle is [run].instrument and nothing else. Declared, a
 # pass looks at each instrument for the price of one data pull - no tokens - applies the [trigger]
 # above to each of them, orders what survives by how far it has moved against its own spread, and
-# spends its cycles on the top of that order. The order is code, because it decides where capital
+# spends its cycles on the top of that order. The order is set by the software, because it decides where capital
 # gets to be considered at all.
 #
-# screener asks the market screener to narrow what code admitted, from the same figures. It can
+# screener asks the market screener to narrow what the software admitted, from the same figures. It can
 # only take an instrument out; it cannot add one, change the order, or say anything about a
 # direction or a size.
 # [universe]
 # instruments = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
 # max_per_cycle = 1                # how many of them one pass runs a full cycle on
 # max_intents_per_day = 6          # across every instrument, not per one
-# screener = false                 # true: the screener chooses and orders what code admitted
+# screener = false                 # true: the screener chooses and orders what the software admitted
 #
-# Discovery: code adds the venue's most traded perpetuals each pass (needs [run].size_quote).
+# Discovery: the software adds the venue's most traded perpetuals each pass (needs [run].size_quote).
 # `tra universe` shows what it would find now.
 # discover = true
 # top = 20

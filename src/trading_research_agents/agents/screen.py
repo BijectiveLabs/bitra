@@ -507,7 +507,7 @@ def asking(
             # A screener that cannot answer does not stop the pass: code's own order stands.
             return candidates, [
                 *refusals,
-                f"market_screener: {exc.__class__.__name__}: {exc}; code's order stands",
+                f"market_screener: {exc.__class__.__name__}: {exc}; the software's order stands",
             ]
         chosen, said_about = choose(candidates, said, asked)
         return chosen, [*refusals, *said_about]
