@@ -1,19 +1,19 @@
 # The agent
 
 An idea in plain language goes in. One of five recorded outcomes comes out. Language models
-are used at exactly three points, and every decision between them is made by the software against the
+are used at exactly three points, and every decision between them is made by the system against the
 gates that already exist.
 
 ```
 idea
   -> [model: bound]      plausible magnitude, with its basis
-  -> [software: floor]       cost_floor(envelope, magnitude)            stop -> CLOSED in the ledger
+  -> [system: floor]       cost_floor(envelope, magnitude)            stop -> CLOSED in the ledger
   -> [model: memo]       one sentence: who is forced to lose, and why
-  -> [software: form]        one sentence, one line, long enough to name a party
+  -> [system: form]        one sentence, one line, long enough to name a party
   -> [model: critique]   does it name a forced loser, or describe a pattern?
   -> [model: draft]      the nine elements of a pre-registration, as JSON
-  -> [software: build]       Preregistration(...) with the validation that already exists
-  -> [software: seal]        seal, write preregistration.json, OPEN in the ledger
+  -> [system: build]       Preregistration(...) with the validation that already exists
+  -> [system: seal]        seal, write preregistration.json, OPEN in the ledger
 ```
 
 | Outcome | Meaning | Recorded where |
@@ -53,7 +53,7 @@ is skipped and the basis is recorded as `declared`.
 ## What the models never do
 
 - They do not measure anything. Layers 1, 4, 5, 6 and 7 are data and statistics, and they are
-  worked out by the software, not by models.
+  worked out by the system, not by models.
 - They do not change the mechanism after the critic accepted it. The registration draft is
   built around the accepted memo, which is passed in and not re-asked.
 - They do not see a return, a win rate, or a profit target anywhere in a prompt. The prompts

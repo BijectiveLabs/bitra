@@ -34,14 +34,14 @@
 
 Language models are good at reading a market and saying what they think. They are bad at
 arithmetic, they don't know what a trade costs, and they will happily overrule a limit you set.
-This project uses them for the first part only. The software itself, fixed rules with no model
+This project uses them for the first part only. The system itself, fixed rules with no model
 involved, fetches the data and works out every figure. The agents read those figures and give an
-opinion. Then the software prices the trade, applies your limits, sizes it, and either writes it
+opinion. Then the system prices the trade, applies your limits, sizes it, and either writes it
 down or sends one order with the stop attached. Every decision and every refusal is kept on disk
 with its reason, so you can check afterwards what happened and why.
 
 It's a pre-release and isn't on PyPI yet. What works today: a universe of perpetuals found and
-measured by the software, a screener that picks where to look, the full autonomous cycle on live data, four
+measured by the system, a screener that picks where to look, the full autonomous cycle on live data, four
 analysts and up to three validators, the gates that decide, sizing from your own rules, real orders
 on a venue's practice environment behind a mandate you sign, and two auditors that read the records.
 
@@ -66,7 +66,7 @@ on a venue's practice environment behind a mandate you sign, and two auditors th
 
 | The usual problem with trading agents | What happens here |
 |---|---|
-| The model invents or miscalculates a number | Models never compute. Every figure comes from the software, and a figure a model cites is checked against its brief, value included. |
+| The model invents or miscalculates a number | Models never compute. Every figure comes from the system, and a figure a model cites is checked against its brief, value included. |
 | Nobody knows what a trade cost until it's done | The round trip (fees, spread, impact, funding, slippage) is priced before an order exists, and a trade whose claimed edge doesn't clear it is refused. |
 | The agent sizes its own position | Size comes from your conviction ladder and your risk limit. No model can make a trade bigger. |
 | A model "decides" to ignore your settings | Your declared thresholds decide. A model's opinion is recorded beside them, never instead of them. |
@@ -132,7 +132,7 @@ apiece, and measures it. The screen steps through them live:
 ![the screen pass](assets/pair-screener.png)
 
 **3. One cycle per instrument it takes.** Code found the candidates and measured them; the screener
-chose among them and cited each instrument's own figures; the software's own order is kept beside the
+chose among them and cited each instrument's own figures; the system's own order is kept beside the
 choice. The instruments taken get a full cycle. The terminal shows the whole pipeline from the
 start and updates it as each step begins and ends. Steps that run at the same time spin at the same
 time, each with its own clock, and the line underneath says who is working right now:
@@ -182,13 +182,13 @@ of twice the cost and got 1.94 times. A refusal names the figure behind it, ever
 
 ```mermaid
 flowchart TD
-    find[["the software finds the universe and measures each instrument<br/>one data pull each; every value carries its source and age"]] --> wake
+    find[["the system finds the universe and measures each instrument<br/>one data pull each; every value carries its source and age"]] --> wake
     wake{"trigger<br/>has anything moved since the last look?"}
     wake -- "no" --> held["held: one data pull, no tokens spent"]
-    wake -- "yes" --> pick["the screener picks among what the software admitted<br/>citing each instrument's own figures"]
+    wake -- "yes" --> pick["the screener picks among what the system admitted<br/>citing each instrument's own figures"]
     pick -- "none taken" --> held
     pick -- "taken" --> briefs
-    briefs["the software writes the briefs<br/>each role sees only the figures its job needs"] --> round1
+    briefs["the system writes the briefs<br/>each role sees only the figures its job needs"] --> round1
     subgraph round1["asked at the same time"]
         direction LR
         tech["technical analyst<br/>a direction, a confidence, a horizon"]
@@ -196,7 +196,7 @@ flowchart TD
         chain["on-chain analyst"]
         mood["sentiment analyst"]
     end
-    round1 --> price["the software prices the round trip<br/>fee, spread, impact, funding, slippage"]
+    round1 --> price["the system prices the round trip<br/>fee, spread, impact, funding, slippage"]
     price --> round2["validators, as many as you declare<br/>a claim that cites no figure is thrown away"]
     round2 --> matrix{"confluence<br/>do your declared states agree with the direction?"}
     matrix -- "no" --> refused["a refusal that names its figure"]
@@ -216,7 +216,7 @@ Who does what:
 | macro analyst | dated rates and levels, dated text | risk-on, risk-off or neutral | propose a direction |
 | on-chain analyst | chain and derivatives figures | accumulation, distribution or neutral | propose a direction |
 | sentiment analyst | dated scores and notes you curate | negative, neutral, positive, or not declared | invent a mood no figure supports |
-| market screener | what the software measured for each admitted instrument: move, spread, regime, volume, correlation to BTC | which instruments to take, in what order, citing their figures | add an instrument the software did not admit |
+| market screener | what the system measured for each admitted instrument: move, spread, regime, volume, correlation to BTC | which instruments to take, in what order, citing their figures | add an instrument the system did not admit |
 | validators (pro, contra, neutral) | the proposal and the figures behind it | support, oppose or abstain, with cited claims | decide, or cite a figure it wasn't given |
 | technology and quant auditors | the cycles this desk recorded | findings and proposed changes | change anything |
 
@@ -237,7 +237,7 @@ opposition shrinks it in proportion, and only opposition that outweighs the case
 short at 0.70 confidence against a barely bullish macro and sentiment scores 0.56 and trades at half
 size; against a strongly bullish context it scores 0 and doesn't trade.
 
-The technical analyst knows what kind of market it is working in before it decides. The software measures
+The technical analyst knows what kind of market it is working in before it decides. The system measures
 the regime on its timeframe (trending up, trending down, ranging or mixed) and on the higher
 timeframes you list in `[run].context_intervals`, and it hands over what your macro thresholds say
 this cycle as well. A setup that doesn't fit the regime, such as a trend trade in a sideways
@@ -280,7 +280,7 @@ environment (or the `.env` beside your config) and nowhere else.
 
 | Provider | Key in `.env` | Install with | Structured output | Tested live here |
 |---|---|---|---|---|
-| `groq` | `GROQ_API_KEY` | `openai` | JSON schema, falling back to JSON mode; checked by the software | **yes**: `openai/gpt-oss-120b` and `openai/gpt-oss-20b`, every live cycle in our records |
+| `groq` | `GROQ_API_KEY` | `openai` | JSON schema, falling back to JSON mode; checked by the system | **yes**: `openai/gpt-oss-120b` and `openai/gpt-oss-20b`, every live cycle in our records |
 | `google` | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | `google-genai` | JSON schema | **yes**: `gemini-flash-latest`, as the fallback |
 | `anthropic` | `ANTHROPIC_API_KEY` | `anthropic` | JSON schema | unit-tested; default model `claude-opus-5-5` |
 | `openai` | `OPENAI_API_KEY` | `openai` | strict JSON schema | unit-tested |
@@ -293,7 +293,7 @@ environment (or the `.env` beside your config) and nowhere else.
 | `local` | none | `openai` | JSON mode | any OpenAI-compatible server; pass `--base-url` |
 | `9router` | `9ROUTER_API_KEY` | `openai` | JSON schema | preset only; a local router |
 
-Whatever the provider, every answer is parsed against a closed schema by the software before anyone reads
+Whatever the provider, every answer is parsed against a closed schema by the system before anyone reads
 it, so a model that only offers JSON mode is held to the same shape as one with strict schemas.
 
 ```toml
@@ -345,7 +345,7 @@ Signing does not switch anything on. `tra check` names whatever else is missing.
 
 ### Your money, your orders, your positions
 
-Once orders flow, three things look after the money, all of them the software's own rules and none of them a model:
+Once orders flow, three things look after the money, all of them the system's own rules and none of them a model:
 
 | Before an order | When it is sent | While it is open |
 |---|---|---|
@@ -462,9 +462,9 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 
 ## What it guarantees, and what is not built yet
 
-Some rules are guarantees, enforced by the software and tests, and every change has to keep them:
+Some rules are guarantees, enforced by the system and tests, and every change has to keep them:
 
-- **No model touches an order or a key.** Models read figures and answer; the software sizes, prices,
+- **No model touches an order or a key.** Models read figures and answer; the system sizes, prices,
   limits and sends.
 - **No model can loosen a control.** A model can tighten a limit, step the ladder down or arm the
   kill switch; never widen, promote or disarm.

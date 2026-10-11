@@ -338,7 +338,7 @@ def test_a_pass_the_screener_emptied_says_so_rather_than_blaming_the_trigger() -
     ]
     said = why_no_cycle(rows)
     assert "NEARUSDT not moved enough for [trigger]" in said
-    assert "the screener took none of the 2 that the software admitted" in said
+    assert "the screener took none of the 2 that the system admitted" in said
     assert "other reasons" not in said
 
 

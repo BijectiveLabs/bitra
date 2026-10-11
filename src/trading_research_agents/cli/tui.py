@@ -760,16 +760,16 @@ def screen_view(record: Mapping[str, Any]) -> Group:
         dropped = ", ".join(f"{n} {why}" for why, n in sorted((found.get("dropped") or {}).items()))
         table.title = (
             f"the universe: {len(found.get('kept') or [])} of {found.get('markets')} perpetuals "
-            f"kept by the software ({dropped})"
+            f"kept by the system ({dropped})"
         )
     code = list(record.get("code_order") or [])
     if chosen:
         caption = f"{len(chosen)} taken"
         if picked:
             ranked = ", ".join(code[:5]) or "-"
-            caption += f"; the screener chose, the software's own order was {ranked}"
+            caption += f"; the screener chose, the system's own order was {ranked}"
         else:
-            caption += "; the software's order (pressure), no screener asked"
+            caption += "; the system's order (pressure), no screener asked"
     else:
         caption = f"no cycle this pass: {why_no_cycle(record.get('candidates') or [])}" + (
             "" if record.get("asked_screener") else "; no model was asked"

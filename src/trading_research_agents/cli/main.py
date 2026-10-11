@@ -4322,7 +4322,7 @@ def _gate_lines(
     if stances:
         weight = cfg.conviction.validator_weight
         good.append(
-            f"validators: {', '.join(stances)}; asked once there is a proposal and the software "
+            f"validators: {', '.join(stances)}; asked once there is a proposal and the system "
             "has not already refused it"
             + (f"; each vote moves conviction by {weight}" if weight > 0 else "")
         )
@@ -4841,8 +4841,8 @@ def _universe_notes(cfg: Any, bad: list[str]) -> list[str]:
         )
     if universe.screener:
         said.append(
-            "universe: the screener picks and orders what the software admitted, citing each "
-            "instrument's own figures; it cannot add an instrument, and the software's order "
+            "universe: the screener picks and orders what the system admitted, citing each "
+            "instrument's own figures; it cannot add an instrument, and the system's order "
             "is kept beside its own"
         )
     if cfg.trigger.idle:

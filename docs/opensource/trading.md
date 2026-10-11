@@ -11,7 +11,7 @@ feed  ->  strategy.on_bar  ->  controls.admit  ->  venue.submit  ->  exits (laye
 ```
 
 No language model is anywhere on the order path. Not to decide, not to assess risk, not to
-narrate an incident mid-run. Capital is governed by the software that is tested and fails closed.
+narrate an incident mid-run. Capital is governed by the system that is tested and fails closed.
 
 ## What this release runs, and what it does not
 

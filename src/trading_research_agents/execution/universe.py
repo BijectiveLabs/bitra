@@ -259,7 +259,7 @@ def why_no_cycle(rows: Sequence[Mapping[str, Any]]) -> str:
         said.append(f"{', '.join(quiet)} not moved enough for [trigger]")
     if passed_over:
         said.append(
-            f"the screener took none of the {len(passed_over)} that the software admitted; "
+            f"the screener took none of the {len(passed_over)} that the system admitted; "
             "its reason for each is above"
         )
     if rest:

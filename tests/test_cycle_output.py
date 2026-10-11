@@ -90,8 +90,8 @@ def test_an_admitted_instrument_that_did_not_run_says_why() -> None:
     assert "waiting" in text and "max_per_cycle was taken by ETHUSDT" in text
     assert "ahead on the screener's order" in text
     assert "#1 range_breakout" in text and "4,167M" in text
-    assert "the screener chose, the software's own order was BTCUSDT, ETHUSDT" in text
-    assert "2 of 782 perpetuals kept by the software (260 not crypto)" in text
+    assert "the screener chose, the system's own order was BTCUSDT, ETHUSDT" in text
+    assert "2 of 782 perpetuals kept by the system (260 not crypto)" in text
 
 
 def test_each_conviction_voice_says_which_way_it_pulled() -> None:

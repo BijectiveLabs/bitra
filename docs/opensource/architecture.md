@@ -70,7 +70,7 @@ the research it descends from.
    of it.
 4. **Agents are a surface, with full access.** The roles and the MCP tools call the gates;
    they never are the gates. A model may decide (the technical analyst is a decision core);
-   the software executes and refuses (controls, caps, ladder, kill switch). Rules 3 and 8 enforce it.
+   the system executes and refuses (controls, caps, ladder, kill switch). Rules 3 and 8 enforce it.
 
 Not every package exists yet. The list is the plan; a package is added when its first gate
 lands with tests. Today: `ledger`, `envelope`, `data`, `chain`, `execution`, `strategy`,
@@ -83,7 +83,7 @@ imported either.
 
 ```mermaid
 sequenceDiagram
-    participant C as software
+    participant C as system
     participant S as screener
     participant A as analyst (core)
     participant R as risk manager
@@ -106,7 +106,7 @@ sequenceDiagram
 ```
 
 The macro and on-chain analysts, when series are declared, are asked between the screener
-and the runs; their briefs are measured by the software and carry no action.
+and the runs; their briefs are measured by the system and carry no action.
 
 ## The chain
 
@@ -114,7 +114,7 @@ and the runs; their briefs are measured by the software and carry no action.
 |---|---|---|---|---|
 | 0 | Cost floor | plausible magnitude below the cheapest round trip | minutes | implemented |
 | 1 | Market observation | the phenomenon does not recur | minutes | implemented (`tra chain observe`) |
-| 2 | Mechanism memo | nobody can be named who is structurally forced to lose | minutes | implemented (model writes, the software checks the form, a critic objects once) |
+| 2 | Mechanism memo | nobody can be named who is structurally forced to lose | minutes | implemented (model writes, the system checks the form, a critic objects once) |
 | 3 | Pre-registration | the claim cannot be stated so data could refute it | hours | implemented |
 | 4 | Data requirements | no available instrument can measure the premise | hours to days | implemented |
 | 5 | Statistical validation | interval spans zero, loses to a matched null, or lives in one subperiod | days | implemented |

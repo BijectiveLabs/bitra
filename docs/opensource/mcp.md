@@ -3,7 +3,7 @@
 Agents are a surface. The language-model roles inside the package call the gates at layers 0,
 2 and 3; the MCP server lets any agent host outside the package call the gates too. It reads.
 It does not trade, promote a tier, or write a ledger row. That is a guarantee, not a gap: capital
-is governed by the software that is tested and fails closed, not by a tool a model can call. Read tools are
+is governed by the system that is tested and fails closed, not by a tool a model can call. Read tools are
 open to contributions.
 
 ```
