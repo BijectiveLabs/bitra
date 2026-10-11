@@ -52,17 +52,15 @@ jobs:
             --notes "See CHANGELOG.md for ${GITHUB_REF_NAME}."
 
   # PyPI through trusted publishing: no token is stored anywhere. It runs only once the repository
-  # variable PUBLISH_TO_PYPI is "true" and a `pypi` environment exists, so a tag pushed before
-  # PyPI is set up makes a GitHub release and nothing else. The files published are the ones the
-  # checks above passed on, not a second build.
+  # variable PUBLISH_TO_PYPI is "true", so a tag pushed before PyPI is set up makes a GitHub
+  # release and nothing else. The files published are the ones the checks above passed on, not a
+  # second build. No deployment environment: GitHub offers them on private repositories only on
+  # paid plans, and the trusted publisher on PyPI is registered without one.
   publish:
     name: publish to PyPI
     needs: build
     if: vars.PUBLISH_TO_PYPI == 'true'
     runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/project/trading-research-agents/
     permissions:
       id-token: write
     steps:
