@@ -19,6 +19,7 @@ from typing import Any
 from trading_research_agents.data.sources.base import Fetched, Source, SourceError
 
 POLICIES = ("refuse", "use_stale_with_flag")
+MINUTE_S = 60.0
 
 
 class ChainExhaustedError(RuntimeError):
@@ -73,6 +74,15 @@ class SourceChain:
             if self.kind not in source.kinds():
                 raise ValueError(f"{source.name} does not serve {self.kind}")
 
+    def allowed_age(self, fetched: Fetched) -> float:
+        """How old a value may be. A candle is aged from its close, so the newest closed bar is a
+        whole interval old just before the next one closes; past one minute, the wait for that next
+        bar is added to the declared ttl, which is written for one-minute bars."""
+        interval = fetched.detail.get("interval_s") if self.kind == "ohlcv" else None
+        if isinstance(interval, int | float) and interval > MINUTE_S:
+            return self.ttl_s + float(interval) - MINUTE_S
+        return self.ttl_s
+
     def fetch(self, instrument: str, **options: Any) -> ChainResult:
         result = ChainResult(fetched=None)
         best_stale: Fetched | None = None
@@ -91,9 +101,10 @@ class SourceChain:
                 )
                 continue
             age = fetched.age_s(now)
-            if age > self.ttl_s:
+            allowed = self.allowed_age(fetched)
+            if age > allowed:
                 result.attempts.append(
-                    Attempt(self.kind, source.name, "stale", f"{age}s older than ttl {self.ttl_s}s")
+                    Attempt(self.kind, source.name, "stale", f"{age}s older than ttl {allowed}s")
                 )
                 if best_stale is None or age < best_stale.age_s(now):
                     best_stale = fetched

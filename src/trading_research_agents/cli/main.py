@@ -2699,6 +2699,11 @@ AGENT_TIMEFRAME = (
 )
 
 
+AGENT_TIMEOUT = (
+    "timeout_bars = 16            # four hours of 15m bars; stops are measured over it\n"
+)
+
+
 def _agent_config(text: str, provider_name: str, model: str) -> str:
     """The template with the technical analyst as the core and the [agents] table live."""
     text = text[: text.index("[strategy]")] + AGENT_HEAD + text[text.index("[exit]") :]
@@ -2707,6 +2712,8 @@ def _agent_config(text: str, provider_name: str, model: str) -> str:
     # A round trip costs the same on any timeframe, so the move it is weighed against should be
     # worth it: fifteen-minute bars, with the hour and four hours as context. Theirs to change.
     text = text.replace(AGENT_TIMEFRAME_FROM, AGENT_TIMEFRAME, 1)
+    # The hold limit is counted in bars, so the same four hours is sixteen of them at 15m.
+    text = text.replace("timeout_bars = 240\n", AGENT_TIMEOUT, 1)
     text = _without_commented(text, "# [agents]")
     agents = (
         "[agents]\n"
@@ -2715,7 +2722,7 @@ def _agent_config(text: str, provider_name: str, model: str) -> str:
         'mechanism = "state the mechanism the analyst reasons from"\n'
         "lookback_bars = 60\n"
         "min_confidence = 0.6\n"
-        "magnitude_bps = 20                 # the claimed edge, for the cost floor\n"
+        "magnitude_bps = 20                 # the claimed edge when the analyst names no target\n"
         '# effort = "medium"                # minimal .. max, where your vendor takes one\n'
         "\n"
         "# Nothing caps what a role may spend: every call is counted in usage.jsonl\n"
@@ -3605,11 +3612,12 @@ def _sweep(
 
 
 def _screen_report(screened: Any) -> tuple[dict[str, Any], list[str]]:
+    """One pass over the universe as a record and as the lines a person reads."""
     from trading_research_agents.execution.universe import why_no_cycle
 
-    """One pass over the universe as a record and as the lines a person reads."""
     payload = screened.record()
-    admitted = sum(1 for c in screened.candidates if c.taken)
+    # Admitted by the system's own measures, before the screener narrowed them.
+    admitted = sum(1 for c in screened.candidates if c.admitted)
     lines = [
         f"screen {screened.at}: {len(screened.candidates)} instrument(s) looked at, "
         f"{admitted} admitted, {len(screened.chosen)} taken"
@@ -4619,7 +4627,7 @@ def _size_notes(cfg: Any) -> list[str]:
                 "[controls].max_position_quote says it in quote currency"
             )
         return said
-    said = [f"size: {run.size} in base units, step {steps}"]
+    said = [f"size: {run.size} in base units, at {steps}"]
     if not cfg.universe.idle:
         said.append(
             f"size: {run.size} is a different amount of money on each of "

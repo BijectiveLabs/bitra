@@ -165,6 +165,8 @@ def test_init_with_an_agent_makes_the_analyst_the_core(
     assert cfg.exit_rule.volatility is not None and "stop_frac = 0.01" not in text
     # Fifteen-minute decisions with the hour and four hours as context.
     assert cfg.run.bar_interval_s == 900 and cfg.run.context_intervals == (3600, 14_400)
+    # The same four-hour hold as a one-minute desk, counted in fifteen-minute bars.
+    assert cfg.exit_rule.timeout_bars == 16
     monkeypatch.chdir(project)
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     assert main(["check"]) == 1

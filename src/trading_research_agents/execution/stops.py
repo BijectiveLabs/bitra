@@ -88,7 +88,7 @@ class VolatilityExit:
         measured = self.stop_atr * atr / last * Decimal(max(horizon_bars, 1)).sqrt()
         stop, clamped = self._held(measured)
         take = stop * self.reward_to_risk
-        source, proposed, notes = "measured", None, []
+        source, proposed, notes, named_target = "measured", None, [], False
         if self.analyst_levels:
             named = _distance(mid, side, stop_price, against=True)
             if named is None:
@@ -99,7 +99,9 @@ class VolatilityExit:
                 proposed = named
                 stop, clamped = self._held(named)
                 source = "analyst"
-                take = self._target(stop, _distance(mid, side, target_price, against=False), notes)
+                target = _distance(mid, side, target_price, against=False)
+                take = self._target(stop, target, notes)
+                named_target = target is not None
         return Placement(
             stop_frac=stop,
             take_frac=take,
@@ -112,6 +114,7 @@ class VolatilityExit:
             source=source,
             proposed_frac=proposed,
             notes=tuple(notes),
+            target_named=named_target,
         )
 
     def _held(self, frac: Decimal) -> tuple[Decimal, str | None]:
@@ -166,6 +169,8 @@ class Placement:
     source: str = "measured"
     proposed_frac: Decimal | None = None
     notes: tuple[str, ...] = field(default_factory=tuple)
+    # The take profit is the analyst's own target (possibly brought in), not a multiple of the stop.
+    target_named: bool = False
 
     def record(self) -> dict[str, Any]:
         cents = Decimal("0.01")
@@ -182,6 +187,7 @@ class Placement:
         }
         if self.proposed_frac is not None:
             out["proposed_stop_bps"] = str((self.proposed_frac * BPS).quantize(cents))
+        out["target_named"] = self.target_named
         if self.notes:
             out["notes"] = list(self.notes)
         return out

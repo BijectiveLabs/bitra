@@ -16,7 +16,7 @@ symbols = { BTCUSDT = "BTC/USDT:USDT" }
 
 [data.ohlcv]
 chain = ["ccxt:bybit", "ccxt:binance", "file:data"]
-ttl = "90s"                    # a minute bar plus the time it takes to publish
+ttl = "90s"                    # a minute bar plus the time it takes to publish; a longer bar adds its own wait
 interval_s = 60
 limit = 240                    # four hours of minutes, enough for the features
 on_exhausted = "refuse"        # refuse | use_stale_with_flag

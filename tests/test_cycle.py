@@ -392,6 +392,9 @@ def test_a_cycle_writes_everything_it_touched_and_admits_a_claim_that_clears(
     assert json.loads((where / "snapshot.json").read_text("utf-8"))["instrument"] == "BTCUSDT"
     brief = json.loads((where / "briefs" / "technical.json").read_text("utf-8"))
     assert brief["bars"] == 5 and brief["mechanism"].startswith("short-horizon")
+    # The figures the analyst names its stop and target from reach it, rather than being filtered.
+    assert {"range_high", "range_low", "atr", "atr_bps"} <= set(brief)
+    assert not any("not this role's to read" in line for line in result.refusals)
     assert (where / "briefs" / "cost.json").is_file()
     assert (where / "answers" / "technical.json").is_file()
     intents = (where / "intents.jsonl").read_text("utf-8").strip().splitlines()

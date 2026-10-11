@@ -160,6 +160,37 @@ def test_the_chain_walks_in_order_records_every_attempt_and_refuses_when_exhaust
     assert [a.outcome for a in result.attempts] == ["stale", "stale"]
 
 
+class Bars(Fake):
+    def __init__(self, name: str, age_s: float, interval_s: int) -> None:
+        super().__init__(name, age_s=age_s)
+        self.interval_s = interval_s
+
+    def fetch(self, kind: str, instrument: str, **options: Any) -> Fetched:
+        got = super().fetch(kind, instrument, **options)
+        return Fetched(
+            kind=got.kind,
+            instrument=got.instrument,
+            value=got.value,
+            source=got.source,
+            tier=got.tier,
+            fetched_at=got.fetched_at,
+            as_of_ns=got.as_of_ns,
+            detail={"interval_s": self.interval_s},
+        )
+
+
+def test_a_longer_bar_is_not_stale_for_waiting_on_the_next_close() -> None:
+    # Ten minutes after a fifteen-minute bar closed it is still the newest one there can be.
+    fresh = SourceChain(kind="ohlcv", sources=(Bars("v", 600, 900),), ttl_s=90, clock=lambda: NOW)
+    assert fresh.fetch("BTCUSDT").fetched is not None
+    late = SourceChain(kind="ohlcv", sources=(Bars("v", 1000, 900),), ttl_s=90, clock=lambda: NOW)
+    with pytest.raises(ChainExhaustedError, match="older than ttl 930"):
+        late.fetch("BTCUSDT")
+    minute = SourceChain(kind="ohlcv", sources=(Bars("v", 100, 60),), ttl_s=90, clock=lambda: NOW)
+    with pytest.raises(ChainExhaustedError):
+        minute.fetch("BTCUSDT")
+
+
 def test_a_chain_refuses_to_be_built_wrong() -> None:
     with pytest.raises(ValueError, match="names no source"):
         SourceChain(kind="ohlcv", sources=(), ttl_s=30)

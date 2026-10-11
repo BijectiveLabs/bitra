@@ -112,7 +112,9 @@ Three rules do the work.
   gets a cycle, from the days already in `data/`.
 - **Every value carries its age.** Age is measured in market time, not in the time we fetched:
   a candle's age is counted from when its interval closed. Nothing older than `ttl` is handed to
-  a decision. When the chain is exhausted the default is to refuse the kind of data outright;
+  a decision. The `ttl` for candles is written for one-minute bars: on a longer bar the newest
+  closed candle is up to a whole bar old before the next one closes, so the system adds that wait.
+  A fifteen-minute bar with `ttl = "90s"` is fresh for 15m30s after it closed, and no longer. When the chain is exhausted the default is to refuse the kind of data outright;
   `use_stale_with_flag` is available, and then the snapshot marks the value stale and says so in
   every report that follows.
 - **Public data only.** These sources are never given a key, which is why they cannot place an

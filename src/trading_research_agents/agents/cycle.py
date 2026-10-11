@@ -397,7 +397,7 @@ def _ask(
     return done.text
 
 
-def _before_votes(cfg: CycleConfig, result: CycleResult, costs: Any) -> str:
+def _before_votes(cfg: CycleConfig, result: CycleResult, costs: Any, edge: Decimal) -> str:
     """A refusal later steps are certain to make whatever the validators say, or nothing.
 
     Only what cannot change after the votes is read here: the desk with nothing added to it, the
@@ -423,15 +423,15 @@ def _before_votes(cfg: CycleConfig, result: CycleResult, costs: Any) -> str:
             )
         floor = sum((c.bps for c in costs.cost.components if c.name != "impact"), Decimal(0))
         if rule.min_edge_multiple is not None and floor > 0:
-            best = edge_multiple(edge_bps=cfg.magnitude_bps, cost_bps=floor)
+            best = edge_multiple(edge_bps=edge, cost_bps=floor)
             if best is not None and best < rule.min_edge_multiple:
                 return (
                     f"targets: the claimed edge is at most {best}x the round trip and the desk "
                     f"declared {rule.min_edge_multiple}x"
                 )
-        if rule.min_net_bps is not None and cfg.magnitude_bps - floor < rule.min_net_bps:
+        if rule.min_net_bps is not None and edge - floor < rule.min_net_bps:
             return (
-                f"targets: net is at most {cfg.magnitude_bps - floor} bps and the declared "
+                f"targets: net is at most {edge - floor} bps and the declared "
                 f"minimum is {rule.min_net_bps} bps"
             )
     if cfg.desk.bounds_a_trade:
@@ -791,8 +791,54 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
     write_json(where.brief("cost"), costs.record())
     announce(cfg.watch, "cost", DONE, f"round trip {costs.cost.round_trip_bps:.2f} bps")
 
+    # Where the trade is wrong and where it is done depend on the price and the bars, not on the
+    # size, so they are settled before anyone is paid to vote on a trade they would refuse.
+    try:
+        exits, placement = _exits(
+            cfg,
+            costs.cost.mid,
+            analyst.target,
+            snapshot=snapshot,
+            horizon_bars=_held_bars(cfg, analyst.horizon_bars),
+            stop_price=analyst.stop_price,
+            target_price=analyst.target_price,
+        )
+    except StopError as exc:
+        # A stop that cannot be placed inside the operator's bounds is not replaced by a guess.
+        result.refusals.append(f"exit: {exc}")
+        announce(cfg.watch, "exit", REFUSED, str(exc))
+        _finish(cfg, where, result)
+        return result
+    view: dict[str, Any] = dict(_exit_view(costs.cost.mid, analyst.target, exits))
+    if placement is not None:
+        view["measured"] = placement.record()
+    result.exits = view
+    take_pnl = view.get("take_pnl_bps")
+    if take_pnl is not None and Decimal(take_pnl) <= costs.cost.round_trip_bps:
+        # A take profit inside the round trip turns the trade's best outcome into a loss.
+        result.refusals.append(
+            f"exit: the take profit is {take_pnl} bps away and the round trip costs "
+            f"{costs.cost.round_trip_bps:.2f} bps, so a winner would lose money"
+        )
+        announce(cfg.watch, "exit", REFUSED, "take profit inside the round trip")
+        _finish(cfg, where, result)
+        return result
+    even = _break_even(view, costs.cost.round_trip_bps)
+    bound = cfg.targets.max_break_even_win_rate
+    if even is not None and Decimal(even) > bound:
+        result.refusals.append(
+            f"exit: {Decimal(even) * 100:.1f}% of trades like this would have to reach the take "
+            f"profit to cover the stops and the {costs.cost.round_trip_bps:.2f} bps round trip; "
+            f"[targets].max_break_even_win_rate is {bound * 100:.0f}%"
+        )
+        announce(cfg.watch, "exit", REFUSED, f"break even at {Decimal(even) * 100:.1f}%")
+        _finish(cfg, where, result)
+        return result
+    edge, edge_source = _claimed_edge(cfg, placement)
+    result.briefs["edge"] = {"edge_bps": str(edge), "source": edge_source}
+
     if cfg.validators:
-        early = _before_votes(cfg, result, costs)
+        early = _before_votes(cfg, result, costs, edge)
         if early:
             # Refused by code that does not read a single vote, so asking three models first
             # would only pay for an answer nothing can use.
@@ -800,7 +846,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
             announce(cfg.watch, early.partition(":")[0], REFUSED, early.partition(": ")[2])
             _finish(cfg, where, result)
             return result
-        _run_validators(cfg, where, result, asked=asked, analyst=analyst, costs=costs)
+        _run_validators(cfg, where, result, asked=asked, analyst=analyst, costs=costs, edge=edge)
         silent = [
             name
             for name in (f"validator_{stance}" for stance in cfg.validators)
@@ -879,47 +925,6 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
             return result
         size = stake.size
 
-    try:
-        exits, placement = _exits(
-            cfg,
-            costs.cost.mid,
-            analyst.target,
-            snapshot=snapshot,
-            horizon_bars=_held_bars(cfg, analyst.horizon_bars),
-            stop_price=analyst.stop_price,
-            target_price=analyst.target_price,
-        )
-    except StopError as exc:
-        # A stop that cannot be placed inside the operator's bounds is not replaced by a guess.
-        result.refusals.append(f"exit: {exc}")
-        announce(cfg.watch, "exit", REFUSED, str(exc))
-        _finish(cfg, where, result)
-        return result
-    view: dict[str, Any] = dict(_exit_view(costs.cost.mid, analyst.target, exits))
-    if placement is not None:
-        view["measured"] = placement.record()
-    result.exits = view
-    take_pnl = view.get("take_pnl_bps")
-    if take_pnl is not None and Decimal(take_pnl) <= costs.cost.round_trip_bps:
-        # A take profit inside the round trip turns the trade's best outcome into a loss.
-        result.refusals.append(
-            f"exit: the take profit is {take_pnl} bps away and the round trip costs "
-            f"{costs.cost.round_trip_bps:.2f} bps, so a winner would lose money"
-        )
-        announce(cfg.watch, "exit", REFUSED, "take profit inside the round trip")
-        _finish(cfg, where, result)
-        return result
-    even = _break_even(view, costs.cost.round_trip_bps)
-    bound = cfg.targets.max_break_even_win_rate
-    if even is not None and Decimal(even) > bound:
-        result.refusals.append(
-            f"exit: {Decimal(even) * 100:.1f}% of trades like this would have to reach the take "
-            f"profit to cover the stops and the {costs.cost.round_trip_bps:.2f} bps round trip; "
-            f"[targets].max_break_even_win_rate is {bound * 100:.0f}%"
-        )
-        announce(cfg.watch, "exit", REFUSED, f"break even at {Decimal(even) * 100:.1f}%")
-        _finish(cfg, where, result)
-        return result
     stop_at = exits.get("stop_price")
     if cfg.max_risk_per_trade_bps is not None and stop_at is None:
         # A declared risk limit that cannot be computed is not a limit. Fail closed and say which
@@ -998,10 +1003,10 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         write_json(where.brief("cost"), costs.record())
 
     verdict = admit(
-        edge_bps=cfg.magnitude_bps,
+        edge_bps=edge,
         cost=costs.cost,
         margin_bps=cfg.margin_bps,
-        edge_source="[agents].magnitude_bps, declared by the operator and not measured here",
+        edge_source=edge_source,
     )
     result.verdict = verdict
     announce(
@@ -1028,7 +1033,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
             net_bps=verdict.net_bps,
             reward_to_risk=cfg.reward_to_risk,
             round_trips_today=intents_today(cfg.root, at=cfg.clock(), instrument=cfg.instrument),
-            over_cost=edge_multiple(edge_bps=cfg.magnitude_bps, cost_bps=costs.cost.round_trip_bps),
+            over_cost=edge_multiple(edge_bps=edge, cost_bps=costs.cost.round_trip_bps),
             research=research_bps(spend=spent, notional=size * costs.cost.mid),
         )
         result.targets = met
@@ -1060,7 +1065,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         # What the direction was read from, after code checked each figure against the brief. An
         # intent that cannot say this is an intent nobody can review a month later.
         "cited": result.cited,
-        "edge_bps": str(cfg.magnitude_bps),
+        "edge_bps": str(edge),
         "edge_source": verdict.edge_source,
         "break_even_win_rate": _break_even(result.exits, costs.cost.round_trip_bps),
         "net_bps": str(verdict.net_bps.quantize(Decimal("0.0001"))),
@@ -1341,6 +1346,7 @@ def _run_validators(
     asked: Mapping[str, Any],
     analyst: Any,
     costs: Any,
+    edge: Decimal,
 ) -> None:
     """Ask each declared stance about the proposal, then keep only the claims that cite a figure."""
     figures = figures_of(asked)
@@ -1350,7 +1356,7 @@ def _run_validators(
         "horizon_bars": analyst.horizon_bars,
         "reason": analyst.reason,
         "mechanism": cfg.mechanism,
-        "edge_bps": str(cfg.magnitude_bps),
+        "edge_bps": str(edge),
     }
     states = {
         role: said.get("declared_state", {})
@@ -1536,6 +1542,23 @@ def _position_cap(cfg: CycleConfig, mid: Decimal, base: Decimal) -> Decimal:
     if cfg.max_position_quote is not None and mid > 0:
         caps.append(_quantized(cfg.max_position_quote / mid, cfg.size_step))
     return min(caps) if caps else base
+
+
+def _claimed_edge(cfg: CycleConfig, placement: Placement | None) -> tuple[Decimal, str]:
+    """The move the trade claims, for the cost gate and the targets, and who claimed it.
+
+    When the analyst named a target and it survived the bounds, that target is the claim: it is the
+    analyst's own reading of where the idea is done, already held to max_reward_to_risk and to the
+    break-even bound. A take profit the system placed as a multiple of the stop claims nothing, so
+    without a named target the operator's declared magnitude stands.
+    """
+    if placement is not None and placement.target_named:
+        take = (placement.take_frac * Decimal(10_000)).quantize(Decimal("0.01"))
+        return take, "the analyst's own target, held inside the [exit] bounds"
+    return (
+        cfg.magnitude_bps,
+        "[agents].magnitude_bps, declared by the operator and not measured here",
+    )
 
 
 def _held_bars(cfg: CycleConfig, horizon: int) -> int:

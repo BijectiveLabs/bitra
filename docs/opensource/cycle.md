@@ -84,6 +84,7 @@ the universe (system: one data pull each, the trigger per instrument, ordered by
   -> briefs (system, each role's own sections only)
   -> technical analyst + reading analysts   (parallel)
   -> the round trip priced (system)
+  -> the stop and the target (the analyst's levels, held in your [exit] bounds; break-even checked)
   -> validators                             (parallel, when configured)
   -> confluence matrix   (system: declared states and votes)   -> whether to trade at all
   -> conviction          (system: the same voices, weighted)    -> how much the desk wants on
@@ -829,10 +830,14 @@ money`): the best outcome the trade can have would still lose.
 - **A floor and a ceiling.** On a very quiet minute the measured stop can sit inside the spread and
   the fees; on a violent one it can be wider than anyone meant to risk. The bounds are yours, and
   the record says when one of them held.
-- **The edge stays declared.** The take profit is where a trade closes when it goes right; the edge
-  is what the desk expects to earn on average, across the winners, the losers and the timeouts.
-  Reading the edge off the take profit would count every trade as a winner and quietly loosen the
-  cost gate, so `[agents].magnitude_bps` stays the number the gate weighs.
+- **The analyst's target is its claim; the losers are counted separately.** When the analyst names
+  a target and it survives the bounds, that distance is the move the cost gate and the targets
+  weigh: it is the analyst's own reading, already held to `max_reward_to_risk`. A target alone
+  would count every trade as a winner, so it never stands alone: the break-even bound prices the
+  stops and the round trip against it and refuses a trade that needs more than half its kind to
+  win. A take profit the system set as a multiple of the stop claims nothing, so without a named
+  target `[agents].magnitude_bps` is still the number the gate weighs. The record says which one
+  was used (`edge_source`).
 - **No guessed stop.** When the candles cannot give a range, the trade is refused. Falling back to
   some default would put a stop on the venue that nothing measured.
 - **One mode at a time.** A table holding both `stop_frac` and `stop_atr` would be read by a person
@@ -872,9 +877,10 @@ component says how much we actually know:
 | `latency_slippage` | estimated | `[run].slippage_bps`, an operator's bound, not a measurement |
 
 The gate is one comparison: the claimed edge must be at least the total plus the margin the
-operator declared. The claim itself is labelled too. Today it comes from
-`[agents].magnitude_bps`, which is a declaration; when layer 1 or layer 5 has measured the
-phenomenon, the same field carries the measurement and the label changes with it.
+operator declared. The claim itself is labelled too. It is the analyst's own target when one was
+named and survived the [exit] bounds, and `[agents].magnitude_bps`, a declaration, otherwise;
+when layer 1 or layer 5 has measured the phenomenon, the same field carries the measurement and
+the label changes with it.
 
 A real cycle, live data and a real model, printed as the console shows it:
 

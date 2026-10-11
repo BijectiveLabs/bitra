@@ -321,7 +321,7 @@ def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> S
         )
     exit_rule = ExitRule(
         stop_frac=_dec(exit_raw, "stop_frac"),
-        timeout_bars=_or_int(exit_raw, "timeout_bars", 240 if agent else None),
+        timeout_bars=_or_int(exit_raw, "timeout_bars", _four_hours(run_raw) if agent else None),
         mechanism_bound=str(exit_raw.get("mechanism_bound", AGENT_EXIT_BOUND if agent else "")),
         take_profit_frac=(
             _dec(exit_raw, "take_profit_frac") if "take_profit_frac" in exit_raw else None
@@ -1374,6 +1374,12 @@ def _or_dec(table: dict[str, Any], key: str, default: str | None) -> Decimal:
     if key in table or default is None:
         return _dec(table, key)
     return Decimal(default)
+
+
+def _four_hours(run_raw: dict[str, Any]) -> int:
+    # The default hold is a span of time, so it is the same four hours on any decision timeframe.
+    interval = _or_int(run_raw, "bar_interval_s", 60)
+    return max(1, 14_400 // max(interval, 1))
 
 
 def _or_int(table: dict[str, Any], key: str, default: int | None) -> int:

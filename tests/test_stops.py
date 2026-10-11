@@ -317,6 +317,34 @@ def test_a_cycle_uses_the_analysts_levels_and_refuses_a_trade_its_costs_cannot_c
     assert result.exits["measured"]["source"] == "analyst"
     assert Decimal(result.intent["stop_price"]) == Decimal("100.00")
     assert Decimal(result.intent["take_price"]) == Decimal("108.00")
+    # The analyst's own target is the move the cost gate weighs, not the declared constant.
+    assert Decimal(result.intent["edge_bps"]) == Decimal(result.exits["measured"]["take_bps"])
+    assert result.intent["edge_source"].startswith("the analyst's own target")
+
+    small, _, _ = cycle_config(
+        tmp_path / "small",
+        envelope,
+        [analyst_answer(horizon=4, stop_price=100.0, target_price=108.0)],
+        chains=chains(closes=SWINGING),
+        lookback_bars=8,
+        volatility_exit=rule,
+        magnitude_bps=Decimal("1"),
+    )
+    # A declared magnitude too small for this timeframe no longer refuses a target that clears.
+    assert run_cycle(small).intent is not None
+
+    unnamed, _, _ = cycle_config(
+        tmp_path / "unnamed",
+        envelope,
+        [analyst_answer(horizon=4, stop_price=100.0, target_price=None)],
+        chains=chains(closes=SWINGING),
+        lookback_bars=8,
+        volatility_exit=rule,
+        magnitude_bps=Decimal("1"),
+    )
+    # A take profit the system set as a multiple of the stop claims nothing; the constant stands.
+    flat = run_cycle(unnamed)
+    assert flat.intent is None and any("cost gate" in r for r in flat.refusals), flat.refusals
 
     thin, _, _ = cycle_config(
         tmp_path / "thin",
