@@ -18,33 +18,8 @@
   <img alt="Managed with uv" src="https://img.shields.io/badge/uv-managed-DE5FE9?style=flat-square&logo=uv&logoColor=white">
   <img alt="Linted and formatted with Ruff" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json&style=flat-square">
   <img alt="Type checked with mypy" src="https://img.shields.io/badge/types-mypy-2A6DB2?style=flat-square">
-  <img alt="Venues through ccxt" src="https://img.shields.io/badge/venues-ccxt-111111?style=flat-square">
-  <img alt="Tested on Linux and Windows" src="https://img.shields.io/badge/tested%20on-Linux%20%7C%20Windows-555555?style=flat-square">
-</p>
-
-<p align="center">
-  <a href="https://bijectivelabs.dev"><img src="assets/bijective_banner.png" alt="Bijective Labs"></a>
-</p>
-
-<h1 align="center">trading-research-agents</h1>
-
-<p align="center"><strong>Autonomous trading agents for crypto that can't fudge their own results.</strong></p>
-
-<p align="center">
-  <a href="https://github.com/BijectiveLabs/trading-research-agents/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/BijectiveLabs/trading-research-agents/ci.yml?branch=develop&style=flat-square&logo=githubactions&logoColor=white&label=CI"></a>
-  <a href="https://github.com/BijectiveLabs/trading-research-agents/actions/workflows/docs.yml"><img alt="Docs build" src="https://img.shields.io/github/actions/workflow/status/BijectiveLabs/trading-research-agents/docs.yml?style=flat-square&logo=vitepress&logoColor=white&label=docs%20build"></a>
-  <a href="https://github.com/BijectiveLabs/trading-research-agents/blob/master/LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square"></a>
-  <a href="https://pypi.org/project/trading-research-agents/"><img alt="PyPI" src="https://img.shields.io/pypi/v/trading-research-agents?style=flat-square&logo=pypi&logoColor=white"></a>
-  <img alt="Status: alpha" src="https://img.shields.io/badge/status-alpha-orange?style=flat-square">
-</p>
-
-<p align="center">
-  <img alt="Python 3.11, 3.12, 3.13" src="https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-3776AB?style=flat-square&logo=python&logoColor=white">
-  <img alt="Managed with uv" src="https://img.shields.io/badge/uv-managed-DE5FE9?style=flat-square&logo=uv&logoColor=white">
-  <img alt="Linted and formatted with Ruff" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json&style=flat-square">
-  <img alt="Type checked with mypy" src="https://img.shields.io/badge/types-mypy-2A6DB2?style=flat-square">
-  <img alt="Venues through ccxt" src="https://img.shields.io/badge/venues-ccxt-111111?style=flat-square">
-  <img alt="Linux and Windows" src="https://img.shields.io/badge/tested%20on-Linux%20%7C%20Windows-555555?style=flat-square">
+  <img alt="Venues through ccxt" src="https://img.shields.io/badge/venues-ccxt-0F766E?style=flat-square">
+  <img alt="Tested on Linux and Windows" src="https://img.shields.io/badge/tested%20on-Linux%20%7C%20Windows-0969DA?style=flat-square">
 </p>
 
 <p align="center">
@@ -167,7 +142,7 @@ apiece, and measures it. The screen steps through them live:
 
 ![the screen pass](assets/pair-screener.png)
 
-**3. One cycle per instrument it takes.** Code found the candidates and measured them; the screener
+**3. One cycle per instrument it takes.** The system found the candidates and measured them; the screener
 chose among them and cited each instrument's own figures; the system's own order is kept beside the
 choice. The instruments taken get a full cycle. The terminal shows the whole pipeline from the
 start and updates it as each step begins and ends. Steps that run at the same time spin at the same
