@@ -1,12 +1,12 @@
 [build-system]
-requires = ["hatchling>=1.27"]
+requires = ["hatchling>=1.27", "hatch-fancy-pypi-readme>=24"]
 build-backend = "hatchling.build"
 
 [project]
 name = "trading-research-agents"
 version = "0.6.0"
 description = "Autonomous trading agents for crypto that can't fudge their own results."
-readme = "README.md"
+dynamic = ["readme"]
 requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE", "NOTICE"]
@@ -76,6 +76,18 @@ dev = [
 # developer environment) takes the fixed release until ccxt moves its pin. Installs from PyPI follow
 # ccxt's own pin, which is ccxt's to change.
 override-dependencies = ["multidict>=6.9.1,<7"]  # aiohttp needs it below 7
+
+[tool.hatch.metadata.hooks.fancy-pypi-readme]
+content-type = "text/markdown"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
+path = "README.md"
+
+# GitHub shows the README's images from the repository itself; PyPI has no repository to read
+# them from, so the published copy points each one at the file on GitHub.
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = '(src="|\]\()assets/'
+replacement = '\1https://raw.githubusercontent.com/BijectiveLabs/trading-research-agents/master/assets/'
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/trading_research_agents"]

@@ -6,6 +6,13 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The README's images are read from the repository again, so they show on GitHub while it is
+  private; the copy published to PyPI points them at GitHub, rewritten at build time.
+- The CI badge is GitHub's own, which shows to anyone who can see the repository; the docs build
+  badge, which had no runs to report, is gone, and the Python badge reads the versions from PyPI.
+
 ## [0.6.0] - 2026-10-11
 
 ### Changed

@@ -1,5 +1,29 @@
 <p align="center">
-  <a href="https://bijectivelabs.dev"><img src="https://raw.githubusercontent.com/BijectiveLabs/trading-research-agents/master/assets/bijective_banner.png" alt="Bijective Labs"></a>
+  <a href="https://bijectivelabs.dev"><img src="assets/bijective_banner.png" alt="Bijective Labs"></a>
+</p>
+
+<h1 align="center">trading-research-agents</h1>
+
+<p align="center"><strong>Autonomous trading agents for crypto that can't fudge their own results.</strong></p>
+
+<p align="center">
+  <a href="https://github.com/BijectiveLabs/trading-research-agents/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/BijectiveLabs/trading-research-agents/actions/workflows/ci.yml/badge.svg?branch=develop"></a>
+  <a href="https://pypi.org/project/trading-research-agents/"><img alt="PyPI" src="https://img.shields.io/pypi/v/trading-research-agents?style=flat-square&logo=pypi&logoColor=white&label=PyPI"></a>
+  <a href="https://pypi.org/project/trading-research-agents/"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/trading-research-agents?style=flat-square&logo=python&logoColor=white&label=python"></a>
+  <a href="https://github.com/BijectiveLabs/trading-research-agents/blob/master/LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square"></a>
+  <img alt="Status: alpha" src="https://img.shields.io/badge/status-alpha-orange?style=flat-square">
+</p>
+
+<p align="center">
+  <img alt="Managed with uv" src="https://img.shields.io/badge/uv-managed-DE5FE9?style=flat-square&logo=uv&logoColor=white">
+  <img alt="Linted and formatted with Ruff" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json&style=flat-square">
+  <img alt="Type checked with mypy" src="https://img.shields.io/badge/types-mypy-2A6DB2?style=flat-square">
+  <img alt="Venues through ccxt" src="https://img.shields.io/badge/venues-ccxt-111111?style=flat-square">
+  <img alt="Tested on Linux and Windows" src="https://img.shields.io/badge/tested%20on-Linux%20%7C%20Windows-555555?style=flat-square">
+</p>
+
+<p align="center">
+  <a href="https://bijectivelabs.dev"><img src="assets/bijective_banner.png" alt="Bijective Labs"></a>
 </p>
 
 <h1 align="center">trading-research-agents</h1>
@@ -135,13 +159,13 @@ and the next command to run. Under it is a prompt that takes every command and d
 there. Arrow keys go back through what you typed, tab completes, `help` lists the commands and
 `exit` leaves. For scripts and cron, `tra -c "run --now"` runs one command and exits.
 
-![the cockpit](https://raw.githubusercontent.com/BijectiveLabs/trading-research-agents/master/assets/cockpit.png)
+![the cockpit](assets/cockpit.png)
 
 **2. The pass over your instruments.** Type `run --every 5m` and the desk first refreshes any data
 series that are due, one line each. Then it looks at every instrument on your list, one data pull
 apiece, and measures it. The screen steps through them live:
 
-![the screen pass](https://raw.githubusercontent.com/BijectiveLabs/trading-research-agents/master/assets/pair-screener.png)
+![the screen pass](assets/pair-screener.png)
 
 **3. One cycle per instrument it takes.** Code found the candidates and measured them; the screener
 chose among them and cited each instrument's own figures; the system's own order is kept beside the
@@ -149,17 +173,17 @@ choice. The instruments taken get a full cycle. The terminal shows the whole pip
 start and updates it as each step begins and ends. Steps that run at the same time spin at the same
 time, each with its own clock, and the line underneath says who is working right now:
 
-![a scheduled desk at work](https://raw.githubusercontent.com/BijectiveLabs/trading-research-agents/master/assets/trading-agents.png)
+![a scheduled desk at work](assets/trading-agents.png)
 
 **4. The result.** When the cycle finishes, the table gives way to the pass over the universe, what
 was taken and what was held and why, then the data the cycle used and what the round trip costs:
 
-![one cycle](https://raw.githubusercontent.com/BijectiveLabs/trading-research-agents/master/assets/cycle.png)
+![one cycle](assets/cycle.png)
 
 After that, what each validator argued, how conviction weighed the analysts, the risk at the stop,
 and whether the trade clears the desk's targets:
 
-![validators, conviction, risk and targets](https://raw.githubusercontent.com/BijectiveLabs/trading-research-agents/master/assets/one-cycle.png)
+![validators, conviction, risk and targets](assets/one-cycle.png)
 
 **5. Between cycles.** The desk says when the next pass is, on the clock and in minutes, for
 example `next pass at 14:30:00 UTC, in 10m 57s`, and counts down to it. An auditor woken by an alarm
