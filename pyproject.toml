@@ -71,6 +71,12 @@ dev = [
     "ruff>=0.9",
 ]
 
+[tool.uv]
+# ccxt pins multidict exactly to a release with a published advisory; the lock (CI and every
+# developer environment) takes the fixed release until ccxt moves its pin. Installs from PyPI follow
+# ccxt's own pin, which is ccxt's to change.
+override-dependencies = ["multidict>=6.9.1,<7"]  # aiohttp needs it below 7
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/trading_research_agents"]
 

@@ -851,6 +851,8 @@ All notable changes to this project are recorded here. The format follows
 
 ### Security
 
+- The lock moves to ccxt 4.5.85, urllib3 2.8.0 and pyjwt 2.15.1, and overrides ccxt's exact pin
+  on multidict to 6.9.1, clearing the advisories `uv audit` reported against 0.6.0's first lock.
 - The read tools only open paths inside a declared root, and never a hidden file. This covers the
   auditor's tool loop in a session (project, session and ladder directories) and the MCP server
   (the working directory, or `tra mcp serve --root DIR`, repeatable). Before this a model could pass
