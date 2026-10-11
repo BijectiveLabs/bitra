@@ -6,8 +6,19 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-11
+
 ### Changed
 
+- When the analyst names a target that survives the `[exit]` bounds, that target is the move the
+  cost gate and the targets weigh, recorded as `edge_source`; the break-even bound prices the
+  stops and the round trip against it. Without a named target, `[agents].magnitude_bps` stands as
+  before. A constant written for one-minute bars had refused most trades on a 15-minute desk.
+- The stop and the target are placed right after the round trip is priced, before the validators,
+  so a trade the exits refuse is never paid for with votes.
+- The default `[exit].timeout_bars` on an agent desk is four hours of bars on its own timeframe
+  (240 at 1m, 16 at 15m), and `tra init --agent` writes 16. A measured stop is sized over the
+  same span, so 240 fifteen-minute bars no longer push every stop to `max_stop_frac`.
 - The documentation, the README, the commented templates and the console say "the system"
   where they used to say "code" for what the program itself does, and "scripted strategy" for
   what was called a code core.
@@ -686,6 +697,17 @@ All notable changes to this project are recorded here. The format follows
 
 ### Fixed
 
+- Candles on a timeframe longer than a minute were refused as stale once a cycle started more than
+  90 seconds after the bar closed, which stopped four in ten cycles of a 15-minute desk before the
+  analyst was asked. The candle `ttl` is now written for one-minute bars and a longer bar adds its
+  own wait: a 15-minute bar with `ttl = "90s"` is fresh for 15m30s after it closed.
+- The technical analyst's brief lost `range_high`, `range_low`, `atr` and `atr_bps` to the scope
+  filter, so it could never name a stop or a target from them. They are now part of what the role
+  reads, and `stop_price` and `target_price` part of what it answers.
+- The screen line counted instruments after the screener as "admitted"; it now counts what the
+  system admitted, so it agrees with the reason given when the screener takes none.
+- The sentiment analyst's prompt names the exact path of a plain figure, so a citation such as
+  `series.fear_greed.change_over_window` is no longer thrown away for a `.value` it never had.
 - Conviction counted every validator verdict, so a pro that supported and a contra that opposed,
   as they do by assignment, added weight to the denominator and diluted every score (measured: 13
   of 13 cycles in a session fell below the floor; with the fix, the five that neutral supported

@@ -41,6 +41,14 @@ One intent per commit. A short imperative subject line, under 60 characters, tha
 changed. A body only when the reason is not obvious from the diff. No trailers, no tooling
 signatures.
 
+## Releases
+
+A release is a version bump, a dated section in `CHANGELOG.md`, a merge of `develop` into
+`master` and a tag `vX.Y.Z` on that merge. The tag runs the same checks as CI, builds the wheel
+and the source archive, refuses a tag that does not match the package version, attaches both to a
+GitHub release, and publishes the same files to PyPI through trusted publishing. No PyPI token is
+stored anywhere.
+
 ## Standards the code is held to
 
 **Money is never a float.** Prices, quantities, fees and costs are `decimal.Decimal`. Floats are

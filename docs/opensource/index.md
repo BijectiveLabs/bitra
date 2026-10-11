@@ -15,10 +15,12 @@ opinion. Then the system prices the trade, applies your limits, sizes it, and ei
 down or sends one order with the stop attached. Every decision and every refusal is kept on disk
 with its reason, so you can check afterwards what happened and why.
 
-It is a pre-release. What works today: a universe of perpetuals found and measured by the system, a
-screener that picks where to look, the full autonomous cycle on live data, four analysts and up to
-three validators, the gates that decide, sizing from your own rules, real orders on a venue's
-practice environment behind a mandate you sign, and two auditors that read the records.
+It is an early release, so expect settings to change between versions. What works
+today: a universe of perpetuals found and measured by the system, a screener that picks where to
+look, the full autonomous cycle on live data, four analysts and up to three validators, stops and
+targets the analyst names inside bounds you set, the gates that decide, sizing from your own rules,
+real orders on a venue's practice environment behind a mandate you sign, a risk manager that can
+only make the desk more careful, and two auditors that read the records.
 
 The command is `tra`. Start with the [quick start](/opensource/quick-start).
 
@@ -52,7 +54,9 @@ flowchart TD
         mood["sentiment analyst"]
     end
     round1 --> price["the system prices the round trip<br/>fee, spread, impact, funding, slippage"]
-    price --> round2["validators, as many as you declare<br/>a claim that cites no figure is thrown away"]
+    price --> exits{"the stop and the target<br/>the analyst's levels, held inside your bounds<br/>does the trade break even at half its kind winning?"}
+    exits -- "no" --> refused
+    exits -- "yes" --> round2["validators, as many as you declare<br/>a claim that cites no figure is thrown away"]
     round2 --> matrix{"confluence<br/>do your declared states agree with the direction?"}
     matrix -- "no" --> refused["a refusal that names its figure"]
     matrix -- "yes" --> size["conviction<br/>how much, from your ladder"]
@@ -67,12 +71,13 @@ flowchart TD
 
 | Role | Reads | Answers | Can never |
 |---|---|---|---|
-| technical analyst | candles, spread, funding, book imbalance, open interest change, and the regime on its timeframe and the higher ones you declare | a direction, a setup from a fixed list, a confidence, a horizon | size the trade, or run a trend setup in a range |
+| technical analyst | candles, spread, funding, book imbalance, open interest change, and the regime on its timeframe and the higher ones you declare | a direction, a setup from a fixed list, a confidence, a horizon, and where its stop and target sit | size the trade, place a level outside your `[exit]` bounds, or run a trend setup in a range |
 | macro analyst | dated rates and levels, dated text | risk-on, risk-off or neutral | propose a direction |
 | on-chain analyst | chain and derivatives figures | accumulation, distribution or neutral | propose a direction |
 | sentiment analyst | dated scores and notes you curate | negative, neutral, positive, or not declared | invent a mood no figure supports |
 | market screener | what the system measured for each admitted instrument: move, spread, regime, volume, correlation to BTC | which instruments to take, in what order, citing their figures | add an instrument the system did not admit |
 | validators (pro, contra, neutral) | the proposal and the figures behind it | support, oppose or abstain, with cited claims | decide, or cite a figure it wasn't given |
+| risk manager | what the run recorded: round trips, the losing streak, your limits, the alarm that woke it | continue, cut the size of new entries, pause instruments, or halt, each for a stated number of hours | loosen a limit you set, or add size |
 | technology and quant auditors | the cycles this desk recorded | findings and proposed changes | change anything |
 
 Everything after the analysts is arithmetic over numbers you declared. No model can place, cancel

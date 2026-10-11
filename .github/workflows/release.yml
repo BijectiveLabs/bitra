@@ -37,6 +37,12 @@ jobs:
           expected="v$(uv run python -c 'import trading_research_agents as t; print(t.__version__)')"
           test "${GITHUB_REF_NAME}" = "${expected}" || { echo "tag ${GITHUB_REF_NAME} is not ${expected}"; exit 1; }
 
+      - name: Keep the built files for the publish job
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -45,16 +51,27 @@ jobs:
             --title "${GITHUB_REF_NAME}" \
             --notes "See CHANGELOG.md for ${GITHUB_REF_NAME}."
 
-  # Publishing to PyPI is a separate decision, taken when the repository goes public: a
-  # `pypi` environment with trusted publishing, and this job enabled.
-  # publish:
-  #   needs: build
-  #   runs-on: ubuntu-latest
-  #   environment: pypi
-  #   permissions:
-  #     id-token: write
-  #   steps:
-  #     - uses: actions/checkout@v7
-  #     - uses: astral-sh/setup-uv@v10.1.0
-  #     - run: uv build
-  #     - run: uv publish
+  # PyPI through trusted publishing: no token is stored anywhere. It runs only once the repository
+  # variable PUBLISH_TO_PYPI is "true" and a `pypi` environment exists, so a tag pushed before
+  # PyPI is set up makes a GitHub release and nothing else. The files published are the ones the
+  # checks above passed on, not a second build.
+  publish:
+    name: publish to PyPI
+    needs: build
+    if: vars.PUBLISH_TO_PYPI == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/trading-research-agents/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - uses: astral-sh/setup-uv@v10.1.0
+
+      - name: Publish
+        run: uv publish --trusted-publishing always dist/*

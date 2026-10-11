@@ -4,18 +4,20 @@ build-backend = "hatchling.build"
 
 [project]
 name = "trading-research-agents"
-version = "0.5.0"
-description = "Autonomous trading agents for crypto that refuse to claim what their gates have not measured."
+version = "0.6.0"
+description = "Autonomous trading agents for crypto that can't fudge their own results."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "Bijective Labs" }]
-keywords = ["quant", "crypto", "trading", "agents", "autonomous", "backtest", "falsification"]
+keywords = ["quant", "crypto", "trading", "agents", "llm", "perpetuals", "autonomous", "backtest", "risk"]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
     "Intended Audience :: Financial and Insurance Industry",
     "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -33,7 +35,10 @@ dependencies = [
 tra = "trading_research_agents.cli:main"
 
 [project.urls]
+Homepage = "https://bijectivelabs.dev"
+Documentation = "https://docs.bijectivelabs.dev"
 Repository = "https://github.com/BijectiveLabs/trading-research-agents"
+Issues = "https://github.com/BijectiveLabs/trading-research-agents/issues"
 Changelog = "https://github.com/BijectiveLabs/trading-research-agents/blob/master/CHANGELOG.md"
 
 [project.optional-dependencies]

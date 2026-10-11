@@ -5,11 +5,10 @@ description: Install trading-research-agents, check a desk and run a first cycle
 
 # Quick start
 
-You need Python 3.11 or newer and [uv](https://docs.astral.sh/uv/).
+You need Python 3.11 or newer. [uv](https://docs.astral.sh/uv/) is the quickest way in.
 
 ```bash
-git clone https://github.com/BijectiveLabs/trading-research-agents && cd trading-research-agents
-uv tool install --editable . --with 'ccxt>=4.5' --with 'openai>=1' --with 'pyarrow>=18'
+uv tool install 'trading-research-agents[ccxt,openai,data]'
 
 tra init my-desk --profile autonomous && cd my-desk
 cp .env.example .env        # put your model key in here; no venue key is needed yet
@@ -17,10 +16,17 @@ tra check                   # what's ready, and the one thing to fix next
 tra run                     # one autonomous cycle, in the sandbox: nothing leaves your machine
 ```
 
-The `--with` extras are what the project talks through: `ccxt` for venue data and orders, `openai`
-for every OpenAI-compatible provider (Groq, DeepSeek, xAI, OpenRouter, a local server), `pyarrow`
-for datasets. Add `--with 'anthropic>=1'` or `--with 'google-genai>=1'` for those providers.
-Without uv, `pip install -e '.[ccxt,openai,data]'` in a virtual environment does the same.
+The extras are what the project talks through: `ccxt` for venue data and orders, `openai` for
+every OpenAI-compatible provider (Groq, DeepSeek, xAI, OpenRouter, a local server), `data` for
+datasets. Add `anthropic` or `google` to the list for those providers. Without uv,
+`pip install 'trading-research-agents[ccxt,openai,data]'` in a virtual environment does the same.
+
+To work on the code itself, install from a clone instead:
+
+```bash
+git clone https://github.com/BijectiveLabs/trading-research-agents && cd trading-research-agents
+uv tool install --editable '.[ccxt,openai,data]'
+```
 
 Trading on another exchange: add `--venue okx` (or any ccxt id) to `tra init`, and the data, the
 orders, the practice environment and the keys are wired for that venue. See
@@ -36,10 +42,13 @@ ok    strategy.toml: valid; core 'agent-pending'; instrument BTCUSDT
 ok    roster: technical_analyst; `tra run` asks these
 ok    channel: bybit/taker-taker enters as a taker, priced at that fee; an order crosses the book at once
 ok    execution: sandbox; nothing leaves the machine
+ok    regime: measured on 15m with 1h, 4h as context; trending at 2.0+, ranging at 1.0 or less
 ok    conviction: floor 0.4; ladder 0.75+ -> 1.0x, 0.55+ -> 0.5x, 0.4+ -> 0.25x
 ok    targets: at least 5 bps net; at least 2.0x the round trip; at most 6 round trips a day
+ok    exits: the analyst names its stop and target; the stop is held between 20 and 300 bps, the
+      target between 1.5x and 4.0x the stop
 ok    risk per trade: 50 bps of equity at the stop, applied to every size the ladder produces
-ok    size: 0.01 in base units, step 0.001
+ok    size: 0.01 in base units, at the step 0.001
 ok    data.toml: chains for ohlcv, orderbook, funding, open_interest; `tra run` uses them
 todo  [agents].provider is still the placeholder; name the provider you have a key for, and its model
 1 thing(s) to fix first
@@ -103,7 +112,7 @@ will do in your project, defaults included.
 | `[controls].max_drawdown_bps` | none (`tra init` writes `1000`) | no new entry once equity is this far below its peak |
 | `[exit]` | the analyst's stop and target, held inside bounds | see [where the stop and take profit sit](/opensource/cycle#where-the-stop-and-the-take-profit-sit) |
 | `[targets].max_break_even_win_rate` | `0.5` | refuse a trade that would need more than half its kind to win to cover the stops and the costs |
-| `[exit].timeout_bars` | `240` | a position closes by time after this many bars |
+| `[exit].timeout_bars` | four hours of bars: `240` at 1m, `16` at 15m | a position closes by time after this many bars; a measured stop is sized over the same span |
 | `[run].bar_interval_s` | `60`; `tra init --agent` writes `900` with 1h and 4h as context | the decision timeframe; the round trip costs the same on any of them, so a longer one leaves more of the move |
 | `[run].settlement_interval_s` | `28800` | the venue's funding clock |
 | `[execution].environment` | `demo` | where orders go: `demo`, `testnet` or `mainnet` |

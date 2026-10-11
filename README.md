@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://bijectivelabs.dev"><img src="assets/bijective_banner.png" alt="Bijective Labs"></a>
+  <a href="https://bijectivelabs.dev"><img src="https://raw.githubusercontent.com/BijectiveLabs/trading-research-agents/master/assets/bijective_banner.png" alt="Bijective Labs"></a>
 </p>
 
 <h1 align="center">trading-research-agents</h1>
@@ -9,8 +9,9 @@
 <p align="center">
   <a href="https://github.com/BijectiveLabs/trading-research-agents/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/BijectiveLabs/trading-research-agents/ci.yml?branch=develop&style=flat-square&logo=githubactions&logoColor=white&label=CI"></a>
   <a href="https://github.com/BijectiveLabs/trading-research-agents/actions/workflows/docs.yml"><img alt="Docs build" src="https://img.shields.io/github/actions/workflow/status/BijectiveLabs/trading-research-agents/docs.yml?style=flat-square&logo=vitepress&logoColor=white&label=docs%20build"></a>
-  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square"></a>
-  <img alt="Status: pre-release" src="https://img.shields.io/badge/status-pre--release-orange?style=flat-square">
+  <a href="https://github.com/BijectiveLabs/trading-research-agents/blob/master/LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square"></a>
+  <a href="https://pypi.org/project/trading-research-agents/"><img alt="PyPI" src="https://img.shields.io/pypi/v/trading-research-agents?style=flat-square&logo=pypi&logoColor=white"></a>
+  <img alt="Status: alpha" src="https://img.shields.io/badge/status-alpha-orange?style=flat-square">
 </p>
 
 <p align="center">
@@ -26,8 +27,8 @@
   <a href="https://bijectivelabs.dev"><img alt="bijectivelabs.dev" src="https://img.shields.io/badge/web-bijectivelabs.dev-1d2a3d?style=flat-square"></a>
   <a href="https://docs.bijectivelabs.dev"><img alt="Documentation" src="https://img.shields.io/badge/docs-docs.bijectivelabs.dev-1f6feb?style=flat-square"></a>
   <a href="https://www.bijectivelabs.dev/insights"><img alt="Insights" src="https://img.shields.io/badge/insights-bijectivelabs.dev%2Finsights-6f42c1?style=flat-square"></a>
-  <a href="CHANGELOG.md"><img alt="Changelog" src="https://img.shields.io/badge/changelog-CHANGELOG.md-E05735?style=flat-square"></a>
-  <a href="SECURITY.md"><img alt="Security policy" src="https://img.shields.io/badge/security-policy-2ea44f?style=flat-square"></a>
+  <a href="https://github.com/BijectiveLabs/trading-research-agents/blob/master/CHANGELOG.md"><img alt="Changelog" src="https://img.shields.io/badge/changelog-CHANGELOG.md-E05735?style=flat-square"></a>
+  <a href="https://github.com/BijectiveLabs/trading-research-agents/blob/master/SECURITY.md"><img alt="Security policy" src="https://img.shields.io/badge/security-policy-2ea44f?style=flat-square"></a>
 </p>
 
 <br>
@@ -40,10 +41,12 @@ opinion. Then the system prices the trade, applies your limits, sizes it, and ei
 down or sends one order with the stop attached. Every decision and every refusal is kept on disk
 with its reason, so you can check afterwards what happened and why.
 
-It's a pre-release and isn't on PyPI yet. What works today: a universe of perpetuals found and
-measured by the system, a screener that picks where to look, the full autonomous cycle on live data, four
-analysts and up to three validators, the gates that decide, sizing from your own rules, real orders
-on a venue's practice environment behind a mandate you sign, and two auditors that read the records.
+It's an early release, so expect settings to change between versions. What works
+today: a universe of perpetuals found and measured by the system, a screener that picks where to
+look, the full autonomous cycle on live data, four analysts and up to three validators, stops and
+targets the analyst names inside bounds you set, the gates that decide, sizing from your own rules,
+real orders on a venue's practice environment behind a mandate you sign, a risk manager that can
+only make the desk more careful, and two auditors that read the records.
 
 ---
 
@@ -75,11 +78,10 @@ on a venue's practice environment behind a mandate you sign, and two auditors th
 
 ## Quick start
 
-You need Python 3.11 or newer and [uv](https://docs.astral.sh/uv/).
+You need Python 3.11 or newer. [uv](https://docs.astral.sh/uv/) is the quickest way in.
 
 ```bash
-git clone https://github.com/BijectiveLabs/trading-research-agents && cd trading-research-agents
-uv tool install --editable . --with 'ccxt>=4.5' --with 'openai>=1' --with 'pyarrow>=18'
+uv tool install 'trading-research-agents[ccxt,openai,data]'
 
 tra init my-desk --profile autonomous && cd my-desk
 cp .env.example .env        # put your model key in here; no venue key is needed yet
@@ -87,10 +89,17 @@ tra check                   # what's ready, and the one thing to fix next
 tra run                     # one autonomous cycle, in the sandbox: nothing leaves your machine
 ```
 
-The `--with` extras are what the project talks through: `ccxt` for venue data and orders, `openai`
-for every OpenAI-compatible provider (Groq, DeepSeek, xAI, OpenRouter, a local server), `pyarrow`
-for datasets. Add `--with 'anthropic>=1'` or `--with 'google-genai>=1'` for those providers.
-Without uv, `pip install -e '.[ccxt,openai,data]'` in a virtual environment does the same.
+The extras are what the project talks through: `ccxt` for venue data and orders, `openai` for
+every OpenAI-compatible provider (Groq, DeepSeek, xAI, OpenRouter, a local server), `data` for
+datasets. Add `anthropic` or `google` to the list for those providers. Without uv,
+`pip install 'trading-research-agents[ccxt,openai,data]'` in a virtual environment does the same.
+
+To work on the code itself, install from a clone instead:
+
+```bash
+git clone https://github.com/BijectiveLabs/trading-research-agents && cd trading-research-agents
+uv tool install --editable '.[ccxt,openai,data]'
+```
 
 A project made by `tra init --profile autonomous` checks out like this before you touch it
 (shortened):
@@ -100,10 +109,13 @@ ok    strategy.toml: valid; core 'agent-pending'; instrument BTCUSDT
 ok    roster: technical_analyst; `tra run` asks these
 ok    channel: bybit/taker-taker enters as a taker, priced at that fee; an order crosses the book at once
 ok    execution: sandbox; nothing leaves the machine
+ok    regime: measured on 15m with 1h, 4h as context; trending at 2.0+, ranging at 1.0 or less
 ok    conviction: floor 0.4; ladder 0.75+ -> 1.0x, 0.55+ -> 0.5x, 0.4+ -> 0.25x
 ok    targets: at least 5 bps net; at least 2.0x the round trip; at most 6 round trips a day
+ok    exits: the analyst names its stop and target; the stop is held between 20 and 300 bps, the
+      target between 1.5x and 4.0x the stop
 ok    risk per trade: 50 bps of equity at the stop, applied to every size the ladder produces
-ok    size: 0.01 in base units, step 0.001
+ok    size: 0.01 in base units, at the step 0.001
 ok    data.toml: chains for ohlcv, orderbook, funding, open_interest; `tra run` uses them
 todo  [agents].provider is still the placeholder; name the provider you have a key for, and its model
 1 thing(s) to fix first
@@ -123,13 +135,13 @@ and the next command to run. Under it is a prompt that takes every command and d
 there. Arrow keys go back through what you typed, tab completes, `help` lists the commands and
 `exit` leaves. For scripts and cron, `tra -c "run --now"` runs one command and exits.
 
-![the cockpit](assets/cockpit.png)
+![the cockpit](https://raw.githubusercontent.com/BijectiveLabs/trading-research-agents/master/assets/cockpit.png)
 
 **2. The pass over your instruments.** Type `run --every 5m` and the desk first refreshes any data
 series that are due, one line each. Then it looks at every instrument on your list, one data pull
 apiece, and measures it. The screen steps through them live:
 
-![the screen pass](assets/pair-screener.png)
+![the screen pass](https://raw.githubusercontent.com/BijectiveLabs/trading-research-agents/master/assets/pair-screener.png)
 
 **3. One cycle per instrument it takes.** Code found the candidates and measured them; the screener
 chose among them and cited each instrument's own figures; the system's own order is kept beside the
@@ -137,17 +149,17 @@ choice. The instruments taken get a full cycle. The terminal shows the whole pip
 start and updates it as each step begins and ends. Steps that run at the same time spin at the same
 time, each with its own clock, and the line underneath says who is working right now:
 
-![a scheduled desk at work](assets/trading-agents.png)
+![a scheduled desk at work](https://raw.githubusercontent.com/BijectiveLabs/trading-research-agents/master/assets/trading-agents.png)
 
 **4. The result.** When the cycle finishes, the table gives way to the pass over the universe, what
 was taken and what was held and why, then the data the cycle used and what the round trip costs:
 
-![one cycle](assets/cycle.png)
+![one cycle](https://raw.githubusercontent.com/BijectiveLabs/trading-research-agents/master/assets/cycle.png)
 
 After that, what each validator argued, how conviction weighed the analysts, the risk at the stop,
 and whether the trade clears the desk's targets:
 
-![validators, conviction, risk and targets](assets/one-cycle.png)
+![validators, conviction, risk and targets](https://raw.githubusercontent.com/BijectiveLabs/trading-research-agents/master/assets/one-cycle.png)
 
 **5. Between cycles.** The desk says when the next pass is, on the clock and in minutes, for
 example `next pass at 14:30:00 UTC, in 10m 57s`, and counts down to it. An auditor woken by an alarm
@@ -197,7 +209,9 @@ flowchart TD
         mood["sentiment analyst"]
     end
     round1 --> price["the system prices the round trip<br/>fee, spread, impact, funding, slippage"]
-    price --> round2["validators, as many as you declare<br/>a claim that cites no figure is thrown away"]
+    price --> exits{"the stop and the target<br/>the analyst's levels, held inside your bounds<br/>does the trade break even at half its kind winning?"}
+    exits -- "no" --> refused
+    exits -- "yes" --> round2["validators, as many as you declare<br/>a claim that cites no figure is thrown away"]
     round2 --> matrix{"confluence<br/>do your declared states agree with the direction?"}
     matrix -- "no" --> refused["a refusal that names its figure"]
     matrix -- "yes" --> size["conviction<br/>how much, from your ladder"]
@@ -212,12 +226,13 @@ Who does what:
 
 | Role | Reads | Answers | Can never |
 |---|---|---|---|
-| technical analyst | candles, spread, funding, book imbalance, open interest change, and the regime on its timeframe and the higher ones you declare | a direction, a setup from a fixed list, a confidence, a horizon | size the trade, or run a trend setup in a range |
+| technical analyst | candles, spread, funding, book imbalance, open interest change, and the regime on its timeframe and the higher ones you declare | a direction, a setup from a fixed list, a confidence, a horizon, and where its stop and target sit | size the trade, place a level outside your `[exit]` bounds, or run a trend setup in a range |
 | macro analyst | dated rates and levels, dated text | risk-on, risk-off or neutral | propose a direction |
 | on-chain analyst | chain and derivatives figures | accumulation, distribution or neutral | propose a direction |
 | sentiment analyst | dated scores and notes you curate | negative, neutral, positive, or not declared | invent a mood no figure supports |
 | market screener | what the system measured for each admitted instrument: move, spread, regime, volume, correlation to BTC | which instruments to take, in what order, citing their figures | add an instrument the system did not admit |
 | validators (pro, contra, neutral) | the proposal and the figures behind it | support, oppose or abstain, with cited claims | decide, or cite a figure it wasn't given |
+| risk manager | what the run recorded: round trips, the losing streak, your limits, the alarm that woke it | continue, cut the size of new entries, pause instruments, or halt, each for a stated number of hours | loosen a limit you set, or add size |
 | technology and quant auditors | the cycles this desk recorded | findings and proposed changes | change anything |
 
 The macro, on-chain and sentiment analysts read dated series you declare under `sources/`. Each one
@@ -511,10 +526,10 @@ uv run mypy
 uv run pytest
 ```
 
-`CONTRIBUTING.md` has the branch flow and the standards the code is held to.
+[CONTRIBUTING.md](https://github.com/BijectiveLabs/trading-research-agents/blob/master/CONTRIBUTING.md) has the branch flow and the standards the code is held to.
 
 ## License
 
-MIT. See `LICENSE`; `NOTICE` lists the third-party software this package builds on.
+MIT. See [LICENSE](https://github.com/BijectiveLabs/trading-research-agents/blob/master/LICENSE); [NOTICE](https://github.com/BijectiveLabs/trading-research-agents/blob/master/NOTICE) lists the third-party software this package builds on.
 
 Built by [Bijective Labs](https://github.com/BijectiveLabs).
