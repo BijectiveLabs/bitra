@@ -79,7 +79,7 @@ every fifteen minutes on the clock (:00, :15, :30 and so on), which is the decis
 next mark, and the desk tells you the time it ends at, for example `next pass at 14:30:00 UTC, in
 10m 57s`. [The cycle](/opensource/cycle) explains why it lands on the clock.
 
-Type `tra` on its own inside the desk and you get the console: the cockpit, then a prompt that takes
+Type `tra` on its own inside the desk and you get the console: what is ready and what to do next, then a prompt that takes
 every command. [What you see](/opensource/what-you-see) walks through the screens in the order they
 appear.
 

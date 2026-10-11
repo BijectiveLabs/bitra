@@ -766,7 +766,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.group is None and console.interactive() and not _PLAIN:
         # A person at a terminal gets somewhere to stand, not one screen and their shell back.
         return _console_for(parser, args).loop()
-    handler = cockpit if args.group is None else HANDLERS[(args.group, args.command)]
+    handler = home if args.group is None else HANDLERS[(args.group, args.command)]
     return _dispatch(handler, args)
 
 
@@ -787,7 +787,7 @@ def _console_for(
     return console.Console(
         parser=parser,
         run=lambda parsed: _dispatch(HANDLERS[(parsed.group, parsed.command)], parsed),
-        cockpit=lambda: cockpit(args),
+        home=lambda: home(args),
         commands=[f"{group} {command}" for group, command in sorted(HANDLERS)],
         set_plain=_set_plain,
         history=console.history_path(bool(args.history)) if interactive else None,
@@ -904,7 +904,7 @@ def plain_text(text: str) -> str:
     return text.translate(TYPOGRAPHY)
 
 
-def cockpit(args: argparse.Namespace) -> int:
+def home(args: argparse.Namespace) -> int:
     """`tra` alone: the banner, what is ready, and the one command to type next."""
     from trading_research_agents.cli import tui
 
@@ -921,7 +921,7 @@ def cockpit(args: argparse.Namespace) -> int:
         print("\n".join([*(f"ok    {g}" for g in good), *(f"todo  {b}" for b in bad)]))
         print(f"next: {next_command}")
         return CLEARED
-    tui.cockpit(__version__, good, bad, next_command)
+    tui.home(__version__, good, bad, next_command)
     return CLEARED
 
 

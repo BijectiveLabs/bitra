@@ -7,12 +7,12 @@ description: The screens of a desk, in the order they appear.
 
 ## 1. The console
 
-Run `tra` inside your desk and it opens the cockpit: what is ready, what isn't, and the next
+Run `tra` inside your desk and it opens the console: what is ready, what isn't, and the next
 command to run. Under it is a prompt that takes every command and draws it right there. Arrow keys
 go back through what you typed, tab completes, `help` lists the commands and `exit` leaves. For
 scripts and cron, `tra -c "run --now"` runs one command and exits.
 
-![the cockpit](/images/cockpit.png)
+![the console](/images/console.png)
 
 ## 2. The pass over your instruments
 

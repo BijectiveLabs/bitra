@@ -129,12 +129,12 @@ Type `tra` on its own inside the desk and you get the console, which is the next
 
 ## What you see, in order
 
-**1. The console.** Run `tra` inside your desk and it opens the cockpit: what is ready, what isn't,
+**1. The console.** Run `tra` inside your desk and it opens the console: what is ready, what isn't,
 and the next command to run. Under it is a prompt that takes every command and draws it right
 there. Arrow keys go back through what you typed, tab completes, `help` lists the commands and
 `exit` leaves. For scripts and cron, `tra -c "run --now"` runs one command and exits.
 
-![the cockpit](assets/cockpit.png)
+![the console](assets/console.png)
 
 **2. The pass over your instruments.** Type `run --every 5m` and the desk first refreshes any data
 series that are due, one line each. Then it looks at every instrument on your list, one data pull

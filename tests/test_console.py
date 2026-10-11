@@ -35,14 +35,14 @@ def build(
             raise EOFError
         return queue.pop(0)
 
-    def cockpit() -> None:
-        drawn.append("cockpit")
+    def home() -> None:
+        drawn.append("home")
 
     return (
         shell.Console(
             parser=build_parser(),
             run=run,
-            cockpit=cockpit,
+            home=home,
             commands=["check", "run", "audit"],
             read=read,
         ),
@@ -87,10 +87,10 @@ def test_an_interrupted_command_leaves_the_console_standing() -> None:
     assert console.one("check") == REFUSED
 
 
-def test_the_loop_opens_on_the_cockpit_and_ends_on_end_of_input(tmp_path: Path) -> None:
+def test_the_loop_opens_on_the_home_screen_and_ends_on_end_of_input(tmp_path: Path) -> None:
     console, ran, drawn = build(["check", "", "run --now"])
     assert console.loop() == CLEARED
-    assert drawn == ["cockpit"]
+    assert drawn == ["home"]
     assert [a.group for a in ran] == ["check", "run"]
 
 
@@ -156,7 +156,7 @@ def test_the_console_reaches_every_command_the_cli_has() -> None:
     console = shell.Console(
         parser=build_parser(),
         run=lambda args: CLEARED,
-        cockpit=lambda: None,
+        home=lambda: None,
         commands=names,
         read=lambda: "exit",
     )
@@ -178,7 +178,7 @@ def test_plain_output_carries_typography_as_ascii() -> None:
     assert plain_text(said) == 'the operator\'s z-score - "bullish"...'
 
 
-def test_the_console_clears_the_screen_before_it_draws_the_cockpit(
+def test_the_console_clears_the_screen_before_it_draws_the_home_screen(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     console, _, _ = build()
@@ -189,11 +189,11 @@ def test_the_console_clears_the_screen_before_it_draws_the_cockpit(
             steps.append("clear")
 
     monkeypatch.setattr(shell.Console, "ui", lambda self: Ui())
-    console.cockpit = lambda: steps.append("cockpit")
+    console.home = lambda: steps.append("home")
     monkeypatch.setattr(shell.Console, "say", lambda self, *a, **k: None)
     monkeypatch.setattr(shell.Console, "rule", lambda self: None)
     console.loop()
-    assert steps[:2] == ["clear", "cockpit"]
+    assert steps[:2] == ["clear", "home"]
 
 
 def test_taking_the_screen_erases_the_scrollback_and_leaves_a_pipe_alone() -> None:

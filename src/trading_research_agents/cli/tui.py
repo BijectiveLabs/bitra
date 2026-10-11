@@ -69,7 +69,7 @@ def console(safe: bool = False) -> Console:
 
 # Cursor home, erase the screen, then erase the scrollback: what `clear` sends. The order matters on
 # the classic Windows console, where erasing the screen pushes it into the scrollback; erasing the
-# scrollback first left the shell's lines above the cockpit (seen 2026-10-06).
+# scrollback first left the shell's lines above the home screen (seen 2026-10-06).
 TAKE_SCREEN = "\x1b[H\x1b[2J\x1b[3J"
 VT_PROCESSING = 0x0004
 STD_OUTPUT = -11
@@ -139,7 +139,7 @@ def _bps(value: Any) -> Text:
     return Text(f"{number:+.2f} bps", style=style)
 
 
-def cockpit(version: str, good: Sequence[str], bad: Sequence[str], next_command: str) -> None:
+def home(version: str, good: Sequence[str], bad: Sequence[str], next_command: str) -> None:
     """`tra` with nothing else: who this is, what is ready, what to type next."""
     c = console()
     head = Text(banner(c.width), style="bold cyan")

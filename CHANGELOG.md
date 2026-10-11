@@ -6,6 +6,11 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The screen `tra` opens on is called the console everywhere; the word cockpit is gone from the
+  docs, the code and the screenshot names.
+
 ### Fixed
 
 - The README's images are read from the repository again, so they show on GitHub while it is

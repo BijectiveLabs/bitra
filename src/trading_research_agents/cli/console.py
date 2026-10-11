@@ -1,7 +1,7 @@
 """`tra` on its own: one process that stays open and runs the rest of the commands inside it.
 
 A desk operator does not want to type a long command, read a wall of text, lose it to the scrollback
-and type the next one. They want somewhere to stand. So `tra` opens a console: the cockpit first,
+and type the next one. They want somewhere to stand. So `tra` opens a console: what is ready first,
 then a prompt that takes every command this CLI has, rendered where they are looking, until they
 type `exit`.
 
@@ -67,7 +67,7 @@ class Console:
 
     parser: argparse.ArgumentParser
     run: Callable[[argparse.Namespace], int]
-    cockpit: Callable[[], Any]
+    home: Callable[[], Any]
     commands: Sequence[str] = ()
     set_plain: Callable[[bool], None] = lambda _: None
     history: Path | None = None
@@ -97,7 +97,7 @@ class Console:
             return CLEARED
         if text in CLEAR:
             self.ui().take_screen()
-            self.cockpit()
+            self.home()
             return CLEARED
         try:
             argv = shlex.split(text)
@@ -114,7 +114,7 @@ class Console:
             # end the process. In here that is one line of output, not the end of the session.
             return int(leaving.code or CLEARED)
         if args.group is None:
-            self.cockpit()
+            self.home()
             return CLEARED
         self.set_plain(bool(args.plain))
         started = perf_counter()
@@ -132,11 +132,11 @@ class Console:
         return code
 
     def loop(self) -> int:
-        """Open on the cockpit, then take commands until the operator leaves."""
+        """Open on the home screen, then take commands until the operator leaves."""
         # The console owns the terminal from its first line, as a full-screen program does; the
-        # shell's earlier output would otherwise sit above the cockpit, or one scroll away.
+        # shell's earlier output would otherwise sit above the home screen, or one scroll away.
         self.ui().take_screen()
-        self.cockpit()
+        self.home()
         self.say('commands run here. "help" lists them, "exit" leaves.')
         read = self.read or (lambda: input(PROMPT))
         while True:
