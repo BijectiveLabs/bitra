@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from trading_research_agents.data.schema import Side, Trade
+from trading_research_agents.extras import install_hint
 
 try:
     import pyarrow as pa
@@ -37,10 +38,7 @@ class ParquetError(ValueError):
 
 def _arrow() -> tuple[Any, Any]:
     if pa is None or pq is None:
-        raise ParquetError(
-            "pyarrow is not installed; install the data extra: "
-            "pip install 'trading-research-agents[data]'"
-        )
+        raise ParquetError(f"pyarrow is not installed; {install_hint('data')}")
     return pa, pq
 
 

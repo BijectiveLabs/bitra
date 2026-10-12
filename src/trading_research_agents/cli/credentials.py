@@ -25,6 +25,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from trading_research_agents.extras import install_hint
+
 # Key material this process has seen. Anything printed is checked against it first.
 REDACTED = "<redacted>"
 MIN_SECRET = 8
@@ -70,9 +72,7 @@ class Credential:
             return f"{', '.join(self.missing)} is not set"
         if not self.installed:
             module, extra = self.needs
-            return (
-                f"the {module} SDK is not installed; pip install 'trading-research-agents[{extra}]'"
-            )
+            return f"the {module} SDK is not installed; {install_hint(extra)}"
         if self.verified is None:
             return "set, not verified"
         if self.verified == "":

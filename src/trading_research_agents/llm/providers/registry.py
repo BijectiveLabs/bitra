@@ -77,7 +77,13 @@ class Provider:
     @property
     def installed(self) -> bool:
         module, _ = self.needs
-        return not module or find_spec(module) is not None
+        if not module:
+            return True
+        try:
+            return find_spec(module) is not None
+        except (ImportError, ValueError):
+            # find_spec("google.genai") imports "google" first and raises when it is not there.
+            return False
 
 
 _registry: dict[str, Provider] = {}

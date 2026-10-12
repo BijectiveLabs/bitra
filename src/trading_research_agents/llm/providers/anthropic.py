@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from trading_research_agents.extras import install_hint
 from trading_research_agents.llm.completer import Completion, ProviderError
 
 DEFAULT_MODEL = "claude-opus-5-5"
@@ -48,8 +49,7 @@ class AnthropicCompleter:
                 ImportError
             ) as exc:  # pragma: no cover - exercised only where the extra is absent
                 raise ProviderError(
-                    "the anthropic SDK is not installed; "
-                    "pip install 'trading-research-agents[anthropic]'"
+                    f"the anthropic SDK is not installed; {install_hint('anthropic')}"
                 ) from exc
             client = anthropic.Anthropic(timeout=timeout_s, max_retries=max_retries)
         self.model = model

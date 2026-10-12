@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from trading_research_agents.extras import install_hint
 from trading_research_agents.llm.completer import Completion, ProviderError
 
 # Read from google-genai 2.23 types.ThinkingLevel on 2026-09-29: MINIMAL, LOW, MEDIUM, HIGH. The two
@@ -44,8 +45,7 @@ class GoogleCompleter:
                 from google import genai
             except ImportError as exc:  # pragma: no cover - exercised only without the extra
                 raise ProviderError(
-                    "the google-genai SDK is not installed; "
-                    "pip install 'trading-research-agents[google]'"
+                    f"the google-genai SDK is not installed; {install_hint('google')}"
                 ) from exc
             # HttpOptions takes milliseconds; retries are attempts beyond the first.
             client = genai.Client(

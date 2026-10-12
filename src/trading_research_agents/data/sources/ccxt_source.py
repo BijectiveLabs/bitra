@@ -33,6 +33,7 @@ from trading_research_agents.data.sources.base import (
     SourceError,
 )
 from trading_research_agents.data.sources.resolve import ResolveError, resolve
+from trading_research_agents.extras import install_hint
 
 TIMEFRAMES = {
     60: "1m",
@@ -104,9 +105,7 @@ class CcxtSource:
         try:
             import ccxt
         except ImportError as exc:  # pragma: no cover - exercised only without the extra
-            raise SourceError(
-                "ccxt is not installed; pip install 'trading-research-agents[ccxt]'"
-            ) from exc
+            raise SourceError(f"ccxt is not installed; {install_hint('ccxt')}") from exc
         factory = getattr(ccxt, self.venue, None)
         if factory is None:
             raise SourceError(f"ccxt has no exchange named {self.venue!r}")

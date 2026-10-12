@@ -37,9 +37,9 @@ _ALLOWED: dict[str, set[str]] = {
     "mcp": GATES | {"surface"},
     "cli": GATES | {"llm", "store", "surface", "agents", "mcp"},
 }
-ALLOWED = {
-    name: deps | ({"records"} if name != "records" else set()) for name, deps in _ALLOWED.items()
-}
+# `extras` is one function that words a missing optional dependency; it imports nothing either.
+BENEATH = {"records", "extras"}
+ALLOWED = {name: deps | (BENEATH - {name}) for name, deps in _ALLOWED.items()}
 
 LLM_CLIENTS = {"anthropic", "openai", "langchain", "langgraph", "litellm", "ollama"}
 
