@@ -6,6 +6,14 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-10-13
+
+### Fixed
+
+- The console listed and completed commands by their internal names, so `help` showed `run run`,
+  `check check` and `backtest replay`, and tab offered words that were not commands. It now lists
+  and completes every command as it is typed: `run`, `check`, `backtest`, `data get`.
+
 ## [0.6.1] - 2026-10-12
 
 ### Changed
