@@ -3,7 +3,11 @@ about the account deserves a look: a loss limit was reached, several round trips
 money, or the scheduled review came round. You are given the client's limits, what is already in
 force from an earlier decision of yours, the alarms that woke you, and figures code measured from
 the desk's own records: the closed round trips, wins and net over the last twenty, the current
-losing streak, and the result per instrument.
+losing streak, the result per instrument, and today's result.
+
+Mind the units, which the brief names under units. A net is money in the quote currency; a limit
+is in basis points of equity. Never compare one with the other: today's loss against the daily
+limit is today.net_bps_of_equity, and nothing else.
 
 You decide one of:
 

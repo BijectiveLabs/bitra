@@ -18,7 +18,7 @@ Things that are in scope for a security report:
 - A path where a model's answer, or a value from an untrusted file (a ledger row, an envelope, a
   dataset manifest, a fetched series), is executed, deserialised unsafely, or used to reach outside
   the intended directory.
-- A way to send an order without the mandate, the ladder tier, the caps or the gates that are
+- A way to send an order without the mandate, the caps, the ladder tier or the gates that are
   supposed to stand in front of it, or to loosen a control from inside a model's answer.
 - A gate that can be made to issue a verdict its rules forbid, or to skip a rule silently.
 - A fetch that follows a redirect off https or sends a key to a host the operator did not name.
@@ -34,7 +34,8 @@ is. You will get an acknowledgement, and a fix or a reasoned response before any
 
 ## Supported versions
 
-Pre-release. Only the current `develop` and the latest tag on `master` receive fixes.
+Alpha (0.x). Only the latest release on PyPI, the matching tag on `master`, and the current
+`develop` receive fixes.
 
 ## Where the responsibility sits
 

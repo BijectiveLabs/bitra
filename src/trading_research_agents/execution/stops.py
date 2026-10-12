@@ -41,6 +41,7 @@ class VolatilityExit:
     analyst_levels: bool = False
     min_reward_to_risk: Decimal = Decimal("1.5")
     max_reward_to_risk: Decimal = Decimal("4.0")
+    min_stop_atr: Decimal = Decimal("1.0")
 
     def __post_init__(self) -> None:
         for label in (
@@ -68,6 +69,10 @@ class VolatilityExit:
             raise StopError("[exit].max_stop_frac is a fraction of price, below 1")
         if not isinstance(self.atr_bars, int) or self.atr_bars < 2:
             raise StopError("[exit].atr_bars is a whole number of bars, at least 2")
+        if not isinstance(self.min_stop_atr, Decimal) or not self.min_stop_atr.is_finite():
+            raise StopError(f"[exit].min_stop_atr is a number, got {self.min_stop_atr!r}")
+        if self.min_stop_atr < 0:
+            raise StopError("[exit].min_stop_atr is zero or more; 0 turns the floor off")
 
     @property
     def mode(self) -> str:
@@ -97,7 +102,15 @@ class VolatilityExit:
                 )
             else:
                 proposed = named
-                stop, clamped = self._held(named)
+                # A stop inside one bar's ordinary range is hit by noise before the idea is wrong.
+                noise = self.min_stop_atr * atr / last
+                stop, clamped = self._held(max(named, noise))
+                if clamped is None and named < noise:
+                    clamped = "min_stop_atr"
+                    notes.append(
+                        f"the named stop is inside {self.min_stop_atr} ATR; widened to it, "
+                        "so the position is smaller"
+                    )
                 source = "analyst"
                 target = _distance(mid, side, target_price, against=False)
                 take = self._target(stop, target, notes)

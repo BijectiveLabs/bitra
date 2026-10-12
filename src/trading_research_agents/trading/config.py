@@ -1271,7 +1271,7 @@ EXIT_KEYS = (
     "slip_bps",
 )
 VOLATILITY_KEYS = ("stop_atr", "reward_to_risk", "min_stop_frac", "max_stop_frac", "atr_bars")
-ANALYST_KEYS = ("min_reward_to_risk", "max_reward_to_risk")
+ANALYST_KEYS = ("min_reward_to_risk", "max_reward_to_risk", "min_stop_atr")
 
 
 def _volatility_exit(exit_raw: dict[str, Any]) -> VolatilityExit | None:
@@ -1313,6 +1313,7 @@ def _volatility_exit(exit_raw: dict[str, Any]) -> VolatilityExit | None:
             analyst_levels=mode == "analyst",
             min_reward_to_risk=number("min_reward_to_risk"),
             max_reward_to_risk=number("max_reward_to_risk"),
+            min_stop_atr=number("min_stop_atr"),
         )
     except StopError as exc:
         raise ConfigError(str(exc)) from exc

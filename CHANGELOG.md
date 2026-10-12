@@ -6,6 +6,41 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-12
+
+### Changed
+
+- A stop the analyst names inside one average true range of the decision timeframe is widened to
+  it (`[exit].min_stop_atr`, 1 by default, 0 turns it off). On 15-minute bars a stop held only to
+  the 20 bps floor sat inside one bar's ordinary range and was hit by noise; the wider stop makes
+  the position smaller, not the loss bigger.
+- The README and the quick start have one way in: install from PyPI, `tra init --agent --model`,
+  the key in `.env`, `tra check`, `tra run`. Installing from a clone is described under
+  Development and in CONTRIBUTING. The path to real orders is three steps for an agent desk, with
+  the research path for a scripted strategy described on its own.
+- Docs brought in line with the code: `--every 15m` throughout, no `--env-file .env` where the
+  `.env` beside the config is read anyway, the ladder at CANARY only on mainnet, `max_notional`
+  among what venue mode needs, the risk manager's part in `tra run`, OKX run end to end on its
+  demo account, and fees filled in from the account rather than left blank.
+- The screen `tra` opens on is called the console everywhere; the word cockpit is gone from the
+  docs, the code and the screenshot names.
+- The README published to PyPI points its images at this release's tag, so each version's page
+  keeps its own pictures.
+
+### Fixed
+
+- The risk manager in `tra run` compared a day's net in money with the daily loss limit in basis
+  points and said the limit was exceeded when it was not. Its brief now names the unit of every
+  figure and gives today's result in basis points of equity beside the money.
+- `tra live` read keys only from `--env-file`; it now reads the `.env` beside `strategy.toml`
+  like every other command, and `tra check` no longer asks for `--env-file .env`.
+- A desk made by `tra init --profile autonomous` opens its README with what is left to do before
+  the first cycle, and no longer asks for a dataset that only a backtest needs.
+- The README's images are read from the repository again, so they show on GitHub while it is
+  private; the copy published to PyPI points them at GitHub, rewritten at build time.
+- The CI badge is GitHub's own, which shows to anyone who can see the repository; the docs build
+  badge, which had no runs to report, is gone, and the Python badge reads the versions from PyPI.
+
 ## [0.6.0] - 2026-10-11
 
 ### Changed

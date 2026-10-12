@@ -44,7 +44,7 @@ def test_the_console_is_off_for_scripts_and_json(monkeypatch: pytest.MonkeyPatch
     assert tui.enabled() is False
 
 
-def test_tra_alone_is_the_cockpit_in_both_faces(
+def test_tra_alone_is_the_console_in_both_faces(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,

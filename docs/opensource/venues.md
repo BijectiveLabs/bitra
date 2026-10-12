@@ -29,7 +29,7 @@ we have run end to end, and what ccxt says a venue can do. The second is read fr
 | Venue | What a cycle can do there | Practice environment | Keys in `.env` | Run end to end by us |
 |---|---|---|---|---|
 | Bybit | everything: orders with the stop and take profit attached | demo, testnet | `BYBIT_API_KEY`, `BYBIT_API_SECRET` | yes, on demo: real orders, exits attached, a resting order cancelled |
-| OKX | everything | testnet | `OKX_API_KEY`, `OKX_API_SECRET`, `OKX_API_PASSPHRASE` | not yet |
+| OKX | everything | testnet | `OKX_API_KEY`, `OKX_API_SECRET`, `OKX_API_PASSPHRASE` | yes, on demo: real orders, exits attached, closed by the venue's own exits |
 | Bitget | everything | demo | `BITGET_API_KEY`, `BITGET_API_SECRET`, `BITGET_API_PASSPHRASE` | not yet |
 | BingX | everything | testnet | `BINGX_API_KEY`, `BINGX_API_SECRET` | not yet |
 | KuCoin Futures | everything | none | `KUCOINFUTURES_API_KEY`, `KUCOINFUTURES_API_SECRET`, `KUCOINFUTURES_API_PASSPHRASE` | not yet |
@@ -146,7 +146,8 @@ as isolated (ccxt would otherwise default to cross), the client order id is lett
 and at most 32 characters, sizes are sent as contracts, and the stop and take profit go with the
 entry as attached algo orders at the market price. The request ccxt builds for a limit IOC entry
 with both was inspected offline on 2026-10-08 and carries `tdMode` isolated, `ordType` ioc,
-`attachAlgoOrds` and the id. It has not been sent to OKX yet; the first demo cycle is that test.
+`attachAlgoOrds` and the id. It has been sent to OKX's demo account since 2026-10-10: entries
+filled with both exits attached, and positions closed by those exits at the venue.
 
 ## Adding a venue you trade on
 
@@ -183,9 +184,9 @@ environment already chosen, and the variable names for `.env`. For a venue that 
 it adds `exits = "none"` and says why; for one that can only feed data it prints the data line and
 nothing else.
 
-The fees are left blank, deliberately. The fee is the biggest number in the cost gate and it depends
-on your account's tier, so a guessed figure would price every trade at a rate nobody checked. The
-file will not load until you write yours in.
+The fee lines come filled in. The fee is the biggest number in the cost gate and it depends on
+your account's tier, so the setup asks the account first and falls back to the venue's standard
+tier, labelled as such, when the account cannot answer yet (see above).
 
 **3. Fill in the blanks.** Your two fees, each instrument's size step (`size_step` as a table, one
 per instrument), and the keys in `.env`. If an instrument's ccxt symbol is not the obvious one, add

@@ -766,7 +766,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.group is None and console.interactive() and not _PLAIN:
         # A person at a terminal gets somewhere to stand, not one screen and their shell back.
         return _console_for(parser, args).loop()
-    handler = cockpit if args.group is None else HANDLERS[(args.group, args.command)]
+    handler = home if args.group is None else HANDLERS[(args.group, args.command)]
     return _dispatch(handler, args)
 
 
@@ -787,7 +787,7 @@ def _console_for(
     return console.Console(
         parser=parser,
         run=lambda parsed: _dispatch(HANDLERS[(parsed.group, parsed.command)], parsed),
-        cockpit=lambda: cockpit(args),
+        home=lambda: home(args),
         commands=[f"{group} {command}" for group, command in sorted(HANDLERS)],
         set_plain=_set_plain,
         history=console.history_path(bool(args.history)) if interactive else None,
@@ -904,7 +904,7 @@ def plain_text(text: str) -> str:
     return text.translate(TYPOGRAPHY)
 
 
-def cockpit(args: argparse.Namespace) -> int:
+def home(args: argparse.Namespace) -> int:
     """`tra` alone: the banner, what is ready, and the one command to type next."""
     from trading_research_agents.cli import tui
 
@@ -921,7 +921,7 @@ def cockpit(args: argparse.Namespace) -> int:
         print("\n".join([*(f"ok    {g}" for g in good), *(f"todo  {b}" for b in bad)]))
         print(f"next: {next_command}")
         return CLEARED
-    tui.cockpit(__version__, good, bad, next_command)
+    tui.home(__version__, good, bad, next_command)
     return CLEARED
 
 
@@ -1582,7 +1582,9 @@ def trade_live(args: argparse.Namespace) -> int:
         adopt_open_position=cfg.live.adopt_open_position,
         poll_interval_ms=cfg.live.poll_interval_ms,
     )
-    venue = live_venue(cfg.live.venue)(settings, _environment(args.env_file))
+    venue = live_venue(cfg.live.venue)(
+        settings, _environment(args.env_file, beside=args.config.resolve().parent)
+    )
     checks = venue.preflight()
     feed = _live_feed(args, cfg, args.feed or cfg.live.venue)
     guard = CanaryGuard(cfg.canary)
@@ -2519,7 +2521,10 @@ def init_project(args: argparse.Namespace) -> int:
         if name == "strategy.toml" and autonomous:
             text = text.replace("\n[data]\n", AUTONOMOUS_GATES + "[data]\n", 1)
         if name == "README.md" and autonomous:
-            text = text.rstrip() + FIRST_HOUR
+            # A desk made for the agents starts with what the agents need; the research tools the
+            # same file describes come after.
+            title, rest = text.split("\n", 1)
+            text = title + FIRST_HOUR.rstrip() + "\n\n## The research tools\n" + rest
         if args.venue:
             text = _for_venue(name, text, able, keys, starter)
         out.write_text(text, encoding="utf-8")
@@ -2680,6 +2685,7 @@ VOLATILITY_EXIT = (
     'mode = "analyst"             # the analyst names its stop and target, held in bounds\n'
     "min_stop_frac = 0.002        # a stop never tighter than 0.2 percent of price\n"
     "max_stop_frac = 0.03         # and never wider than 3 percent\n"
+    "min_stop_atr = 1.0           # nor inside one bar's ordinary range\n"
     "min_reward_to_risk = 1.5     # a target closer than 1.5x the stop is refused\n"
     "max_reward_to_risk = 4.0     # a target past 4x the stop is brought in\n"
     "stop_atr = 1.5               # with no level named: the stop in average true ranges\n"
@@ -2807,8 +2813,9 @@ losing_streak = 3                  # losing round trips in a row that wake the q
 
 [execution]
 # sandbox keeps the intent here. signals writes it for your own executor. venue sends it, and does
-# not start until `tra mandate > MANDATE.md`, a signature below, the ladder at CANARY, [canary]
-# declared and the keys in your environment. `tra check` names whatever is missing.
+# not start until `tra mandate --sign "Your Name"` has signed it, a leverage and max_notional are
+# set and the keys are in .env; on mainnet the ladder must also be at CANARY. `tra check` names
+# whatever is missing.
 mode = "sandbox"
 # acknowledged_by = "your name"
 # acknowledged_on = "YYYY-MM-DD"
@@ -2820,18 +2827,19 @@ FIRST_HOUR = """
 
 ## Your first hour
 
-This project was written by `tra init --profile autonomous`, so the cycle is already wired. Three
-things are yours before it can decide anything:
+This project was written by `tra init --profile autonomous`, so the cycle is already wired. What
+is left before it can decide anything:
 
-1. **A model.** Put your key in `.env` (copy `.env.example`) and name the provider and model in
-   `[agents]` in `strategy.toml`.
-2. **The mechanism and the edge.** `[agents].mechanism` is the sentence the analyst reasons from,
-   and `[agents].magnitude_bps` is the edge you claim, in basis points. The cost gate holds that
-   claim against what a round trip actually costs, so an honest number here is the whole point.
-3. **Data to decide on.** `tra data get BTCUSDT 2025-01-01` for a dataset, and `data.toml` already
-   declares the live chains a cycle pulls through.
+1. **A model.** Put your key in `.env` (copy `.env.example`). If `tra init` was not given
+   `--agent` and `--model`, name the provider and model in `[agents]` in `strategy.toml`.
+2. **The mechanism.** `[agents].mechanism` is the sentence the analyst reasons from. The analyst
+   names its own stop and target, held inside `[exit]`; `[agents].magnitude_bps` is the edge
+   claimed only when it names no target.
+3. **Nothing to download.** `data.toml` already declares the live chains a cycle pulls through;
+   a dataset is only for `tra backtest`.
 
-Then `tra check` tells you what is still missing, and `tra run --env-file .env` runs one cycle.
+Then `tra check` tells you what is still missing, `tra run` decides once, and
+`tra run --every 15m` keeps deciding on each fifteen-minute bar.
 
 Optional, and worth doing in this order: fill in a file under `sources/` and its analyst joins the
 roster; give that analyst a weight in `[conviction].weights` and its agreement starts changing the
@@ -4091,12 +4099,13 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
                 bad.append(str(exc))
             else:
                 if p.key_env and not env.get(p.key_env):
-                    bad.append(f"{p.key_env} is not set; put it in .env and pass --env-file .env")
+                    bad.append(f"{p.key_env} is not set; put it in the .env beside strategy.toml")
                 elif not p.installed:
                     module, extra = p.needs
                     bad.append(
-                        f"provider {p.name}: the {module} SDK is not installed; "
-                        f"pip install 'trading-research-agents[{extra}]'"
+                        f"provider {p.name}: the {module} SDK is not installed; run the install "
+                        f"again with `{extra}` among the extras, for example "
+                        f"uv tool install 'trading-research-agents[ccxt,{extra},data]'"
                     )
                 else:
                     good.append(f"provider {p.name}: ready")
@@ -5001,8 +5010,9 @@ def _exit_notes(cfg: Any, bad: list[str]) -> list[str]:
     return [
         (
             f"exits: the analyst names its stop and target; the stop is held between "
-            f"{_bps(scale.min_stop_frac * 10_000)} and {_bps(scale.max_stop_frac * 10_000)} bps, "
-            f"the target between {scale.min_reward_to_risk}x and {scale.max_reward_to_risk}x the "
+            f"{_bps(scale.min_stop_frac * 10_000)} and {_bps(scale.max_stop_frac * 10_000)} bps "
+            f"and never inside {scale.min_stop_atr} ATR, the target between "
+            f"{scale.min_reward_to_risk}x and {scale.max_reward_to_risk}x the "
             f"stop; with no level named, {scale.stop_atr} x ATR({scale.atr_bars}) and "
             f"{scale.reward_to_risk}x"
         )

@@ -234,7 +234,7 @@ kill_switch = "KILL"               # touch this file to flatten and stop
 
 # Before any of that: has anything happened worth paying a model to look at? Everything here is
 # computed from the snapshot and the cycles already on disk, so a cycle that holds costs one data
-# pull and no tokens. This is how a scheduler on a five minute bar stops being a subscription.
+# pull and no tokens. This is how a scheduler on a short bar stops being a subscription.
 # [trigger]
 # min_move_bps = 15                # the mid has to have moved this far since the last cycle
 # max_spread_bps = 8               # a book wider than this cannot be traded through, whatever
