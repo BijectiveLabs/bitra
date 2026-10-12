@@ -15,6 +15,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
+from trading_research_agents.extras import install_hint
+
 # What the data adapter calls for each kind a chain can declare.
 DATA_METHODS = {
     "ohlcv": "fetchOHLCV",
@@ -127,9 +129,7 @@ def capability_of(
         try:
             import ccxt
         except ImportError as exc:  # pragma: no cover - exercised only without the extra
-            raise CapabilityError(
-                "ccxt is not installed; pip install 'trading-research-agents[ccxt]'"
-            ) from exc
+            raise CapabilityError(f"ccxt is not installed; {install_hint('ccxt')}") from exc
         factory = getattr(ccxt, name, None)
         if factory is None:
             raise CapabilityError(f"ccxt has no exchange named {name!r}")

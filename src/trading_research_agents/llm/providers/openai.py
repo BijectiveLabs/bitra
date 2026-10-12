@@ -14,6 +14,7 @@ import os
 from collections.abc import Mapping
 from typing import Any
 
+from trading_research_agents.extras import install_hint
 from trading_research_agents.llm.completer import Completion, ProviderError
 
 BASE_URL_ENV = "TRA_OPENAI_BASE_URL"
@@ -59,7 +60,7 @@ class OpenAICompleter:
                 ImportError
             ) as exc:  # pragma: no cover - exercised only where the extra is absent
                 raise ProviderError(
-                    "the openai SDK is not installed; pip install 'trading-research-agents[openai]'"
+                    f"the openai SDK is not installed; {install_hint('openai')}"
                 ) from exc
             # The declared timeout is per request; the SDK retries 429s and 5xx with backoff.
             options: dict[str, Any] = {"timeout": timeout_s, "max_retries": max_retries}

@@ -12,6 +12,7 @@ contract.
 trading_research_agents/
   records/     how every record reaches the disk: crash-safe appends, atomic
                writes, hashes, the per-day cycle index                          depends on nothing
+  extras.py    how to add a missing optional dependency, worded once            depends on nothing
   ledger/      verdict vocabulary, axes, transferability, kill-ledger rows      depends on nothing
   envelope/    operator parameters: fees per channel, latency, venue access     depends on nothing
   data/        any trade data to Parquet, dataset audit, manifest; venue

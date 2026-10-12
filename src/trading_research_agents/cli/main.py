@@ -90,6 +90,7 @@ from trading_research_agents.data.sources.registry import UnknownSourceError
 from trading_research_agents.envelope import EnvelopeError, load_envelope
 from trading_research_agents.execution import FundingSchedule
 from trading_research_agents.execution.pretrade import PreTradeError
+from trading_research_agents.extras import install_hint
 from trading_research_agents.ledger import Ledger, LedgerError, Verdict
 from trading_research_agents.ledger.store import to_record as ledger_to_record
 from trading_research_agents.llm import Completer
@@ -4122,12 +4123,25 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
                 elif not p.installed:
                     module, extra = p.needs
                     bad.append(
-                        f"provider {p.name}: the {module} SDK is not installed; run the install "
-                        f"again with `{extra}` among the extras, for example "
-                        f"uv tool install 'trading-research-agents[ccxt,{extra},data]'"
+                        f"provider {p.name}: the {module} SDK is not installed; "
+                        + install_hint(extra)
                     )
                 else:
                     good.append(f"provider {p.name}: ready")
+            from trading_research_agents.cli.credentials import in_play
+
+            for name, why in in_play(cfg.agents)[1:]:
+                try:
+                    spare = provider(name)
+                except UnknownProviderError:
+                    continue
+                if not spare.installed:
+                    module, extra = spare.needs
+                    # A spare that cannot load is skipped when it is reached, so this is a note.
+                    good.append(
+                        f"provider {name} ({why}): the {module} SDK is not installed, so this link "
+                        f"is skipped if it is ever reached; " + install_hint(extra)
+                    )
         if cfg.live is not None and not _has_live_plugin(cfg.live.venue):
             good.append(
                 f"live: no live-session plugin for {cfg.live.venue}, so `tra live` is not "

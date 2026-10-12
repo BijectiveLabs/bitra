@@ -157,3 +157,15 @@ def test_effort_is_one_vocabulary_mapped_onto_what_each_vendor_takes() -> None:
     assert CallOptions(effort="medium").effort == "medium"
     with pytest.raises(ValueError, match="effort is one of"):
         CallOptions(effort="ludicrous")
+
+
+def test_an_sdk_whose_parent_package_is_missing_reads_as_not_installed() -> None:
+    from dataclasses import replace
+
+    from trading_research_agents.llm.providers.registry import provider
+
+    google = provider("google")
+    # find_spec on "pkg.sub" imports "pkg" and raises when it is absent; that is "not installed".
+    missing = replace(google, needs=("bijective_no_such_package.genai", "google"))
+    assert missing.installed is False
+    assert replace(google, needs=("", "")).installed is True
