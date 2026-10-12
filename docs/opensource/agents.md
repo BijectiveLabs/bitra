@@ -32,10 +32,10 @@ wrote, and records every answer as a numbered file in the session directory.
 ## A session
 
 ```
-tra agent session --env-file .env       # every dataset in data/, [agents].magnitude_bps
+tra agent session                      # every dataset in data/, [agents].magnitude_bps
 tra agent session --config strategy.toml --envelope envelope.toml \
     --dataset BTCUSDT=data/btc.parquet --dataset ETHUSDT=data/eth.parquet \
-    --magnitude 20 --out runs/session-1 --env-file .env     # the same, spelled out
+    --magnitude 20 --out runs/session-1     # the same, spelled out
 ```
 
 ```
@@ -138,14 +138,16 @@ the cost gate, and it cuts the size to fit or refuses. No model is asked, becaus
 much to risk answers differently on Tuesday than on Monday from the same figures, and a size that
 depends on which sentence was written last cannot be backtested or audited. See [The cycle](/opensource/cycle).
 
-**The role.** Whether the limits themselves are still the right limits is a judgement over a
-completed run: latency against what was declared, net per round trip against what was claimed,
-drawdown, which control keeps refusing. That is what `risk_manager` reads, once, after the runs -
-and all it may do is tighten a limit, step the ladder down, or arm the kill switch. It cannot widen
-anything, and it is not in the path of a decision.
+**The role.** Whether the limits themselves are still the right limits is a judgement over what
+the desk has been doing: losses in a row, net per round trip against what was claimed, drawdown,
+which control keeps refusing. In `tra run` the risk manager is asked whenever the quant auditor is,
+and it may cut the size of new entries, pause instruments or halt the desk, each for a stated
+number of hours (below). In a research session it reads the finished runs and may tighten a
+limit, step the ladder down or arm the kill switch. Either way it cannot widen anything, and it
+never decides a single trade.
 
-So "where is the risk manager" has two answers: the decision it owns is made by the system in every cycle, and the
-judgement it owns happens after the fact where a wrong answer costs a review rather than a position.
+So "where is the risk manager" has two answers: the per-trade limit is arithmetic the system does
+in every cycle, and the judgement over a run of trades is the role's, made between cycles.
 
 ### The two auditors
 
@@ -203,7 +205,7 @@ the daily loss limit was reached, or several round trips in a row lost money.
 | A data chain ran out, or a kind was used stale | technical auditor | |
 | The venue refused or failed an order | technical auditor | |
 | The same kind fires again inside `alarm_cooldown_s` | nobody | one look per kind per cooldown; a different kind still wakes it |
-| Every `quant_every_cycles` cycles | quant auditor | a count of cycles run: at `--every 5m`, 12 cycles is about an hour |
+| Every `quant_every_cycles` cycles | quant auditor | a count of cycles run: at `--every 15m`, 4 cycles is about an hour |
 | Every `quant_every` (for example `"24h"`) | quant auditor | a clock: the first cycle starts it, any quant look restarts it |
 | Both on the same cycle | both, in one audit | one report, one ledger entry per call |
 | The quant auditor is asked, for any reason | the risk manager as well, first | it may cut size, pause instruments or halt, never loosen; `[audit].risk_manager = false` leaves the account to your limits alone |
@@ -260,7 +262,7 @@ A question worth answering plainly, because it decides where the token bill goes
 | decide how much goes behind it | the conviction rule, in the system | weigh every voice by its strength (confidence, graded scores, votes) and pick a size multiple off the operator's ladder; it may only shrink the base size |
 | price the round trip | the cost gate, in the system | refuse a claim that does not clear its own cost |
 | hold the desk's shape | the targets, in the system | refuse a trade that is not worth what the operator said it must be worth |
-| watch what actually happened | the risk manager | continue, tighten, demote or halt from measured behaviour; it never enlarges anything |
+| watch what actually happened | the risk manager | in `tra run`: continue, cut size, pause instruments or halt, from measured behaviour; it never enlarges anything |
 | read the machinery afterwards | the technology auditor | write findings tied to figures, and propose changes a person applies |
 | read the desk's own results afterwards | the quant auditor | the same, over decisions and round trips |
 | turn a decision into an order | the executor | caps, the venue's step, the rate budget, the signal file; no discretion |
@@ -302,7 +304,7 @@ is worth running on that instrument at all.
 ### Comparing models on the same bars
 
 ```
-tra agent eval --model groq:openai/gpt-oss-120b --model deepseek:deepseek-flash     --model ollama:qwen3:8b --env-file .env          # the newest dataset in data/
+tra agent eval --model groq:openai/gpt-oss-120b --model deepseek:deepseek-flash     --model ollama:qwen3:8b          # the newest dataset in data/
 ```
 
 An eval runs the analyst once per model over one dataset, under the same controls and in the
@@ -351,5 +353,5 @@ newer book would mix two moments in one decision. The next cycle takes its own s
 `promote`, `loosen_limits`, `disarm_kill_switch`, `raise_cap`, `place_order` are not actions
 on the surface; a role that asks for one is refused by name, every time, and the refusal is
 what it is told. Orders are not on the surface either: they leave the runtime through the
-controls, the canary caps and the ladder, or they do not leave at all. A model may decide;
+mandate, the controls and the caps (and on mainnet the ladder), or they do not leave at all. A model may decide;
 the system executes and refuses.

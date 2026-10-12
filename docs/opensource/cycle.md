@@ -5,9 +5,9 @@ refusal with a reason. It is the unit this project works in, and the unit an aud
 
 ```bash
 tra init my-desk --profile autonomous     # the cycle laid down wired, every line commented
-tra run --env-file .env                   # data.toml, strategy.toml, envelope.toml from the project
+tra run                                   # data.toml, strategy.toml, envelope.toml and .env from the project
 tra run --instrument ETHUSDT --margin 5 --mode signals
-tra run --every 5m --cycles 12 --env-file .env   # one cycle every five minutes, on the boundary
+tra run --every 15m --cycles 12           # one cycle every fifteen minutes, on the boundary
 ```
 
 ## Running it on a schedule
@@ -17,7 +17,7 @@ happening rather than one that is half built. One process, no cron, no daemon: t
 same command, and everything that should end it ends it by name.
 
 The first pass runs as soon as the desk starts. After that, passes land on the clock: with
-`--every 30m` they fall at :00 and :30 UTC, with `--every 5m` at every fifth minute. So the wait
+`--every 30m` they fall at :00 and :30 UTC, with `--every 15m` at :00, :15, :30 and :45. So the wait
 after a pass is whatever is left to the next boundary, not a full interval, and a pass that takes
 several minutes shortens it further. The desk says it plainly after every pass, for example
 `next pass at 08:30:00 UTC, in 20m 00s`.
@@ -58,12 +58,13 @@ while any order still works on the instrument. A desk that has to survive its te
 a supervisor, not in a window.
 
 
-
-The profile is the short way in. It writes the same project as `tra init`, with four differences:
-the technical analyst is the core, the confluence matrix, the conviction ladder and the targets are
-live tables rather than commented ones, `[execution].mode` is `sandbox`, and the project's README
-carries the three things that are yours before a cycle can decide anything - a model and its key,
-the mechanism and the edge you claim, and data to decide on. `tra check` names whatever is still
+`tra init my-desk --profile autonomous` is the short way in. It writes the same project as
+`tra init`, with these differences: the technical analyst is the core, deciding on 15-minute bars
+with the hour and four hours as context and naming its own stop and target; the confluence matrix,
+the conviction ladder and the targets are live tables rather than commented ones;
+`[execution].mode` is `sandbox`; and the project's README opens with what is still yours before a
+cycle can decide anything - a model and its key, and the mechanism the analyst reasons from. Add
+`--agent PROVIDER --model MODEL` and the model is named for you. `tra check` names whatever is still
 missing, including the provider placeholder, and reads the three files against each other: the
 instrument as the sources know it, a venue supplying data that is not the venue whose fees are
 priced, and an `[execution].venue` that does not match `[run].venue_key` - that last one is a
@@ -164,7 +165,7 @@ figure that counts the whole desk.
 
 ## Before anyone is asked: the trigger
 
-A five minute schedule is two hundred and eighty cycles a day. Most of them should refuse, and
+A five minute schedule is two hundred and eighty-eight passes a day, and a fifteen minute one ninety-six. Most of them should refuse, and
 refusing is the right answer - but the tokens were spent finding that out, and a desk that spends
 more on research than it can win on a trade is not a desk. The answer is not to abandon the
 schedule. It is to put a check in front of it that costs nothing.
@@ -264,8 +265,8 @@ left out, and so is an open interest with nothing earlier to compare it to.
 
 ```toml
 [run]
-bar_interval_s = 60
-context_intervals = ["15m", "1h"]  # up to three, each a whole multiple of bar_interval_s
+bar_interval_s = 900               # what `tra init --agent` writes: 15m decisions
+context_intervals = ["1h", "4h"]   # up to three, each a whole multiple of bar_interval_s
 
 [regime]
 trend_above = 2.0                  # trend_strength at or above this is a trend
@@ -925,7 +926,7 @@ became of them; the last pass over the universe; the book as the newest cycle re
 that broke; and what the models have cost across the cycles in view.
 
 This matters for how a desk is deployed. **The console runs commands in its own process**, so a
-`tra run --every 5m` typed at the prompt ends when the console does. A desk meant to keep running
+`tra run --every 15m` typed at the prompt ends when the console does. A desk meant to keep running
 belongs under a supervisor, and `tra watch` is how it is looked at from anywhere else.
 
 ## Watching it work

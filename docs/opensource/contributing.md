@@ -11,12 +11,14 @@ that a contribution is judged against a standard rather than a mood.
 ## Setup
 
 ```bash
-uv sync
+git clone https://github.com/BijectiveLabs/trading-research-agents && cd trading-research-agents
+uv sync --all-extras
 uv run pytest
 ```
 
 Python 3.11 or newer. `uv` manages the environment and the lock file; commit `uv.lock` with any
-dependency change.
+dependency change. To use your working copy as the `tra` command on your machine, in place of the
+release from PyPI, install it editable: `uv tool install --editable '.[ccxt,openai,data]'`.
 
 ## Before you open a pull request
 

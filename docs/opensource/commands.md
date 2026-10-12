@@ -27,7 +27,7 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | Command | What it does |
 |---|---|
 | `tra run` | one autonomous cycle |
-| `tra run --every 5m --cycles 12` | twelve scheduled passes: the first now, then one on every fifth minute of the clock |
+| `tra run --every 15m --cycles 12` | twelve scheduled passes: the first now, then one on every fifteenth minute of the clock |
 | `tra run --now` | ask the roster even if the trigger would have held a quiet market |
 | `tra watch --every 5s` | a read-only view of a running desk |
 | `tra audit` | both auditors over the records; nothing is applied |

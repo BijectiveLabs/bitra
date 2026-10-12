@@ -10,8 +10,9 @@ mechanism the memo named, and the runtime demands controls that the research nev
 feed  ->  strategy.on_bar  ->  controls.admit  ->  venue.submit  ->  exits (layer 6)  ->  trades.jsonl
 ```
 
-No language model is anywhere on the order path. Not to decide, not to assess risk, not to
-narrate an incident mid-run. Capital is governed by the system that is tested and fails closed.
+In this runtime, which runs a scripted strategy, no language model is anywhere on the order
+path: not to decide, not to assess risk, not to narrate an incident mid-run. The agent desk
+(`tra run`) is described in [The cycle](/opensource/cycle). Capital is governed by the system that is tested and fails closed.
 
 ## What this release runs, and what it does not
 

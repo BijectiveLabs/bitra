@@ -52,12 +52,12 @@ only make the desk more careful, and two auditors that read the records.
 ## Contents
 
 - [What it solves](#what-it-solves)
-- [Quick start](#quick-start)
+- [Get started](#get-started)
 - [What you see, in order](#what-you-see-in-order)
 - [How one cycle decides](#how-one-cycle-decides)
 - [Venues](#venues)
 - [Models and providers](#models-and-providers)
-- [From a replay to real orders](#from-a-replay-to-real-orders)
+- [Toward real orders](#toward-real-orders)
 - [Your money, your orders, your positions](#your-money-your-orders-your-positions)
 - [Watching a desk, and what is kept](#watching-a-desk-and-what-is-kept)
 - [Command line](#command-line)
@@ -75,57 +75,67 @@ only make the desk more careful, and two auditors that read the records.
 | Something went wrong and there is no trace | Each cycle keeps its snapshot, briefs, answers, the intent and what the venue said. Nothing is rewritten. |
 | A crash leaves a position with no stop | The stop and take profit go to the venue attached to the entry, so they survive this process dying. |
 
-## Quick start
+## Get started
 
-You need Python 3.11 or newer. [uv](https://docs.astral.sh/uv/) is the quickest way in.
+Six steps. You need Python 3.11 or newer and a key for one model provider
+(Groq has a free tier). No exchange account is needed until step 6.
+
+**1. Install.** [uv](https://docs.astral.sh/uv/) is the quickest way:
 
 ```bash
 uv tool install 'trading-research-agents[ccxt,openai,data]'
-
-tra init my-desk --profile autonomous && cd my-desk
-cp .env.example .env        # put your model key in here; no venue key is needed yet
-tra check                   # what's ready, and the one thing to fix next
-tra run                     # one autonomous cycle, in the sandbox: nothing leaves your machine
 ```
 
-The extras are what the project talks through: `ccxt` for venue data and orders, `openai` for
-every OpenAI-compatible provider (Groq, DeepSeek, xAI, OpenRouter, a local server), `data` for
-datasets. Add `anthropic` or `google` to the list for those providers. Without uv,
-`pip install 'trading-research-agents[ccxt,openai,data]'` in a virtual environment does the same.
+Without uv, run `pip install 'trading-research-agents[ccxt,openai,data]'` inside a virtual
+environment. The extras are `ccxt` for exchange data and orders, `openai` for every
+OpenAI-compatible provider (Groq, DeepSeek, xAI, OpenRouter, a local server) and `data` for
+datasets. Add `anthropic` or `google` to the list if you use those. To add an extra later, run the
+same install again with the longer list; the per-feature pages say which extra they need.
 
-To work on the code itself, install from a clone instead:
+**2. Make a desk.** A desk is a folder holding your settings and everything the agents decide.
+Name your provider and model here:
 
 ```bash
-git clone https://github.com/BijectiveLabs/trading-research-agents && cd trading-research-agents
-uv tool install --editable '.[ccxt,openai,data]'
+tra init my-desk --profile autonomous --agent groq --model openai/gpt-oss-120b
+cd my-desk
 ```
 
-A project made by `tra init --profile autonomous` checks out like this before you touch it
-(shortened):
+Add `--venue okx` (or any ccxt id) to trade somewhere other than Bybit. `tra models groq` lists
+the models your key can use.
+
+**3. Add your key.** Copy the example file and put your key in it. Every command reads the `.env`
+next to `strategy.toml` on its own.
+
+```bash
+cp .env.example .env        # then set GROQ_API_KEY=... in .env
+```
+
+**4. Check.** `tra check` reads every setting against the others and names the one thing to fix
+next. A desk that is ready ends like this (shortened):
 
 ```
-ok    strategy.toml: valid; core 'agent-pending'; instrument BTCUSDT
-ok    roster: technical_analyst; `tra run` asks these
-ok    channel: bybit/taker-taker enters as a taker, priced at that fee; an order crosses the book at once
 ok    execution: sandbox; nothing leaves the machine
-ok    regime: measured on 15m with 1h, 4h as context; trending at 2.0+, ranging at 1.0 or less
-ok    conviction: floor 0.4; ladder 0.75+ -> 1.0x, 0.55+ -> 0.5x, 0.4+ -> 0.25x
-ok    targets: at least 5 bps net; at least 2.0x the round trip; at most 6 round trips a day
-ok    exits: the analyst names its stop and target; the stop is held between 20 and 300 bps, the
-      target between 1.5x and 4.0x the stop
+ok    exits: the analyst names its stop and target; the stop is held between 20 and 300 bps
 ok    risk per trade: 50 bps of equity at the stop, applied to every size the ladder produces
-ok    size: 0.01 in base units, at the step 0.001
-ok    data.toml: chains for ohlcv, orderbook, funding, open_interest; `tra run` uses them
-todo  [agents].provider is still the placeholder; name the provider you have a key for, and its model
-1 thing(s) to fix first
+ok    provider groq: ready
+ready to run `tra run`
 ```
 
-Name your provider and model in `strategy.toml` (see [Models and providers](#models-and-providers))
-and `tra run` decides once. `tra run --every 15m` keeps deciding: the first pass runs now, then one
-every fifteen minutes on the clock (:00, :15, :30 and so on), so the wait after a pass is whatever is
-left to the next mark, and the desk tells you the time it ends at.
+**5. Run.** `tra run` decides once on live market data, in the sandbox: nothing leaves your
+machine. `tra run --every 15m` keeps deciding, once per fifteen-minute bar, on the clock (:00,
+:15, :30, :45). Or type `tra` on its own for the console, which takes the same commands.
 
-Type `tra` on its own inside the desk and you get the console, which is the next section.
+```bash
+tra run
+tra run --every 15m
+```
+
+**6. When you want real orders.** Start on the exchange's practice account: put its keys in
+`.env`, read the mandate with `tra mandate`, sign it with `tra mandate --sign "Your Name"`, and
+in `[execution]` of `strategy.toml` set `mode = "venue"`, a `leverage` and `max_notional` (the
+most one order may be worth). `tra check` lists whatever is still missing. [Toward real orders](#toward-real-orders) has the whole path.
+
+Working on the code itself? See [Development](#development).
 
 ## What you see, in order
 
@@ -136,7 +146,7 @@ there. Arrow keys go back through what you typed, tab completes, `help` lists th
 
 ![the console](assets/console.png)
 
-**2. The pass over your instruments.** Type `run --every 5m` and the desk first refreshes any data
+**2. The pass over your instruments.** Type `run --every 15m` and the desk first refreshes any data
 series that are due, one line each. Then it looks at every instrument on your list, one data pull
 apiece, and measures it. The screen steps through them live:
 
@@ -268,13 +278,15 @@ A cycle reaches venues through ccxt. Here is what that means in practice today:
 | Venue | What a cycle can do there | Practice environment | Run end to end by us |
 |---|---|---|---|
 | **Bybit** (the default) | everything: orders with the stop and take profit attached | demo, testnet | **yes**, on demo: real orders, exits attached, a resting order cancelled |
-| OKX, Bitget, BingX, KuCoin Futures, Hyperliquid | everything | varies, see `tra venues` | not yet |
+| **OKX** | everything | demo (ccxt's testnet switch) | **yes**, on demo: real orders, exits attached, closed by the venue's own exits |
+| Bitget, BingX, KuCoin Futures, Hyperliquid | everything | varies, see `tra venues` | not yet |
 | Binance, Deribit, HTX, Gate, MEXC | orders, but you carry the stop yourself (`exits = "none"`) | varies | not yet |
 | Kraken, Kraken Futures, Phemex | data only: they can't report the position, so no order is sent | | |
 
 "Everything" means ccxt reports the five things a safe order needs: send it, attach the exits, read
-the position, read the open orders, cancel. Only Bybit has been run end to end with real orders, so
-treat every other venue as untested: start on its practice environment and read what it sends.
+the position, read the open orders, cancel. Only Bybit and OKX have been run end to end with real
+orders, so treat every other venue as untested: start on its practice environment and read what
+it sends.
 
 Adding the venue you trade on is four steps, and one command writes most of it:
 
@@ -283,8 +295,8 @@ tra venues okx            # what it can do, and which keys it signs with
 tra venues okx --setup    # the blocks to paste into envelope.toml, data.toml, strategy.toml and .env
 ```
 
-The setup leaves your fees blank on purpose, because a guessed fee would price every trade wrong,
-and the file won't load until you fill them in. [Venues](https://docs.bijectivelabs.dev/opensource/venues) has the full table, the keys each
+Your fees are filled in from your account when it reports them, and from the venue's standard
+tier until then, labelled as such; a fee you write yourself is kept and checked against the account. [Venues](https://docs.bijectivelabs.dev/opensource/venues) has the full table, the keys each
 venue needs, and the four steps.
 
 ## Models and providers
@@ -330,7 +342,7 @@ call is a line in `usage.jsonl` with its tokens and latency, and nothing caps sp
 declare a ceiling. `tra keys --probe` proves each key works without sending a prompt. A vendor of
 your own is about thirty lines ([Model providers](https://docs.bijectivelabs.dev/opensource/providers)).
 
-## From a replay to real orders
+## Toward real orders
 
 What it trades: **linear perpetual futures** (USDT- or USDC-margined swaps) on any venue ccxt
 reaches, long and short, with the leverage and margin mode you declare. Spot, dated futures,
@@ -338,19 +350,24 @@ inverse contracts and options are not built yet; until they are, venue mode chec
 on every order and refuses anything that is not a linear perpetual. [Boundaries](https://docs.bijectivelabs.dev/opensource/boundaries) says what
 adding one would take.
 
-You can stop at any of these steps. Each is one command, and each was run end to end before this
-README was written.
+An agent desk goes through three steps, and you can stay at any of them as long as you like:
 
-| Step | Command | What happens | Needs |
+| Step | How | What happens | Needs |
 |---|---|---|---|
-| 1. Replay | `tra data get BTCUSDT 2025-01-01`, then `tra backtest` | a day of the venue's own archive, checksum-verified and audited, replayed net of every cost | nothing |
-| 2. Shadow | `tra paper --minutes 30` | the live public feed, decisions recorded, nothing sent | nothing |
-| 3. Canary | `tra live` | a small live session behind hard caps and the ladder | a venue key, a promotion with evidence |
-| 4. Agents | `tra run` | the cycle above instead of a scripted strategy; sandbox until you say otherwise | a model key |
-| 5. Venue mode | `tra run` with `[execution].mode = "venue"` | one order per decision, exits attached, positions looked after | a signed `MANDATE.md`, a leverage, a cap per order, venue keys; on mainnet also the canary tier |
+| 1. Sandbox | `tra run` | the full cycle on live data; every decision written down, no order sent | a model key |
+| 2. Practice account | `tra run` with `[execution].mode = "venue"` and `environment = "demo"` or `"testnet"` | real orders on the exchange's practice account, exits attached, positions looked after | a signed mandate, a leverage, `max_notional`, practice keys |
+| 3. Real capital | the same, with `environment = "mainnet"` | real orders with real money | all of the above, plus the ladder at its canary tier (`tra ladder promote`, with evidence) |
 
-The replay of that day printed `net -294.19 bps` for the example core, and it is shown as it came
-out: a backtest that only shows good news is one nobody should believe.
+Steps 1 and 2 have been run end to end on Bybit's and OKX's practice accounts. Step 3 has not
+been run by us; treat it as yours to verify, small, first.
+
+If you bring a scripted strategy of your own instead of the agents, it has a research path of its
+own before any of this: `tra data get BTCUSDT 2025-01-01` and `tra backtest` replay a day of the
+exchange's archive net of every cost, `tra paper --minutes 30` runs it on the live feed with
+nothing sent, and `tra live` is a small canary session behind hard caps. The replay of that day
+printed `net -294.19 bps` for the example core, and it is shown as it came out: a backtest that
+only shows good news is one nobody should believe. [The live tier](https://docs.bijectivelabs.dev/opensource/live)
+has the details.
 
 Venue mode is the only mode that can lose money, so it has a door in front of it. Read the
 mandate with `tra mandate`; when you accept it, `tra mandate --sign "Your Name"` keeps it in the
@@ -375,7 +392,9 @@ bigger. It only decides how much margin the trade ties up and how far away liqui
 ```toml
 [execution]
 mode = "venue"
-leverage = 3                     # the one setting you must choose; everything else has a default
+environment = "demo"             # demo | testnet | mainnet
+leverage = 3                     # yours to choose; it never makes a trade bigger
+max_notional = 400               # the most one order may be worth, in quote currency
 margin_mode = "isolated"         # isolated | cross
 hold_limit = "timeout"           # close by time after [exit].timeout_bars; or horizon, or none
 ```
@@ -445,7 +464,7 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | Command | What it does |
 |---|---|
 | `tra run` | one autonomous cycle |
-| `tra run --every 5m --cycles 12` | twelve scheduled passes: the first now, then one on every fifth minute of the clock |
+| `tra run --every 15m --cycles 12` | twelve scheduled passes: the first now, then one on every fifteenth minute of the clock |
 | `tra run --now` | ask the roster even if the trigger would have held a quiet market |
 | `tra watch --every 5s` | a read-only view of a running desk |
 | `tra audit` | both auditors over the records; nothing is applied |
@@ -519,7 +538,8 @@ The full documentation is at [docs.bijectivelabs.dev](https://docs.bijectivelabs
 ## Development
 
 ```bash
-uv sync
+git clone https://github.com/BijectiveLabs/trading-research-agents && cd trading-research-agents
+uv sync --all-extras
 uv run ruff check . && uv run ruff format --check .
 uv run mypy
 uv run pytest

@@ -25,6 +25,6 @@ promoted to canary with evidence and your signature:
     tra ladder promote --evidence "layer 5 OPEN on paper-1" --signed-by you   # to T1
     tra ladder promote --evidence "..." --signed-by you                        # to T2
     tra ladder promote --evidence "..." --signed-by you                        # to T3
-    tra live --env-file .env
+    tra live
 
 Where the responsibility sits: docs.bijectivelabs.dev/opensource/liability in the project's repository.

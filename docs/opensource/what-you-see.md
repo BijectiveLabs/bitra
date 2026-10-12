@@ -16,7 +16,7 @@ scripts and cron, `tra -c "run --now"` runs one command and exits.
 
 ## 2. The pass over your instruments
 
-Type `run --every 5m` and the desk first refreshes any data series that are due, one line each.
+Type `run --every 15m` and the desk first refreshes any data series that are due, one line each.
 Then it looks at every instrument on your list, one data pull apiece, and measures it. The screen
 steps through them live:
 
