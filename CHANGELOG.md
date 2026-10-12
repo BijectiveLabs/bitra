@@ -6,6 +6,19 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-10-13
+
+### Fixed
+
+- `tra keys --probe` stopped with `No module named 'google'` when a fallback named a provider whose
+  SDK was not installed: asking whether `google.genai` is installed imports `google` first, and
+  that raised instead of answering no. The probe now names the missing SDK and the extra that
+  adds it, and goes on to the next key.
+- `tra check` says when a provider in a fallback chain cannot load, as a note: the chain skips that
+  link when it is reached, so the desk still runs.
+- Every message about a missing optional dependency gives the same advice, for a uv tool install
+  and for pip alike, instead of a pip command that does not fit an install made with uv.
+
 ## [0.6.2] - 2026-10-13
 
 ### Fixed
