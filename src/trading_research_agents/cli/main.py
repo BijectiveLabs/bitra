@@ -2685,6 +2685,7 @@ VOLATILITY_EXIT = (
     'mode = "analyst"             # the analyst names its stop and target, held in bounds\n'
     "min_stop_frac = 0.002        # a stop never tighter than 0.2 percent of price\n"
     "max_stop_frac = 0.03         # and never wider than 3 percent\n"
+    "min_stop_atr = 1.0           # nor inside one bar's ordinary range\n"
     "min_reward_to_risk = 1.5     # a target closer than 1.5x the stop is refused\n"
     "max_reward_to_risk = 4.0     # a target past 4x the stop is brought in\n"
     "stop_atr = 1.5               # with no level named: the stop in average true ranges\n"
@@ -4102,8 +4103,9 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
                 elif not p.installed:
                     module, extra = p.needs
                     bad.append(
-                        f"provider {p.name}: the {module} SDK is not installed; "
-                        f"pip install 'trading-research-agents[{extra}]'"
+                        f"provider {p.name}: the {module} SDK is not installed; run the install "
+                        f"again with `{extra}` among the extras, for example "
+                        f"uv tool install 'trading-research-agents[ccxt,{extra},data]'"
                     )
                 else:
                     good.append(f"provider {p.name}: ready")
@@ -5008,8 +5010,9 @@ def _exit_notes(cfg: Any, bad: list[str]) -> list[str]:
     return [
         (
             f"exits: the analyst names its stop and target; the stop is held between "
-            f"{_bps(scale.min_stop_frac * 10_000)} and {_bps(scale.max_stop_frac * 10_000)} bps, "
-            f"the target between {scale.min_reward_to_risk}x and {scale.max_reward_to_risk}x the "
+            f"{_bps(scale.min_stop_frac * 10_000)} and {_bps(scale.max_stop_frac * 10_000)} bps "
+            f"and never inside {scale.min_stop_atr} ATR, the target between "
+            f"{scale.min_reward_to_risk}x and {scale.max_reward_to_risk}x the "
             f"stop; with no level named, {scale.stop_atr} x ATR({scale.atr_bars}) and "
             f"{scale.reward_to_risk}x"
         )

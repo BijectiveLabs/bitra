@@ -171,11 +171,13 @@ def brief(
     """What code measured, from the run's own files, for the risk manager to judge."""
     trips = [t for t in read_lines(Path(root) / "round_trips.jsonl") if "net" in t]
     nets = []
+    days = []
     for trip in trips:
         try:
             nets.append((str(trip.get("instrument", "")), Decimal(str(trip["net"]))))
         except InvalidOperation:
             continue
+        days.append(str(trip.get("at", ""))[:10])
     recent = nets[-20:]
     streak = 0
     for _, net in reversed(nets):
@@ -188,8 +190,30 @@ def brief(
         row["trips"] += 1
         row["wins"] += int(net > 0)
         row["net"] += net
-    equity = read_lines(Path(root) / "equity.jsonl")
+    day = now.astimezone(UTC).date().isoformat()
+    start = next(
+        (
+            row.get("equity")
+            for row in read_lines(Path(root) / "equity.jsonl")
+            if row.get("day") == day
+        ),
+        None,
+    )
+    today = [net for (_, net), on in zip(nets, days, strict=True) if on == day]
+    day_net = sum(today, Decimal(0))
     return {
+        # Models mix up money and basis points when both are bare numbers, so each says which.
+        "units": {
+            "net": "quote currency (USDT on most desks), summed over round trips",
+            "*_bps": "basis points of equity: the limits and net_bps_of_equity",
+        },
+        "today": {
+            "day": day,
+            "round_trips": len(today),
+            "net": str(day_net),
+            "net_bps_of_equity": _bps_of(day_net, start),
+            "equity_at_day_start": start,
+        },
         "limits": {
             "max_risk_per_trade_bps": str(limits.max_risk_per_trade_bps),
             "daily_loss_limit_bps": str(limits.daily_loss_limit_bps),
@@ -208,9 +232,18 @@ def brief(
                 k: {**v, "net": str(v["net"])} for k, v in sorted(per.items())
             },
         },
-        "day_start_equity": equity[-1].get("equity") if equity else None,
         "at": now.astimezone(UTC).isoformat(),
     }
+
+
+def _bps_of(amount: Decimal, equity: Any) -> str | None:
+    try:
+        base = Decimal(str(equity))
+    except (InvalidOperation, ValueError):
+        return None
+    if not base.is_finite() or base <= 0:
+        return None
+    return str((amount / base * 10_000).quantize(Decimal("0.01")))
 
 
 def _moment(value: Any) -> datetime | None:

@@ -129,3 +129,24 @@ def test_a_risk_manager_that_cannot_answer_changes_nothing(
     said = asked(tmp_path, monkeypatch, "not json", None)
     assert "limits unchanged" in said[0]
     assert not (tmp_path / "runs" / "cycles" / risk.STATE).exists()
+
+
+def test_todays_loss_is_given_in_bps_of_equity_beside_the_money(tmp_path: Path) -> None:
+    trips = [
+        ("2026-10-09T10:00:00+00:00", "-9"),
+        ("2026-10-10T09:00:00+00:00", "-3"),
+        ("2026-10-10T11:00:00+00:00", "-2"),
+    ]
+    (tmp_path / "round_trips.jsonl").write_text(
+        "".join(json.dumps({"at": a, "instrument": "SOLUSDT", "net": n}) + "\n" for a, n in trips),
+        encoding="utf-8",
+    )
+    (tmp_path / "equity.jsonl").write_text(
+        json.dumps({"day": "2026-10-10", "equity": "5000"}) + "\n", encoding="utf-8"
+    )
+    got = risk.brief(
+        tmp_path, limits=Limits(), overrides=risk.Overrides.load(tmp_path, NOW), alarms=[], now=NOW
+    )
+    assert got["today"]["round_trips"] == 2 and got["today"]["net"] == "-5"
+    assert got["today"]["net_bps_of_equity"] == "-10.00"
+    assert "quote currency" in got["units"]["net"]

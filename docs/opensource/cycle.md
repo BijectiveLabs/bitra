@@ -736,6 +736,7 @@ from. The system then:
 | Check | What happens |
 |---|---|
 | a level on the wrong side of the price (a long's stop above it) | set aside; the measured stop below stands, and the record says why |
+| the stop inside `min_stop_atr` average true ranges (1 by default) | widened to it: a stop inside one bar's ordinary range is hit by noise before the idea is wrong, and the wider stop makes the position smaller, not the loss bigger |
 | the stop tighter than `min_stop_frac` or wider than `max_stop_frac` | held to that bound |
 | the target closer than `min_reward_to_risk` times the stop | the trade is refused; moving the analyst's target out would be inventing one |
 | the target past `max_reward_to_risk` times the stop | brought in to it; a far target makes the break even look easy and is rarely reached |
@@ -746,6 +747,7 @@ from. The system then:
 mode = "analyst"
 min_stop_frac = 0.002        # a stop never tighter than 0.2 percent of price
 max_stop_frac = 0.03         # and never wider than 3 percent
+min_stop_atr = 1.0           # nor inside one bar's ordinary range; 0 turns this off
 min_reward_to_risk = 1.5     # a target closer than 1.5x the stop is refused
 max_reward_to_risk = 4.0     # a target past 4x the stop is brought in
 stop_atr = 1.5               # with no level named: the measured stop

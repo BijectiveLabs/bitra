@@ -215,8 +215,24 @@ def analyst_rule(**keys: Any) -> VolatilityExit:
         "max_stop_frac": Decimal("0.05"),
         "atr_bars": 3,
         "analyst_levels": True,
+        # These bars are wide on purpose; the noise floor has its own test below.
+        "min_stop_atr": Decimal(0),
     }
     return VolatilityExit(**{**base, **keys})
+
+
+def test_a_named_stop_inside_one_bars_range_is_widened_to_it() -> None:
+    rule = analyst_rule(min_stop_atr=Decimal(1))
+    mid = Decimal(100)
+    atr = average_true_range(BARS, 3)
+    placed = rule.place(
+        BARS, horizon_bars=1, mid=mid, side="long", stop_price=mid - atr / 4, target_price=None
+    )
+    assert placed.clamped_to == "min_stop_atr" and placed.source == "analyst"
+    assert abs(placed.stop_frac - atr / BARS[-1].close) < Decimal("0.000001")
+    assert "ATR" in placed.notes[0]
+    with pytest.raises(StopError, match="min_stop_atr"):
+        analyst_rule(min_stop_atr=Decimal(-1))
 
 
 def test_the_analysts_levels_are_used_inside_the_operators_bounds() -> None:
