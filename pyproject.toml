@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "trading-research-agents"
-version = "0.6.0"
+version = "0.6.1"
 description = "Autonomous trading agents for crypto that can't fudge their own results."
 dynamic = ["readme"]
 requires-python = ">=3.11"
@@ -84,10 +84,11 @@ content-type = "text/markdown"
 path = "README.md"
 
 # GitHub shows the README's images from the repository itself; PyPI has no repository to read
-# them from, so the published copy points each one at the file on GitHub.
+# them from, so the published copy points each one at the file under this release's tag, which
+# keeps an old version's page intact when a later one renames a picture.
 [[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
 pattern = '(src="|\]\()assets/'
-replacement = '\1https://raw.githubusercontent.com/BijectiveLabs/trading-research-agents/master/assets/'
+replacement = '\1https://raw.githubusercontent.com/BijectiveLabs/trading-research-agents/v$HFPR_VERSION/assets/'
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/trading_research_agents"]
