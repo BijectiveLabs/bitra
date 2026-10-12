@@ -210,3 +210,19 @@ def test_taking_the_screen_erases_the_scrollback_and_leaves_a_pipe_alone() -> No
     assert screen.getvalue() == "\x1b[H\x1b[2J\x1b[3J"
     pipe = io.StringIO()
     assert tui.take_screen(pipe) is False and pipe.getvalue() == ""
+
+
+def test_the_commands_offered_are_the_ones_a_person_types() -> None:
+    from trading_research_agents.cli.main import HANDLERS, _choices, typed_commands
+
+    parser = build_parser()
+    offered = typed_commands(parser)
+    # One entry per handler, and a one-word command is one word: `run`, never `run run`.
+    assert len(offered) == len(HANDLERS)
+    assert "run" in offered and "data get" in offered and "backtest" in offered
+    assert not any(len(set(words.split())) < len(words.split()) for words in offered)
+    groups = _choices(parser)
+    for words in offered:
+        group, *rest = words.split()
+        command = rest[0] if rest else groups[group].get_default("command")
+        assert (group, command) in HANDLERS, words
