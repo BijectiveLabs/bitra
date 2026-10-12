@@ -788,11 +788,30 @@ def _console_for(
         parser=parser,
         run=lambda parsed: _dispatch(HANDLERS[(parsed.group, parsed.command)], parsed),
         home=lambda: home(args),
-        commands=[f"{group} {command}" for group, command in sorted(HANDLERS)],
+        commands=typed_commands(parser),
         set_plain=_set_plain,
         history=console.history_path(bool(args.history)) if interactive else None,
         read=None if interactive else (lambda: ""),
     )
+
+
+def typed_commands(parser: argparse.ArgumentParser) -> list[str]:
+    """Every command as a person types it: `run`, `data get`, never the handler's own key."""
+    out: list[str] = []
+    for name, sub in sorted(_choices(parser).items()):
+        children = _choices(sub)
+        if children:
+            out.extend(f"{name} {child}" for child in sorted(children))
+        else:
+            out.append(name)
+    return out
+
+
+def _choices(parser: argparse.ArgumentParser) -> dict[str, argparse.ArgumentParser]:
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            return dict(action.choices)
+    return {}
 
 
 def _dispatch(handler: Callable[[argparse.Namespace], int], args: argparse.Namespace) -> int:
