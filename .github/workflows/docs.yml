@@ -43,9 +43,11 @@ jobs:
         with:
           path: docs/.vitepress/dist
 
+  # Pages has to be switched on for the repository first (free only once it is public); until the
+  # variable PAGES_ENABLED is "true" the site is built and checked, and nothing is deployed.
   deploy:
     name: deploy
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/master' && vars.PAGES_ENABLED == 'true'
     needs: build
     runs-on: ubuntu-latest
     permissions:
