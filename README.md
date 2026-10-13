@@ -8,8 +8,8 @@
 
 <p align="center">
   <a href="https://github.com/BijectiveLabs/trading-research-agents/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/BijectiveLabs/trading-research-agents/actions/workflows/ci.yml/badge.svg?branch=develop"></a>
-  <a href="https://pypi.org/project/trading-research-agents/"><img alt="PyPI" src="https://img.shields.io/pypi/v/trading-research-agents?style=flat-square&logo=pypi&logoColor=white&label=PyPI"></a>
-  <a href="https://pypi.org/project/trading-research-agents/"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/trading-research-agents?style=flat-square&logo=python&logoColor=white&label=python"></a>
+  <a href="https://pypi.org/project/trading-research-agents/"><img alt="PyPI" src="https://img.shields.io/pypi/v/trading-research-agents?style=flat-square&logo=pypi&logoColor=white&label=PyPI&cacheSeconds=1800"></a>
+  <a href="https://pypi.org/project/trading-research-agents/"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/trading-research-agents?style=flat-square&logo=python&logoColor=white&label=python&cacheSeconds=1800"></a>
   <a href="https://github.com/BijectiveLabs/trading-research-agents/blob/master/LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square"></a>
   <img alt="Status: alpha" src="https://img.shields.io/badge/status-alpha-orange?style=flat-square">
 </p>
@@ -77,31 +77,40 @@ only make the desk more careful, and two auditors that read the records.
 
 ## Get started
 
-Six steps. You need Python 3.11 or newer and a key for one model provider
-(Groq has a free tier). No exchange account is needed until step 6.
+A few minutes and one model key. Every setting has a working default, so a new desk runs before you
+change anything; the table under step 6 says what those defaults are.
 
-**1. Install.** [uv](https://docs.astral.sh/uv/) is the quickest way:
+**1. Install.** You need Python 3.11 or newer. [uv](https://docs.astral.sh/uv/) is the quickest way:
 
 ```bash
-uv tool install 'trading-research-agents[ccxt,openai,data]'
+uv tool install 'trading-research-agents[ccxt,openai,anthropic,google,data]'
 ```
 
-Without uv, run `pip install 'trading-research-agents[ccxt,openai,data]'` inside a virtual
-environment. The extras are `ccxt` for exchange data and orders, `openai` for every
-OpenAI-compatible provider (Groq, DeepSeek, xAI, OpenRouter, a local server) and `data` for
-datasets. Add `anthropic` or `google` to the list if you use those. To add an extra later, run the
-same install again with the longer list; the per-feature pages say which extra they need.
-
-**2. Make a desk.** A desk is a folder holding your settings and everything the agents decide.
-Name your provider and model here:
+That brings every model provider and every exchange in. Without uv, run
+`pip install 'trading-research-agents[ccxt,openai,anthropic,google,data]'` inside a virtual
+environment. To move to the newest release later:
 
 ```bash
-tra init my-desk --profile autonomous --agent groq --model openai/gpt-oss-120b
+uv tool upgrade trading-research-agents      # or: pip install -U 'trading-research-agents[ccxt,openai,anthropic,google,data]'
+tra --version
+```
+
+**2. Make a desk.** A desk is a folder holding your settings and everything the agents decide. Name
+the provider you have a key for:
+
+```bash
+tra init my-desk --profile autonomous --agent groq
 cd my-desk
 ```
 
-Add `--venue okx` (or any ccxt id) to trade somewhere other than Bybit. `tra models groq` lists
-the models your key can use.
+| `--agent` | Key in `.env` | Model, when you name none |
+|---|---|---|
+| `groq` | `GROQ_API_KEY` (free tier) | `openai/gpt-oss-120b` |
+| `google` | `GEMINI_API_KEY` | `gemini-flash-latest` |
+| `anthropic` | `ANTHROPIC_API_KEY` | `claude-opus-5-5` |
+| `openai`, `deepseek`, `xai`, `openrouter`, ... | see [Models and providers](#models-and-providers) | name one with `--model`; `tra models <provider>` lists them |
+
+Add `--venue okx` (or any ccxt id) to trade somewhere other than Bybit.
 
 **3. Add your key.** Copy the example file and put your key in it. Every command reads the `.env`
 next to `strategy.toml` on its own.
@@ -111,29 +120,45 @@ cp .env.example .env        # then set GROQ_API_KEY=... in .env
 ```
 
 **4. Check.** `tra check` reads every setting against the others and names the one thing to fix
-next. A desk that is ready ends like this (shortened):
+next. A desk that is ready ends with:
 
 ```
-ok    execution: sandbox; nothing leaves the machine
-ok    exits: the analyst names its stop and target; the stop is held between 20 and 300 bps
-ok    risk per trade: 50 bps of equity at the stop, applied to every size the ladder produces
 ok    provider groq: ready
 ready to run `tra run`
 ```
 
 **5. Run.** `tra run` decides once on live market data, in the sandbox: nothing leaves your
-machine. `tra run --every 15m` keeps deciding, once per fifteen-minute bar, on the clock (:00,
-:15, :30, :45). Or type `tra` on its own for the console, which takes the same commands.
+machine. `tra run --every 15m` keeps deciding, once per fifteen-minute bar, on the clock. Or type
+`tra` on its own for the console, which takes the same commands.
 
 ```bash
 tra run
 tra run --every 15m
 ```
 
-**6. When you want real orders.** Start on the exchange's practice account: put its keys in
-`.env`, read the mandate with `tra mandate`, sign it with `tra mandate --sign "Your Name"`, and
-in `[execution]` of `strategy.toml` set `mode = "venue"`, a `leverage` and `max_notional` (the
-most one order may be worth). `tra check` lists whatever is still missing. [Toward real orders](#toward-real-orders) has the whole path.
+**6. When you want real orders.** Start on the exchange's practice account:
+- put its keys in `.env`;
+- read the mandate with `tra mandate`, then sign it with `tra mandate --sign "Your Name"`;
+- in `[execution]` of `strategy.toml`, set `mode = "venue"`, a `leverage` and `max_notional` (the
+  most one order may be worth).
+
+`tra check` lists whatever is still missing. [Toward real orders](#toward-real-orders) has the
+whole path.
+
+**What a new desk does before you change anything**
+
+| | Default | Where to change it |
+|---|---|---|
+| Orders | none: the sandbox writes each decision down and sends nothing | `[execution].mode` |
+| What it trades | BTCUSDT on Bybit, as a taker | `[run].instrument`, `[universe]`, `--venue` |
+| Timeframe | decides on 15-minute bars, reads 1h and 4h as context | `[run].bar_interval_s`, `context_intervals` |
+| Strategy | none fixed: the analyst picks the setup the measured regime supports, or stays flat | `[agents].mechanism` |
+| Stop and target | the analyst names them; the stop is held between 0.2% and 3% and never inside one ATR, the target between 1.5x and 4x the stop | `[exit]` |
+| Risk per trade | 0.5% of equity lost at the stop, whatever the stop's distance | `[controls].max_risk_per_trade_bps` |
+| Bad days | no new entry after a 3% loss on the day or a 10% fall from the peak | `[controls]` |
+| Time limit | a position closes after 4 hours | `[exit].timeout_bars` |
+| Trades worth taking | the edge at least 2x the round trip, break even at half the trades or better, at most 6 a day | `[targets]` |
+| Oversight | a risk manager that can only cut, pause or halt; two auditors that report | `[audit]` |
 
 Working on the code itself? See [Development](#development).
 
@@ -160,15 +185,19 @@ time, each with its own clock, and the line underneath says who is working right
 
 ![a scheduled desk at work](assets/trading-agents.png)
 
-**4. The result.** When the cycle finishes, the table gives way to the pass over the universe, what
-was taken and what was held and why, then the data the cycle used and what the round trip costs:
+**4. The result.** When the cycle finishes, the table gives way to the pass over the universe: what the screener took,
+what waited and what was held, and why. Then the cycle itself: what the analyst proposed and from
+which figures, and every refusal with the number behind it. Here an ETH short in a ranging market
+stopped at its exits: with its own stop and target and the round trip, more than half of trades
+like it would have had to win just to break even:
 
 ![one cycle](assets/cycle.png)
 
-After that, what each validator argued, how conviction weighed the analysts, the risk at the stop,
-and whether the trade clears the desk's targets:
+Then the data the cycle used and how old it was, the series the reading analysts read, the stop and
+take profit it would have placed, and which agents answered. A cycle that goes further adds what
+each validator argued, how conviction weighed the analysts, the risk at the stop and the targets:
 
-![validators, conviction, risk and targets](assets/one-cycle.png)
+![data, series, exits and agents](assets/one-cycle.png)
 
 **5. Between cycles.** The desk says when the next pass is, on the clock and in minutes, for
 example `next pass at 14:30:00 UTC, in 10m 57s`, and counts down to it. An auditor woken by an alarm

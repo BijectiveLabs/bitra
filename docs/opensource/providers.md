@@ -28,6 +28,11 @@ answers `404` for a model that used to work, ask the vendor which names your key
 `gemini-flash-latest` worked on the same key. A failed call is recorded in `usage.jsonl` with the
 vendor's own error, so this is visible rather than mysterious.
 
+Three providers have a model to fall back on when `tra init --agent` is given none, because those
+models have run live cycles here: `groq` uses `openai/gpt-oss-120b`, `google` uses
+`gemini-flash-latest` and `anthropic` uses `claude-opus-5-5`. Every other provider asks for
+`--model`. `tra models <provider>` lists what your key can use.
+
 Output caps are the other account-shaped trap. A reasoning model spends most of its output budget
 thinking before it writes the answer, so a cap that looks generous for a short JSON object is not.
 Measured on 2026-09-27 against one small reasoning model, asked for a three-field object from an

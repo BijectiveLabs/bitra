@@ -796,6 +796,19 @@ def _console_for(
     )
 
 
+def screen_options_for(cycle_cfg: Any) -> dict[str, dict[str, Any]]:
+    """What the pass pulls per instrument: data.toml's options, on the cycle's own bars.
+
+    Read off data.toml's candle settings, the pass judged a 15-minute desk's market from four hours
+    of one-minute bars, and the screener and the analyst saw two regimes for one instrument.
+    """
+    options = {kind: dict(opts) for kind, opts in cycle_cfg.data_options.items()}
+    options.setdefault("ohlcv", {}).update(
+        {"interval_s": cycle_cfg.interval_s, "limit": max(cycle_cfg.lookback_bars, 2)}
+    )
+    return options
+
+
 def typed_commands(parser: argparse.ArgumentParser) -> list[str]:
     """Every command as a person types it: `run`, `data get`, never the handler's own key."""
     out: list[str] = []
@@ -3638,6 +3651,8 @@ def _sweep(
         else ""
     )
 
+    screen_options = screen_options_for(cycle_cfg)
+
     def look(watch: Any) -> Any:
         return sweep(
             universe,
@@ -3646,7 +3661,7 @@ def _sweep(
             root=out,
             now=now,
             max_round_trips_per_day=cfg.targets.max_round_trips_per_day,
-            options=cycle_cfg.data_options,
+            options=screen_options,
             ask=screener,
             desk=cfg.desk,
             held=cycle_cfg.held,
@@ -3802,7 +3817,7 @@ def _cycle_steps(cfg: Any) -> list[str]:
     steps.extend(["regime", "technical"])
     # Every reading analyst has a row, asked or not; the row says which.
     steps.extend(["macro_analyst", "onchain_analyst", "sentiment_analyst"])
-    steps.append("cost")
+    steps.extend(["cost", "exit"])
     steps.extend(f"validator_{stance}" for stance in cfg.validators)
     if not cfg.matrix.idle:
         steps.append("confluence")
