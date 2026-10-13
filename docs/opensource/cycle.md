@@ -280,7 +280,7 @@ and the figures that make the claim are in the brief. On the decision timeframe,
 | Setup | Refused when |
 |---|---|
 | `trend_continuation`, `pullback_in_trend` | the market is not measured as trending (ranging or mixed), or the trade points against the trend |
-| `range_reversion` | the market is trending, or the trade does not fade the stretch: a long with the close at or above the window's mean (z-score 0 or more), a short at or below it |
+| `range_reversion` | the market is not measured as a range (trending, or mixed with a measured trend strength), or the trade does not fade the stretch: a long with the close at or above the window's mean (z-score 0 or more), a short at or below it |
 | `momentum_exhaustion` | the trade goes with the move it says is exhausted: with the trend, or with the window's move |
 | `range_breakout` | the trade is on the other side from where the close sits: a long with the close in the lower half of the range, a short in the upper half |
 | `volatility_expansion` | never on direction: it is about a regime changing, not which way |
@@ -291,6 +291,21 @@ checked trends it could measure. A short setup against a higher timeframe's tren
 the analyst to weigh, because fading the hourly on the minute chart is sometimes the whole trade;
 the reason has to say so. With `setups_must_fit = false` a misfit is written down and the trade
 goes on. `tra check` prints the lines and the timeframes in use.
+
+The fade has been held to the same standard as the trend setups since 0.6.4. Before that,
+`range_reversion` was refused only in a trend, so in a mixed market it was the one regime-bound
+setup still allowed. Across the demo desks' record to 2026-10-13, fades in a mixed market were
+right 27% of the time (n = 30), against 60% in a measured range (n = 37).
+
+**The analyst picks the setup; the mechanism does not.** In `tra run` the technical analyst reads
+the regime and the higher timeframes first and names the setup the market supports. A mixed market
+takes `range_breakout`, `momentum_exhaustion`, `volatility_expansion` or flat.
+`[agents].mechanism` is your thesis: the setups you favour when the market offers them. It never
+turns a trending market into a fade, and the screener picks where *a* setup has the best chance,
+not one mechanism. `tra init --agent` writes a mechanism that names no setup ("trade the setup the
+measured regime supports: with a trend, inside a range, or flat"). Write a narrower one only if you
+trade a single idea. The research core in `tra backtest` and `tra agent session` is different: it
+trades one registered mechanism, by design.
 
 The macro analyst's regime is a different thing: risk-on or risk-off is about the world outside the
 chart, and it can disagree with what price is doing. Both are kept. The analyst sees the declared

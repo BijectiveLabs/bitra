@@ -135,6 +135,12 @@ the practice environment (`ccxt:okx@testnet`, `ccxt:bybit@demo`), and the drift 
 and the slippage a desk records are measured on the book its orders meet. Candles, funding and open
 interest stay on the live market. Any `ccxt:<venue>` source takes `@demo` or `@testnet`.
 
+The price can drift too. On OKX's demo account, in 6 of 52 decisions recorded to 2026-10-13, the
+demo book's mid sat outside the live market's range for that minute: 30 to 40 bps on NEAR and 149
+bps once on MAGIC. The analyst reads live candles, while the cost and the entry are priced on the
+demo book. Treat demo results on thin instruments as a test of the plumbing, not of the strategy;
+Bybit's demo book stayed inside the live range in all 63 recorded decisions.
+
 Three things only you can do, in the OKX app or website (in Demo trading for a demo key): set the
 account mode to Futures mode (Menu, Settings, Trading mode), because an account in Spot mode cannot
 trade perpetuals at all and OKX does not let an API key change it; set the position mode to

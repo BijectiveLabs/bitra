@@ -71,7 +71,7 @@ flowchart TD
 
 | Role | Reads | Answers | Can never |
 |---|---|---|---|
-| technical analyst | candles, spread, funding, book imbalance, open interest change, and the regime on its timeframe and the higher ones you declare | a direction, a setup from a fixed list, a confidence, a horizon, and where its stop and target sit | size the trade, place a level outside your `[exit]` bounds, or run a trend setup in a range |
+| technical analyst | candles, spread, funding, book imbalance, open interest change, and the regime on its timeframe and the higher ones you declare | a direction, a setup from a fixed list, a confidence, a horizon, and where its stop and target sit | size the trade, place a level outside your `[exit]` bounds, run a trend setup in a range, or fade a market that is not a measured range |
 | macro analyst | dated rates and levels, dated text | risk-on, risk-off or neutral | propose a direction |
 | on-chain analyst | chain and derivatives figures | accumulation, distribution or neutral | propose a direction |
 | sentiment analyst | dated scores and notes you curate | negative, neutral, positive, or not declared | invent a mood no figure supports |

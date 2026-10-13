@@ -312,3 +312,15 @@ def test_a_setup_trades_the_direction_its_own_figures_point(
     setup: str, target: str, figures: dict[str, float], refused: bool
 ) -> None:
     assert bool(misfit(setup, target, "mixed", **figures)) is refused
+
+
+def test_a_fade_needs_a_measured_range_as_a_trend_setup_needs_a_trend() -> None:
+    # Seen across 30 decisions to 2026-10-13: range_reversion in a mixed market was right 27% of
+    # the time against 60% in a measured range.
+    why = misfit("range_reversion", "short", "mixed", zscore=1.4, trend_strength=1.6)
+    assert "needs a measured range" in why
+    assert not misfit("range_reversion", "short", "ranging", zscore=1.4, trend_strength=0.6)
+    # A regime that could not be measured refuses nothing.
+    assert not misfit("range_reversion", "short", "mixed", zscore=1.4)
+    # The setups that presuppose no regime stay open in a mixed market.
+    assert not misfit("range_breakout", "long", "mixed", position_in_range=0.97, trend_strength=1.6)

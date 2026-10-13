@@ -6,6 +6,23 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-10-13
+
+### Changed
+
+- In `tra run` the technical analyst chooses the setup from the measured regime and the higher
+  timeframes, with its own desk prompt. `[agents].mechanism` is the operator's thesis, the setups
+  they favour when the market offers them, and no longer the only thing the analyst may trade. The
+  research core in `tra backtest` and `tra agent session` keeps its registered mechanism.
+- The market screener picks where a setup has the best chance given each instrument's regime, not
+  where one mechanism might work.
+- `range_reversion` needs a measured range, as the trend setups need a measured trend: it is now
+  refused in a mixed market with a measured trend strength. A regime that could not be measured
+  still refuses nothing. On the demo desks' record, fades in a mixed market were right 27% of the
+  time (n = 30), against 60% in a measured range (n = 37).
+- `tra init --agent` writes a mechanism that names no setup: "trade the setup the measured regime
+  supports: with a trend, inside a range, or flat".
+
 ## [0.6.3] - 2026-10-13
 
 ### Fixed

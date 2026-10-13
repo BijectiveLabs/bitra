@@ -56,6 +56,7 @@ def misfit(
     zscore: float | None = None,
     window_move_bps: float | None = None,
     position_in_range: float | None = None,
+    trend_strength: float | None = None,
 ) -> str:
     """Why this setup does not fit what code measured, or empty when it does.
 
@@ -75,6 +76,13 @@ def misfit(
         if setup == "momentum_exhaustion" and target == way:
             # Exhaustion trades against the move; with it, it is a continuation under another name.
             return f"momentum_exhaustion {target} in a market measured as {regime}; that is with it"
+    if setup in RANGE_SETUPS and regime == "mixed" and trend_strength is not None:
+        # The same standard a trend setup is held to: a fade needs a measured range, and a market
+        # between a range and a trend has been running often enough to take one out.
+        return (
+            f"{setup} in a market measured as mixed (trend strength {trend_strength:.2f}); a fade "
+            "needs a measured range"
+        )
     # A range fade sells what is stretched up and buys what is stretched down.
     if setup in RANGE_SETUPS and zscore is not None and not _points(target, -zscore):
         return (
