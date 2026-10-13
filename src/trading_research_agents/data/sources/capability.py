@@ -120,6 +120,25 @@ class Capability:
         }
 
 
+# The venues the docs describe, in the order of the README's table.
+VENUE_OVERVIEW = (
+    "bybit",
+    "okx",
+    "bitget",
+    "bingx",
+    "kucoinfutures",
+    "hyperliquid",
+    "binance",
+    "deribit",
+    "htx",
+    "gate",
+    "mexc",
+    "kraken",
+    "krakenfutures",
+    "phemex",
+)
+
+
 def capability_of(
     venue: str, *, client: Any = None, kinds: Iterable[str] | None = None
 ) -> Capability:

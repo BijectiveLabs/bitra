@@ -91,6 +91,8 @@ def data_brief(snapshot: Snapshot, *, now: float | None = None) -> DataBrief:
                 "source": value["source"],
                 "tier": value["tier"],
                 "age_s": value["age_s"],
+                # A candle is aged from its close, so a bar's own length is part of a fresh age.
+                **({"interval_s": value["interval_s"]} if "interval_s" in value else {}),
             }
             for kind, value in record["values"].items()
         },

@@ -19,6 +19,7 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | `tra keys --probe` | proves every key works; no key is printed, no prompt or order sent |
 | `tra models groq` | the models your key can use on a provider, read from the vendor; no prompt sent |
 | `tra init my-desk --profile autonomous --venue okx` | a desk wired for one exchange: data, orders, practice account, keys |
+| `tra venues` | every venue the docs describe, and what each can do |
 | `tra venues okx --setup` | what a venue can do, and the blocks to paste to trade on it |
 | `tra mandate` | the text venue mode requires; `--sign "Your Name"` keeps it as `MANDATE.md` and signs `[execution]` in one step |
 

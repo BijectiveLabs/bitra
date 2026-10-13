@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
 
+from trading_research_agents.extras import install_hint
 from trading_research_agents.trading.capital import (
     CapitalError,
     liquidation_estimate,
@@ -191,9 +192,7 @@ class VenueHand:
         try:
             import ccxt
         except ImportError as exc:  # pragma: no cover - exercised only without the extra
-            raise DispatchError(
-                "ccxt is not installed; pip install 'trading-research-agents[ccxt]'"
-            ) from exc
+            raise DispatchError(f"ccxt is not installed; {install_hint('ccxt')}") from exc
         factory = getattr(ccxt, self.venue, None)
         if factory is None:
             raise DispatchError(f"ccxt has no exchange named {self.venue!r}")

@@ -49,10 +49,13 @@ the swing, the range edge or the level the setup leans on, not a round distance.
 where the mechanism is done: the mean a stretch reverts to, the opposite edge of the range, the
 next level the bars show. Name both from what you were given (range_high, range_low, atr, the bars
 themselves), on the right side of the close: a long's stop below it and its target above, a
-short's the other way. Code holds the stop between the operator's floor and ceiling, brings in a
-target that is too far, refuses a trade whose target is too close to its stop or whose costs need
-more than the operator's share of winners, and sizes the position so the loss at your stop fits
-the risk per trade: a wider stop means a smaller position, not a bigger loss. Null leaves either
+short's the other way. A stop closer than one atr is moved out to one atr, because inside that the
+ordinary movement of a single bar takes it out; your target then has to be a multiple of the stop
+that results (one and a half times by default), counted from the close. Code holds the stop
+between the operator's floor and ceiling, brings in a target that is too far, refuses a trade whose
+target is too close to its stop or whose costs need more than the operator's share of winners, and
+sizes the position so the loss at your stop fits the risk per trade: a wider stop means a smaller
+position, not a bigger loss. Null leaves either
 to the market's measured range.
 
 You never propose a size. You never reference a figure you were not given, and you never reason

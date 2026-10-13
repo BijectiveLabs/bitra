@@ -133,6 +133,7 @@ def agent_health(cycles: Cycles) -> dict[str, Any]:
 def data_health(cycles: Cycles) -> dict[str, Any]:
     """Where the values came from, how old they were, and how often a kind was refused."""
     ages: dict[str, list[float]] = {}
+    bars: list[float] = []
     sources = Counts()
     refused = Counts()
     stale = Counts()
@@ -140,13 +141,25 @@ def data_health(cycles: Cycles) -> dict[str, Any]:
         data = record.get("data") or {}
         for kind, value in (data.get("values") or {}).items():
             ages.setdefault(kind, []).append(float(value.get("age_s") or 0.0))
+            if value.get("interval_s"):
+                bars.append(float(value["interval_s"]))
             sources.add(f"{kind} <- {value.get('source')}")
         for kind in data.get("refused") or {}:
             refused.add(kind)
         for kind in data.get("stale") or ():
             stale.add(kind)
-    return {
+    out: dict[str, Any] = {
         "median_age_s": {kind: round(median(v), 3) for kind, v in sorted(ages.items()) if v},
+    }
+    if bars:
+        # Without this an auditor reads a fifteen-minute bar ten minutes after its close as stale.
+        out["ohlcv_bar_s"] = median(bars)
+        out["ohlcv_age_note"] = (
+            "ohlcv is aged from the close of its last finished bar, so any age below ohlcv_bar_s "
+            "plus the chain's ttl is the newest bar there is, not a stale one"
+        )
+    return {
+        **out,
         "sources": sources.record(),
         "refused": refused.record(),
         "used_stale": stale.record(),

@@ -100,6 +100,11 @@ class DataConfig:
 def load_data_config(path: Path) -> DataConfig:
     try:
         raw = tomllib.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise DataConfigError(
+            f"{path}: not here; `tra init` writes one beside strategy.toml, and a cycle reads its "
+            "data through it"
+        ) from exc
     except (OSError, tomllib.TOMLDecodeError) as exc:
         raise DataConfigError(f"{path}: {exc}") from exc
     data = raw.get("data")
