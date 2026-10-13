@@ -1,0 +1,18 @@
+docs:
+  - changed-files:
+      - any-glob-to-any-file: ["docs/**", "README.md", "CHANGELOG.md", "CONTRIBUTING.md"]
+venues:
+  - changed-files:
+      - any-glob-to-any-file: ["src/trading_research_agents/trading/**", "src/trading_research_agents/data/sources/**"]
+agents:
+  - changed-files:
+      - any-glob-to-any-file: ["src/trading_research_agents/agents/**", "src/trading_research_agents/llm/**"]
+risk:
+  - changed-files:
+      - any-glob-to-any-file: ["src/trading_research_agents/execution/**", "src/trading_research_agents/trading/controls.py", "src/trading_research_agents/trading/capital.py"]
+cli:
+  - changed-files:
+      - any-glob-to-any-file: ["src/trading_research_agents/cli/**"]
+ci:
+  - changed-files:
+      - any-glob-to-any-file: [".github/**", "scripts/**"]

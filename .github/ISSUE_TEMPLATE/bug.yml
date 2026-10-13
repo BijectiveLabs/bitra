@@ -1,0 +1,52 @@
+name: Bug
+description: A command that crashed, refused something it should not have, or did not fail closed
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. A security problem goes to private reporting (Security tab), never
+        here. Never paste a key: `tra` prints keys as fingerprints, so its output is safe to paste.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The output of `tra --version`
+      placeholder: tra 0.6.5
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Python and OS
+      placeholder: Python 3.12, Windows 11
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command
+      description: What you ran, and in which mode (sandbox, signals, venue)
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: What happened
+      description: The full output; `--plain` gives text that pastes cleanly
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: files
+    attributes:
+      label: Settings that reproduce it
+      description: The relevant part of strategy.toml, envelope.toml or data.toml, with no keys
+      render: toml

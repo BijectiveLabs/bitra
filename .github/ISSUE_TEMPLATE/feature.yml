@@ -1,0 +1,30 @@
+name: Feature
+description: Something you need the desk to do that it does not do yet
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: job
+    attributes:
+      label: What you are trying to do
+      description: The job, not the implementation
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: What happens today
+      description: The command and what it says, or the setting you looked for
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part it touches
+      options: [data, cycle and agents, exits and risk, venues and orders, models and providers, cli, docs, other]
+    validations:
+      required: true
+  - type: textarea
+    id: guarantee
+    attributes:
+      label: Does it loosen a guarantee?
+      description: Boundaries (docs.bijectivelabs.dev/opensource/boundaries) lists them. If it does, say why the guarantee still holds.
