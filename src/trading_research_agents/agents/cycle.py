@@ -385,12 +385,17 @@ class CycleResult:
         }
 
 
+# A desk picks its setup from the market in front of it; the research core trades one registered
+# mechanism. Same role and schema, so only the instructions differ.
+LIVE_PROMPTS = {technical_analyst.ROLE: "technical_analyst_live"}
+
+
 def _ask(
     cfg: CycleConfig, role: str, question: Mapping[str, Any], schema: Mapping[str, Any]
 ) -> str:
     completer = cfg.completer_for(role)
     done = completer.complete(
-        system=prompt(role),
+        system=prompt(LIVE_PROMPTS.get(role, role)),
         user=json.dumps(question, sort_keys=True, default=str, separators=COMPACT),
         schema=dict(schema),
     )
@@ -754,6 +759,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         zscore=technical.features.zscore,
         window_move_bps=technical.features.window_move_bps,
         position_in_range=technical.features.position_in_range,
+        trend_strength=technical.features.trend_strength,
     )
     if misfit_why and cfg.regime.setups_must_fit:
         result.refusals.append(f"regime: {misfit_why} ([regime].setups_must_fit)")

@@ -2758,6 +2758,12 @@ AGENT_TIMEOUT = (
 )
 
 
+# A thesis the analyst can trade in any market: it names no single setup, so the regime decides.
+AGENT_MECHANISM = (
+    "trade the setup the measured regime supports: with a trend, inside a range, or flat"
+)
+
+
 def _agent_config(text: str, provider_name: str, model: str) -> str:
     """The template with the technical analyst as the core and the [agents] table live."""
     text = text[: text.index("[strategy]")] + AGENT_HEAD + text[text.index("[exit]") :]
@@ -2773,7 +2779,7 @@ def _agent_config(text: str, provider_name: str, model: str) -> str:
         "[agents]\n"
         f'provider = "{provider_name}"\n'
         f'model = "{model}"\n'
-        'mechanism = "state the mechanism the analyst reasons from"\n'
+        f'mechanism = "{AGENT_MECHANISM}"\n'
         "lookback_bars = 60\n"
         "min_confidence = 0.6\n"
         "magnitude_bps = 20                 # the claimed edge when the analyst names no target\n"
@@ -2880,9 +2886,10 @@ is left before it can decide anything:
 
 1. **A model.** Put your key in `.env` (copy `.env.example`). If `tra init` was not given
    `--agent` and `--model`, name the provider and model in `[agents]` in `strategy.toml`.
-2. **The mechanism.** `[agents].mechanism` is the sentence the analyst reasons from. The analyst
-   names its own stop and target, held inside `[exit]`; `[agents].magnitude_bps` is the edge
-   claimed only when it names no target.
+2. **The mechanism, if you have one.** `[agents].mechanism` is your thesis. The one written here
+   lets the measured regime pick the setup; write a narrower one only if you trade one idea, and
+   the analyst still never fades a trend for it. The analyst names its own stop and target, held
+   inside `[exit]`; `[agents].magnitude_bps` is the edge claimed only when it names no target.
 3. **Nothing to download.** `data.toml` already declares the live chains a cycle pulls through;
    a dataset is only for `tra backtest`.
 

@@ -80,7 +80,7 @@ will do in your project, defaults included.
 | What to trade | `[run].instrument`, `[run].venue_key` | |
 | How much per trade | `[run].size` or `[run].size_quote` | your money |
 | Which model | `[agents].provider`, `[agents].model` (`tra init --agent` writes both) | your account and your bill |
-| What the analyst reasons from | `[agents].mechanism` | one sentence, your thesis |
+| Your thesis, if you trade one idea | `[agents].mechanism` (`tra init --agent` writes one that lets the regime choose) | the setups you favour; it never overrides the measured regime |
 | Leverage | `[execution].leverage` | only you know what you can carry |
 | The most one order may be worth | `[execution].max_notional` | the cap on a defect's cost |
 | That you take the losses on | `MANDATE.md`, `acknowledged_by`, `acknowledged_on` | venue mode only |

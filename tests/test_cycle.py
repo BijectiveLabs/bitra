@@ -1289,3 +1289,16 @@ def test_a_declared_validator_that_never_answers_refuses_the_trade_by_default(
     )
     carried_on = run_cycle(cfg)
     assert carried_on.acted
+
+
+def test_the_desk_analyst_is_told_the_regime_picks_the_setup(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    from trading_research_agents.agents.roles import prompt
+
+    cfg, fake, _ = cycle_config(tmp_path, envelope, [analyst_answer()])
+    run_cycle(cfg)
+    told = fake.calls[0].system
+    # The desk's prompt, not the research core's sealed pre-registration.
+    assert told == prompt("technical_analyst_live")
+    assert "it is not the only setup you may name" in told and "pre-registration" not in told
