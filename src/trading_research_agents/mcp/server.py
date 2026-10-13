@@ -13,6 +13,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any, ParamSpec, TypeVar
 
+from trading_research_agents.extras import install_hint
 from trading_research_agents.surface import READ_TOOLS
 from trading_research_agents.surface.confine import confined, roots_of
 
@@ -33,9 +34,7 @@ def _sdk() -> tuple[Any, Any, Any]:
         from mcp.server.mcpserver.exceptions import ToolError
         from mcp.types import ToolAnnotations
     except ImportError as exc:  # pragma: no cover - exercised only without the extra
-        raise ImportError(
-            "the MCP server needs the `mcp` extra: pip install 'trading-research-agents[mcp]'"
-        ) from exc
+        raise ImportError(f"the MCP SDK is not installed; {install_hint('mcp')}") from exc
     return MCPServer, ToolAnnotations, ToolError
 
 

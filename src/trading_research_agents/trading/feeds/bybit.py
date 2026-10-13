@@ -22,6 +22,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from trading_research_agents.data.schema import Side, Trade
+from trading_research_agents.extras import install_hint
 from trading_research_agents.trading.feed import Feed, FeedError
 from trading_research_agents.trading.feeds.registry import register
 
@@ -115,9 +116,7 @@ class BybitPublicFeed:
             from websockets.exceptions import ConnectionClosed
             from websockets.sync.client import connect
         except ImportError as exc:  # pragma: no cover - exercised only where the extra is absent
-            raise FeedError(
-                "websockets is not installed; pip install 'trading-research-agents[shadow]'"
-            ) from exc
+            raise FeedError(f"websockets is not installed; {install_hint('shadow')}") from exc
 
         attempts = 0
         while not self.stop.is_set():

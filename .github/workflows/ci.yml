@@ -69,6 +69,18 @@ jobs:
           cd /tmp/proj && /tmp/bare/bin/tra check || test $? -eq 1
           /tmp/bare/bin/python -c "import trading_research_agents, trading_research_agents.cli.main"
 
+      # The commands a new client types first, with no extras and then with the quick start's
+      # extras. A missing extra may refuse; it may not crash.
+      - name: Client commands, bare install
+        run: python scripts/client_smoke.py /tmp/bare/bin/tra /tmp/smoke-bare
+
+      - name: Client commands, quick start install
+        run: |
+          uv venv /tmp/quick
+          wheel=$(ls dist/*.whl)
+          uv pip install --python /tmp/quick/bin/python "trading-research-agents[ccxt,openai,data] @ file://$PWD/$wheel"
+          python scripts/client_smoke.py /tmp/quick/bin/tra /tmp/smoke-quick
+
   audit:
     name: known vulnerabilities
     runs-on: ubuntu-latest

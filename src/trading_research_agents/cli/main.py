@@ -815,6 +815,10 @@ def _choices(parser: argparse.ArgumentParser) -> dict[str, argparse.ArgumentPars
     return {}
 
 
+DESK_FILES = frozenset({"strategy.toml", "envelope.toml", "data.toml"})
+NOT_A_DESK = "`tra init my-desk --profile autonomous` makes one, or cd into yours"
+
+
 def _dispatch(handler: Callable[[argparse.Namespace], int], args: argparse.Namespace) -> int:
     """Run one command and turn the failures this project knows about into one line.
 
@@ -826,6 +830,12 @@ def _dispatch(handler: Callable[[argparse.Namespace], int], args: argparse.Names
     except BrokenPipeError:
         # `tra ... | head`: the reader closed; nothing was refused.
         return CLEARED
+    except FileNotFoundError as exc:
+        name = Path(str(exc.filename or "")).name
+        print(f"tra: {name or exc}: not found in {Path.cwd()}", file=sys.stderr)
+        if name in DESK_FILES:
+            print(f"tra: this folder is not a desk; {NOT_A_DESK}", file=sys.stderr)
+        return REFUSED
     except (
         ArchiveError,
         ArchiveFormatError,
@@ -2143,6 +2153,9 @@ def show_models(args: argparse.Namespace) -> int:
     p = provider(name)
     if p.key_env and not os.environ.get(p.key_env):
         raise ConfigError(f"{p.key_env} is not set; put it in .env beside strategy.toml")
+    if not p.installed:
+        module, extra = p.needs
+        raise ConfigError(f"{name}: the {module} SDK is not installed; {install_hint(extra)}")
     try:
         found = model_ids(name, base_url=args.base_url)
     except UnknownProviderError:
@@ -2161,7 +2174,11 @@ def show_models(args: argparse.Namespace) -> int:
 
 def show_venues(args: argparse.Namespace) -> int:
     """What a venue can actually do, asked of ccxt rather than promised in a README."""
-    from trading_research_agents.data.sources.capability import CapabilityError, capability_of
+    from trading_research_agents.data.sources.capability import (
+        VENUE_OVERVIEW,
+        CapabilityError,
+        capability_of,
+    )
     from trading_research_agents.trading.dispatch import credentials_for
 
     names = list(args.venue)
@@ -2169,18 +2186,27 @@ def show_venues(args: argparse.Namespace) -> int:
         raw = tomllib.loads(args.config.read_text(encoding="utf-8"))
         declared = str(raw.get("run", {}).get("venue_key", "")).partition("/")[0]
         names = [declared] if declared else []
-    if not names:
-        raise ConfigError("name a venue, or run this inside a project with [run].venue_key")
+    overview = not names
+    if overview:
+        # With nothing named and no project, the useful answer is the list a person picks from.
+        names = list(VENUE_OVERVIEW)
 
     found = []
     lines: list[str] = []
+    refused = False
     for name in names:
         try:
             able = capability_of(name)
         except CapabilityError as exc:
             lines.append(f"{name}: {exc}")
+            refused = True
+            if overview:
+                break
             continue
         found.append(able.record())
+        if overview:
+            lines.append(f"{able.venue:<14} {able.verdict()}")
+            continue
         serves = ", ".join(able.serves_data) or "nothing this project reads"
         lines.append(f"{able.venue}")
         lines.append(f"  data        {serves}")
@@ -2203,8 +2229,10 @@ def show_venues(args: argparse.Namespace) -> int:
             snippet = venue_setup(able, keys, fees=fees, fees_note=said)
             found[-1]["setup"] = snippet
             lines.extend(["", *snippet.splitlines(), ""])
+    if overview and not refused:
+        lines.append("`tra venues NAME` says what one can do; `--setup` writes the blocks to paste")
     emit({"venues": found}, args.json, lines)
-    return CLEARED
+    return REFUSED if refused else CLEARED
 
 
 def _account_fees(
@@ -3993,6 +4021,8 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
         good.append(
             f"{args.config}: valid; core {cfg.strategy.name!r}; instrument {cfg.run.instrument}"
         )
+    except FileNotFoundError:
+        bad.append(f"{args.config}: not here, so this folder is not a desk; {NOT_A_DESK}")
     except (ConfigError, OSError, ValueError) as exc:
         bad.append(f"{args.config}: {exc}")
     channels: tuple[Any, ...] = ()
@@ -4006,6 +4036,9 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
         good.append(f"{args.envelope}: {len(envelope.channels)} channels")
         if cfg is not None and not any(c.key == cfg.run.venue_key for c in envelope.channels):
             bad.append(f"[run].venue_key {cfg.run.venue_key!r} is not a channel in {args.envelope}")
+    except FileNotFoundError:
+        if args.config.is_file():
+            bad.append(f"{args.envelope}: not here; `tra init` writes one beside strategy.toml")
     except (EnvelopeError, OSError, ValueError) as exc:
         bad.append(f"{args.envelope}: {exc}")
     if cfg is not None:
@@ -4158,7 +4191,7 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
                 bad.append(f"missing {', '.join(missing)} for the live venue")
     next_command = "tra backtest"
     if not args.config.is_file():
-        next_command = "tra init my-run"
+        next_command = "tra init my-desk --profile autonomous"
     elif cfg is not None and cfg.agents is not None:
         next_command = "tra run"
     elif cfg is not None and cfg.run.instrument not in _datasets(args.config):

@@ -18,6 +18,22 @@ All notable changes to this project are recorded here. The format follows
   link when it is reached, so the desk still runs.
 - Every message about a missing optional dependency gives the same advice, for a uv tool install
   and for pip alike, instead of a pip command that does not fit an install made with uv.
+- `tra models` with a provider whose SDK is missing names the SDK and the extra, instead of
+  `ModuleNotFoundError`.
+- `tra venues` with nothing named and no project lists the venues and what each can do, instead of
+  refusing; `tra venues NAME` exits 1 when it cannot answer for NAME.
+- A command run outside a desk says the folder is not a desk and how to make one, instead of
+  `[Errno 2] No such file or directory`; `tra` alone there suggests
+  `tra init my-desk --profile autonomous`.
+- The auditors read candle age with the bar it belongs to, so a fifteen-minute bar ten minutes
+  after its close is no longer reported as stale data.
+- The technical analyst is told that a stop inside one ATR is moved out to it and that the target
+  is measured against the stop that results, so it stops naming targets the bounds will refuse.
+
+### Added
+
+- `scripts/client_smoke.py` runs the commands a new client types first against an installed
+  `tra` and fails on any crash; CI runs it on a bare install and on the quick start's extras.
 
 ## [0.6.2] - 2026-10-13
 

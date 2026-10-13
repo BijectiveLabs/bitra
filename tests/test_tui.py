@@ -54,11 +54,13 @@ def test_tra_alone_is_the_console_in_both_faces(
     assert main([]) == 0
     text = recorded.export_text()
     assert "trading-research-agents" in text and "by Bijective" in text
-    assert "todo" in text and "next: tra init my-run" in text
+    assert "todo" in text and "next: tra init my-desk --profile autonomous" in text
     assert main(["--plain"]) == 0
     out = capsys.readouterr().out
     assert (
-        out.startswith("tra ") and "todo  strategy.toml" in out and "next: tra init my-run" in out
+        out.startswith("tra ")
+        and "todo  strategy.toml" in out
+        and "next: tra init my-desk --profile autonomous" in out
     )
 
 
