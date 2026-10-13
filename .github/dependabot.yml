@@ -2,12 +2,22 @@ version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
+    target-branch: develop
     schedule:
-      interval: monthly
+      interval: weekly
+    labels: ["dependencies"]
+    groups:
+      actions:
+        patterns: ["*"]
   - package-ecosystem: uv
     directory: /
+    target-branch: develop
     schedule:
-      interval: monthly
+      interval: weekly
+    labels: ["dependencies"]
+    open-pull-requests-limit: 5
     groups:
-      dependencies:
-        patterns: ["*"]
+      # Minor and patch releases together, one pull request a week; a major version arrives on its
+      # own so its changelog is read before it is merged.
+      minor-and-patch:
+        update-types: ["minor", "patch"]

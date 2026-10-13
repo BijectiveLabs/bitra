@@ -1,0 +1,28 @@
+name: Venue
+description: A new exchange, or a supported one that drifted from what it publishes
+labels: ["venue", "needs-triage"]
+body:
+  - type: input
+    id: venue
+    attributes:
+      label: Venue and its ccxt id
+      placeholder: OKX (okx)
+    validations:
+      required: true
+  - type: textarea
+    id: capability
+    attributes:
+      label: What `tra venues <id>` says
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: What you saw on the practice account
+      description: The order, the exits, the position as the venue reported them, with no keys
+      render: text
+  - type: textarea
+    id: docs
+    attributes:
+      label: Venue documentation read, and on what date

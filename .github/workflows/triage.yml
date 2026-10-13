@@ -1,0 +1,44 @@
+name: triage
+
+# Housekeeping a maintainer would otherwise do by hand: label pull requests by what they touch,
+# and close issues and pull requests nobody has answered in six weeks.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  label:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      # Reads only the changed paths and .github/labeler.yml from the base branch; the pull
+      # request's own code is never checked out or run here.
+      - uses: actions/labeler@v7
+
+  stale:
+    if: github.event_name != 'pull_request_target'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/stale@v11
+        with:
+          days-before-stale: 30
+          days-before-close: 14
+          stale-issue-label: stale
+          stale-pr-label: stale
+          exempt-issue-labels: "accepted,security,pinned"
+          exempt-pr-labels: "accepted,security,pinned"
+          stale-issue-message: >
+            No activity for 30 days. If this still matters, reply with what changed or the
+            version you saw it on, and it stays open; otherwise it closes in 14 days.
+          stale-pr-message: >
+            No activity for 30 days. Push or reply to keep it open; otherwise it closes in 14 days.
+          close-issue-message: Closed after 44 days without activity. Reopen with new details any time.

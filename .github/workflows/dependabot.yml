@@ -1,0 +1,25 @@
+name: dependabot
+
+# Patch and minor updates merge themselves once the checks the develop ruleset requires are green.
+# Without that ruleset `--auto` would merge at once, so this stays off until the variable
+# AUTO_MERGE_DEPENDABOT is "true", which is set after the ruleset. A major version
+# waits for a person.
+on: pull_request_target
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && vars.AUTO_MERGE_DEPENDABOT == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - id: meta
+        uses: dependabot/fetch-metadata@v3
+      - name: Merge when the required checks pass
+        if: steps.meta.outputs.update-type != 'version-update:semver-major'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge --auto --squash "$PR"
