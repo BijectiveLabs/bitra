@@ -6,6 +6,27 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.6.5] - 2026-10-13
+
+### Fixed
+
+- The pass over the universe measured each instrument on data.toml's own candles (one-minute bars,
+  four hours) while the cycle decided on fifteen-minute bars, so the screener and the analyst could
+  read two different regimes for the same instrument in the same pass (ETH "trending up" to the
+  screener, "ranging" to the analyst). The pass now measures on the cycle's bars and window.
+- The console's tagline matches the README's.
+
+### Changed
+
+- `tra init --agent groq` and `--agent google` no longer ask for `--model`: they use the models
+  that have run live cycles here (`openai/gpt-oss-120b`, `gemini-flash-latest`), as `anthropic`
+  already did. Other providers still ask for one.
+- The README and the quick start install every provider in one command
+  (`[ccxt,openai,anthropic,google,data]`), say how to upgrade, and end with a table of what a new
+  desk does before anything is changed. Missing-extra messages suggest the same install.
+- The README's PyPI and Python badges refresh within half an hour of a release.
+- The screenshots in the README and the docs are taken from the current console.
+
 ## [0.6.4] - 2026-10-13
 
 ### Changed
