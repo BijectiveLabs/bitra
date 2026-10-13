@@ -34,15 +34,19 @@ line underneath says who is working right now:
 
 ## 4. The result
 
-When the cycle finishes, the table gives way to the pass over the universe, what was taken and what
-was held and why, then the data the cycle used and what the round trip costs:
+When the cycle finishes, the table gives way to the pass over the universe: what the screener took,
+what waited and what was held, and why. Then the cycle itself: what the analyst proposed and from
+which figures, and every refusal with the number behind it. Here an ETH short in a ranging market
+stopped at its exits: with its own stop and target and the round trip, more than half of trades
+like it would have had to win just to break even:
 
 ![one cycle](/images/cycle.png)
 
-After that, what each validator argued, how conviction weighed the analysts, the risk at the stop,
-and whether the trade clears the desk's targets:
+Then the data the cycle used and how old it was, the series the reading analysts read, the stop and
+take profit it would have placed, and which agents answered. A cycle that goes further adds what
+each validator argued, how conviction weighed the analysts, the risk at the stop and the targets:
 
-![validators, conviction, risk and targets](/images/one-cycle.png)
+![data, series, exits and agents](/images/one-cycle.png)
 
 ## 5. Between cycles
 

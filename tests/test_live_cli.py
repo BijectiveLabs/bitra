@@ -435,8 +435,12 @@ def test_models_lists_what_the_key_can_use_and_init_takes_a_default_model(
     assert 'provider = "anthropic"' in (tmp_path / "a" / "strategy.toml").read_text(
         encoding="utf-8"
     )
-    assert main(["init", str(tmp_path / "b"), "--agent", "groq"]) != 0
-    assert "tra models groq" in capsys.readouterr().err
+    # A provider whose model has run live here has a default; the others still ask for one.
+    assert main(["init", str(tmp_path / "b"), "--agent", "groq"]) == 0
+    assert 'model = "openai/gpt-oss-120b"' in (tmp_path / "b" / "strategy.toml").read_text("utf-8")
+    capsys.readouterr()
+    assert main(["init", str(tmp_path / "c"), "--agent", "deepseek"]) != 0
+    assert "tra models deepseek" in capsys.readouterr().err
 
 
 def test_blank_fees_are_read_from_the_account_and_written_ones_are_checked(

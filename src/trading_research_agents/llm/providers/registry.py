@@ -213,6 +213,10 @@ def _two_args(
     return plain
 
 
+# A model is a default only after it has run live cycles here; the others are named by the client.
+TESTED_DEFAULTS = {"groq": "openai/gpt-oss-120b", "google": "gemini-flash-latest"}
+
+
 def _bundled() -> None:
     from trading_research_agents.llm.providers.anthropic import DEFAULT_MODEL
 
@@ -233,7 +237,7 @@ def _bundled() -> None:
         Provider(
             "google",
             "GEMINI_API_KEY",
-            None,
+            TESTED_DEFAULTS["google"],
             False,
             _google,
             "or GOOGLE_API_KEY",
@@ -247,7 +251,7 @@ def _bundled() -> None:
             Provider(
                 name,
                 p.key_env,
-                None,
+                TESTED_DEFAULTS.get(name),
                 True,
                 _two_args(_compatible(name)),
                 p.note,

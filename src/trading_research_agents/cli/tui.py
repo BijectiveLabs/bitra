@@ -36,7 +36,10 @@ BANNER = r"""
   |_|  |_| \_\/_/   \_\
 """.strip("\n")
 
-TAGLINE = "trading-research-agents: autonomous trading agents that cannot lie about their results"
+TAGLINE = (
+    "trading-research-agents: autonomous trading agents for crypto "
+    "that can't fudge their own results"
+)
 _console: Console | None = None
 
 
@@ -1027,10 +1030,11 @@ def cycle_view(record: Mapping[str, Any]) -> Group:
 
 # The steps after the analysts, in the order a cycle runs them, by the record key each one fills.
 LATER_STEPS = (
-    ("cost", "cost"),
+    ("exits", "stop and target"),
     ("conviction", "conviction"),
     ("risk", "risk per trade"),
     ("desk", "desk"),
+    ("cost", "cost gate"),
     ("targets", "targets"),
     ("intent", "intent"),
 )

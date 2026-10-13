@@ -257,3 +257,15 @@ def test_a_character_the_console_cannot_encode_does_not_end_the_run(
     said = "a reason with a non" + chr(0x2011) + "breaking hyphen"
     tui.show(said)
     assert drawn == [said]
+
+
+def test_a_cycle_refused_at_its_exits_says_what_it_never_reached() -> None:
+    record = {
+        "analyst": {"target": "short"},
+        "exits": {"stop_pnl_bps": "-40"},
+        "refusals": ["exit: the analyst's target is 1.42x its stop"],
+    }
+    said = tui._not_reached(record)
+    # The round trip was priced and the exits placed before the refusal; neither is "not reached".
+    assert said.startswith("conviction, risk per trade, desk, cost gate, targets, intent")
+    assert said.endswith("the cycle ended at exit")

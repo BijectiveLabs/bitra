@@ -438,3 +438,19 @@ def test_a_pass_measures_every_candidate_and_runs_what_the_screener_put_first(
     assert by["SOLUSDT"].features["quote_volume_24h"] == "592230876"
     assert "regime" in by["BTCUSDT"].features and "zscore" in by["BTCUSDT"].features
     assert not by["BTCUSDT"].kept_by_screener
+
+
+def test_the_pass_measures_on_the_bars_the_cycle_decides_on() -> None:
+    from types import SimpleNamespace
+
+    from trading_research_agents.cli.main import screen_options_for
+
+    cycle = SimpleNamespace(
+        data_options={"ohlcv": {"interval_s": 60, "limit": 240, "params": {"x": 1}}},
+        interval_s=900,
+        lookback_bars=60,
+    )
+    got = screen_options_for(cycle)
+    # data.toml keeps its own venue params; the window is the decision timeframe's.
+    assert got["ohlcv"] == {"interval_s": 900, "limit": 60, "params": {"x": 1}}
+    assert cycle.data_options["ohlcv"]["interval_s"] == 60

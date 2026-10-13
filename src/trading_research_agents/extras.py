@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-BASE = ("ccxt", "openai", "data")
+BASE = ("ccxt", "openai", "anthropic", "google", "data")
 
 
 def install_hint(extra: str) -> str:

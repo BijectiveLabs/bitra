@@ -842,6 +842,14 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         return result
     edge, edge_source = _claimed_edge(cfg, placement)
     result.briefs["edge"] = {"edge_bps": str(edge), "source": edge_source}
+    if view.get("stop_pnl_bps") is not None:
+        announce(
+            cfg.watch,
+            "exit",
+            DONE,
+            f"stop {view['stop_pnl_bps']} bps, take {view.get('take_pnl_bps')} bps"
+            + (f", break even {Decimal(even) * 100:.0f}%" if even is not None else ""),
+        )
 
     if cfg.validators:
         early = _before_votes(cfg, result, costs, edge)
