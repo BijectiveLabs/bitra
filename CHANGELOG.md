@@ -33,7 +33,7 @@ All notable changes to this project are recorded here. The format follows
   blank issues are off, and questions go to Discussions (`SUPPORT.md`).
 - Repository housekeeping: pull requests are labelled by what they touch, issues and pull requests
   with no activity for 30 days are marked stale and closed 14 days later, Dependabot proposes
-  grouped updates weekly and its patch and minor ones merge once CI passes, and CodeQL scans the
+  grouped updates monthly, at most two open at a time, and its patch and minor ones merge once CI passes, and CodeQL scans the
   Python and the workflows.
 
 ## [0.6.4] - 2026-10-13

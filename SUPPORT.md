@@ -11,7 +11,7 @@
 
 Issues are read by the maintainers, usually within a week. One with no activity for 30 days is
 marked stale and closes 14 days later unless someone replies; reopening with new details is always
-welcome. Dependency updates arrive from Dependabot each week and merge on their own when the checks
+welcome. Dependency updates arrive from Dependabot once a month and merge on their own when the checks
 pass.
 
 This project is offered as is, under the MIT license. It is not investment advice, and nobody here
