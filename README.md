@@ -577,6 +577,15 @@ uv run pytest
 
 [CONTRIBUTING.md](https://github.com/BijectiveLabs/trading-research-agents/blob/master/CONTRIBUTING.md) has the branch flow and the standards the code is held to.
 
+## Where it comes from
+
+This repository opened to the public in October 2026. Its history starts on 12 September 2026,
+when the code was separated from Bijective's internal work, and every commit, tag and contributor
+since then is here. The ideas it is built on are older: the falsification chain, the cost model and
+the controls in front of every order come from Bijective's research and from the trading platform
+it was building before this repository existed. The language-model agents came later and sit on top
+of those gates, which is why they can propose but never size, price or send.
+
 ## License
 
 MIT. See [LICENSE](https://github.com/BijectiveLabs/trading-research-agents/blob/master/LICENSE); [NOTICE](https://github.com/BijectiveLabs/trading-research-agents/blob/master/NOTICE) lists the third-party software this package builds on.
