@@ -6,6 +6,12 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- The docs site's build tools move to vite 6.4 and katex 0.18, closing five advisories against the
+  local docs server. They affect writing the docs only; the package and the published site are
+  unchanged.
+
 ## [0.6.5] - 2026-10-13
 
 ### Fixed
