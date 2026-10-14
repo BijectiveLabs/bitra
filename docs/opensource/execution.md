@@ -1,3 +1,7 @@
+---
+description: "Execution realism: the cost identity, fees, spread, slippage and funding, and the measured assumptions that separate a backtest from a live result."
+---
+
 # Execution realism
 
 Backtests do not survive contact with the market, and that sentence is useless as guidance

@@ -6,6 +6,16 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The docs site can be found and read by search engines and language models: a sitemap and
+  `robots.txt`, a description, canonical link and social card on every page, structured data
+  naming the package, its version and its repository, `llms.txt` and `llms-full.txt`, and a plain
+  Markdown copy beside each page. Each deploy tells IndexNow engines which pages changed.
+- The landing page links to the docs with a real link and says in a few lines what the package
+  is, so a crawler that does not run scripts still finds both.
+- `CITATION.cff`, so GitHub offers a citation; more PyPI keywords and classifiers.
+
 ### Security
 
 - The docs site's build tools move to vite 6.4 and katex 0.18, closing five advisories against the

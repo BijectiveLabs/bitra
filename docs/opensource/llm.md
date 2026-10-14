@@ -1,3 +1,7 @@
+---
+description: "How trading-research-agents works with language models without an orchestration framework: schemas, retries, caching, budgets and provider failover."
+---
+
 # Working with language models
 
 This project asks models to do one narrow thing: read figures that the system computed and answer inside

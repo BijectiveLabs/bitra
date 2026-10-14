@@ -1,3 +1,7 @@
+---
+description: Package layout, dependency direction and the file formats that form the contract of trading-research-agents.
+---
+
 # Architecture
 
 The product is one chain of gates. A claim about a strategy passes the data gate, the

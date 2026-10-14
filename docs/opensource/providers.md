@@ -1,3 +1,7 @@
+---
+description: Supported model providers (Anthropic, OpenAI, Google Gemini, Groq, DeepSeek, xAI, Mistral, OpenRouter, Qwen, Ollama, local servers), their keys, endpoints and default models.
+---
+
 # Model providers
 
 Providers are plugins. `--provider NAME` on `tra agent propose` and `[agents].provider` in

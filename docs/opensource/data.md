@@ -1,3 +1,7 @@
+---
+description: "The data gate: the canonical trade record, how venue archives are normalised, and why every unreadable row stops the run instead of being dropped."
+---
+
 # The data gate
 
 A wrong number is more dangerous than a missing number. A missing number stops the pipeline;

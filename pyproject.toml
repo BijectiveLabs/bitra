@@ -11,7 +11,11 @@ requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "Bijective Labs" }]
-keywords = ["quant", "crypto", "trading", "agents", "llm", "perpetuals", "autonomous", "backtest", "risk"]
+keywords = [
+    "quant", "crypto", "trading", "agents", "llm", "perpetuals", "autonomous", "backtest", "risk",
+    "algorithmic-trading", "trading-bot", "ai-agents", "llm-agents", "ccxt", "risk-management",
+    "mcp", "openai", "anthropic", "gemini", "groq", "ollama",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
@@ -19,10 +23,12 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Office/Business :: Financial :: Investment",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Typing :: Typed",
 ]
 dependencies = [

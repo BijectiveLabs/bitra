@@ -1,3 +1,7 @@
+---
+description: "The trading agent runtime: replay, paper, shadow and canary tiers, the controls in front of every order, and how closed trades feed back into research."
+---
+
 # The trading agent
 
 Two agents, one ledger. The research agent turns an idea into a sealed pre-registration and a

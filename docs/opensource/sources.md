@@ -1,3 +1,7 @@
+---
+description: Where the macro, on-chain and sentiment analysts' figures come from, how to declare and refresh series, and how to see the age of every figure.
+---
+
 # Where the analysts' figures come from
 
 The technical analyst reads the venue: candles, the book, funding and open interest, pulled through

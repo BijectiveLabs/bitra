@@ -1,3 +1,7 @@
+---
+description: "The MCP server: read-only tools that let any agent host call the research gates of trading-research-agents over stdio."
+---
+
 # The MCP server
 
 Agents are a surface. The language-model roles inside the package call the gates at layers 0,

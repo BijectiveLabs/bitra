@@ -8,16 +8,8 @@
         </div>
 
         <div class="landing-cards">
-          <!-- Open Source Card -->
-          <article 
-            class="landing-card" 
-            @click="navigate('/opensource/')"
-            @keydown.enter="navigate('/opensource/')"
-            @keydown.space.prevent="navigate('/opensource/')"
-            tabindex="0" 
-            role="button" 
-            aria-label="Open Source documentation"
-          >
+          <!-- Open Source Card: a real link, so crawlers and screen readers follow it -->
+          <a class="landing-card" href="/opensource/" aria-label="Open Source documentation">
             <div class="card-icon" aria-hidden="true">
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M6 9 12 15 18 9"/>
@@ -27,13 +19,13 @@
             </div>
             <h2 class="card-title">Open Source</h2>
             <p class="card-description">Autonomous trading agents for crypto market</p>
-            <button class="card-cta" aria-label="Enter Open Source">
+            <span class="card-cta">
               <span>Enter Open Source</span>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M5 12h14M12 5l7 7-7 7"/>
               </svg>
-            </button>
-          </article>
+            </span>
+          </a>
 
           <!-- The Platform Card -->
           <article 
@@ -65,15 +57,35 @@
           </article>
         </div>
       </section>
+
+      <section class="landing-about" aria-labelledby="landing-about-title">
+        <h2 id="landing-about-title" class="about-title">trading-research-agents</h2>
+        <p class="about-text">
+          An open-source Python package and command line (<code>tra</code>) for autonomous crypto
+          trading agents. Language models read the market and propose a trade; fixed, tested rules
+          compute every figure, price the round trip, size the position and decide whether an order
+          goes out. Runs in a sandbox by default, trades on any exchange ccxt supports, and works
+          with Anthropic, OpenAI, Google Gemini, Groq, DeepSeek, OpenRouter, Ollama and other model
+          providers. MIT licensed, published by Bijective Labs.
+        </p>
+        <nav class="about-links" aria-label="Start here">
+          <a href="/opensource/quick-start">Quick start</a>
+          <a href="/opensource/cycle">The cycle</a>
+          <a href="/opensource/agents">Agents</a>
+          <a href="/opensource/providers">Model providers</a>
+          <a href="/opensource/venues">Venues</a>
+          <a href="/opensource/commands">Command line</a>
+          <a href="https://github.com/BijectiveLabs/trading-research-agents">GitHub</a>
+          <a href="https://pypi.org/project/trading-research-agents/">PyPI</a>
+        </nav>
+      </section>
     </main>
   </div>
 </template>
 
 <script setup lang="ts">
-import { useRouter } from 'vitepress'
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 
-const router = useRouter()
 const isDark = ref(false)
 let themeObserver: MutationObserver | null = null
 
@@ -94,10 +106,6 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (themeObserver) themeObserver.disconnect()
 })
-
-const navigate = (path: string) => {
-  router.go(path)
-}
 </script>
 
 <style scoped>
@@ -196,6 +204,8 @@ const navigate = (path: string) => {
   text-align: center;
   height: 100%;
   min-height: 360px;
+  color: inherit;
+  text-decoration: none;
   cursor: pointer;
   transition: 
     transform 200ms ease,
@@ -281,6 +291,55 @@ const navigate = (path: string) => {
 
 .landing-card:hover .card-cta svg {
   transform: translateX(3px);
+}
+
+/* ===== About ===== */
+.landing-about {
+  margin: 72px auto 0;
+  max-width: 720px;
+  text-align: center;
+}
+
+.about-title {
+  margin: 0 0 16px;
+  padding: 0;
+  border: none;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.about-text {
+  margin: 0 0 24px;
+  font-size: 0.9375rem;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+
+.about-text code {
+  font-size: 0.875em;
+}
+
+.about-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 20px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.8125rem;
+}
+
+.about-links a {
+  color: var(--text-primary);
+  text-decoration: none;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 2px;
+}
+
+.about-links a:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 /* ===== Responsive ===== */

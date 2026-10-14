@@ -1,3 +1,7 @@
+---
+description: "Where responsibility sits when you run trading-research-agents: the sandbox default, the keys and mandate you supply, and the MIT License terms."
+---
+
 # Where the responsibility sits
 
 This is software you run. It is published under the MIT License, which provides it without

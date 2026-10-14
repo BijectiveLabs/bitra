@@ -1,3 +1,7 @@
+---
+description: Which exchanges work with trading-research-agents today through ccxt, how to add one, and the plugin contract for archived data, live feeds and orders.
+---
+
 # Venues
 
 A cycle reaches any venue ccxt knows. The replay and live-session paths use plugins, and the ones
