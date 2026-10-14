@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://bijectivelabs.dev"><img src="assets/bijective_banner.png" alt="Bijective Labs"></a>
+  <a href="https://www.bijectivelabs.dev"><img src="assets/bijective_banner.png" alt="Bijective Labs"></a>
 </p>
 
 <h1 align="center">trading-research-agents</h1>
@@ -23,7 +23,7 @@
 </p>
 
 <p align="center">
-  <a href="https://bijectivelabs.dev"><img alt="bijectivelabs.dev" src="https://img.shields.io/badge/web-bijectivelabs.dev-1d2a3d?style=flat-square"></a>
+  <a href="https://www.bijectivelabs.dev/open-source"><img alt="Website" src="https://img.shields.io/badge/web-bijectivelabs.dev%2Fopen--source-1d2a3d?style=flat-square"></a>
   <a href="https://docs.bijectivelabs.dev"><img alt="Documentation" src="https://img.shields.io/badge/docs-docs.bijectivelabs.dev-1f6feb?style=flat-square"></a>
   <a href="https://www.bijectivelabs.dev/insights"><img alt="Insights" src="https://img.shields.io/badge/insights-bijectivelabs.dev%2Finsights-6f42c1?style=flat-square"></a>
   <a href="https://github.com/BijectiveLabs/trading-research-agents/blob/master/CHANGELOG.md"><img alt="Changelog" src="https://img.shields.io/badge/changelog-CHANGELOG.md-E05735?style=flat-square"></a>

@@ -41,7 +41,7 @@ dependencies = [
 tra = "trading_research_agents.cli:main"
 
 [project.urls]
-Homepage = "https://bijectivelabs.dev"
+Homepage = "https://www.bijectivelabs.dev/open-source"
 Documentation = "https://docs.bijectivelabs.dev"
 Repository = "https://github.com/BijectiveLabs/trading-research-agents"
 Issues = "https://github.com/BijectiveLabs/trading-research-agents/issues"

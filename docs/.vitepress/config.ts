@@ -6,6 +6,7 @@ import { withMermaid } from 'vitepress-plugin-mermaid'
 const repo = 'https://github.com/BijectiveLabs/trading-research-agents'
 const host = 'https://docs.bijectivelabs.dev'
 const pypi = 'https://pypi.org/project/trading-research-agents/'
+const website = 'https://www.bijectivelabs.dev/open-source'
 const description =
   'Documentation for trading-research-agents, open-source autonomous trading agents for crypto by ' +
   'Bijective Labs: install, the decision cycle, agents, model providers, venues and controls.'
@@ -92,14 +93,14 @@ function structuredData(): HeadConfig {
     '@type': 'SoftwareSourceCode',
     name: 'trading-research-agents',
     description: summary,
-    url: `${host}/opensource/`,
+    url: website,
     codeRepository: repo,
     programmingLanguage: 'Python',
     runtimePlatform: 'Python 3.11+',
     license: 'https://opensource.org/licenses/MIT',
     ...(version ? { version } : {}),
-    sameAs: [repo, pypi],
-    publisher: { '@type': 'Organization', name: 'Bijective Labs', url: 'https://bijectivelabs.dev' }
+    sameAs: [repo, pypi, `${host}/opensource/`],
+    publisher: { '@type': 'Organization', name: 'Bijective Labs', url: 'https://www.bijectivelabs.dev' }
   }
   return ['script', { type: 'application/ld+json' }, JSON.stringify(data)]
 }
@@ -132,6 +133,7 @@ function writeTextCopies(siteConfig: SiteConfig) {
     version ? `Current release: ${version}.` : '',
     "Install: uv tool install 'trading-research-agents[ccxt,openai,anthropic,google,data]'",
     'Command: tra. Python 3.11 or newer.',
+    `Website: ${website}`,
     `Source: ${repo}`,
     `Package: ${pypi}`
   ].filter(Boolean)
@@ -223,7 +225,7 @@ export default withMermaid(
       socialLinks: [{ icon: 'github', link: repo }],
       nav: [
         { text: 'Open Source', link: '/opensource/' },
-        { text: 'Bijective Labs', link: 'https://bijectivelabs.dev' }
+        { text: 'Bijective Labs', link: 'https://www.bijectivelabs.dev' }
       ],
       sidebar: { '/opensource/': sidebar },
       editLink: {

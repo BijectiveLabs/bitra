@@ -75,6 +75,7 @@
           <a href="/opensource/providers">Model providers</a>
           <a href="/opensource/venues">Venues</a>
           <a href="/opensource/commands">Command line</a>
+          <a href="https://www.bijectivelabs.dev/open-source">Website</a>
           <a href="https://github.com/BijectiveLabs/trading-research-agents">GitHub</a>
           <a href="https://pypi.org/project/trading-research-agents/">PyPI</a>
         </nav>

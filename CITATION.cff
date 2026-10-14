@@ -8,9 +8,9 @@ abstract: >-
   price the round trip, size the position and decide whether an order goes out.
 authors:
   - name: "Bijective Labs"
-    website: "https://bijectivelabs.dev"
+    website: "https://www.bijectivelabs.dev"
 repository-code: "https://github.com/BijectiveLabs/trading-research-agents"
-url: "https://docs.bijectivelabs.dev/opensource/"
+url: "https://www.bijectivelabs.dev/open-source"
 license: MIT
 keywords:
   - algorithmic trading

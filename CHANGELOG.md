@@ -16,6 +16,14 @@ All notable changes to this project are recorded here. The format follows
   is, so a crawler that does not run scripts still finds both.
 - `CITATION.cff`, so GitHub offers a citation; more PyPI keywords and classifiers.
 
+### Changed
+
+- One address per role: the product page `www.bijectivelabs.dev/open-source` is the homepage on
+  PyPI, in the citation and in the README's web badge; the docs stay at `docs.bijectivelabs.dev`;
+  company links go to `www.bijectivelabs.dev` without a redirect.
+- Docs: the venues page says Bybit and OKX have both been run end to end on demo, matching its own
+  table; the providers page names all three providers with a default model.
+
 ### Security
 
 - The docs site's build tools move to vite 6.4 and katex 0.18, closing five advisories against the
