@@ -43,8 +43,8 @@ jobs:
         with:
           path: docs/.vitepress/dist
 
-  # Pages has to be switched on for the repository first (free only once it is public); until the
-  # variable PAGES_ENABLED is "true" the site is built and checked, and nothing is deployed.
+  # Deploys only where the variable PAGES_ENABLED is "true", so a fork builds and checks the site
+  # without trying to publish it.
   deploy:
     name: deploy
     if: github.ref == 'refs/heads/master' && vars.PAGES_ENABLED == 'true'
