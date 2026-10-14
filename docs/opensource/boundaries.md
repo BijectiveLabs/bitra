@@ -1,3 +1,7 @@
+---
+description: What trading-research-agents guarantees and the tests that hold it, and what is not built yet and how a contribution could add it.
+---
+
 # What it guarantees, and what is not built yet
 
 This page separates two things that are easy to confuse.

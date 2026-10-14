@@ -1,3 +1,7 @@
+---
+description: "The live tier: real orders at the canary tier through a venue plugin, hard caps, reduce-only exits and the security checks that run as tests."
+---
+
 # The live tier
 
 Real orders exist in this release at one tier, canary (T3), through a venue plugin, behind a

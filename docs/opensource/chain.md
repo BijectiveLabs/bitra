@@ -1,3 +1,7 @@
+---
+description: "The falsification chain: the ordered, cheapest-first tests a trading idea must pass, from the cost floor to pre-registration and the live verdict."
+---
+
 # The falsification chain
 
 A research programme fails in one of two ways. It commits capital to an idea that was never

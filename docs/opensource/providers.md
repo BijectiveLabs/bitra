@@ -1,3 +1,7 @@
+---
+description: Supported model providers (Anthropic, OpenAI, Google Gemini, Groq, DeepSeek, xAI, Mistral, OpenRouter, Qwen, Ollama, local servers), their keys, endpoints and default models.
+---
+
 # Model providers
 
 Providers are plugins. `--provider NAME` on `tra agent propose` and `[agents].provider` in
@@ -81,8 +85,8 @@ tra init my-desk --profile autonomous --agent groq --model openai/gpt-oss-120b
 
 `tra models` reads the vendor's own model list with your key: no prompt is sent and nothing is
 spent. Without a provider it reads `[agents].provider` from the desk. `tra init --agent` writes the
-provider and model into the desk from the start; a provider with a default model (Anthropic) needs
-no `--model`, and one without says to run `tra models` first.
+provider and model into the desk from the start; a provider with a default model (Groq, Google,
+Anthropic) needs no `--model`, and one without says to run `tra models` first.
 
 ## Adding a provider
 

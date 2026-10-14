@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use this software in research, please cite it as below."
+type: software
+title: "trading-research-agents"
+abstract: >-
+  An open-source Python package and command line (tra) for autonomous crypto trading agents.
+  Language models read the market and propose a trade; fixed, tested rules compute every figure,
+  price the round trip, size the position and decide whether an order goes out.
+authors:
+  - name: "Bijective Labs"
+    website: "https://www.bijectivelabs.dev"
+repository-code: "https://github.com/BijectiveLabs/trading-research-agents"
+url: "https://www.bijectivelabs.dev/open-source"
+license: MIT
+keywords:
+  - algorithmic trading
+  - cryptocurrency
+  - trading agents
+  - large language models
+  - risk management
+  - backtesting
+  - ccxt

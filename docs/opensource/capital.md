@@ -1,3 +1,7 @@
+---
+description: "What venue mode does with your money: the account reads, the checks before an order, position sizing, leverage and what happens after a fill, all through ccxt."
+---
+
 # Capital, orders and positions
 
 This is what venue mode does with your money, step by step: what is read from the account, what

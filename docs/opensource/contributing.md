@@ -106,6 +106,11 @@ A change in behaviour comes with the page that describes it, in the same pull re
 software does today and, where something is not built yet, say so plainly rather than describing it
 as a restriction.
 
+A new page needs two things besides its text: a `description` in its front matter (one sentence,
+under about 160 characters, shown by search engines) and an entry in the sidebar in
+`docs/.vitepress/config.ts`. The sidebar also decides what goes into `llms.txt` and
+`llms-full.txt`, the plain-text copies that language models read.
+
 ## Reporting a problem
 
 Open an issue with the smallest input that reproduces it. For anything that could affect a user's

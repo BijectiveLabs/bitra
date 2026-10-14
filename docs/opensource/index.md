@@ -1,6 +1,6 @@
 ---
 title: Introduction
-description: Autonomous trading agents for crypto that cannot fudge their own results.
+description: "What trading-research-agents is: autonomous crypto trading agents where language models propose and fixed, tested rules price, size and send. What it does, what it never lets a model do, and where to start."
 ---
 
 # trading-research-agents

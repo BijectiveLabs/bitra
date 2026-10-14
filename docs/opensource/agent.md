@@ -1,3 +1,7 @@
+---
+description: How the research agent turns a plain-language trading idea into one of five recorded outcomes, using language models at three points and the system's gates everywhere else.
+---
+
 # The agent
 
 An idea in plain language goes in. One of five recorded outcomes comes out. Language models

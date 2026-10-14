@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           python-version: "3.12"
           enable-cache: true
@@ -51,11 +51,10 @@ jobs:
             --title "${GITHUB_REF_NAME}" \
             --notes "See CHANGELOG.md for ${GITHUB_REF_NAME}."
 
-  # PyPI through trusted publishing: no token is stored anywhere. It runs only once the repository
-  # variable PUBLISH_TO_PYPI is "true", so a tag pushed before PyPI is set up makes a GitHub
-  # release and nothing else. The files published are the ones the checks above passed on, not a
-  # second build. No deployment environment: GitHub offers them on private repositories only on
-  # paid plans, and the trusted publisher on PyPI is registered without one.
+  # PyPI through trusted publishing: no token is stored anywhere. It runs only where the variable
+  # PUBLISH_TO_PYPI is "true", so a tag pushed in a fork makes a GitHub release and nothing else.
+  # The files published are the ones the checks above passed on, not a second build. No
+  # deployment environment, because the trusted publisher on PyPI is registered without one.
   publish:
     name: publish to PyPI
     needs: build
@@ -69,7 +68,7 @@ jobs:
           name: dist
           path: dist/
 
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: astral-sh/setup-uv@v10.3.0
 
       - name: Publish
         run: uv publish --trusted-publishing always dist/*

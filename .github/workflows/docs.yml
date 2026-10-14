@@ -43,8 +43,8 @@ jobs:
         with:
           path: docs/.vitepress/dist
 
-  # Pages has to be switched on for the repository first (free only once it is public); until the
-  # variable PAGES_ENABLED is "true" the site is built and checked, and nothing is deployed.
+  # Deploys only where the variable PAGES_ENABLED is "true", so a fork builds and checks the site
+  # without trying to publish it.
   deploy:
     name: deploy
     if: github.ref == 'refs/heads/master' && vars.PAGES_ENABLED == 'true'
@@ -59,3 +59,17 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v5
+
+      # IndexNow tells Bing, Yandex and the other engines that take it which pages changed, so they
+      # are crawled within hours. Google does not take it and reads the sitemap from robots.txt.
+      - name: Notify search engines
+        continue-on-error: true
+        env:
+          SITE: https://docs.bijectivelabs.dev
+          KEY: c501f126290de4b6f7310d7cbc3a4678
+        run: |
+          urls=$( { curl -fsS "$SITE/sitemap.xml" | grep -o '<loc>[^<]*' | sed 's/<loc>//'; echo "$SITE/llms.txt"; } | jq -R . | jq -sc .)
+          jq -n --arg host "${SITE#https://}" --arg key "$KEY" --arg loc "$SITE/$KEY.txt" --argjson urls "$urls" \
+            '{host: $host, key: $key, keyLocation: $loc, urlList: $urls}' |
+            curl -sS -X POST https://api.indexnow.org/indexnow -H 'Content-Type: application/json; charset=utf-8' \
+              --data @- -o /dev/null -w "IndexNow answered %{http_code}\n"

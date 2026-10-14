@@ -1,3 +1,7 @@
+---
+description: Which exchanges work with trading-research-agents today through ccxt, how to add one, and the plugin contract for archived data, live feeds and orders.
+---
+
 # Venues
 
 A cycle reaches any venue ccxt knows. The replay and live-session paths use plugins, and the ones
@@ -45,8 +49,9 @@ is the one mistake that cannot be undone. Everything else is a limit we state, n
 
 "Everything" means ccxt reports the five things the venue hand needs: send an order, attach the
 stop and take profit to it, read the position, read the open orders, and cancel. "Run end to end"
-is the stronger claim, and only Bybit has earned it. Start any other venue on its practice
-environment, watch a few cycles, and read `placed.json` before you point it at money.
+is the stronger claim, and only Bybit and OKX have earned it, both on their demo accounts. Start
+any other venue on its practice environment, watch a few cycles, and read `placed.json` before you
+point it at money.
 
 The default project (`tra init`) prices Bybit and Hyperliquid channels in `envelope.toml`, reads
 data from Bybit with Binance behind it in `data.toml`, and trades `bybit/taker-taker` in the
@@ -95,8 +100,8 @@ is 4 contracts, and 20 million PEPE where a contract is 10 million is 2. A size 
 number of contracts is refused with both figures, a venue that does not report its contract size is
 refused, and what the venue reports back, fills and positions, is read in the base again.
 
-Only Bybit has been run end to end with real orders. The contract arithmetic and the name
-resolution for the other venues are tested against the shapes ccxt returns, not against those
+Only Bybit and OKX have been run end to end with real orders, on their demo accounts. The contract
+arithmetic and the name resolution for the other venues are tested against the shapes ccxt returns, not against those
 venues' accounts, so start any of them on its practice environment first.
 
 ## Trading on another exchange

@@ -6,6 +6,34 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-10-15
+
+### Added
+
+- The docs site can be found and read by search engines and language models: a sitemap and
+  `robots.txt`, a description, canonical link and social card on every page, structured data
+  naming the package, its version and its repository, `llms.txt` and `llms-full.txt`, and a plain
+  Markdown copy beside each page. Each deploy tells IndexNow engines which pages changed.
+- The landing page links to the docs with a real link and says in a few lines what the package
+  is, so a crawler that does not run scripts still finds both.
+- `CITATION.cff`, so GitHub offers a citation; more PyPI keywords and classifiers.
+
+### Changed
+
+- One address per role: the product page `www.bijectivelabs.dev/open-source` is the homepage on
+  PyPI, in the citation and in the README's web badge; the docs stay at `docs.bijectivelabs.dev`;
+  company links go to `www.bijectivelabs.dev` without a redirect.
+- Docs: the venues page says Bybit and OKX have both been run end to end on demo, matching its own
+  table; the providers page names all three providers with a default model.
+- Locked dependencies move to newer minor and patch releases: anthropic 1.13, openai 3.28,
+  google-genai 2.29 and mcp 2.3; ruff 0.17 and mypy 2.4 for development.
+
+### Security
+
+- The docs site's build tools move to vite 6.4 and katex 0.18, closing five advisories against the
+  local docs server. They affect writing the docs only; the package and the published site are
+  unchanged.
+
 ## [0.6.5] - 2026-10-13
 
 ### Fixed

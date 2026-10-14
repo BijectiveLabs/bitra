@@ -1,3 +1,7 @@
+---
+description: "The kill ledger: how every tested idea is recorded as falsified, closed, not proven or open, and on which axis it ended."
+---
+
 # The kill ledger
 
 "It did not work" is not a research finding. It is the absence of one. The ledger records
