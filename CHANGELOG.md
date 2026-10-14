@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-10-15
+
 ### Added
 
 - The docs site can be found and read by search engines and language models: a sitemap and
@@ -23,6 +25,8 @@ All notable changes to this project are recorded here. The format follows
   company links go to `www.bijectivelabs.dev` without a redirect.
 - Docs: the venues page says Bybit and OKX have both been run end to end on demo, matching its own
   table; the providers page names all three providers with a default model.
+- Locked dependencies move to newer minor and patch releases: anthropic 1.13, openai 3.28,
+  google-genai 2.29 and mcp 2.3; ruff 0.17 and mypy 2.4 for development.
 
 ### Security
 
