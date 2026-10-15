@@ -28,9 +28,13 @@ uv run pytest
 
 ## Branches
 
-- `develop` is where work lands. Open pull requests against it.
-- `master` is what has been released. It only moves by merge from `develop`.
-- Branch from `develop`; name the branch after what it does, briefly.
+- `master` is the stable line. Every commit on it is a release, tagged and published to PyPI, and
+  it only moves by merge from `develop`.
+- `develop` is where work lands, and it is the experimental line. It moves often, a commit there is
+  not a release, and between releases it can carry work that is unfinished or changed again. A
+  set of changes becomes a release when it is merged into `master` and tagged.
+- Open pull requests against `develop`. Branch from it; name the branch after what it does, briefly.
+- To use the software rather than change it, install the release from PyPI.
 
 ## Commits
 
@@ -71,7 +75,7 @@ imports a vendor SDK. A test checks that too.
 
 ## Extending what it can do
 
-Spot and other market types, decentralised venues, more than one account, routing and execution
+Spot and other market types, on-chain venues outside ccxt, more than one account, routing and execution
 algorithms, portfolio accounting: [Boundaries](https://docs.bijectivelabs.dev/opensource/boundaries) lists each under "not built yet", with what
 it does today and what a contribution would need. Open an issue first with the design, so the shape
 is agreed before the code. A contribution may add any of them; it may not weaken a guarantee on the

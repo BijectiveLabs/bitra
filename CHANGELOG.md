@@ -6,6 +6,27 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The README and the docs say where the project is going, in a new "Where it is going" section:
+  linear perpetuals are what it trades today, with spot and the other market types on the way;
+  every venue ccxt supports is integrated and ready for its end-to-end run, with Bybit and OKX run
+  so far and a report wanted for the others.
+- Tagline: "An autonomous trading system for crypto. The agents propose; tested rules decide."
+- The branches are spelled out: `master` is the stable line and every commit on it is a release;
+  `develop` is the experimental line and a commit there is not a release. Users are pointed at the
+  release on PyPI; links to the examples and the changelog, and the README's CI badge, follow
+  `master`.
+- A market type that is not built yet is refused with "venue mode trades linear perpetual futures
+  today, and other market types are not built yet".
+
+### Fixed
+
+- Boundaries said a decentralised venue could be priced but not executed, while Hyperliquid goes
+  through the same venue hand as any ccxt venue. The row now covers on-chain venues outside ccxt.
+- Liability described Boundaries as what the software will not do by design; it now says what that
+  page holds: the guarantees, and what is not built yet.
+
 ## [0.6.6] - 2026-10-15
 
 ### Added

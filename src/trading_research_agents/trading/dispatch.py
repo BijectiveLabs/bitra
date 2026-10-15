@@ -285,7 +285,7 @@ class VenueHand:
                 "sent": False,
                 "refused": (
                     f"{self.symbol} is a {kind} market; venue mode trades linear perpetual "
-                    "futures only"
+                    "futures today, and other market types are not built yet"
                 ),
             }
         target = str(intent.get("target", ""))

@@ -897,7 +897,7 @@ def test_venue_mode_trades_linear_perpetuals_and_refuses_anything_else() -> None
         {**LONG, "instrument": "ETHUSDT", "size": "0.03", "mid": "2700"}
     )
     assert placed["sent"] is False
-    assert "is a spot market; venue mode trades linear perpetual futures only" in placed["refused"]
+    assert "is a spot market; venue mode trades linear perpetual futures today" in placed["refused"]
     assert market_kind({"swap": True, "linear": True}) == "linear perpetual"
     assert market_kind({"swap": True, "inverse": True}) == "inverse perpetual"
     assert market_kind({"option": True}) == "option"

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "trading-research-agents"
 version = "0.6.6"
-description = "Autonomous trading agents for crypto that can't fudge their own results."
+description = "An autonomous trading system for crypto. The agents propose; tested rules decide."
 dynamic = ["readme"]
 requires-python = ">=3.11"
 license = "MIT"

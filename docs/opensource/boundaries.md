@@ -9,8 +9,9 @@ This page separates two things that are easy to confuse.
 - **Guarantees** are rules the system enforces and the tests check. They protect capital and keys,
   and any change, including a contribution, has to keep them.
 - **Not built yet** is scope: things a trading system can do that this project does not do today.
-  None of them is forbidden. Each one says what a contribution would need, and [Contributing](/opensource/contributing)
-  says how to propose it.
+  None of them is forbidden, and several are where the project is heading: more market types
+  among them ([Where it is going](/opensource/#where-it-is-going)). Each one says what a
+  contribution would need, and [Contributing](/opensource/contributing) says how to propose it.
 
 ## Guarantees
 
@@ -30,8 +31,8 @@ This page separates two things that are easy to confuse.
 
 | Area | Today | What a contribution would need |
 |---|---|---|
-| **Market types: spot, inverse and dated futures, options** | Venue mode trades linear perpetual futures and refuses any other market type on every order (`market_kind` in `trading/dispatch.py`) | A cost model for that market (spot has no funding; options have premium and greeks), exit semantics that hold there (spot cannot be shorted without margin), sizing and liquidation rules, and tests; then that type is added to what the venue hand accepts |
-| **Decentralised venues** | A DEX can be priced (`[[channel]].gas_quote`) but not executed | Wallet and transaction signing kept outside every model's reach, RPC and nonce management, slippage and MEV protection, and the same mandate and caps |
+| **Market types: spot, inverse and dated futures, options** | On the way. Venue mode trades linear perpetual futures today and refuses any other market type on every order until that type has the pieces on the right (`market_kind` in `trading/dispatch.py`) | A cost model for that market (spot has no funding; options have premium and greeks), exit semantics that hold there (spot cannot be shorted without margin), sizing and liquidation rules, and tests; then that type is added to what the venue hand accepts |
+| **On-chain venues outside ccxt** | Venues ccxt supports, Hyperliquid among them, go through the same venue hand. An on-chain exchange ccxt does not cover can be priced (`[[channel]].gas_quote`) but not executed | Wallet and transaction signing kept outside every model's reach, RPC and nonce management, slippage and MEV protection, and the same mandate and caps |
 | **More than one account or sub-account** | One account per project, read before every order | Account selection that is declared, never chosen by a model; per-account caps, equity and daily loss; the keeper and desk counting per account |
 | **Wallet transfers, withdrawals, treasury** | None. The venue hand reads the account and sends orders, nothing else | Separate keys with separate permissions, a human approval step, and records of every movement; this is the area where the guarantees above matter most |
 | **Routing across venues, execution algorithms (TWAP, VWAP, iceberg)** | One venue per project; one order per decision, taker IOC or maker post-only | A long-lived order manager with its own records, so `--mode signals` plus your own executor is the route today |

@@ -276,7 +276,7 @@ operator's own declarations, which is what makes a result reproducible tomorrow.
 
 ### Series from anywhere
 
-[`examples/series.toml`](https://github.com/BijectiveLabs/trading-research-agents/blob/develop/examples/series.toml) maps external series the way `mapping.toml` maps trades: the file, the
+[`examples/series.toml`](https://github.com/BijectiveLabs/trading-research-agents/blob/master/examples/series.toml) maps external series the way `mapping.toml` maps trades: the file, the
 time column and its unit, the value column, the unit, and `publish_lag`, the time between an
 observation and the moment it was actually available. A monthly print released two weeks after
 month end is unknown for those two weeks, and the brief says so. Thresholds in the map are the
