@@ -8,13 +8,14 @@ const host = 'https://docs.bijectivelabs.dev'
 const pypi = 'https://pypi.org/project/trading-research-agents/'
 const website = 'https://www.bijectivelabs.dev/open-source'
 const description =
-  'Documentation for trading-research-agents, open-source autonomous trading agents for crypto by ' +
+  'Documentation for trading-research-agents, an open-source autonomous trading system for crypto by ' +
   'Bijective Labs: install, the decision cycle, agents, model providers, venues and controls.'
 const summary =
-  'An open-source Python package and command line (tra) for autonomous crypto trading agents. ' +
-  'Language models read the market and propose a trade; fixed, tested rules compute every figure, ' +
-  'price the round trip, size the position and decide whether an order goes out. It runs in a ' +
-  'sandbox by default, trades on any exchange ccxt supports, and works with Anthropic, OpenAI, ' +
+  'An open-source Python package and command line (tra): an autonomous crypto trading system. ' +
+  'Language model agents read the market and propose a trade; fixed, tested rules compute every ' +
+  'figure, price the round trip, size the position and decide whether an order goes out. It runs ' +
+  'in a sandbox by default, trades linear perpetuals today on any exchange ccxt supports, with more ' +
+  'market types on the way, and works with Anthropic, OpenAI, ' +
   'Google Gemini, Groq, DeepSeek, OpenRouter, Ollama and other model providers. MIT licensed.'
 const socialImage = { url: `${host}/images/console.png`, width: '1199', height: '630' }
 
@@ -82,7 +83,7 @@ const sidebar = [
       { text: 'Liability', link: '/opensource/liability' },
       { text: 'Security', link: '/opensource/security' },
       { text: 'Contributing', link: '/opensource/contributing' },
-      { text: 'Changelog', link: `${repo}/blob/develop/CHANGELOG.md` }
+      { text: 'Changelog', link: `${repo}/blob/master/CHANGELOG.md` }
     ]
   }
 ]

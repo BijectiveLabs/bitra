@@ -37,8 +37,8 @@ BANNER = r"""
 """.strip("\n")
 
 TAGLINE = (
-    "trading-research-agents: autonomous trading agents for crypto "
-    "that can't fudge their own results"
+    "trading-research-agents: an autonomous trading system for crypto; "
+    "the agents propose, tested rules decide"
 )
 _console: Console | None = None
 

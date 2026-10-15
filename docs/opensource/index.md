@@ -1,11 +1,11 @@
 ---
 title: Introduction
-description: "What trading-research-agents is: autonomous crypto trading agents where language models propose and fixed, tested rules price, size and send. What it does, what it never lets a model do, and where to start."
+description: "What trading-research-agents is: an autonomous crypto trading system where language models propose and fixed, tested rules price, size and send. What it does, what it never lets a model do, and where to start."
 ---
 
 # trading-research-agents
 
-**Autonomous trading agents for crypto that can't fudge their own results.**
+**An autonomous trading system for crypto. The agents propose; tested rules decide.**
 
 Language models are good at reading a market and saying what they think. They are bad at
 arithmetic, they don't know what a trade costs, and they will happily overrule a limit you set.
@@ -86,11 +86,34 @@ has the full table of what an agent can reach, and [The cycle](/opensource/cycle
 
 ## What it trades
 
-**Linear perpetual futures** (USDT- or USDC-margined swaps) on any venue ccxt reaches, long and
-short, with the leverage and margin mode you declare. Spot, dated futures, inverse contracts and
-options are not built yet; until they are, venue mode checks the market type on every order and
-refuses anything that is not a linear perpetual. [Boundaries](/opensource/boundaries) lists what
+Today: **linear perpetual futures** (USDT- or USDC-margined swaps) on any venue ccxt reaches, long
+and short, with the leverage and margin mode you declare. Every exchange ccxt supports is already
+integrated through the same order path and gates; Bybit and OKX are the two run end to end so far,
+and any other can have that run on its practice account at any time ([Venues](/opensource/venues)).
+
+That is where the project started, not where it stops. Spot, dated futures, inverse contracts and
+options are on the way, each with its own cost model, exit rules and tests. Until a market type has
+those, venue mode checks the type on every order and refuses it, because a market the system cannot
+yet price and protect is not one it should send to. [Boundaries](/opensource/boundaries) lists what
 is guaranteed, what is not built yet, and what adding each piece would take.
+
+## Where it is going
+
+The project is in active development, and these pages describe where it stands today.
+
+- **More market types:** spot, inverse and dated futures, and options, each added with its own
+  cost model, exit rules, sizing and tests before venue mode accepts it.
+- **More venues run end to end:** each joins Bybit and OKX after a full run on its practice
+  account, ours or yours.
+- **The rest of the not-built-yet list** in [Boundaries](/opensource/boundaries), one piece at a
+  time, without weakening a guarantee.
+
+**Use the release.** What PyPI installs is the latest release, and these docs describe it. Releases
+come from `master`. The `develop` branch is where the next release is built: it moves often, a
+commit there is not a release, and it can carry work that is unfinished or changed again before it
+ships. A set of changes becomes a release when it is merged into `master`, tagged and published; the
+[changelog](https://github.com/BijectiveLabs/trading-research-agents/blob/master/CHANGELOG.md) says
+what each one brought.
 
 ## Where to go next
 

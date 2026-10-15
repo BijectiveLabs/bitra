@@ -4,10 +4,10 @@
 
 <h1 align="center">trading-research-agents</h1>
 
-<p align="center"><strong>Autonomous trading agents for crypto that can't fudge their own results.</strong></p>
+<p align="center"><strong>An autonomous trading system for crypto. The agents propose; tested rules decide.</strong></p>
 
 <p align="center">
-  <a href="https://github.com/BijectiveLabs/trading-research-agents/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/BijectiveLabs/trading-research-agents/actions/workflows/ci.yml/badge.svg?branch=develop"></a>
+  <a href="https://github.com/BijectiveLabs/trading-research-agents/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/BijectiveLabs/trading-research-agents/actions/workflows/ci.yml/badge.svg?branch=master"></a>
   <a href="https://pypi.org/project/trading-research-agents/"><img alt="PyPI" src="https://img.shields.io/pypi/v/trading-research-agents?style=flat-square&logo=pypi&logoColor=white&label=PyPI&cacheSeconds=1800"></a>
   <a href="https://pypi.org/project/trading-research-agents/"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/trading-research-agents?style=flat-square&logo=python&logoColor=white&label=python&cacheSeconds=1800"></a>
   <a href="https://github.com/BijectiveLabs/trading-research-agents/blob/master/LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square"></a>
@@ -62,6 +62,7 @@ only make the desk more careful, and two auditors that read the records.
 - [Watching a desk, and what is kept](#watching-a-desk-and-what-is-kept)
 - [Command line](#command-line)
 - [What it guarantees, and what is not built yet](#what-it-guarantees-and-what-is-not-built-yet)
+- [Where it is going](#where-it-is-going)
 - [Documentation](#documentation)
 
 ## What it solves
@@ -94,6 +95,9 @@ environment. To move to the newest release later:
 uv tool upgrade trading-research-agents      # or: pip install -U 'trading-research-agents[ccxt,openai,anthropic,google,data]'
 tra --version
 ```
+
+That is the release, and the version to run. The `develop` branch on GitHub is where the next
+one is built; a commit there is not a release ([more](#where-it-is-going)).
 
 **2. Make a desk.** A desk is a folder holding your settings and everything the agents decide. Name
 the provider you have a key for:
@@ -302,20 +306,24 @@ the full table of what an agent can reach, and [The cycle](https://docs.bijectiv
 
 ## Venues
 
-A cycle reaches venues through ccxt. Here is what that means in practice today:
+A cycle reaches venues through ccxt, so every exchange ccxt supports is already integrated: the
+same order path, the same gates and the same checks, with nothing in the core naming a venue. What
+differs from one venue to the next is what ccxt reports it can do, the second column, and how far
+it has been tested, the last:
 
 | Venue | What a cycle can do there | Practice environment | Run end to end by us |
 |---|---|---|---|
 | **Bybit** (the default) | everything: orders with the stop and take profit attached | demo, testnet | **yes**, on demo: real orders, exits attached, a resting order cancelled |
 | **OKX** | everything | demo (ccxt's testnet switch) | **yes**, on demo: real orders, exits attached, closed by the venue's own exits |
-| Bitget, BingX, KuCoin Futures, Hyperliquid | everything | varies, see `tra venues` | not yet |
-| Binance, Deribit, HTX, Gate, MEXC | orders, but you carry the stop yourself (`exits = "none"`) | varies | not yet |
-| Kraken, Kraken Futures, Phemex | data only: they can't report the position, so no order is sent | | |
+| Bitget, BingX, KuCoin Futures, Hyperliquid | everything | varies, see `tra venues` | ready for its run; reports wanted for [Bitget](https://github.com/BijectiveLabs/trading-research-agents/issues/5), [BingX](https://github.com/BijectiveLabs/trading-research-agents/issues/6), [Hyperliquid](https://github.com/BijectiveLabs/trading-research-agents/issues/7) |
+| Binance, Deribit, HTX, Gate, MEXC | orders, but you carry the stop yourself (`exits = "none"`) | varies | ready for its run |
+| Kraken, Kraken Futures, Phemex | data for now: ccxt does not report their positions, and no order is sent into a position nobody can see | | |
 
 "Everything" means ccxt reports the five things a safe order needs: send it, attach the exits, read
-the position, read the open orders, cancel. Only Bybit and OKX have been run end to end with real
-orders, so treat every other venue as untested: start on its practice environment and read what
-it sends.
+the position, read the open orders, cancel. "Run end to end" is the stronger claim, a full run
+with real orders on the venue's practice account, and Bybit and OKX are the two that have had it
+so far. Any other venue that takes orders can have that run at any time: start on its practice environment, watch a
+few cycles and read what it sends. Each report moves a venue into the last column.
 
 Adding the venue you trade on is four steps, and one command writes most of it:
 
@@ -373,11 +381,12 @@ your own is about thirty lines ([Model providers](https://docs.bijectivelabs.dev
 
 ## Toward real orders
 
-What it trades: **linear perpetual futures** (USDT- or USDC-margined swaps) on any venue ccxt
-reaches, long and short, with the leverage and margin mode you declare. Spot, dated futures,
-inverse contracts and options are not built yet; until they are, venue mode checks the market type
-on every order and refuses anything that is not a linear perpetual. [Boundaries](https://docs.bijectivelabs.dev/opensource/boundaries) says what
-adding one would take.
+What it trades today: **linear perpetual futures** (USDT- or USDC-margined swaps) on any venue
+ccxt reaches, long and short, with the leverage and margin mode you declare. That is where the
+project started, not where it stops. Spot, dated futures, inverse contracts and options are on the
+way, each with its own cost model, exit rules and tests. Until a market type has those, venue mode
+checks the type on every order and refuses it, because a market the system cannot yet price and
+protect is not one it should send to. [Boundaries](https://docs.bijectivelabs.dev/opensource/boundaries) says what each one takes.
 
 An agent desk goes through three steps, and you can stay at any of them as long as you like:
 
@@ -536,12 +545,30 @@ Some rules are guarantees, enforced by the system and tests, and every change ha
 - **Stale or missing data is refused,** never read as zero or as current.
 
 Other things are simply not built yet, and contributions are welcome: spot, inverse, dated futures
-and options; decentralised venues; more than one account; transfers and treasury; routing and
-execution algorithms; portfolio accounting. [Boundaries](https://docs.bijectivelabs.dev/opensource/boundaries) lists each one with what it does
+and options; on-chain venues outside ccxt; more than one account; transfers and treasury; routing
+and execution algorithms; portfolio accounting. [Boundaries](https://docs.bijectivelabs.dev/opensource/boundaries) lists each one with what it does
 today and what a contribution would need. The example strategy cores are examples: your edge is
 yours to declare.
 
 [Liability](https://docs.bijectivelabs.dev/opensource/liability) says plainly where responsibility sits when real capital is involved.
+
+## Where it is going
+
+The project is in active development, and what this page describes is where it stands today, not
+where it stops.
+
+- **More market types.** Spot, inverse and dated futures, and options, each added with its own
+  cost model, exit rules, sizing and tests before venue mode accepts it.
+- **More venues run end to end.** Every venue ccxt supports already goes through the same order
+  path and gates. Each one joins Bybit and OKX in the last column of the venues table after a full
+  run on its practice account, ours or yours.
+- **The rest of the not-built-yet list,** one piece at a time, without weakening a guarantee.
+
+**Use the release.** What PyPI installs is the latest release, and it is the version to run.
+Releases come from `master`. The `develop` branch is where the next release is built: it moves
+often, a commit there is not a release, and it can carry work that is unfinished or changed again
+before it ships. A set of changes becomes a release when it is merged into `master`, tagged and
+published, and [CHANGELOG.md](https://github.com/BijectiveLabs/trading-research-agents/blob/master/CHANGELOG.md) says what each one brought.
 
 ## Documentation
 

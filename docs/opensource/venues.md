@@ -34,13 +34,13 @@ we have run end to end, and what ccxt says a venue can do. The second is read fr
 |---|---|---|---|---|
 | Bybit | everything: orders with the stop and take profit attached | demo, testnet | `BYBIT_API_KEY`, `BYBIT_API_SECRET` | yes, on demo: real orders, exits attached, a resting order cancelled |
 | OKX | everything | testnet | `OKX_API_KEY`, `OKX_API_SECRET`, `OKX_API_PASSPHRASE` | yes, on demo: real orders, exits attached, closed by the venue's own exits |
-| Bitget | everything | demo | `BITGET_API_KEY`, `BITGET_API_SECRET`, `BITGET_API_PASSPHRASE` | not yet |
-| BingX | everything | testnet | `BINGX_API_KEY`, `BINGX_API_SECRET` | not yet |
-| KuCoin Futures | everything | none | `KUCOINFUTURES_API_KEY`, `KUCOINFUTURES_API_SECRET`, `KUCOINFUTURES_API_PASSPHRASE` | not yet |
-| Hyperliquid | everything | testnet | `HYPERLIQUID_WALLET_ADDRESS`, `HYPERLIQUID_PRIVATE_KEY` | not yet |
-| Binance | orders, but you carry the stop yourself (`exits = "none"`) | demo, testnet | `BINANCE_API_KEY`, `BINANCE_API_SECRET` | not yet; it is the data fallback in the default project |
-| Deribit, HTX, Gate, MEXC | orders with `exits = "none"` | varies, see `tra venues` | `<VENUE>_API_KEY`, `<VENUE>_API_SECRET` | not yet |
-| Kraken, Kraken Futures, Phemex | data only for a cycle: they cannot report the position, and the venue hand will not send without it | | | |
+| Bitget | everything | demo | `BITGET_API_KEY`, `BITGET_API_SECRET`, `BITGET_API_PASSPHRASE` | ready for its run; [report wanted](https://github.com/BijectiveLabs/trading-research-agents/issues/5) |
+| BingX | everything | testnet | `BINGX_API_KEY`, `BINGX_API_SECRET` | ready for its run; [report wanted](https://github.com/BijectiveLabs/trading-research-agents/issues/6) |
+| KuCoin Futures | everything | none | `KUCOINFUTURES_API_KEY`, `KUCOINFUTURES_API_SECRET`, `KUCOINFUTURES_API_PASSPHRASE` | integrated; it has no practice environment to run on |
+| Hyperliquid | everything | testnet | `HYPERLIQUID_WALLET_ADDRESS`, `HYPERLIQUID_PRIVATE_KEY` | ready for its run; [report wanted](https://github.com/BijectiveLabs/trading-research-agents/issues/7) |
+| Binance | orders, but you carry the stop yourself (`exits = "none"`) | demo, testnet | `BINANCE_API_KEY`, `BINANCE_API_SECRET` | ready for its run; it is the data fallback in the default project |
+| Deribit, HTX, Gate, MEXC | orders with `exits = "none"` | varies, see `tra venues` | `<VENUE>_API_KEY`, `<VENUE>_API_SECRET` | ready for its run |
+| Kraken, Kraken Futures, Phemex | data for now: ccxt does not report their positions, and the venue hand will not send without one | | | |
 
 No venue is blocked here. The table says two separate things: what ccxt reports a venue can do,
 and what we have run ourselves. A venue ccxt says takes orders can be used; the only one the desk
@@ -49,9 +49,11 @@ is the one mistake that cannot be undone. Everything else is a limit we state, n
 
 "Everything" means ccxt reports the five things the venue hand needs: send an order, attach the
 stop and take profit to it, read the position, read the open orders, and cancel. "Run end to end"
-is the stronger claim, and only Bybit and OKX have earned it, both on their demo accounts. Start
-any other venue on its practice environment, watch a few cycles, and read `placed.json` before you
-point it at money.
+is the stronger claim, a full run with real orders on the venue's practice account, and Bybit and
+OKX are the two that have had it so far, both on their demo accounts. Every other venue that takes
+orders is integrated the same way and ready for that run at any time: start it on its practice
+environment, watch a few cycles, and read `placed.json` before you point it at money. A report of
+that run, from us or from you, moves the venue into the last column.
 
 The default project (`tra init`) prices Bybit and Hyperliquid channels in `envelope.toml`, reads
 data from Bybit with Binance behind it in `data.toml`, and trades `bybit/taker-taker` in the
@@ -100,9 +102,10 @@ is 4 contracts, and 20 million PEPE where a contract is 10 million is 2. A size 
 number of contracts is refused with both figures, a venue that does not report its contract size is
 refused, and what the venue reports back, fills and positions, is read in the base again.
 
-Only Bybit and OKX have been run end to end with real orders, on their demo accounts. The contract
-arithmetic and the name resolution for the other venues are tested against the shapes ccxt returns, not against those
-venues' accounts, so start any of them on its practice environment first.
+Bybit and OKX have been run end to end with real orders, on their demo accounts. For the other
+venues the contract arithmetic and the name resolution are tested against the shapes ccxt returns;
+the run against the venue's own account is the step still open, so start any of them on its
+practice environment first.
 
 ## Trading on another exchange
 
