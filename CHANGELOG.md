@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.6.7] - 2026-10-16
+
 ### Changed
 
 - The README and the docs say where the project is going, in a new "Where it is going" section:
