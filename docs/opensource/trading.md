@@ -173,11 +173,13 @@ its own core.
 
 Live feeds are plugins, found by name through `trading.feeds`. `tra trade shadow` takes the
 name from the venue half of `[run].venue_key` (`bybit/taker-taker` selects `bybit`) or from
-`--feed NAME`, and refuses a name with no plugin before opening a connection. One feed ships,
-behind the `[shadow]` extra; [Venues](/opensource/venues) says how to add another.
+`--feed NAME`, and refuses a name it cannot stream before opening a connection. Every venue ccxt
+streams is a feed, through the `ccxt` extra (`[shadow]` installs the same thing);
+[Venues](/opensource/venues) says how to add one ccxt does not cover.
 
-The bundled feed subscribes to the venue's public trade stream with no key. A subscribe that
-is not acknowledged within ten seconds is not a subscription. A link carrying nothing for two
-ping intervals is treated as dead and reconnected. A frame it does not recognise is counted
-and shown, not dropped. The message shape was taken from the venue's own documentation and
-checked against recorded frames.
+The feed reads the venue's public trade stream with no key, through ccxt's streaming side, which
+keeps the socket, the venue's ping and the subscription. Trades on a contract market arrive in
+contracts and are turned into the base. A trade the venue sends twice is passed on once; a trade
+older than the last one passed on is counted and not passed on, because bars are built in time
+order; a trade that does not parse stops the feed rather than leaving a gap that reads as a quiet
+market. A dropped connection is reopened, and counted.

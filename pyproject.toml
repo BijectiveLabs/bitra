@@ -69,8 +69,10 @@ mcp = [
 openai = [
     "openai>=1",
 ]
+# The public trade stream for `tra paper` and `tra live` is ccxt's, so this is the ccxt extra
+# under the name the docs have always used for it.
 shadow = [
-    "websockets>=13",
+    "ccxt>=4.5",
 ]
 
 [dependency-groups]
@@ -135,8 +137,6 @@ module = [
     "anthropic.*",
     "openai",
     "openai.*",
-    "websockets",
-    "websockets.*",
     "google",
     "google.*",
 ]

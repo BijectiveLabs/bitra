@@ -26,7 +26,7 @@ trading_research_agents/
                fill probability, markout                                        -> ledger, envelope, data, chain
   strategy/    the core protocol, exits bound to the mechanism, the walk-forward
                harness; no strategy of its own                                 -> everything above
-  trading/     feeds (live plugins in trading/feeds), simulated venue, the
+  trading/     the live feed through ccxt in trading/feeds, simulated venue, the
                live venue through ccxt in trading/venues, controls, canary caps,
                ladder, the runtime                                                     -> everything above
   llm/         language-model providers, fallback chains, usage ledger        depends on nothing
@@ -111,9 +111,10 @@ It is deliberately small. It holds what an autonomous desk needs to send an orde
 afterwards what happened, and no more; a full order and portfolio platform is a different product.
 
 `tra live`, the research ladder's canary tier, sends through the same client and hand as venue
-mode, so the order path is one path whichever command sends. The public trade stream that
-`tra trade shadow` and `tra live` read is still a Bybit websocket plugin in `trading/feeds/`, and it is
-next to move onto ccxt.
+mode, so the order path is one path whichever command sends, and the public trade stream that
+`tra trade shadow` and `tra live` read is ccxt's too. What is left venue by venue is what ccxt does
+not unify: the historical trade archives in `data/venues/`, and the account checks in
+`trading/venues/accounts.py`.
 
 ## The session, as it runs
 

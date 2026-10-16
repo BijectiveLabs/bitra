@@ -8,7 +8,6 @@ from typing import Protocol
 from trading_research_agents.trading.feed import Feed
 
 ENTRY_POINT_GROUP = "trading_research_agents.feeds"
-BUNDLED = ("trading_research_agents.trading.feeds.bybit",)
 
 
 class UnknownFeedError(KeyError):
@@ -40,23 +39,35 @@ def _discover() -> None:
     if _discovered:
         return
     _discovered = True
-    for module in BUNDLED:
-        import_module(module)
     for ep in entry_points(group=ENTRY_POINT_GROUP):
         plugin = ep.load()
         register(plugin() if isinstance(plugin, type) else plugin)
 
 
-def live_feed(name: str) -> LiveFeedFactory:
-    _discover()
+def _streamed() -> tuple[str, ...]:
     try:
-        return _registry[name.strip().lower()]
-    except KeyError:
-        raise UnknownFeedError(
-            f"no live feed named {name!r}; registered: {', '.join(sorted(_registry)) or 'none'}"
-        ) from None
+        pro = import_module("ccxt.pro")
+    except ImportError:
+        return ()
+    return tuple(str(name) for name in getattr(pro, "exchanges", ()))
+
+
+def live_feed(name: str) -> LiveFeedFactory:
+    """A registered plugin by that name, else the venue's public stream through ccxt."""
+    _discover()
+    key = name.strip().lower()
+    if key in _registry:
+        return _registry[key]
+    if key in _streamed():
+        from trading_research_agents.trading.feeds.ccxt_trades import CcxtFeedFactory
+
+        return CcxtFeedFactory(key)
+    raise UnknownFeedError(
+        f"no live feed named {name!r}: not a registered plugin, and not a venue ccxt streams "
+        "(is the ccxt extra installed?)"
+    )
 
 
 def live_feeds() -> tuple[str, ...]:
     _discover()
-    return tuple(sorted(_registry))
+    return tuple(sorted({*_registry, *_streamed()}))
