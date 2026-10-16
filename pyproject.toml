@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "trading-research-agents"
-version = "0.6.7"
-description = "An autonomous trading system for crypto. The agents propose; tested rules decide."
+version = "0.6.8"
+description = "Autonomous trading agents with deterministic execution. The agents propose; the system decides."
 dynamic = ["readme"]
 requires-python = ">=3.11"
 license = "MIT"
@@ -14,7 +14,8 @@ authors = [{ name = "Bijective Labs" }]
 keywords = [
     "quant", "crypto", "trading", "agents", "llm", "perpetuals", "autonomous", "backtest", "risk",
     "algorithmic-trading", "trading-bot", "ai-agents", "llm-agents", "ccxt", "risk-management",
-    "mcp", "openai", "anthropic", "gemini", "groq", "ollama",
+    "mcp", "openai", "anthropic", "gemini", "groq", "ollama", "trading-agents", "deterministic",
+    "execution", "trading-system",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -39,6 +40,8 @@ dependencies = [
 
 [project.scripts]
 tra = "trading_research_agents.cli:main"
+# The same command under the package's own name, which is what `uvx trading-research-agents` runs.
+trading-research-agents = "trading_research_agents.cli:main"
 
 [project.urls]
 Homepage = "https://www.bijectivelabs.dev/open-source"

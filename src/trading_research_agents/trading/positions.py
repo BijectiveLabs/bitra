@@ -351,7 +351,7 @@ class Keeper:
             notional = entry.price * min(amount, entry.size)
             trip.update(
                 {
-                    "quote": _quote_of(str(getattr(hand, "symbol", ""))),
+                    "quote": _settlement(hand),
                     "net_bps": str(((gross - fees) / notional * 10_000).quantize(Decimal("0.1"))),
                     "exit": str(exit_price.quantize(Decimal("0.0001"))),
                     "gross": str(gross.quantize(Decimal("0.0001"))),
@@ -409,9 +409,14 @@ def _contract_unit(hand: Any) -> Decimal:
     return Decimal(1) if size is None else Decimal(size())
 
 
-def _quote_of(symbol: str) -> str:
-    """The settlement currency of a ccxt symbol: `XRP/USDT:USDT` is USDT."""
-    return symbol.partition("/")[2].partition(":")[0]
+def _settlement(hand: Any) -> str:
+    """The currency the result is counted in, as the venue describes the market."""
+    with suppress(Exception):
+        found = str(hand.market().settlement)
+        if found:
+            return found
+    # A hand that cannot describe its market: the quote half of a ccxt symbol, `XRP/USDT:USDT`.
+    return str(getattr(hand, "symbol", "")).partition("/")[2].partition(":")[0]
 
 
 def _trip_line(trip: Mapping[str, Any]) -> str:

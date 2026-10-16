@@ -8,10 +8,12 @@ const host = 'https://docs.bijectivelabs.dev'
 const pypi = 'https://pypi.org/project/trading-research-agents/'
 const website = 'https://www.bijectivelabs.dev/open-source'
 const description =
-  'Documentation for trading-research-agents, an open-source autonomous trading system for crypto by ' +
+  'Documentation for trading-research-agents, open-source autonomous trading agents with deterministic ' +
+  'execution by ' +
   'Bijective Labs: install, the decision cycle, agents, model providers, venues and controls.'
 const summary =
-  'An open-source Python package and command line (tra): an autonomous crypto trading system. ' +
+  'An open-source Python package and command line (tra): autonomous trading agents with ' +
+  'deterministic execution. ' +
   'Language model agents read the market and propose a trade; fixed, tested rules compute every ' +
   'figure, price the round trip, size the position and decide whether an order goes out. It runs ' +
   'in a sandbox by default, trades linear perpetuals today on any exchange ccxt supports, with more ' +

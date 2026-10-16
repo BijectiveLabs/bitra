@@ -57,7 +57,7 @@ Rules, each enforced by a test in `tests/test_boundaries.py`:
 
 ## Adoption rules
 
-Four rules decide what goes into the package and what stays outside it. They exist so the
+Five rules decide what goes into the package and what stays outside it. They exist so the
 software can be adopted without inheriting the particular strategies, venues or vendors of
 the research it descends from.
 
@@ -76,6 +76,13 @@ the research it descends from.
 4. **Agents are a surface, with full access.** The roles and the MCP tools call the gates;
    they never are the gates. A model may decide (the technical analyst is a decision core);
    the system executes and refuses (controls, caps, ladder, kill switch). Rules 3 and 8 enforce it.
+5. **Every market is one shape.** A market is read once from ccxt's unified market structure
+   into `trading.market.Market`: its type, what it settles in, whether it trades in contracts
+   and how large one is, its fees and its minimum. A spot pair, a perpetual, a dated future, an
+   option and a prediction outcome are the same type with different facts, so the order path
+   asks the market what applies (contracts, margin, leverage) rather than branching per venue or
+   per market type. Which types venue mode sends to today is one list in `trading/dispatch.py`;
+   [Boundaries](/opensource/boundaries) says why the rest wait.
 
 Not every package exists yet. The list is the plan; a package is added when its first gate
 lands with tests. Today: `ledger`, `envelope`, `data`, `chain`, `execution`, `strategy`,
@@ -83,6 +90,29 @@ lands with tests. Today: `ledger`, `envelope`, `data`, `chain`, `execution`, `st
 config, a column map, two example cores), never imported by it; `templates/` inside the
 package is a copy of those examples that `tra init` writes into a new project, and is never
 imported either.
+
+## One system, every venue
+
+The desk does not carry an adapter per exchange. It speaks to every venue through ccxt, and
+everything ccxt reports is turned into the package's own types once, at the edge. Past that edge
+a venue is a name in the settings, and the parts below work the same for all of them.
+
+| Part | What it does | Where |
+|---|---|---|
+| Data | candles, books, funding and open interest from any venue ccxt supports, chained with fallbacks | `data/sources/` |
+| Market | one shape for every market type, read from ccxt's unified market | `trading/market.py` |
+| Order | the entry, its exits attached, one per decision, under a client id from the cycle | `trading/dispatch.py` |
+| Execution | a taker entry as a limit IOC inside a slippage band, a maker entry post-only with a timeout | `trading/dispatch.py` |
+| Order state | waits for the fill, cancels what is left, and records what the venue said in its own words | `trading/dispatch.py` |
+| Position | reconciled with the venue on every pass; closed by time or by the kill switch, reduce-only | `trading/positions.py` |
+| Account | equity, free margin, the margin an order ties up, the day's loss and the drawdown | `trading/capital.py` |
+
+It is deliberately small. It holds what an autonomous desk needs to send an order safely and know
+afterwards what happened, and no more; a full order and portfolio platform is a different product.
+
+One path still predates this: `tra live`, the research ladder's canary tier, sends through a
+direct Bybit plugin in `trading/venues/`. It is due to move onto the same ccxt path, after which
+the plugin is retired.
 
 ## The session, as it runs
 

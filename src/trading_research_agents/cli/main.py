@@ -4287,6 +4287,7 @@ def _venue_hand(
         max_slippage_bps=mandate.max_slippage_bps,
         max_margin_share=mandate.max_margin_share,
         liquidation_buffer_bps=mandate.liquidation_buffer_bps,
+        markets=mandate.markets,
         rate=rate,
         env=env,
     )

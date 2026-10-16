@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
 
+from trading_research_agents.execution.mandate import MARKETS
 from trading_research_agents.extras import install_hint
 from trading_research_agents.trading.capital import (
     CapitalError,
@@ -40,6 +41,7 @@ from trading_research_agents.trading.capital import (
     margin_needed,
     read_account,
 )
+from trading_research_agents.trading.market import Market, MarketError
 from trading_research_agents.trading.venues.accounts import account_refusal
 
 SIDES = {"long": "buy", "short": "sell"}
@@ -49,6 +51,9 @@ SIDES = {"long": "buy", "short": "sell"}
 ENVIRONMENTS = ("demo", "testnet", "mainnet")
 ROLES = ("maker", "taker")
 EXITS = ("attached", "none")
+# A venue that does not describe its markets through ccxt is let through: the size, margin and
+# exit checks that follow still read the account, and refuse on what they find there.
+UNDESCRIBED = "unknown"
 # Order states in which the venue has finished with an order without it being fully filled.
 ENDED = ("canceled", "cancelled", "rejected", "expired")
 BPS = Decimal(10_000)
@@ -147,6 +152,7 @@ class VenueHand:
     max_slippage_bps: Decimal = Decimal(20)
     max_margin_share: Decimal = Decimal("0.5")
     liquidation_buffer_bps: Decimal = Decimal(50)
+    markets: tuple[str, ...] = MARKETS
     # Shared by every hand in a run: [controls].max_orders_per_minute is the desk's, not a hand's.
     rate: OrderRate | None = None
     client: Any = None
@@ -277,8 +283,8 @@ class VenueHand:
         if self.sent_count:
             # One decision, one order. A hand asked twice is a wiring fault, not a second trade.
             return {"sent": False, "refused": "this hand has already sent its one order"}
-        kind = market_kind(self._market())
-        if kind not in ("linear perpetual", "unknown"):
+        kind = self.market().label
+        if kind not in MARKETS and kind != UNDESCRIBED:
             # Leverage, margin, liquidation and reduce-only exits are all perpetual-futures
             # mechanics; a spot or option symbol here would be priced and protected wrongly.
             return {
@@ -286,6 +292,14 @@ class VenueHand:
                 "refused": (
                     f"{self.symbol} is a {kind} market; venue mode trades linear perpetual "
                     "futures today, and other market types are not built yet"
+                ),
+            }
+        if kind not in self.markets and kind != UNDESCRIBED:
+            return {
+                "sent": False,
+                "refused": (
+                    f"{self.symbol} is a {kind} market and [execution].markets lists "
+                    f"{list(self.markets)}"
                 ),
             }
         target = str(intent.get("target", ""))
@@ -432,7 +446,7 @@ class VenueHand:
             "role": self.role,
             "side": side,
             "size": str(size),
-            **({"contracts": str(contracts), "contract_size": str(unit)} if unit != 1 else {}),
+            **({"contracts": f"{contracts:f}", "contract_size": f"{unit:f}"} if unit != 1 else {}),
             "price": None if price is None else str(price),
             "notional": str(notional),
             "client_order_id": order_id,
@@ -572,24 +586,10 @@ class VenueHand:
         million tokens, so sending the base figure as an amount would be a hundred times too small
         on one and a million times too large on another.
         """
-        market = self._market()
-        raw = market.get("contractSize")
-        if raw in (None, ""):
-            if market.get("contract"):
-                raise DispatchError(
-                    f"{self.venue} does not say how large one {self.symbol} contract is, so a size "
-                    "in the base cannot be turned into an order"
-                )
-            return Decimal(1)
         try:
-            unit = Decimal(str(raw))
-        except ArithmeticError:
-            unit = Decimal(0)
-        if not unit.is_finite() or unit <= 0:
-            raise DispatchError(
-                f"{self.venue} reports a contract size of {raw!r} for {self.symbol}"
-            )
-        return unit
+            return self.market().unit()
+        except MarketError as exc:
+            raise DispatchError(str(exc)) from exc
 
     @staticmethod
     def _in_base(order: Mapping[str, Any], unit: Decimal) -> dict[str, Any]:
@@ -598,7 +598,8 @@ class VenueHand:
         if unit != 1:
             for key in ("filled", "amount", "remaining"):
                 if out.get(key) is not None:
-                    out[key] = str(Decimal(str(out[key])) * unit)
+                    # Fixed-point: Decimal's own str writes 10 contracts of 0.001 as 1E+1.
+                    out[key] = f"{Decimal(str(out[key])) * unit:f}"
         return out
 
     def _off_step(self, contracts: Decimal, size: Decimal, unit: Decimal) -> str:
@@ -727,15 +728,15 @@ class VenueHand:
         """Is there margin for this order, and does liquidation sit safely beyond the stop?"""
         if self.leverage is None:
             return {}
-        market = self._market()
-        currency = str(market.get("settle") or market.get("quote") or "")
+        market = self.market()
+        currency = market.settlement
         if not currency:
             return f"the settlement currency of {self.symbol} is unknown; nothing was sent"
         try:
             account = read_account(self.client, currency)
         except CapitalError as exc:
             return self._clean(str(exc))
-        fee_bps = Decimal(str(market.get("taker") or 0)) * BPS
+        fee_bps = (market.taker or Decimal(0)) * BPS
         needed = margin_needed(notional, self.leverage, fee_bps)
         allowed = account.free * self.max_margin_share
         if needed > allowed:
@@ -774,11 +775,14 @@ class VenueHand:
 
     def account(self) -> Any:
         """The account in this symbol's settlement currency, read through this hand's client."""
-        market = self._market()
-        currency = str(market.get("settle") or market.get("quote") or "")
+        currency = self.market().settlement
         if not currency:
             raise CapitalError(f"the settlement currency of {self.symbol} is unknown")
         return read_account(self.client, currency)
+
+    def market(self) -> Market:
+        """This hand's market as the venue describes it through ccxt, in the package's one shape."""
+        return Market.from_ccxt(self.venue, self.symbol, self._market())
 
     def _market(self) -> Mapping[str, Any]:
         with suppress(Exception):
@@ -1112,6 +1116,7 @@ def hand_for(
     max_slippage_bps: Decimal = Decimal(20),
     max_margin_share: Decimal = Decimal("0.5"),
     liquidation_buffer_bps: Decimal = Decimal(50),
+    markets: tuple[str, ...] = MARKETS,
     rate: OrderRate | None = None,
 ) -> VenueHand:
     """A hand for `venue`, reading whatever credentials that venue signs with."""
@@ -1137,20 +1142,11 @@ def hand_for(
         max_slippage_bps=max_slippage_bps,
         max_margin_share=max_margin_share,
         liquidation_buffer_bps=liquidation_buffer_bps,
+        markets=markets,
         rate=rate,
     )
 
 
 def market_kind(market: Mapping[str, Any]) -> str:
     """What ccxt says a market is, in the words the refusal uses."""
-    if not market:
-        return "unknown"
-    if market.get("option"):
-        return "option"
-    if market.get("spot"):
-        return "spot"
-    if market.get("future") and not market.get("swap"):
-        return "dated future"
-    if market.get("swap"):
-        return "linear perpetual" if market.get("linear") else "inverse perpetual"
-    return str(market.get("type") or "unknown")
+    return Market.from_ccxt("", "", market).label

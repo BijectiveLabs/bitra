@@ -6,6 +6,44 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.6.8] - 2026-10-16
+
+### Added
+
+- The package also installs its command as `trading-research-agents`, next to `tra`, so
+  `uvx --with "mcp>=2,<3" trading-research-agents mcp serve` starts the MCP server without an
+  install. `server.json` describes the server for the MCP Registry, and the MCP page has a section
+  on using it from your own agent. Each release now also publishes that entry to the MCP Registry,
+  after PyPI, through GitHub's OIDC with a pinned and checksum-verified publisher.
+
+### Changed
+
+- One headline everywhere, naming no market: "Autonomous trading agents with deterministic
+  execution. The agents propose; the system decides." It replaces "An autonomous trading system
+  for crypto" in the README, the docs, the PyPI summary, the citation and the console. What it
+  trades today is unchanged and still stated where it is described: linear perpetuals, run end to
+  end on Bybit and OKX.
+- Every market is read once into one type, `trading.market.Market`, from ccxt's unified market
+  structure: type, settlement currency, contract size, fees and minimum. The order path asks it
+  what applies instead of reading raw venue fields, which is the ground spot, tokenized stocks and
+  prediction markets are built on. Nothing about what is sent changes; a new test pins the
+  perpetual order byte for byte and checks that the same decision sends the same order twice.
+- What kind of market a desk may send to is one setting, `[execution].markets`, defaulting to
+  `["linear perpetual"]`, the one type built today. A type that is not built yet is refused when
+  the config is read, by name. The round-trip record reads its currency from the market's
+  settlement instead of splitting the symbol.
+- The architecture page describes the desk as one system: data, markets, orders, execution, order
+  state, positions and the account, all through ccxt and the package's own types, with no adapter
+  per exchange.
+
+### Fixed
+
+- Order records wrote some quantities in scientific notation: ten contracts of 0.001 were recorded
+  as `1E+1`, and a fill on a venue with a large contract could read `2E+7`. Contracts, contract
+  size and filled amounts are now written in plain decimals. Orders themselves were never affected.
+- The MCP server reported an empty version to the hosts that connect to it; it now reports the
+  package version and the documentation link.
+
 ## [0.6.7] - 2026-10-16
 
 ### Changed

@@ -1,11 +1,11 @@
 ---
 title: Introduction
-description: "What trading-research-agents is: an autonomous crypto trading system where language models propose and fixed, tested rules price, size and send. What it does, what it never lets a model do, and where to start."
+description: "What trading-research-agents is: autonomous trading agents with deterministic execution, where language models propose and fixed, tested rules price, size and send. What it does, what it never lets a model do, and where to start."
 ---
 
 # trading-research-agents
 
-**An autonomous trading system for crypto. The agents propose; tested rules decide.**
+**Autonomous trading agents with deterministic execution. The agents propose; the system decides.**
 
 Language models are good at reading a market and saying what they think. They are bad at
 arithmetic, they don't know what a trade costs, and they will happily overrule a limit you set.

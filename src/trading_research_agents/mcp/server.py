@@ -13,6 +13,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any, ParamSpec, TypeVar
 
+from trading_research_agents import __version__
 from trading_research_agents.extras import install_hint
 from trading_research_agents.surface import READ_TOOLS
 from trading_research_agents.surface.confine import confined, roots_of
@@ -46,7 +47,12 @@ def build_server(roots: Sequence[Path] | None = None) -> Any:
     """
     server_cls, annotations_cls, tool_error = _sdk()
     allowed = roots_of(roots or (Path.cwd(),))
-    mcp = server_cls(SERVER_NAME, instructions=INSTRUCTIONS)
+    mcp = server_cls(
+        SERVER_NAME,
+        instructions=INSTRUCTIONS,
+        version=__version__,
+        website_url="https://docs.bijectivelabs.dev/opensource/mcp",
+    )
     reads = annotations_cls(read_only_hint=True, open_world_hint=False)
 
     def guarded(fn: Callable[P, R]) -> Callable[P, R]:

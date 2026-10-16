@@ -72,3 +72,41 @@ jobs:
 
       - name: Publish
         run: uv publish --trusted-publishing always dist/*
+
+  # The MCP Registry entry, after PyPI: the registry checks that the version in server.json is on
+  # PyPI and that its README names the server. GitHub OIDC proves the namespace, so no token is
+  # stored. The publisher is pinned and checked against the checksum its release published.
+  registry:
+    name: publish to the MCP Registry
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      PUBLISHER: v1.8.1
+      PUBLISHER_SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install the publisher
+        run: |
+          curl -sSfL -o mcp-publisher.tar.gz \
+            "https://github.com/modelcontextprotocol/registry/releases/download/${PUBLISHER}/mcp-publisher_linux_amd64.tar.gz"
+          echo "${PUBLISHER_SHA256}  mcp-publisher.tar.gz" | sha256sum --check
+          tar xzf mcp-publisher.tar.gz mcp-publisher
+
+      - name: Wait for the version on PyPI
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          for _ in $(seq 1 30); do
+            curl -sSf "https://pypi.org/pypi/trading-research-agents/${version}/json" >/dev/null && exit 0
+            sleep 10
+          done
+          echo "trading-research-agents ${version} is not on PyPI after five minutes"
+          exit 1
+
+      - name: Publish
+        run: |
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish

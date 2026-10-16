@@ -4,7 +4,9 @@
 
 <h1 align="center">trading-research-agents</h1>
 
-<p align="center"><strong>An autonomous trading system for crypto. The agents propose; tested rules decide.</strong></p>
+<p align="center"><strong>Autonomous trading agents with deterministic execution. The agents propose; the system decides.</strong></p>
+
+<!-- mcp-name: io.github.BijectiveLabs/trading-research-agents -->
 
 <p align="center">
   <a href="https://github.com/BijectiveLabs/trading-research-agents/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/BijectiveLabs/trading-research-agents/actions/workflows/ci.yml/badge.svg?branch=master"></a>

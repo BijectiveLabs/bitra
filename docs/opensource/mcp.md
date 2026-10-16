@@ -22,6 +22,34 @@ A host configuration names the command and nothing else:
 { "mcpServers": { "trading-research-agents": { "command": "tra", "args": ["mcp", "serve"] } } }
 ```
 
+## Use it from your own agent
+
+Your agent does not need this package installed to use it. With [uv](https://docs.astral.sh/uv/)
+on the machine, the host starts the server on demand, at the released version, with the MCP SDK
+it needs:
+
+```json
+{
+  "mcpServers": {
+    "trading-research-agents": {
+      "command": "uvx",
+      "args": ["--with", "mcp>=2,<3", "trading-research-agents", "mcp", "serve"]
+    }
+  }
+}
+```
+
+Any host that launches a stdio server takes this, desktop chat apps and coding agents alike. Add
+`"--root", "/path/to/project"` at the end to let the tools read a project other than the directory
+the host starts in. From 0.6.8 the package installs a `trading-research-agents` command next to
+`tra`, which is what `uvx` runs.
+
+What your agent gets is the same set of checks this package's own roles use, and nothing that
+trades: it can ask whether a claimed edge clears the round-trip cost, whether a dataset is fit to
+test on, and what a validation run decided. Every tool reads; none sends an order, writes a
+ledger row or moves the ladder. The entry for the MCP Registry is `server.json` at the root of the
+repository, under the name `io.github.BijectiveLabs/trading-research-agents`.
+
 ## Tools
 
 Every tool is annotated read-only and closed-world; ten of them, the same functions the

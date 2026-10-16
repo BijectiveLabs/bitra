@@ -18,7 +18,7 @@ from trading_research_agents.execution.confluence import STANCES, ConfluenceErro
 from trading_research_agents.execution.conviction import Conviction, ConvictionError, Tier
 from trading_research_agents.execution.cost import CostError, FundingSchedule
 from trading_research_agents.execution.desk import Desk, DeskError
-from trading_research_agents.execution.mandate import Mandate, MandateError
+from trading_research_agents.execution.mandate import MARKETS, Mandate, MandateError
 from trading_research_agents.execution.regime import REGIME_KEYS, RegimeError, RegimeRule
 from trading_research_agents.execution.stops import MODES, StopError, VolatilityExit
 from trading_research_agents.execution.targets import TargetError, Targets
@@ -680,6 +680,7 @@ EXECUTION_KEYS = (
     "adopt_open_position",
     "params",
     "environment",
+    "markets",
 )
 
 
@@ -726,9 +727,19 @@ def _mandate(raw: dict[str, Any], venue_key: str) -> Mandate:
                 else Decimal(50)
             ),
             hold_limit=str(table.get("hold_limit", "timeout")),
+            markets=_markets(table),
         )
     except MandateError as exc:
         raise ConfigError(str(exc)) from exc
+
+
+def _markets(table: Mapping[str, Any]) -> tuple[str, ...]:
+    if "markets" not in table:
+        return MARKETS
+    listed = table["markets"]
+    if not isinstance(listed, list) or not all(isinstance(kind, str) for kind in listed):
+        raise ConfigError('[execution].markets is a list of market types: ["linear perpetual"]')
+    return tuple(dict.fromkeys(kind.strip() for kind in listed))
 
 
 CONVICTION_KEYS = ("weights", "validator_weight", "min_score", "max_leverage", "ladder")

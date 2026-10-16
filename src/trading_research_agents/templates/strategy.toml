@@ -190,6 +190,7 @@ kill_switch = "KILL"               # touch this file to flatten and stop
 # max_margin_share = 0.5         # the most of the free margin one order may use
 # liquidation_buffer_bps = 50    # liquidation must sit this far beyond the stop
 # hold_limit = "timeout"         # timeout | horizon | none: when time closes a position
+# markets = ["linear perpetual"]  # market types this desk may send to; the one built today
 # max_drift_bps = 10              # refuse when the book moved this far against the trade
 #                                  # between the snapshot it was priced on and sending it
 # adopt_open_position = false      # deliberately add to a position this desk did not open
