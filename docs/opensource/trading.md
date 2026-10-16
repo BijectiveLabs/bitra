@@ -25,7 +25,7 @@ path: not to decide, not to assess risk, not to narrate an incident mid-run. The
 | T0 research | recorded (Parquet from `tra data audit`) | simulated | `tra backtest` (`trade replay`) |
 | T1 paper | live public trades | simulated | `tra paper` (`trade shadow`) |
 | T2 shadow | live public trades | simulated, intents recorded, zero orders | `tra paper` (`trade shadow`) |
-| T3 canary | live public trades | a live venue plugin, hard caps | `tra live` (`trade live`), see [The live tier](/opensource/live) |
+| T3 canary | live public trades | any ccxt venue, hard caps | `tra live` (`trade live`), see [The live tier](/opensource/live) |
 | T4 production | | | **not in this release**; the ladder refuses it |
 
 The common spellings are aliases of the tiers. Real orders exist only at canary, through a
@@ -142,8 +142,8 @@ A clock that goes backwards refuses rather than evaluating.
 
 `tra ladder promote --evidence "..." --signed-by "..."` moves one tier up and needs both. `tra
 ladder demote --reason "..."` moves down on a reason alone. The asymmetry is deliberate: up
-slowly with evidence, down instantly. Canary is reachable when a live venue plugin is
-registered; production is refused by this release, and the ladder says so. `tra live` runs
+slowly with evidence, down instantly. Canary is reachable when a live venue is
+available, which is any venue ccxt knows once the `ccxt` extra is installed; production is refused by this release, and the ladder says so. `tra live` runs
 only when `ladder.json` stands at canary.
 
 ## Running it
@@ -173,11 +173,13 @@ its own core.
 
 Live feeds are plugins, found by name through `trading.feeds`. `tra trade shadow` takes the
 name from the venue half of `[run].venue_key` (`bybit/taker-taker` selects `bybit`) or from
-`--feed NAME`, and refuses a name with no plugin before opening a connection. One feed ships,
-behind the `[shadow]` extra; [Venues](/opensource/venues) says how to add another.
+`--feed NAME`, and refuses a name it cannot stream before opening a connection. Every venue ccxt
+streams is a feed, through the `ccxt` extra (`[shadow]` installs the same thing);
+[Venues](/opensource/venues) says how to add one ccxt does not cover.
 
-The bundled feed subscribes to the venue's public trade stream with no key. A subscribe that
-is not acknowledged within ten seconds is not a subscription. A link carrying nothing for two
-ping intervals is treated as dead and reconnected. A frame it does not recognise is counted
-and shown, not dropped. The message shape was taken from the venue's own documentation and
-checked against recorded frames.
+The feed reads the venue's public trade stream with no key, through ccxt's streaming side, which
+keeps the socket, the venue's ping and the subscription. Trades on a contract market arrive in
+contracts and are turned into the base. A trade the venue sends twice is passed on once; a trade
+older than the last one passed on is counted and not passed on, because bars are built in time
+order; a trade that does not parse stops the feed rather than leaving a gap that reads as a quiet
+market. A dropped connection is reopened, and counted.

@@ -11,7 +11,6 @@ from trading_research_agents.execution.cost import FundingSchedule
 from trading_research_agents.trading.venue import Venue
 
 ENTRY_POINT_GROUP = "trading_research_agents.live_venues"
-BUNDLED = ("trading_research_agents.trading.venues.bybit",)
 
 
 class UnknownLiveVenueError(KeyError):
@@ -70,26 +69,38 @@ def _discover() -> None:
     if _discovered:
         return
     _discovered = True
-    for module in BUNDLED:
-        import_module(module)
     for ep in entry_points(group=ENTRY_POINT_GROUP):
         plugin = ep.load()
         register(plugin() if isinstance(plugin, type) else plugin)
 
 
-def live_venue(name: str) -> LiveVenueFactory:
-    _discover()
+def _ccxt_venues() -> tuple[str, ...]:
     try:
-        return _registry[name.strip().lower()]
-    except KeyError:
-        raise UnknownLiveVenueError(
-            f"no live venue named {name!r}; registered: {', '.join(sorted(_registry)) or 'none'}"
-        ) from None
+        ccxt = import_module("ccxt")
+    except ImportError:
+        return ()
+    return tuple(str(name) for name in getattr(ccxt, "exchanges", ()))
+
+
+def live_venue(name: str) -> LiveVenueFactory:
+    """A registered plugin by that name, else the venue through ccxt, the path every venue has."""
+    _discover()
+    key = name.strip().lower()
+    if key in _registry:
+        return _registry[key]
+    if key in _ccxt_venues():
+        from trading_research_agents.trading.venues.ccxt_live import CcxtLiveFactory
+
+        return CcxtLiveFactory(key)
+    raise UnknownLiveVenueError(
+        f"no live venue named {name!r}: not a registered plugin, and not an exchange ccxt knows "
+        "(is the ccxt extra installed?)"
+    )
 
 
 def live_venues() -> tuple[str, ...]:
     _discover()
-    return tuple(sorted(_registry))
+    return tuple(sorted({*_registry, *_ccxt_venues()}))
 
 
 __all__ = [

@@ -26,9 +26,9 @@ trading_research_agents/
                fill probability, markout                                        -> ledger, envelope, data, chain
   strategy/    the core protocol, exits bound to the mechanism, the walk-forward
                harness; no strategy of its own                                 -> everything above
-  trading/     feeds (live plugins in trading/feeds), simulated venue, live
-               venue plugins in trading/venues, controls, canary caps, ladder,
-               the runtime                                                     -> everything above
+  trading/     the live feed through ccxt in trading/feeds, simulated venue, the
+               live venue through ccxt in trading/venues, controls, canary caps,
+               ladder, the runtime                                                     -> everything above
   llm/         language-model providers, fallback chains, usage ledger        depends on nothing
   store/       snapshots and cycle directories                                  -> everything above, llm
   surface/     the gates as callable tools, read tools and tightening actions
@@ -110,9 +110,11 @@ a venue is a name in the settings, and the parts below work the same for all of 
 It is deliberately small. It holds what an autonomous desk needs to send an order safely and know
 afterwards what happened, and no more; a full order and portfolio platform is a different product.
 
-One path still predates this: `tra live`, the research ladder's canary tier, sends through a
-direct Bybit plugin in `trading/venues/`. It is due to move onto the same ccxt path, after which
-the plugin is retired.
+`tra live`, the research ladder's canary tier, sends through the same client and hand as venue
+mode, so the order path is one path whichever command sends, and the public trade stream that
+`tra trade shadow` and `tra live` read is ccxt's too. What is left venue by venue is what ccxt does
+not unify: the historical trade archives in `data/venues/`, and the account checks in
+`trading/venues/accounts.py`.
 
 ## The session, as it runs
 

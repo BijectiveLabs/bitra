@@ -8,8 +8,13 @@ not knowing is not a reason to refuse, and the venue still refuses at its end if
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any
+
+# A key that expires inside a session strands a position mid-trade; a week leaves room to rotate.
+MIN_KEY_LIFE_DAYS = 7
 
 
 def _okx(client: Any) -> str:
@@ -39,6 +44,58 @@ def _okx(client: Any) -> str:
 
 
 CHECKS: dict[str, Callable[[Any], str]] = {"okx": _okx, "myokx": _okx, "okxus": _okx}
+
+
+def _bybit_key(client: Any, *, ip_unbound_ok: bool, now: float) -> str:
+    """A trade key and nothing more: orders and positions, no wallet, bound to an IP, not expiring.
+
+    Read through `GET /v5/user/query-api`, ccxt's `privateGetV5UserQueryApi`. A key that can move
+    funds is refused even though it would trade, because the one permission a trading process never
+    needs is the one that empties the account.
+    """
+    read = getattr(client, "privateGetV5UserQueryApi", None)
+    if read is None:
+        return ""
+    info = (read() or {}).get("result") or {}
+    permissions = info.get("permissions") or {}
+    wallet = list(permissions.get("Wallet") or [])
+    contract = list(permissions.get("ContractTrade") or [])
+    if str(info.get("readOnly", "1")) == "1":
+        return "the key is read-only; a live session needs a trade key"
+    if wallet:
+        return f"the key carries wallet permissions {wallet}; a trading key must carry none"
+    if "Order" not in contract or "Position" not in contract:
+        return f"the key needs ContractTrade Order and Position; it has {contract}"
+    if not list(info.get("ips") or []) and not ip_unbound_ok:
+        return (
+            "the key is not bound to an IP; bind it, or set [live].key_ip_unbound_ok = true to "
+            "accept that deliberately"
+        )
+    expires = str(info.get("expiredAt") or "")
+    if expires and expires not in ("-1", "0"):
+        try:
+            when = datetime.fromisoformat(expires.replace("Z", "+00:00"))
+        except ValueError:
+            return ""
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=UTC)
+        days = (when.timestamp() - now) / 86400
+        if days < MIN_KEY_LIFE_DAYS:
+            return f"the key expires in {days:.0f} days; rotate it before a live session"
+    return ""
+
+
+KEY_CHECKS: dict[str, Callable[..., str]] = {"bybit": _bybit_key}
+
+
+def key_refusal(
+    venue: str, client: Any, *, ip_unbound_ok: bool = False, now: float | None = None
+) -> str:
+    """Why this key should not run a live session, or nothing when it passes or cannot be read."""
+    check = KEY_CHECKS.get(venue.strip().lower())
+    if check is None:
+        return ""
+    return check(client, ip_unbound_ok=ip_unbound_ok, now=time.time() if now is None else now)
 
 
 def account_refusal(venue: str, client: Any) -> str:
