@@ -18,6 +18,13 @@ All notable changes to this project are recorded here. The format follows
   what applies instead of reading raw venue fields, which is the ground spot, tokenized stocks and
   prediction markets are built on. Nothing about what is sent changes; a new test pins the
   perpetual order byte for byte and checks that the same decision sends the same order twice.
+- What kind of market a desk may send to is one setting, `[execution].markets`, defaulting to
+  `["linear perpetual"]`, the one type built today. A type that is not built yet is refused when
+  the config is read, by name. The round-trip record reads its currency from the market's
+  settlement instead of splitting the symbol.
+- The architecture page describes the desk as one system: data, markets, orders, execution, order
+  state, positions and the account, all through ccxt and the package's own types, with no adapter
+  per exchange.
 
 ### Fixed
 

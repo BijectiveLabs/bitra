@@ -50,6 +50,9 @@ I accept that the losses are mine.
 
 
 MARGIN_MODES = ("isolated", "cross")
+# The market types the order path is built for, in the words `trading.market.Market` labels them.
+# Spot, tokenized stocks and prediction markets join this list as each is built and run end to end.
+MARKETS = ("linear perpetual",)
 HOLD_LIMITS = ("timeout", "horizon", "none")
 
 
@@ -101,6 +104,8 @@ class Mandate:
     hold_limit: str = "timeout"
     # Where orders go: demo, testnet or mainnet. Empty falls back to [live].environment, then demo.
     environment: str = ""
+    # Which market types this desk may send to. The venue and the symbol say where; this says what.
+    markets: tuple[str, ...] = MARKETS
 
     def __post_init__(self) -> None:
         if self.mode not in MODES:
@@ -137,6 +142,13 @@ class Mandate:
             raise MandateError(f"[execution].hold_limit is one of {list(HOLD_LIMITS)}")
         if self.environment not in ("", "demo", "testnet", "mainnet"):
             raise MandateError('[execution].environment is "demo", "testnet" or "mainnet"')
+        if not self.markets:
+            raise MandateError("[execution].markets names at least one market type")
+        unbuilt = [kind for kind in self.markets if kind not in MARKETS]
+        if unbuilt:
+            raise MandateError(
+                f"[execution].markets: {unbuilt} not built yet; built today: {list(MARKETS)}"
+            )
         if self.acknowledged_on:
             try:
                 signed = date.fromisoformat(self.acknowledged_on)
@@ -170,6 +182,7 @@ class Mandate:
             "hold_limit": self.hold_limit,
             "adopt_open_position": self.adopt_open_position,
             "environment": self.environment,
+            "markets": list(self.markets),
             "params": {str(k): str(v) for k, v in sorted(self.params.items())},
         }
 

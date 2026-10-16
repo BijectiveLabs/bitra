@@ -195,3 +195,52 @@ def test_the_same_decision_on_the_same_market_sends_the_same_order() -> None:
     assert first["contracts"] == "10" and first["contract_size"] == "0.001"
     assert first["filled"] == "0.010" and first["slippage_bps"] == "0.05"
     assert first["send_ms"] == 0 and first["decision_age_s"] == 0.0
+
+
+def test_the_market_types_a_desk_sends_to_are_one_setting() -> None:
+    from trading_research_agents.trading.config import ConfigError, _mandate
+
+    def read(execution: dict[str, Any]) -> tuple[str, ...]:
+        return _mandate({"execution": execution}, "bybit/taker-taker").markets
+
+    assert read({}) == ("linear perpetual",)
+    assert read({"markets": ["linear perpetual", "linear perpetual"]}) == ("linear perpetual",)
+    with pytest.raises(ConfigError, match=r"\['spot'\] not built yet"):
+        read({"markets": ["spot"]})
+    with pytest.raises(ConfigError, match="at least one market type"):
+        read({"markets": []})
+    with pytest.raises(ConfigError, match="is a list of market types"):
+        read({"markets": "linear perpetual"})
+
+
+def test_a_built_market_type_the_desk_did_not_list_is_refused() -> None:
+    venue = Recorded()
+    hand = VenueHand(
+        venue="bybit",
+        symbol="BTC/USDT:USDT",
+        instrument="BTCUSDT",
+        max_notional=Decimal(5000),
+        keys=("BYBIT_API_KEY", "BYBIT_API_SECRET"),
+        client=venue,
+        clock=lambda: 4070908800.0,
+        markets=(),
+    )
+    placed = hand(dict(INTENT))
+    assert placed["sent"] is False and "[execution].markets lists []" in placed["refused"]
+    assert venue.calls == []
+
+
+def test_a_round_trip_is_counted_in_the_markets_settlement_currency() -> None:
+    from trading_research_agents.trading.positions import _settlement
+
+    class Described:
+        symbol = "BTC/USD:BTC"
+
+        def market(self) -> Market:
+            return Market.from_ccxt("venue", self.symbol, INVERSE_SWAP)
+
+    class Bare:
+        symbol = "XRP/USDT:USDT"
+
+    assert _settlement(Described()) == "BTC"
+    assert _settlement(Bare()) == "USDT"

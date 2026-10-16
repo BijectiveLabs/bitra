@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
 
+from trading_research_agents.execution.mandate import MARKETS
 from trading_research_agents.extras import install_hint
 from trading_research_agents.trading.capital import (
     CapitalError,
@@ -50,9 +51,9 @@ SIDES = {"long": "buy", "short": "sell"}
 ENVIRONMENTS = ("demo", "testnet", "mainnet")
 ROLES = ("maker", "taker")
 EXITS = ("attached", "none")
-# The market types venue mode sends to. "unknown" is a venue that does not describe its markets
-# through ccxt; it is let through because the size, margin and exit checks still read the account.
-TRADED = ("linear perpetual", "unknown")
+# A venue that does not describe its markets through ccxt is let through: the size, margin and
+# exit checks that follow still read the account, and refuse on what they find there.
+UNDESCRIBED = "unknown"
 # Order states in which the venue has finished with an order without it being fully filled.
 ENDED = ("canceled", "cancelled", "rejected", "expired")
 BPS = Decimal(10_000)
@@ -151,6 +152,7 @@ class VenueHand:
     max_slippage_bps: Decimal = Decimal(20)
     max_margin_share: Decimal = Decimal("0.5")
     liquidation_buffer_bps: Decimal = Decimal(50)
+    markets: tuple[str, ...] = MARKETS
     # Shared by every hand in a run: [controls].max_orders_per_minute is the desk's, not a hand's.
     rate: OrderRate | None = None
     client: Any = None
@@ -282,7 +284,7 @@ class VenueHand:
             # One decision, one order. A hand asked twice is a wiring fault, not a second trade.
             return {"sent": False, "refused": "this hand has already sent its one order"}
         kind = self.market().label
-        if kind not in TRADED:
+        if kind not in MARKETS and kind != UNDESCRIBED:
             # Leverage, margin, liquidation and reduce-only exits are all perpetual-futures
             # mechanics; a spot or option symbol here would be priced and protected wrongly.
             return {
@@ -290,6 +292,14 @@ class VenueHand:
                 "refused": (
                     f"{self.symbol} is a {kind} market; venue mode trades linear perpetual "
                     "futures today, and other market types are not built yet"
+                ),
+            }
+        if kind not in self.markets and kind != UNDESCRIBED:
+            return {
+                "sent": False,
+                "refused": (
+                    f"{self.symbol} is a {kind} market and [execution].markets lists "
+                    f"{list(self.markets)}"
                 ),
             }
         target = str(intent.get("target", ""))
@@ -1106,6 +1116,7 @@ def hand_for(
     max_slippage_bps: Decimal = Decimal(20),
     max_margin_share: Decimal = Decimal("0.5"),
     liquidation_buffer_bps: Decimal = Decimal(50),
+    markets: tuple[str, ...] = MARKETS,
     rate: OrderRate | None = None,
 ) -> VenueHand:
     """A hand for `venue`, reading whatever credentials that venue signs with."""
@@ -1131,6 +1142,7 @@ def hand_for(
         max_slippage_bps=max_slippage_bps,
         max_margin_share=max_margin_share,
         liquidation_buffer_bps=liquidation_buffer_bps,
+        markets=markets,
         rate=rate,
     )
 

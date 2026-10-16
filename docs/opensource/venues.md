@@ -107,6 +107,14 @@ venues the contract arithmetic and the name resolution are tested against the sh
 the run against the venue's own account is the step still open, so start any of them on its
 practice environment first.
 
+What kind of market a desk may send to is one setting, `[execution].markets`. Every market, on
+every venue, is read into one shape from what ccxt reports (see
+[Architecture](/opensource/architecture#adoption-rules)), and the order path decides from that
+shape what applies: contracts, margin, leverage, where the exits go. Today the list holds one type,
+`linear perpetual`, and a symbol of any other type is refused by name before anything is sent.
+Spot, tokenized stocks and prediction markets join the list as each is built and run end to end on
+a practice account; the venue and the symbol stay where they are, in the same settings.
+
 ## Trading on another exchange
 
 The route is the same for any venue ccxt can take orders on. OKX is the example, and its demo is
