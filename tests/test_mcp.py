@@ -169,3 +169,11 @@ def test_the_registry_entry_names_the_released_package_and_the_readme_proves_it(
     assert len(entry["description"]) <= 100
     readme = (root / "README.md").read_text(encoding="utf-8")
     assert f"<!-- mcp-name: {entry['name']} -->" in readme
+
+
+def test_the_server_says_which_release_it_is() -> None:
+    pytest.importorskip("mcp")
+    from trading_research_agents import __version__
+    from trading_research_agents.mcp.server import build_server
+
+    assert build_server().version == __version__
