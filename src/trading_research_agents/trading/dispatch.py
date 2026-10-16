@@ -250,10 +250,10 @@ class VenueHand:
         proves nothing about the place the order is about to be sent to.
         """
         try:
-            skew = self._skew()
+            skew = self.clock_skew()
             if skew:
                 return skew
-            hedged = self._hedged()
+            hedged = self.hedged()
             if hedged:
                 return hedged
             setting = account_refusal(self.venue, self.client)
@@ -329,11 +329,11 @@ class VenueHand:
                 "decision_age_s": round(age, 1),
             }
         if not self.skew_checked:
-            skew = self._skew()
+            skew = self.clock_skew()
             if skew:
                 return {"sent": False, "refused": skew}
             self.skew_checked = True
-        hedged = self._hedged()
+        hedged = self.hedged()
         if hedged:
             return {"sent": False, "refused": hedged}
         if not self.account_checked:
@@ -371,7 +371,7 @@ class VenueHand:
         except DispatchError as exc:
             return {"sent": False, "refused": str(exc)}
         contracts = size / unit
-        off_step = self._off_step(contracts, size, unit)
+        off_step = self.off_step(contracts, size, unit)
         if off_step:
             return {"sent": False, "refused": off_step}
 
@@ -432,9 +432,9 @@ class VenueHand:
                 params,
             )
         except Exception as exc:
-            raise DispatchError(self._clean(f"{exc.__class__.__name__}: {exc}")) from exc
+            raise DispatchError(self.redact(f"{exc.__class__.__name__}: {exc}")) from exc
         send_ms = round((self.clock() - began) * 1000)
-        order = self._in_base(order, unit)
+        order = self.in_base(order, unit)
         self.sent_count += 1
 
         placed: dict[str, Any] = {
@@ -475,7 +475,7 @@ class VenueHand:
     def _taken(self, order_id: str, tries: int = 4) -> dict[str, Any]:
         """What an IOC entry actually filled. Some venues answer a create with only an id."""
         for attempt in range(tries):
-            status = self._status(order_id) if order_id else None
+            status = self.order_status(order_id) if order_id else None
             state = "" if status is None else str(status.get("status", ""))
             if status is not None and state in ("closed", "filled", *ENDED):
                 return {
@@ -516,7 +516,7 @@ class VenueHand:
             "takeProfit": {"triggerPrice": float(high)},
         }
 
-    def _clean(self, text: str) -> str:
+    def redact(self, text: str) -> str:
         """A venue's message without this hand's key or secret in it, before it is recorded."""
         for name in self.credentials.values():
             held = self.env.get(name, "")
@@ -524,7 +524,7 @@ class VenueHand:
                 text = text.replace(held, "[redacted]")
         return text
 
-    def _hedged(self) -> str:
+    def hedged(self) -> str:
         """Why an account in long/short position mode is refused, or nothing when it is one-way.
 
         In long/short mode a position is two (a long and a short), every order names which side it
@@ -547,7 +547,7 @@ class VenueHand:
             )
         return ""
 
-    def _skew(self) -> str:
+    def clock_skew(self) -> str:
         """Empty when this machine's clock agrees with the venue's; otherwise by how much."""
         fetch = getattr(self.client, "fetch_time", None)
         if fetch is None:
@@ -592,7 +592,7 @@ class VenueHand:
             raise DispatchError(str(exc)) from exc
 
     @staticmethod
-    def _in_base(order: Mapping[str, Any], unit: Decimal) -> dict[str, Any]:
+    def in_base(order: Mapping[str, Any], unit: Decimal) -> dict[str, Any]:
         """A venue's order with its quantities in the base, so nothing downstream sees contracts."""
         out = dict(order)
         if unit != 1:
@@ -602,7 +602,7 @@ class VenueHand:
                     out[key] = f"{Decimal(str(out[key])) * unit:f}"
         return out
 
-    def _off_step(self, contracts: Decimal, size: Decimal, unit: Decimal) -> str:
+    def off_step(self, contracts: Decimal, size: Decimal, unit: Decimal) -> str:
         """Empty when the venue takes this size as it is; otherwise why it would not.
 
         ccxt rounds an amount to the market's precision before sending it. That is helpful
@@ -622,7 +622,7 @@ class VenueHand:
             stepped = Decimal(str(to_step(self.symbol, float(contracts))))
             market = self.client.market(self.symbol) if hasattr(self.client, "market") else {}
         except Exception as exc:
-            said = self._clean(f"{exc.__class__.__name__}: {exc}")[:200]
+            said = self.redact(f"{exc.__class__.__name__}: {exc}")[:200]
             return f"{self.venue} will not take {shown} of {self.symbol}: {said}"
         if stepped != contracts:
             return (
@@ -648,7 +648,7 @@ class VenueHand:
             return len(list(fetch(self.symbol)))
         except Exception as exc:
             raise DispatchError(
-                self._clean(f"cannot read the open orders: {exc.__class__.__name__}: {exc}")
+                self.redact(f"cannot read the open orders: {exc.__class__.__name__}: {exc}")
             ) from exc
 
     def position(self) -> Decimal | None:
@@ -669,7 +669,7 @@ class VenueHand:
                 # it is a read that succeeded and found the account flat, not a failed read.
                 return Decimal(0)
             raise DispatchError(
-                self._clean(f"cannot read the account: {exc.__class__.__name__}: {exc}")
+                self.redact(f"cannot read the account: {exc.__class__.__name__}: {exc}")
             ) from exc
         if not held:
             return Decimal(0)
@@ -735,7 +735,7 @@ class VenueHand:
         try:
             account = read_account(self.client, currency)
         except CapitalError as exc:
-            return self._clean(str(exc))
+            return self.redact(str(exc))
         fee_bps = (market.taker or Decimal(0)) * BPS
         needed = margin_needed(notional, self.leverage, fee_bps)
         allowed = account.free * self.max_margin_share
@@ -830,7 +830,7 @@ class VenueHand:
         except Exception as exc:
             return {
                 "closed": False,
-                "error": self._clean(f"{exc.__class__.__name__}: {exc}")[:300],
+                "error": self.redact(f"{exc.__class__.__name__}: {exc}")[:300],
                 "reason": reason,
             }
         return {
@@ -888,7 +888,7 @@ class VenueHand:
         started = self.clock()
         try:
             while self.clock() - started < self.limit_timeout_s:
-                status = self._status(order_id)
+                status = self.order_status(order_id)
                 state = "" if status is None else str(status.get("status", ""))
                 if status is not None and state in ("closed", "filled"):
                     return {
@@ -915,7 +915,7 @@ class VenueHand:
         # The cancel did not go through. Either the venue had already ended the order - which is
         # ordinary for a post-only limit - or it is still resting there, and those are very
         # different facts. Asking costs one call and turns a guess into a record.
-        standing = self._status(order_id)
+        standing = self.order_status(order_id)
         state = "" if standing is None else str(standing.get("status", ""))
         if standing is not None and state in (*ENDED, "closed", "filled"):
             return {**self._ended(standing, waited), "cancel_refused": why}
@@ -975,7 +975,7 @@ class VenueHand:
             ),
         }
 
-    def _status(self, order_id: str) -> Mapping[str, Any] | None:
+    def order_status(self, order_id: str) -> Mapping[str, Any] | None:
         """What the venue says became of an order, or None when it will not say.
 
         Seen on 2026-10-04: one venue's fetch_order through ccxt refuses unless told the order is
@@ -997,7 +997,7 @@ class VenueHand:
             with suppress(Exception):
                 found = fetch(order_id, self.symbol)
             if found:
-                return self._in_base(found, self.contract_size())
+                return self.in_base(found, self.contract_size())
         return None
 
     def _cancel(self, order_id: str) -> str:
@@ -1008,7 +1008,7 @@ class VenueHand:
         try:
             cancel(order_id, self.symbol)
         except Exception as exc:
-            return self._clean(f"{exc.__class__.__name__}: {exc}")[:200]
+            return self.redact(f"{exc.__class__.__name__}: {exc}")[:200]
         return ""
 
 
@@ -1091,7 +1091,7 @@ def account_fees(
     except DispatchError:
         raise
     except Exception as exc:
-        raise DispatchError(hand._clean(f"{exc.__class__.__name__}: {exc}")) from exc
+        raise DispatchError(hand.redact(f"{exc.__class__.__name__}: {exc}")) from exc
 
 
 def hand_for(

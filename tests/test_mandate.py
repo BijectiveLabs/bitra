@@ -924,7 +924,7 @@ def test_the_clock_is_judged_on_the_quickest_reading_not_the_first() -> None:
         clock=lambda: next(ticks),
     )
     # The first reading carries a handshake and looks 1200 ms off; the two quick ones agree at 100.
-    assert hand._skew() == ""
+    assert hand.clock_skew() == ""
 
 
 def test_an_okx_account_in_spot_mode_is_refused_before_anything_is_sent() -> None:

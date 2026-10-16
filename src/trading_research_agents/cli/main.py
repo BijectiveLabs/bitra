@@ -2480,9 +2480,6 @@ def venue_setup(
         ]
     if environment == "mainnet":
         out.append("# no practice environment through ccxt: the first order here is real money")
-    if _has_live_plugin(name):
-        out += ["", "# only for `tra live`, which has a plugin for this venue", "[live]"]
-        out.append(f'environment = "{environment}"')
     out += ["", "# 4. .env beside the config, never in a file you commit", *(f"{k}=" for k in keys)]
     out += ["", f"# Then: tra check, and tra keys --probe to prove the keys reach {name}."]
     return "\n".join(out)
@@ -4199,8 +4196,8 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
                     )
         if cfg.live is not None and not _has_live_plugin(cfg.live.venue):
             good.append(
-                f"live: no live-session plugin for {cfg.live.venue}, so `tra live` is not "
-                "available there; `tra run` reaches the venue through ccxt and is not affected"
+                f"live: {cfg.live.venue} is not an exchange ccxt knows and no plugin names it, so "
+                "`tra live` is not available there"
             )
         elif cfg.live is not None:
             tier = Ladder(args.ladder).tier

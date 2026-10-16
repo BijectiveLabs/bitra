@@ -333,7 +333,10 @@ runtime does not care how the venue frames a trade. It cares that every `Trade` 
 
 ## A live venue
 
-A live venue plugin is a factory that takes `LiveVenueSettings` (instrument, channel,
+Every exchange ccxt knows is already a live venue for `tra live`, through
+`trading/venues/ccxt_live.py`, on the same client and hand venue mode sends with; nothing needs
+writing for one of them. A plugin is for a venue ccxt does not cover, and it takes precedence for
+its name. It is a factory that takes `LiveVenueSettings` (instrument, channel,
 funding schedule, environment, run id, the two deliberate overrides) and the environment
 mapping, and returns an object satisfying `trading.venue.Venue` plus `preflight()`. The
 factory declares which environment variables it needs (`env_keys`) so the CLI can say which
@@ -354,12 +357,12 @@ class MyLiveFactory:
 my-venue = "my_package.live:MyLiveFactory"
 ```
 
-What the runtime expects of it, and what the bundled adapter does: `routes_exits = True`;
+What the runtime expects of it, and what the ccxt live venue does: `routes_exits = True`;
 `submit` accepts one intent at a time and sends it with an idempotent client order id;
 `poll(trade)` confirms the fill from the venue's own order state and reconciles the position
 after every fill, raising `VenueError` on any disagreement; closes are reduce-only;
-`preflight()` refuses a key with more or fewer permissions than a trade key, a clock too far
-from the venue's, and a position the run was not told to adopt; `cost_of` charges the fees
+`preflight()` refuses a clock too far from the venue's, a key with more or fewer permissions than
+a trade key where the venue reports them, and a position the run was not told to adopt; `cost_of` charges the fees
 the venue reported. [The live tier](/opensource/live) is the review a new adapter is held to, and
 `tests/test_live_venue.py` is the shape of the tests it should ship with.
 
@@ -367,10 +370,12 @@ the venue reported. [The live tier](/opensource/live) is the review a new adapte
 
 | Name | Archive | Funding | Live feed | Live venue |
 |---|---|---|---|---|
-| `bybit` | daily `.csv.gz`, header row, no published checksum | `GET /v5/market/funding/history`, paged | public v5 trade stream, `[shadow]` extra | v5 REST, market IOC, canary only |
-| `binance` | monthly `.zip` of one CSV, no header, `.CHECKSUM` sidecar verified | none | none | none |
+| `bybit` | daily `.csv.gz`, header row, no published checksum | `GET /v5/market/funding/history`, paged | public v5 trade stream, `[shadow]` extra | through ccxt, like every venue |
+| `binance` | monthly `.zip` of one CSV, no header, `.CHECKSUM` sidecar verified | none | none | through ccxt, like every venue |
 
-They live in `data/venues/`, `trading/feeds/` and `trading/venues/` and nowhere else. They
+They live in `data/venues/` and `trading/feeds/`, and a venue's account checks that ccxt does
+not unify (OKX's account mode, Bybit's key permissions) in `trading/venues/accounts.py`; nowhere
+else names a venue. They
 are examples of the protocols as much as they are integrations, and a plugin for another
 venue is expected to be about the same size.
 

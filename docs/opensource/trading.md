@@ -25,7 +25,7 @@ path: not to decide, not to assess risk, not to narrate an incident mid-run. The
 | T0 research | recorded (Parquet from `tra data audit`) | simulated | `tra backtest` (`trade replay`) |
 | T1 paper | live public trades | simulated | `tra paper` (`trade shadow`) |
 | T2 shadow | live public trades | simulated, intents recorded, zero orders | `tra paper` (`trade shadow`) |
-| T3 canary | live public trades | a live venue plugin, hard caps | `tra live` (`trade live`), see [The live tier](/opensource/live) |
+| T3 canary | live public trades | any ccxt venue, hard caps | `tra live` (`trade live`), see [The live tier](/opensource/live) |
 | T4 production | | | **not in this release**; the ladder refuses it |
 
 The common spellings are aliases of the tiers. Real orders exist only at canary, through a
@@ -142,8 +142,8 @@ A clock that goes backwards refuses rather than evaluating.
 
 `tra ladder promote --evidence "..." --signed-by "..."` moves one tier up and needs both. `tra
 ladder demote --reason "..."` moves down on a reason alone. The asymmetry is deliberate: up
-slowly with evidence, down instantly. Canary is reachable when a live venue plugin is
-registered; production is refused by this release, and the ladder says so. `tra live` runs
+slowly with evidence, down instantly. Canary is reachable when a live venue is
+available, which is any venue ccxt knows once the `ccxt` extra is installed; production is refused by this release, and the ladder says so. `tra live` runs
 only when `ladder.json` stands at canary.
 
 ## Running it

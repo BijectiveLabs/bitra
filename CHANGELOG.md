@@ -10,6 +10,24 @@ All notable changes to this project are recorded here. The format follows
 
 - `glama.json`, which lets the maintainers claim the server's listing on Glama.
 
+### Changed
+
+- `tra live`, the canary tier, sends through ccxt on the same client and `VenueHand` as venue
+  mode, so every exchange ccxt knows is a live venue and there is one order path whichever command
+  sends. What it checks before the first print is the same or stricter: the clock, the account's
+  position mode, OKX's account mode, Bybit's key permissions (now read through ccxt), the market
+  type and contract size, and a position the run was not told to adopt. A size off the venue's
+  step is refused rather than rounded, and a send that failed in transit is looked up by its client
+  id before anything is sent again. Client ids are now `tra<run><seq>`, letters and digits only.
+- `tra venues --setup` no longer prints a `[live]` table; venue mode is what it sets up, and
+  [The live tier](https://docs.bijectivelabs.dev/opensource/live) covers `tra live`.
+
+### Removed
+
+- The direct Bybit REST adapter, `trading_research_agents.trading.venues.bybit`. Bybit runs through
+  ccxt like every other venue. A plugin registered under `trading_research_agents.live_venues`
+  still takes precedence for its name.
+
 ## [0.6.8] - 2026-10-16
 
 ### Added
