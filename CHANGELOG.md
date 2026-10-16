@@ -6,6 +6,14 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- One headline everywhere, naming no market: "Autonomous trading agents with deterministic
+  execution. The agents propose; the system decides." It replaces "An autonomous trading system
+  for crypto" in the README, the docs, the PyPI summary, the citation and the console. What it
+  trades today is unchanged and still stated where it is described: linear perpetuals, run end to
+  end on Bybit and OKX.
+
 ## [0.6.7] - 2026-10-16
 
 ### Changed

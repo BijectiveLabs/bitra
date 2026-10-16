@@ -18,7 +18,7 @@
               </svg>
             </div>
             <h2 class="card-title">Open Source</h2>
-            <p class="card-description">Autonomous trading system for crypto</p>
+            <p class="card-description">Autonomous trading agents with deterministic execution</p>
             <span class="card-cta">
               <span>Enter Open Source</span>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -61,10 +61,10 @@
       <section class="landing-about" aria-labelledby="landing-about-title">
         <h2 id="landing-about-title" class="about-title">trading-research-agents</h2>
         <p class="about-text">
-          An open-source Python package and command line (<code>tra</code>): an autonomous crypto
-          trading system. Language model agents read the market and propose a trade; fixed, tested
-          rules compute every figure, price the round trip, size the position and decide whether an
-          order goes out. Runs in a sandbox by default, trades linear perpetuals today on any
+          An open-source Python package and command line (<code>tra</code>): autonomous trading
+          agents with deterministic execution. Language model agents read the market and propose a
+          trade; fixed, tested rules compute every figure, price the round trip, size the position
+          and decide whether an order goes out. Runs in a sandbox by default, trades linear perpetuals today on any
           exchange ccxt supports, with more market types on the way, and works
           with Anthropic, OpenAI, Google Gemini, Groq, DeepSeek, OpenRouter, Ollama and other model
           providers. MIT licensed, published by Bijective Labs.

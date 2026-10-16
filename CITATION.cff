@@ -3,7 +3,7 @@ message: "If you use this software in research, please cite it as below."
 type: software
 title: "trading-research-agents"
 abstract: >-
-  An open-source Python package and command line (tra): an autonomous crypto trading system.
+  An open-source Python package and command line (tra): autonomous trading agents with deterministic execution.
   Language model agents read the market and propose a trade; fixed, tested rules compute every
   figure, price the round trip, size the position and decide whether an order goes out.
 authors:
