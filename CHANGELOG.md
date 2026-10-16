@@ -6,6 +6,13 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The package also installs its command as `trading-research-agents`, next to `tra`, so
+  `uvx --with "mcp>=2,<3" trading-research-agents mcp serve` starts the MCP server without an
+  install. `server.json` describes the server for the MCP Registry, and the MCP page has a section
+  on using it from your own agent.
+
 ### Changed
 
 - One headline everywhere, naming no market: "Autonomous trading agents with deterministic

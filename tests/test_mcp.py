@@ -151,3 +151,21 @@ def test_a_host_cannot_read_outside_its_roots_or_into_a_hidden_file(tmp_path: Pa
         call("ladder_show", {"ladder_path": str(EXAMPLES / "x.json")}, roots=(tmp_path,))
     )
     assert elsewhere.is_error and "outside" in json.dumps(elsewhere.model_dump(), default=str)
+
+
+def test_the_registry_entry_names_the_released_package_and_the_readme_proves_it() -> None:
+    import json
+    import tomllib
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    entry = json.loads((root / "server.json").read_text(encoding="utf-8"))
+    project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    # The release bumps all three together; the registry rejects a version PyPI does not have.
+    assert entry["version"] == project["version"]
+    assert [p["version"] for p in entry["packages"]] == [project["version"]]
+    assert entry["packages"][0]["identifier"] == project["name"]
+    assert entry["packages"][0]["identifier"] in project["scripts"]
+    assert len(entry["description"]) <= 100
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    assert f"<!-- mcp-name: {entry['name']} -->" in readme

@@ -6,6 +6,8 @@
 
 <p align="center"><strong>Autonomous trading agents with deterministic execution. The agents propose; the system decides.</strong></p>
 
+<!-- mcp-name: io.github.BijectiveLabs/trading-research-agents -->
+
 <p align="center">
   <a href="https://github.com/BijectiveLabs/trading-research-agents/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/BijectiveLabs/trading-research-agents/actions/workflows/ci.yml/badge.svg?branch=master"></a>
   <a href="https://pypi.org/project/trading-research-agents/"><img alt="PyPI" src="https://img.shields.io/pypi/v/trading-research-agents?style=flat-square&logo=pypi&logoColor=white&label=PyPI&cacheSeconds=1800"></a>

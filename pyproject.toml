@@ -40,6 +40,8 @@ dependencies = [
 
 [project.scripts]
 tra = "trading_research_agents.cli:main"
+# The same command under the package's own name, which is what `uvx trading-research-agents` runs.
+trading-research-agents = "trading_research_agents.cli:main"
 
 [project.urls]
 Homepage = "https://www.bijectivelabs.dev/open-source"
