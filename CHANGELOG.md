@@ -6,12 +6,15 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.6.8] - 2026-10-16
+
 ### Added
 
 - The package also installs its command as `trading-research-agents`, next to `tra`, so
   `uvx --with "mcp>=2,<3" trading-research-agents mcp serve` starts the MCP server without an
   install. `server.json` describes the server for the MCP Registry, and the MCP page has a section
-  on using it from your own agent.
+  on using it from your own agent. Each release now also publishes that entry to the MCP Registry,
+  after PyPI, through GitHub's OIDC with a pinned and checksum-verified publisher.
 
 ### Changed
 
@@ -38,6 +41,8 @@ All notable changes to this project are recorded here. The format follows
 - Order records wrote some quantities in scientific notation: ten contracts of 0.001 were recorded
   as `1E+1`, and a fill on a venue with a large contract could read `2E+7`. Contracts, contract
   size and filled amounts are now written in plain decimals. Orders themselves were never affected.
+- The MCP server reported an empty version to the hosts that connect to it; it now reports the
+  package version and the documentation link.
 
 ## [0.6.7] - 2026-10-16
 
