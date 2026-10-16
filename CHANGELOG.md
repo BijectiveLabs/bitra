@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-16
+
 ### Added
 
 - `glama.json`, which lets the maintainers claim the server's listing on Glama.
@@ -19,6 +21,8 @@ All notable changes to this project are recorded here. The format follows
   type and contract size, and a position the run was not told to adopt. A size off the venue's
   step is refused rather than rounded, and a send that failed in transit is looked up by its client
   id before anything is sent again. Client ids are now `tra<run><seq>`, letters and digits only.
+  Run end to end on the Bybit demo (ETHUSDT) and the OKX demo (BTCUSDT, one contract of 0.01 BTC):
+  entry, reduce-only close, flat, fees as charged.
 - The public trade stream for `tra paper` and `tra live` is ccxt's streaming side, so every venue
   ccxt streams is a feed, with no key. Trades on a contract market are turned into the base, a
   trade sent twice is passed on once, and one older than the last is counted and not passed on.
