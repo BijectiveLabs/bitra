@@ -13,6 +13,17 @@ All notable changes to this project are recorded here. The format follows
   for crypto" in the README, the docs, the PyPI summary, the citation and the console. What it
   trades today is unchanged and still stated where it is described: linear perpetuals, run end to
   end on Bybit and OKX.
+- Every market is read once into one type, `trading.market.Market`, from ccxt's unified market
+  structure: type, settlement currency, contract size, fees and minimum. The order path asks it
+  what applies instead of reading raw venue fields, which is the ground spot, tokenized stocks and
+  prediction markets are built on. Nothing about what is sent changes; a new test pins the
+  perpetual order byte for byte and checks that the same decision sends the same order twice.
+
+### Fixed
+
+- Order records wrote some quantities in scientific notation: ten contracts of 0.001 were recorded
+  as `1E+1`, and a fill on a venue with a large contract could read `2E+7`. Contracts, contract
+  size and filled amounts are now written in plain decimals. Orders themselves were never affected.
 
 ## [0.6.7] - 2026-10-16
 

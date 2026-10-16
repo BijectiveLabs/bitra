@@ -57,7 +57,7 @@ Rules, each enforced by a test in `tests/test_boundaries.py`:
 
 ## Adoption rules
 
-Four rules decide what goes into the package and what stays outside it. They exist so the
+Five rules decide what goes into the package and what stays outside it. They exist so the
 software can be adopted without inheriting the particular strategies, venues or vendors of
 the research it descends from.
 
@@ -76,6 +76,13 @@ the research it descends from.
 4. **Agents are a surface, with full access.** The roles and the MCP tools call the gates;
    they never are the gates. A model may decide (the technical analyst is a decision core);
    the system executes and refuses (controls, caps, ladder, kill switch). Rules 3 and 8 enforce it.
+5. **Every market is one shape.** A market is read once from ccxt's unified market structure
+   into `trading.market.Market`: its type, what it settles in, whether it trades in contracts
+   and how large one is, its fees and its minimum. A spot pair, a perpetual, a dated future, an
+   option and a prediction outcome are the same type with different facts, so the order path
+   asks the market what applies (contracts, margin, leverage) rather than branching per venue or
+   per market type. Which types venue mode sends to today is one list in `trading/dispatch.py`;
+   [Boundaries](/opensource/boundaries) says why the rest wait.
 
 Not every package exists yet. The list is the plan; a package is added when its first gate
 lands with tests. Today: `ledger`, `envelope`, `data`, `chain`, `execution`, `strategy`,
