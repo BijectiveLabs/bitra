@@ -6,6 +6,10 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `glama.json`, which lets the maintainers claim the server's listing on Glama.
+
 ## [0.6.8] - 2026-10-16
 
 ### Added
