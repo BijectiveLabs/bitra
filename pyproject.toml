@@ -36,6 +36,8 @@ dependencies = [
     "numpy>=1.26",
     "prompt-toolkit>=3.0",
     "rich>=13",
+    # Windows ships no time zone database; the equity session is read in New York time.
+    "tzdata>=2024.1; sys_platform == 'win32'",
 ]
 
 [project.scripts]

@@ -44,6 +44,7 @@ from trading_research_agents.trading.capital import (
 from trading_research_agents.trading.market import Market, MarketError
 from trading_research_agents.trading.venues.accounts import account_refusal
 from trading_research_agents.trading.venues.exits import exit_cancel_params, exit_reads
+from trading_research_agents.trading.venues.limits import price_band
 
 SIDES = {"long": "buy", "short": "sell"}
 # Read from ccxt 4.5 on 2026-09-29: a venue reaches its demo environment through
@@ -864,6 +865,13 @@ class VenueHand:
         edge = Decimal(str(raw))
         step = edge * self.max_slippage_bps / BPS
         price = edge + step if side == "buy" else edge - step
+        # Held inside the venue's own band where it publishes one: an order priced past it is
+        # refused whole, and the band's edge is never a worse price than the slippage bound.
+        high, low = price_band(self.venue, self.client, self.symbol)
+        if side == "buy" and high is not None and price > high:
+            price = high
+        elif side == "sell" and low is not None and price < low:
+            price = low
         to_tick = getattr(self.client, "price_to_precision", None)
         if to_tick is not None:
             with suppress(Exception):
@@ -909,13 +917,36 @@ class VenueHand:
                 "error": self.redact(f"{exc.__class__.__name__}: {exc}")[:300],
                 "reason": reason,
             }
+        order_id = str(order.get("id", ""))
+        state = str(order.get("status") or "")
+        average = order.get("average")
+        if order_id and state not in ("closed", "filled", *ENDED):
+            taken = self._taken(order_id)
+            state, average = str(taken.get("status") or state), taken.get("average", average)
+        # Accepted is not filled. Seen on a demo on 2026-10-17: a reduce-only market close on a
+        # stock perpetual whose book sat outside the venue's price band rested unfilled, and the
+        # account still held the position. The record says closed only when the account agrees.
+        after = self.position()
+        if after and (after > 0) == (held > 0):
+            if order_id and state not in ("closed", "filled", *ENDED):
+                self._cancel(order_id)
+            return {
+                "closed": False,
+                "reason": reason,
+                "order_id": order_id,
+                "error": (
+                    f"the close did not fill: the venue reports {state or 'no status'} and the "
+                    f"account still holds {after}; the unfilled close was cancelled, the exits at "
+                    "the venue still stand, and the next pass tries again"
+                ),
+            }
         return {
             "closed": True,
             "reason": reason,
             "side": side,
             "size": f"{amount * self.contract_size():f}",
-            "order_id": str(order.get("id", "")),
-            "average": None if order.get("average") is None else str(order["average"]),
+            "order_id": order_id,
+            "average": None if average is None else str(average),
         }
 
     def cancel_open_orders(self) -> int:

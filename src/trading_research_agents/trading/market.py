@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from trading_research_agents.data.sources.discover import asset_class_of
+
 # ccxt's `type` values. "prediction" is the type its prediction namespace gives an outcome market.
 KINDS = ("spot", "margin", "swap", "future", "option", "prediction")
 
@@ -51,6 +53,9 @@ class Market:
     maker: Decimal | None = None
     taker: Decimal | None = None
     described: bool = True
+    # What the underlying is: crypto, equity (a stock perpetual or a tokenized stock), commodity,
+    # forex. The order path is the same; what differs is when the underlying's own market trades.
+    asset_class: str = "crypto"
 
     @classmethod
     def from_ccxt(cls, venue: str, symbol: str, market: Mapping[str, Any] | None) -> Market:
@@ -81,6 +86,7 @@ class Market:
             maker=_decimal(found.get("maker")),
             taker=_decimal(found.get("taker")),
             described=True,
+            asset_class=asset_class_of(venue, found),
         )
 
     @property

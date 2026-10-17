@@ -191,6 +191,9 @@ kill_switch = "KILL"               # touch this file to flatten and stop
 # liquidation_buffer_bps = 50    # liquidation must sit this far beyond the stop
 # hold_limit = "timeout"         # timeout | horizon | none: when time closes a position
 # markets = ["linear perpetual"]  # market types this desk may send to; add "spot" to trade it
+# equity_session = "regular"       # stocks: enter only while the US regular session trades
+# equity_closed = ["2026-11-26"]   # exchange holidays; the package carries no calendar
+# equities = ["TSLAUSDT"]          # stocks a venue does not mark as stocks itself
 # max_drift_bps = 10              # refuse when the book moved this far against the trade
 #                                  # between the snapshot it was priced on and sending it
 # adopt_open_position = false      # deliberately add to a position this desk did not open

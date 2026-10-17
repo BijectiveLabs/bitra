@@ -165,6 +165,40 @@ exit_fee_bps = 10
 desk cycle on SOL/USDT in sandbox and in venue mode on the Bybit demo, which priced the round trip
 at the spot fee and refused the trade on its break-even rate. Start on a practice account.
 
+## Stocks on a crypto venue
+
+Several venues list equities as crypto instruments, and they arrive through the same order path as
+any other market, because to the venue they are one: a stock perpetual is a linear perpetual (Bybit
+`AAPL/USDT:USDT`, OKX `TSLA/USDT:USDT`, Bitget `NVDA/USDT:USDT`), and a tokenized stock is a spot
+pair (Bybit `AAPLX/USDT`). Leverage, contract size, exits and closes work as they do for crypto;
+the market's own facts decide.
+
+What is different is the underlying. Its exchange keeps hours, and the token does not: it quotes
+on a Sunday at a price nobody is making. So:
+
+- **What the underlying is comes from the venue.** Bybit marks stock perpetuals `stock` and
+  tokenized stocks `xstocks`; OKX marks contracts with `instCategory` 3. A venue that does not say
+  (Bitget, among others) is read as crypto, and you name its equities in `[execution].equities`.
+- **An entry waits for the session.** With `[execution].equity_session = "regular"` (the default)
+  a cycle on an equity does not ask anyone while the US regular session is closed (09:30 to 16:00
+  New York time, Monday to Friday, daylight saving from the time zone database), and refuses a
+  trade whose hold would run past that day's close, because the next open can gap past the stop.
+  `"any"` trades at every hour, deliberately.
+- **Holidays are yours to declare.** The package carries no exchange calendar; list the closed
+  dates in `[execution].equity_closed`.
+- **On-chain figures do not bear on a share**, so the on-chain analyst is not asked.
+- **Some accounts need a step first.** Bybit refuses a stock perpetual until the account has
+  signed its agreement for them, in the app or on the website; the refusal names it.
+- **Prices stay inside the venue's band.** OKX refuses an order priced outside its current price
+  limit, and publishes the limit; a taker entry there is held inside it.
+
+Run on 2026-10-17: a tokenized stock round trip on the Bybit demo (AAPLX/USDT: entry with its
+exits, close, flat) and a stock perpetual on the OKX demo (TSLA/USDT:USDT, five contracts of 0.01:
+the entry filled inside the price band with its exits attached). That weekend the OKX demo's book
+sat outside its band, and the reduce-only close was accepted but not filled; the close is now
+confirmed against the account, recorded as not closed when the account still holds, and tried again
+on the next pass, while the exits at the venue keep standing.
+
 ## Trading on another exchange
 
 The route is the same for any venue ccxt can take orders on. OKX is the example, and its demo is

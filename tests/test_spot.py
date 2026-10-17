@@ -86,6 +86,9 @@ class SpotVenue:
                 "params": dict(params or {}),
             }
         )
+        # A spot fill moves coins: a buy adds the base, a sale takes it away.
+        moved = Decimal(str(amount))
+        self.balances["SOL"] += moved if side == "buy" else -moved
         return {"id": f"o-{len(self.orders)}", "status": "closed", "filled": amount}
 
 

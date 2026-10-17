@@ -108,6 +108,12 @@ class Mandate:
     environment: str = ""
     # Which market types this desk may send to. The venue and the symbol say where; this says what.
     markets: tuple[str, ...] = DEFAULT_MARKETS
+    # Equity underlyings (stock perpetuals, tokenized stocks): enter only while the underlying's
+    # exchange trades ("regular"), or at any hour ("any"). The exchange's holidays, and the
+    # instruments a venue does not mark as equities itself, are the operator's to name.
+    equity_session: str = "regular"
+    equity_closed: tuple[str, ...] = ()
+    equities: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.mode not in MODES:
@@ -144,6 +150,15 @@ class Mandate:
             raise MandateError(f"[execution].hold_limit is one of {list(HOLD_LIMITS)}")
         if self.environment not in ("", "demo", "testnet", "mainnet"):
             raise MandateError('[execution].environment is "demo", "testnet" or "mainnet"')
+        if self.equity_session not in ("regular", "any"):
+            raise MandateError('[execution].equity_session is "regular" or "any"')
+        for day in self.equity_closed:
+            try:
+                date.fromisoformat(day)
+            except ValueError as exc:
+                raise MandateError(
+                    f"[execution].equity_closed lists dates, YYYY-MM-DD; {day!r} is not one"
+                ) from exc
         if not self.markets:
             raise MandateError("[execution].markets names at least one market type")
         unbuilt = [kind for kind in self.markets if kind not in MARKETS]
@@ -185,6 +200,9 @@ class Mandate:
             "adopt_open_position": self.adopt_open_position,
             "environment": self.environment,
             "markets": list(self.markets),
+            "equity_session": self.equity_session,
+            "equity_closed": list(self.equity_closed),
+            "equities": list(self.equities),
             "params": {str(k): str(v) for k, v in sorted(self.params.items())},
         }
 

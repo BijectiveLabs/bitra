@@ -681,6 +681,9 @@ EXECUTION_KEYS = (
     "params",
     "environment",
     "markets",
+    "equity_session",
+    "equity_closed",
+    "equities",
 )
 
 
@@ -728,9 +731,19 @@ def _mandate(raw: dict[str, Any], venue_key: str) -> Mandate:
             ),
             hold_limit=str(table.get("hold_limit", "timeout")),
             markets=_markets(table),
+            equity_session=str(table.get("equity_session", "regular")),
+            equity_closed=_execution_names(table, "equity_closed"),
+            equities=tuple(n.upper() for n in _execution_names(table, "equities")),
         )
     except MandateError as exc:
         raise ConfigError(str(exc)) from exc
+
+
+def _execution_names(table: Mapping[str, Any], key: str) -> tuple[str, ...]:
+    listed = table.get(key, [])
+    if not isinstance(listed, list) or not all(isinstance(n, str) for n in listed):
+        raise ConfigError(f"[execution].{key} is a list of strings")
+    return tuple(n.strip() for n in listed if n.strip())
 
 
 def _markets(table: Mapping[str, Any]) -> tuple[str, ...]:

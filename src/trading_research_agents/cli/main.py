@@ -3127,6 +3127,7 @@ def run_cycle_command(args: argparse.Namespace) -> int:
             )
         return metered[role]
 
+    facts = _market_facts(cfg, beside, instrument, hand)
     cycle_cfg = CycleConfig(
         instrument=instrument,
         envelope=load_envelope(args.envelope),
@@ -3148,7 +3149,10 @@ def run_cycle_command(args: argparse.Namespace) -> int:
         min_confidence=a.min_confidence,
         mode=mode,
         place=hand,
-        spot=_spot_market(cfg, beside, instrument, hand),
+        spot=facts[0],
+        asset_class=facts[1],
+        equity_session=cfg.execution.equity_session,
+        equity_closed=tuple(date.fromisoformat(d) for d in cfg.execution.equity_closed),
         matrix=cfg.confluence,
         conviction=cfg.conviction,
         max_position=cfg.limits.max_position,
@@ -3264,11 +3268,13 @@ def run_cycle_command(args: argparse.Namespace) -> int:
                         else None
                     )
                     mid_cycle = True
+                    chosen_facts = _market_facts(cfg, beside, instrument, sends)
                     result = _one_cycle(
                         replace(
                             cycle_cfg,
                             instrument=instrument,
-                            spot=_spot_market(cfg, beside, instrument, sends),
+                            spot=chosen_facts[0],
+                            asset_class=chosen_facts[1],
                             size_step=_step_for(cfg, instrument),
                             # The risk manager's cut, if one is in force; the client's caps apply
                             # after it as always.
@@ -4353,27 +4359,32 @@ def _venue_hand(
     )
 
 
-def _spot_market(cfg: Any, project: Path, instrument: str, hand: Any = None) -> bool:
-    """Whether the instrument is a spot market on the venue orders go to.
+def _market_facts(cfg: Any, project: Path, instrument: str, hand: Any = None) -> tuple[bool, str]:
+    """Whether the instrument is spot on the venue orders go to, and what its underlying is.
 
     In venue mode the hand that will send says so. Elsewhere the venue's market list is asked,
-    keyless; a list that cannot be read leaves the cycle as it always was, since every other gate
-    still applies and nothing is sent outside venue mode.
+    keyless, and only by a desk that could trade something other than crypto perpetuals; a list
+    that cannot be read leaves the cycle as it always was, since nothing is sent outside venue
+    mode. An instrument named in [execution].equities is an equity whatever the venue says.
     """
     from trading_research_agents.trading.market import Market
 
-    if "spot" not in cfg.execution.markets:
-        # A desk that does not list spot sends nothing to it, so nothing needs asking.
-        return False
+    markets = tuple(cfg.execution.markets)
+    declared = instrument.upper() in tuple(cfg.execution.equities)
+    market = None
     if hand is not None:
-        return bool(hand.market().held_as_balance)
-    try:
-        client = _execution_client(cfg)
-        symbol = _symbol_for(cfg, project, instrument)
-        venue = cfg.execution.venue or cfg.run.venue_key.partition("/")[0]
-        return Market.from_ccxt(venue, symbol, client.market(symbol)).held_as_balance
-    except Exception:
-        return False
+        market = hand.market()
+    elif "spot" in markets or not cfg.universe.crypto_only:
+        try:
+            client = _execution_client(cfg)
+            symbol = _symbol_for(cfg, project, instrument)
+            venue = cfg.execution.venue or cfg.run.venue_key.partition("/")[0]
+            market = Market.from_ccxt(venue, symbol, client.market(symbol))
+        except Exception:
+            market = None
+    spot = "spot" in markets and market is not None and market.held_as_balance
+    asset = "equity" if declared else (market.asset_class if market is not None else "crypto")
+    return spot, asset
 
 
 def _symbol_for(cfg: Any, project: Path, instrument: str = "") -> str:

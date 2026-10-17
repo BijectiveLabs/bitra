@@ -21,7 +21,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from itertools import islice
 from pathlib import Path
@@ -73,6 +73,7 @@ from trading_research_agents.data.series import (
 from trading_research_agents.data.sources.base import Fetched
 from trading_research_agents.data.sources.chain import ChainExhaustedError, SourceChain
 from trading_research_agents.envelope.model import Channel, Envelope
+from trading_research_agents.execution import session
 from trading_research_agents.execution.confluence import STANCES, Confluence, Matrix, confluent
 from trading_research_agents.execution.conviction import (
     Conviction,
@@ -254,6 +255,12 @@ class CycleConfig:
     # is refused by code before it is priced; funding and open interest belong to contracts, so
     # they are not asked for, rather than asked for and refused every cycle.
     spot: bool = False
+    # What the underlying is, from the venue's own market fields. An equity's exchange keeps
+    # hours: with equity_session "regular" an entry waits for the session and a hold may not run
+    # past its close; on-chain figures do not bear on a share, so that analyst is not asked.
+    asset_class: str = "crypto"
+    equity_session: str = "any"
+    equity_closed: tuple[date, ...] = ()
     # A reading analyst is asked only when the roster names it. `tra run` names the ones with a
     # declared source, because paying a model to say it was given nothing is waste; an operator who
     # wants a role asked anyway, on notes alone, names it in [agents].analysts.
@@ -543,6 +550,15 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
             "" if wake.moved_bps is None else f"moved {wake.moved_bps} bps",
         )
 
+    equity_hours = cfg.asset_class == "equity" and cfg.equity_session == "regular"
+    if equity_hours and not session.is_open(cfg.clock(), cfg.equity_closed):
+        why = f"session: {session.refusal(cfg.clock(), timedelta(0), cfg.equity_closed)}"
+        result.refusals.append(why)
+        result.held = True
+        announce(cfg.watch, "session", HELD, "the underlying's exchange is closed")
+        _finish(cfg, where, result)
+        return result
+
     if cfg.size_quote is not None:
         # Converted before anyone is asked: a size that cannot exist is not worth a model call.
         if mid_now is None:
@@ -628,6 +644,11 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
     calendar = _calendar(cfg, result)
     reading_briefs: dict[str, dict[str, Any]] = {}
     for role in READING:
+        if role == onchain_analyst.ROLE and cfg.asset_class == "equity" and role in cfg.analysts:
+            why = "on-chain figures do not bear on an equity underlying, so not asked"
+            result.briefs.setdefault("not_asked", {})[role] = why
+            announce(cfg.watch, role, SKIPPED, why)
+            continue
         if role not in cfg.analysts:
             # Shown, not hidden: an analyst missing from the table reads as one that broke.
             why = _not_on_roster(cfg, role)
@@ -832,6 +853,14 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         announce(cfg.watch, "exit", REFUSED, str(exc))
         _finish(cfg, where, result)
         return result
+    if equity_hours:
+        hold = timedelta(seconds=_held_bars(cfg, analyst.horizon_bars) * cfg.bar_interval_s)
+        late = session.refusal(cfg.clock(), hold, cfg.equity_closed)
+        if late:
+            result.refusals.append(f"session: {late}")
+            announce(cfg.watch, "session", REFUSED, "the hold would run past the close")
+            _finish(cfg, where, result)
+            return result
     view: dict[str, Any] = dict(_exit_view(costs.cost.mid, analyst.target, exits))
     if placement is not None:
         view["measured"] = placement.record()

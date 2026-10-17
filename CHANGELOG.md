@@ -8,6 +8,22 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- Stock perpetuals and tokenized stocks, through the same order path as crypto: a stock perpetual
+  is a linear perpetual and a tokenized stock is a spot pair. What the underlying is comes from the
+  venue's own fields (Bybit `stock` and `xstocks`, OKX `instCategory` 3) or from
+  `[execution].equities`. With `[execution].equity_session = "regular"`, the default, a cycle on an
+  equity waits while the US regular session is closed and refuses a hold past its close; holidays
+  are declared in `[execution].equity_closed`; the on-chain analyst is not asked. Run on the Bybit
+  demo (AAPLX/USDT) and the OKX demo (TSLA/USDT:USDT).
+- A taker price is held inside a venue's published price band (OKX), where an order priced past it
+  is refused whole.
+
+### Fixed
+
+- A close the venue accepted but did not fill was recorded as closed. It is now confirmed against
+  the account: when the account still holds the position the unfilled close is cancelled, the
+  record says it did not fill, the exits at the venue keep standing, and the next pass tries again.
+
 - A channel can carry a spot pair's fees beside the perpetual's, as a `[channel.spot]` table, and a
   spot cycle is priced at them; the base fees stay the perpetual's. `tra check` compares the base
   fees with the perpetual and the spot fees with the pair, and names the market when one is priced
