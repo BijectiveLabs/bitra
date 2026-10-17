@@ -1319,3 +1319,20 @@ def test_a_short_on_a_spot_market_is_refused_before_it_is_priced(
     # Funding belongs to contracts: on spot it is not asked for, and so not refused either.
     assert "funding" not in spot_long.snapshot.values
     assert not any(r.startswith("data funding") for r in spot_long.refusals)
+
+
+def test_a_spot_cycle_is_priced_at_the_channels_spot_fees(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    from dataclasses import replace
+
+    channel = envelope.cheapest(None)
+    spot_priced = replace(channel, market_fees=(("spot", Decimal(10), Decimal(10)),))
+    priced = Envelope(
+        channels=tuple(spot_priced if c is channel else c for c in envelope.channels),
+        order_latency_ms=envelope.order_latency_ms,
+    )
+    cfg, _, _ = cycle_config(tmp_path, priced, [analyst_answer("long")], spot=True)
+    result = run_cycle(cfg)
+    fee = next(c for c in result.briefs["cost"]["components"] if c["name"] == "fee_round_trip")
+    assert Decimal(fee["bps"]) == Decimal(20) and fee["source"].endswith("its spot fees")

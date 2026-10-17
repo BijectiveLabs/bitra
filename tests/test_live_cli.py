@@ -539,7 +539,7 @@ def test_a_standard_tier_fee_is_replaced_by_the_accounts_own_once_it_reports_one
     assert "written into envelope.toml" in good[0]
 
 
-def test_a_written_fee_under_the_venues_standard_tier_is_said_to_price_too_cheap(
+def test_spot_fees_are_checked_against_the_spot_pair_and_base_fees_against_the_perpetual(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from datetime import UTC, datetime
@@ -547,26 +547,40 @@ def test_a_written_fee_under_the_venues_standard_tier_is_said_to_price_too_cheap
 
     cli = __import__("importlib").import_module("trading_research_agents.cli.main")
     envelope = tmp_path / "envelope.toml"
-    # A perpetual's fee, written for a desk that now trades the spot pair, which costs more.
     envelope.write_text(
         '[[channel]]\nvenue = "bybit"\nname = "taker-taker"\nentry_fee_bps = 5.5\n'
-        "exit_fee_bps = 5.5\n",
+        "exit_fee_bps = 5.5\n\n[channel.spot]\nentry_fee_bps = 8\nexit_fee_bps = 10\n",
         encoding="utf-8",
     )
+    (tmp_path / "data.toml").write_text(
+        '[data]\nsymbols = { SOLUSDT = "SOL/USDT" }\n', encoding="utf-8"
+    )
     cfg = SimpleNamespace(
-        execution=SimpleNamespace(venue="bybit", environment="demo", markets=("linear perpetual",)),
-        run=SimpleNamespace(venue_key="bybit/taker-taker", instrument="SOLUSDT"),
+        execution=SimpleNamespace(
+            venue="bybit", environment="demo", markets=("linear perpetual", "spot")
+        ),
+        run=SimpleNamespace(venue_key="bybit/taker-taker", instrument="BTCUSDT"),
         live=None,
     )
-    monkeypatch.setattr(
-        cli,
-        "_read_fees",
-        lambda *a: ((Decimal("10"), Decimal("10")), "bybit's standard tier from its market list"),
-    )
+    monkeypatch.setattr(cli, "_symbol_for", lambda *a: "BTC/USDT:USDT")
+    asked: list[object] = []
+
+    def fees(*args: object) -> tuple[tuple[Decimal, Decimal], str]:
+        asked.append(args[5])
+        spot = args[5] == "SOL/USDT"
+        rate = Decimal(10) if spot else Decimal("5.5")
+        return (rate, rate), "read from your demo account"
+
+    monkeypatch.setattr(cli, "_read_fees", fees)
     _, bad = cli._fill_account_fees(
         envelope,
         cfg,
         {"BYBIT_API_KEY": "k", "BYBIT_API_SECRET": "s"},
         datetime(2026, 10, 17, tzinfo=UTC),
     )
-    assert any("taker at 5.5 bps and bybit's standard tier is 10" in line for line in bad)
+    assert sorted(asked, key=str) == [None, "SOL/USDT"]
+    # The perpetual's 5.5 matches; the spot entry at 8 is under the spot pair's 10.
+    assert bad == [
+        "fees: envelope.toml prices bybit/taker-taker spot taker at 8 bps and your account pays "
+        "10; the cost gate would price trades too cheap"
+    ]

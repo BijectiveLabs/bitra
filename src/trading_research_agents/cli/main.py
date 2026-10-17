@@ -2341,6 +2341,9 @@ def _fill_account_fees(
     standard tier is replaced by the account's own figure as soon as the account reports one. A
     fee the operator wrote is never replaced; when it is below what the account pays, that is
     reported, because the cost gate would then price trades cheaper than they are.
+
+    A channel's base fees are checked against the perpetual, and its `[channel.spot]` fees against
+    the spot pair; a desk that trades spot alone is checked against the spot pair throughout.
     """
     from trading_research_agents.trading.dispatch import credentials_for
 
@@ -2348,14 +2351,15 @@ def _fill_account_fees(
         return [], []
     venue = cfg.execution.venue or cfg.run.venue_key.partition("/")[0]
     lines = envelope.read_text(encoding="utf-8").splitlines()
-    blanks: list[tuple[int, str]] = []
-    ours: list[tuple[int, str]] = []
-    written: list[tuple[str, str, Decimal]] = []
-    current_venue, current_name = "", ""
+    # (line number, market, channel name, role, value, comment), for this venue's fee lines.
+    found_lines: list[tuple[int, str, str, str, str, str]] = []
+    current_venue, current_name, current_market = "", "", ""
     for number, line in enumerate(lines):
         stripped = line.strip()
         if stripped == "[[channel]]":
-            current_venue, current_name = "", ""
+            current_venue, current_name, current_market = "", "", ""
+        elif stripped.startswith("[channel.") and stripped.endswith("]"):
+            current_market = stripped[len("[channel.") : -1].strip()
         elif stripped.startswith("venue") and "=" in stripped:
             current_venue = stripped.partition("=")[2].split("#")[0].strip().strip('"')
         elif stripped.startswith("name") and "=" in stripped:
@@ -2366,72 +2370,103 @@ def _fill_account_fees(
         side, value, comment = found.group(1), found.group(2), found.group(3) or ""
         roles = current_name.split("-")
         role = roles[0] if side == "entry" else roles[-1]
-        if role not in ("maker", "taker"):
-            continue
-        if not value:
-            blanks.append((number, role))
-        elif STANDARD_MARK in comment:
-            ours.append((number, role))
-        else:
-            with contextlib.suppress(ArithmeticError, ValueError):
-                written.append((current_name, role, Decimal(value)))
-    if not blanks and not ours and not written:
+        if role in ("maker", "taker"):
+            found_lines.append((number, current_market, current_name, role, value, comment))
+    if not found_lines:
         return [], []
     keys = list(credentials_for(venue).values())
-    if not blanks and not ours and any(not env.get(k) for k in keys):
+    filling = any(not v or STANDARD_MARK in c for _, _, _, _, v, c in found_lines)
+    if not filling and any(not env.get(k) for k in keys):
         # Nothing to fill, and no account to check a written fee against: no call is worth making.
         return [], []
-    symbol = None
-    if "spot" in getattr(cfg.execution, "markets", ()):
-        with contextlib.suppress(Exception):
-            symbol = _symbol_for(cfg, envelope.parent, cfg.run.instrument)
-    fees, said = _read_fees(
-        venue, keys, env, _declared_environment(cfg), cfg.run.instrument, symbol
-    )
+    markets = tuple(getattr(cfg.execution, "markets", ("linear perpetual",)))
+    spot_symbol = _spot_reference(cfg, envelope.parent) if "spot" in markets else None
     good: list[str] = []
     bad: list[str] = []
-    if fees is None:
-        if blanks:
-            bad.append(f"fees: not read for {venue} ({said}); the blank lines stay")
-        return good, bad
-    from_account = said.startswith("read from your")
-    if not from_account and all(env.get(k) for k in keys):
-        # A refused key is why orders would fail too; an account that does not report fees is not.
-        refused = any(word in said for word in ("PermissionDenied", "AuthenticationError"))
-        (bad if refused else good).append(f"fees: {said}")
-    by_role = {"maker": fees[0], "taker": fees[1]}
-    to_fill = blanks + (ours if from_account else [])
-    if to_fill:
+    changed = False
+    for market in sorted({m for _, m, _, _, _, _ in found_lines}):
+        group = [row for row in found_lines if row[1] == market]
+        priced_as_spot = market == "spot" or "linear perpetual" not in markets
+        if priced_as_spot and spot_symbol is None:
+            continue
+        fees, said = _read_fees(
+            venue,
+            keys,
+            env,
+            _declared_environment(cfg),
+            cfg.run.instrument,
+            spot_symbol if priced_as_spot else None,
+        )
+        label = " spot" if market == "spot" else ""
+        if fees is None:
+            if any(not v for _, _, _, _, v, _ in group):
+                bad.append(f"fees{label}: not read for {venue} ({said}); the blank lines stay")
+            continue
+        from_account = said.startswith("read from your")
+        if not from_account and all(env.get(k) for k in keys):
+            # A refused key is why orders would fail too; an account without fees is not.
+            refused = any(word in said for word in ("PermissionDenied", "AuthenticationError"))
+            (bad if refused else good).append(f"fees{label}: {said}")
+        by_role = {"maker": fees[0], "taker": fees[1]}
         stamp = f"{when:%Y-%m-%d}"
         origin = (
             f"read from your {venue} account on {stamp}"
             if from_account
             else f"{venue} {STANDARD_MARK}, {stamp}; replaced once your account reports its own"
         )
-        for number, role in to_fill:
-            side = lines[number].split("=")[0].rstrip()
-            lines[number] = f"{side} = {_bps(by_role[role])}   # your {role} fee, {origin}"
+        filled = False
+        flagged = False
+        for number, _, name, role, value, comment in group:
+            if not value or (STANDARD_MARK in comment and from_account):
+                side = lines[number].split("=")[0].rstrip()
+                lines[number] = f"{side} = {_bps(by_role[role])}   # your {role} fee, {origin}"
+                filled = changed = True
+                continue
+            if STANDARD_MARK in comment:
+                continue
+            try:
+                declared = Decimal(value)
+            except (ArithmeticError, ValueError):
+                continue
+            # Only the account's own figure is a fact to hold a written fee to: a venue's market
+            # list can lag its fee schedule (one listed 6 bps for a perpetual it charges 5.5 on).
+            if not from_account or declared >= by_role[role]:
+                continue
+            flagged = True
+            bad.append(
+                f"fees: {envelope.name} prices {venue}/{name}{label} {role} at "
+                f"{_bps(declared)} bps and your account pays {_bps(by_role[role])}; the cost "
+                "gate would price trades too cheap"
+            )
+        if filled:
+            good.append(
+                f"fees{label}: maker {_bps(fees[0])} bps, taker {_bps(fees[1])} bps, {said}; "
+                f"written into {envelope.name}"
+            )
+        written = any(v and STANDARD_MARK not in c for _, _, _, _, v, c in group)
+        if written and not flagged and from_account:
+            good.append(
+                f"fees{label}: {envelope.name} matches or exceeds what your {venue} account pays"
+            )
+    if changed:
         envelope.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        good.append(
-            f"fees: maker {_bps(fees[0])} bps, taker {_bps(fees[1])} bps, {said}; "
-            f"written into {envelope.name}"
-        )
-    for name, role, declared in written:
-        if from_account and declared < by_role[role]:
-            bad.append(
-                f"fees: {envelope.name} prices {venue}/{name} {role} at {_bps(declared)} bps "
-                f"and your account pays {_bps(by_role[role])}; the cost gate would price trades "
-                "too cheap"
-            )
-        elif not from_account and declared < by_role[role]:
-            bad.append(
-                f"fees: {envelope.name} prices {venue}/{name} {role} at {_bps(declared)} bps and "
-                f"{venue}'s standard tier is {_bps(by_role[role])}; unless your account is on a "
-                "better tier, the cost gate would price trades too cheap"
-            )
-    if written and not bad and from_account:
-        good.append(f"fees: {envelope.name} matches or exceeds what your {venue} account pays")
     return good, bad
+
+
+def _spot_reference(cfg: Any, project: Path) -> str | None:
+    """A spot pair the desk declares, to read the venue's spot fees for: the run's own, else any."""
+    with contextlib.suppress(Exception):
+        own = _symbol_for(cfg, project, cfg.run.instrument)
+        if "/" in own and ":" not in own:
+            return own
+    declared = project / "data.toml"
+    if declared.is_file():
+        with contextlib.suppress(Exception):
+            raw = tomllib.loads(declared.read_text(encoding="utf-8"))
+            for symbol in (raw.get("data", {}).get("symbols") or {}).values():
+                if "/" in str(symbol) and ":" not in str(symbol):
+                    return str(symbol)
+    return None
 
 
 def _bps(value: Decimal) -> str:

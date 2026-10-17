@@ -12,7 +12,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from trading_research_agents.envelope.model import Channel, Envelope, EnvelopeError
+from trading_research_agents.envelope.model import MARKET_FEES, Channel, Envelope, EnvelopeError
 
 
 def _blank_fee(text: str) -> str:
@@ -66,6 +66,20 @@ def _channel(index: int, raw: Any) -> Channel:
             raise EnvelopeError(f"{where} is missing {required!r}")
     measured = raw.get("measured_round_trip_bps")
     gas = raw.get("gas_quote")
+    markets: list[tuple[str, Decimal, Decimal]] = []
+    for market in MARKET_FEES:
+        table = raw.get(market)
+        if table is None:
+            continue
+        if not isinstance(table, dict) or not {"entry_fee_bps", "exit_fee_bps"} <= set(table):
+            raise EnvelopeError(f"{where}.{market} declares entry_fee_bps and exit_fee_bps")
+        markets.append(
+            (
+                market,
+                _decimal(f"{where}.{market}.entry_fee_bps", table["entry_fee_bps"]),
+                _decimal(f"{where}.{market}.exit_fee_bps", table["exit_fee_bps"]),
+            )
+        )
     return Channel(
         venue=str(raw["venue"]),
         name=str(raw["name"]),
@@ -75,6 +89,7 @@ def _channel(index: int, raw: Any) -> Channel:
             None if measured is None else _decimal(f"{where}.measured_round_trip_bps", measured)
         ),
         gas_quote=None if gas is None else _decimal(f"{where}.gas_quote", gas),
+        market_fees=tuple(markets),
     )
 
 

@@ -139,13 +139,28 @@ And in the cycle, before any order:
 - **A short is refused by code** before it is priced, whatever the analyst proposed.
 - **Funding and open interest are not asked for.** They belong to contracts; on spot they would be
   refused every cycle and wake the technical auditor for nothing.
-- **The fees are the spot pair's.** One channel prices one fee, and a spot pair usually costs more
-  than the perpetual on the same coin (on Bybit, 10 bps a side against 5.5). `tra check` reads the
-  fee for the symbol orders go to and says so when the channel prices it lower.
+- **The fees are the spot pair's.** A spot pair usually costs more than the perpetual on the same
+  coin (on Bybit, 10 bps a side against 5.5), so a channel can carry both: its own fees for the
+  perpetual and a `[channel.spot]` table for the pair, and a spot cycle is priced at the second.
+  `tra check` compares each with what the venue charges for that market and says so when one is
+  priced lower.
 
 To set a desk up for spot, name the pair in `data.toml` under `[data].symbols` (for example
-`SOLUSDT = "SOL/USDT"`), list `spot` in `[execution].markets`, and price the channel at the spot
-fee. Spot was run on 2026-10-17: the order path end to end on the Bybit demo and the OKX demo
+`SOLUSDT = "SOL/USDT"`), list `spot` in `[execution].markets`, and add the pair's fees to the
+channel:
+
+```toml
+[[channel]]
+venue = "bybit"
+name = "taker-taker"
+entry_fee_bps = 5.5
+exit_fee_bps = 5.5
+
+[channel.spot]
+entry_fee_bps = 10
+exit_fee_bps = 10
+```
+ Spot was run on 2026-10-17: the order path end to end on the Bybit demo and the OKX demo
 (SOL/USDT; entry with the exits attached, the exits found at the venue, close, flat), and a full
 desk cycle on SOL/USDT in sandbox and in venue mode on the Bybit demo, which priced the round trip
 at the spot fee and refused the trade on its break-even rate. Start on a practice account.

@@ -16,6 +16,9 @@ name = "taker-taker"
 entry_fee_bps = 5.5
 exit_fee_bps = 5.5
 measured_round_trip_bps = 15.02
+# [channel.spot]                # the spot pair's fees on the same channel, for a desk that
+# entry_fee_bps = 10             # lists spot in [execution].markets; a spot pair usually costs
+# exit_fee_bps = 10              # more than the perpetual on the same coin
 
 [[channel]]
 venue = "bybit"

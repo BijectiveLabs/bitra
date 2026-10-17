@@ -309,7 +309,8 @@ class CycleConfig:
 
     @property
     def channel(self) -> Channel | None:
-        return next((c for c in self.envelope.channels if c.key == self.venue_key), None)
+        found = next((c for c in self.envelope.channels if c.key == self.venue_key), None)
+        return found.for_market("spot") if found is not None and self.spot else found
 
 
 @dataclass

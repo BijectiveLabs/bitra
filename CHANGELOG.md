@@ -8,6 +8,11 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- A channel can carry a spot pair's fees beside the perpetual's, as a `[channel.spot]` table, and a
+  spot cycle is priced at them; the base fees stay the perpetual's. `tra check` compares the base
+  fees with the perpetual and the spot fees with the pair, and names the market when one is priced
+  below what the venue charges.
+
 - Spot, on the same order path as perpetuals. A desk lists it in `[execution].markets` (the default
   stays perpetuals only). Read from the market's own facts: long only, since a short on spot needs a
   borrow; paid in full against the free quote balance, with no leverage set; the position is the
@@ -17,9 +22,6 @@ All notable changes to this project are recorded here. The format follows
   bought is counted in the quote currency. In the cycle, a short on spot is refused by code before
   it is priced, and funding and open interest are not asked for. Run end to end on the Bybit and
   OKX demos on SOL/USDT, and as a full desk cycle in sandbox and venue mode on the Bybit demo.
-- `tra check` reads the fee for the symbol orders actually go to (the spot pair, when the desk lists
-  spot) and says when a channel prices a fee below the venue's standard tier, not only below what
-  the account reports.
 
 ## [0.7.0] - 2026-10-16
 
