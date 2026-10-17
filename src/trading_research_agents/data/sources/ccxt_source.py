@@ -192,9 +192,11 @@ class CcxtSource:
         if limit <= 0:
             raise SourceError("limit is positive")
         timeframe = self._timeframe(interval_s)
+        since = options.get("since_ms")
+        since = None if since is None else int(since)
         # One extra row: the last one is usually still forming and is dropped below.
         rows = self._client.fetch_ohlcv(
-            symbol, timeframe, None, limit + 1, _params(options, self.venue)
+            symbol, timeframe, since, limit + 1, _params(options, self.venue)
         )
         if not rows:
             raise SourceError(f"{self.name}: no candles for {symbol}")
@@ -222,7 +224,8 @@ class CcxtSource:
             )
         if not candles:
             raise SourceError(f"{self.name}: no closed candle for {symbol} yet")
-        window = candles[-limit:]
+        # From a start, the window runs forward from it; without one, it ends at the newest bar.
+        window = candles[-limit:] if since is None else candles[:limit]
         return Fetched(
             kind="ohlcv",
             instrument=instrument,

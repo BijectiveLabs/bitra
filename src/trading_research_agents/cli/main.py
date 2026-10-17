@@ -589,6 +589,26 @@ def build_parser() -> argparse.ArgumentParser:
     audit_cmd.add_argument("--env-file", type=Path, default=None)
     audit_cmd.add_argument("--json", action="store_true")
 
+    hindsight_cmd = top.add_parser(
+        "hindsight",
+        help="what the trades each gate refused would have done, beside the ones it let through",
+    )
+    hindsight_cmd.set_defaults(command="hindsight")
+    hindsight_cmd.add_argument("--config", type=Path, default=Path("strategy.toml"))
+    hindsight_cmd.add_argument("--data-config", type=Path, default=Path("data.toml"))
+    hindsight_cmd.add_argument("--runs", type=Path, default=Path("runs") / "cycles")
+    hindsight_cmd.add_argument(
+        "--hold",
+        type=parse_duration_s,
+        default=None,
+        help="how long each trade is held (default: [exit].timeout_bars on the decision bar)",
+    )
+    hindsight_cmd.add_argument(
+        "--bar", type=parse_duration_s, default=300.0, help="the replay's candle (default: 5m)"
+    )
+    hindsight_cmd.add_argument("--days", type=int, default=None, help="only the last N days")
+    hindsight_cmd.add_argument("--json", action="store_true")
+
     universe_cmd = top.add_parser(
         "universe", help="what discovery finds on the venue now, and what each filter took out"
     )
@@ -1760,6 +1780,87 @@ def run_audit_command(args: argparse.Namespace) -> int:
     payload["out"] = str(result.path)
     emit(payload, args.json, _audit_lines(result, raised), lambda: _ui().audit_view(payload))
     return CLEARED
+
+
+FOUR_HOURS_S = 4 * 3600
+
+
+def hindsight_command(args: argparse.Namespace) -> int:
+    """Replay every directional decision on the candles that followed it, grouped by its gate."""
+    from trading_research_agents.data.sources import SourceError
+    from trading_research_agents.execution.hindsight import outcomes, read_decisions, report
+
+    cfg = load_strategy_config(args.config)
+    bar_s = int(args.bar)
+    timeout = cfg.exit_rule.timeout_bars
+    hold_s = (
+        int(args.hold)
+        if args.hold
+        else (timeout * cfg.run.bar_interval_s if timeout else FOUR_HOURS_S)
+    )
+    if bar_s <= 0 or bar_s > hold_s:
+        raise ConfigError(f"--bar is positive and no longer than the hold ({hold_s}s)")
+    data = _desk_data(args.data_config, cfg)
+    sources = data.chain("ohlcv").sources
+    declared = data.for_kind("ohlcv").options
+    params = {"params": declared["params"]} if "params" in declared else {}
+
+    def fetch(instrument: str, since_ms: int, limit: int) -> list[Any]:
+        for source in sources:
+            try:
+                got = source.fetch(
+                    "ohlcv", instrument, interval_s=bar_s, limit=limit, since_ms=since_ms, **params
+                )
+            except SourceError:
+                continue
+            bars = [c for c in got.value if c.start_ns >= since_ms * 1_000_000]
+            if bars:
+                return bars
+        return []
+
+    since = None if args.days is None else datetime.now(UTC) - timedelta(days=args.days)
+    decisions = read_decisions(args.runs, since=since)
+    found, skipped = outcomes(
+        decisions, fetch, hold_s=hold_s, bar_s=bar_s, cache=args.runs / "hindsight"
+    )
+    payload = report(found, hold_s=hold_s, bar_s=bar_s, skipped=skipped)
+    write_json(args.runs / "hindsight.json", payload)
+    emit(payload, args.json, _hindsight_lines(payload))
+    return CLEARED
+
+
+def _hindsight_lines(payload: dict[str, Any]) -> list[str]:
+    from trading_research_agents.agents.briefs import interval_name
+
+    def row(name: str, s: dict[str, Any]) -> str:
+        if not s["decisions"]:
+            return f"  {name:<22} none"
+        return (
+            f"  {name:<22} {s['decisions']:>4}  mean {s['mean_net_bps']:>7} bps  median "
+            f"{s['median_net_bps']:>7}  won {float(s['won']):>4.0%}  sum {s['sum_net_bps']:>8}"
+        )
+
+    side = payload["side"]
+    held, bar = interval_name(payload["hold_s"]), interval_name(payload["bar_s"])
+    lines = [
+        f"hindsight: {payload['replayed']} decisions replayed over {payload['days']} day(s), "
+        f"{payload['independent']} of them independent, each held {held} on {bar} candles, "
+        "net of its round trip",
+        row("admitted", payload["admitted"]),
+    ]
+    for gate in payload["gates"]:
+        lines.append(row(f"refused by {gate['gate']}", gate) + f"  {gate['verdict']}")
+    refused = payload["all_refused"]
+    lines.append(row("all refused", refused) + f"  {refused['verdict']}")
+    lines.append(
+        f"  side: the model's {side['model_side']['mean_net_bps']} bps against "
+        f"{side['opposite_side']['mean_net_bps']} on the reverse; {side['verdict']}"
+    )
+    left = {k: v for k, v in payload["skipped"].items() if v}
+    if left:
+        lines.append("  not replayed: " + ", ".join(f"{v} {k}" for k, v in left.items()))
+    lines.append(f"  written to hindsight.json; {payload['basis']}")
+    return lines
 
 
 def watch_desk(args: argparse.Namespace) -> int:
@@ -5792,6 +5893,7 @@ HANDLERS = {
     ("sources", "add"): sources_add,
     ("models", "models"): show_models,
     ("audit", "audit"): run_audit_command,
+    ("hindsight", "hindsight"): hindsight_command,
     ("keys", "keys"): show_keys,
     ("watch", "watch"): watch_desk,
     ("run", "run"): run_cycle_command,

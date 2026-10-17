@@ -1129,3 +1129,58 @@ open two.
 
 Every refusal on this list stops the cycle before an order exists. The last one is the gate doing
 the job the research programme this package came from was built to do.
+
+## Did the gates earn their place: `tra hindsight`
+
+A gate that refuses is easy to defend and hard to judge. It refused a trade; nobody saw what the
+trade would have done. `tra hindsight` replays every directional decision in `runs/cycles` on the
+candles that followed it, then puts each gate's refusals next to what the desk let through:
+
+```text
+hindsight: 81 decisions replayed over 7 day(s), 43 of them independent, each held 4h on 5m candles, net of its round trip
+  admitted                 21  mean   -41.3 bps  median   -61.6  won  14%  sum   -867.4
+  refused by targets       16  mean  -281.6 bps  median   -73.7  won  12%  sum  -4505.2  refused worse trades than it let through
+  refused by exit          14  mean   -47.2 bps  median   -46.6  won  21%  sum   -661.2  no clear difference yet
+  refused by regime        11  mean    62.0 bps  median    65.1  won  64%  sum    681.8  refused better trades than it let through; review it
+  side: the model's -79.5 bps against 36.4 on the reverse; the reverse of the model's side did better; its calls carried no edge
+```
+
+That is a real desk: an OKX demo account, decisions from 8 to 16 October 2026. Read it the way it is
+meant to be read. The targets gate kept out trades that would have lost far more than the ones it admitted.
+The regime gate kept out trades that would have done better, on eleven decisions, which is a reason
+to watch it, not yet a reason to switch it off. And the last line is the one that matters most: on
+those days the deciding model's side did worse than its exact reverse. No gate can fix that. A gate
+only refuses; it cannot turn a call with no edge into one with an edge.
+
+How each decision is replayed:
+
+- From the open of the first candle after the cycle finished, on the side the analyst took.
+- On the stop and take profit the record holds: the levels sent with the order, else the exits the
+  cycle measured, else the analyst's own named levels. With none, the trade closes at the hold limit.
+- A candle that touches both levels counts as the stop. Inside one candle the order is unknown, so
+  the replay takes the worse reading.
+- Held for `[exit].timeout_bars` on the decision bar (`--hold 4h` to change it), on 5-minute candles
+  (`--bar 1m` for a finer path), net of the round trip the cycle priced.
+- The same path on the opposite side gives the side check.
+
+The verdicts are deliberately reluctant:
+
+| Verdict | When |
+|---|---|
+| `too few to tell` | fewer than 10 decisions on either side, or fewer than 5 days for the side check |
+| `refused worse trades than it let through` | a permutation test puts the admitted group ahead with p at or below 0.05 |
+| `refused better trades than it let through; review it` | the same test, the other way |
+| `no clear difference yet` | anything between |
+
+The side check resamples whole days, because one day's tape moves every decision on it together.
+"Independent" counts decisions after dropping those on an instrument inside an earlier one's hold;
+the rest are the same bet asked again.
+
+The candles come from the desk's own ohlcv chain, the venue first. A path is kept under
+`runs/cycles/hindsight/` once its hold is over, so a second run asks the venue for nothing it already
+has. The report goes to `runs/cycles/hindsight.json`, and the quant auditor reads it there, beside
+the round trips the venue closed.
+
+A replay is not a fill. It assumes the entry at the next candle's open and an exit exactly at the
+level, with no queue, no partial fill and no gap past a stop. That is why it is reported beside the
+real round trips, never in place of them.

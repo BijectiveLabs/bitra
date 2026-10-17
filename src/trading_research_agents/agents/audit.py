@@ -101,7 +101,7 @@ def run_audit(cfg: AuditConfig) -> AuditResult:
 
     briefs = {
         tech_auditor.ROLE: tech_auditor.tech_brief(cycles, usage=cfg.runs / "usage.jsonl"),
-        quant_auditor.ROLE: quant_auditor.quant_brief(cycles, runs=cfg.sessions),
+        quant_auditor.ROLE: quant_auditor.quant_brief(cycles, runs=cfg.sessions, desk=cfg.runs),
     }
     tasks = []
     for role in cfg.auditors:

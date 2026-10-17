@@ -42,6 +42,12 @@ All notable changes to this project are recorded here. The format follows
   the book read from the environment orders go to. The shipped chains use it, so a desk reads one
   venue by default and changes venue by changing `venue_key`. `params` may be keyed by venue,
   `{ bybit = { intervalTime = "5min" } }`, so one venue's spelling never reaches another.
+- `tra hindsight`: every directional decision a desk recorded, replayed on the candles that followed
+  it with its own stop, take and hold, grouped by the gate that stopped it. Each gate's refusals
+  are set beside what it let through, with a verdict that says when the sample is too small, and
+  the deciding model's side is set beside its reverse, resampled by day. Paths are kept under
+  `runs/cycles/hindsight/`, the report in `runs/cycles/hindsight.json`, and the quant auditor
+  reads it. A ccxt source takes `since_ms` for a window that starts at a given time.
 
 ### Changed
 
@@ -64,6 +70,10 @@ All notable changes to this project are recorded here. The format follows
 - A close the venue accepted but did not fill was recorded as closed. It is now confirmed against
   the account: when the account still holds the position the unfilled close is cancelled, the
   record says it did not fill, the exits at the venue keep standing, and the next pass tries again.
+- The quant auditor never saw a venue desk's results: it read closed round trips only from session
+  runs, while a venue desk records them in `runs/cycles/round_trips.jsonl`, so every scheduled look
+  reported none closed. It now reads both; rows written before the net was kept in bps are stated
+  from their net, entry and size.
 
 ## [0.7.1] - 2026-10-17
 

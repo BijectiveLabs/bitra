@@ -162,7 +162,7 @@ of a cycle.
 | Auditor | Reads | Looks for |
 |---|---|---|
 | `tech_auditor` | calls answered and failed per role, median seconds, where each kind of data came from and how old it was, what was refused or stale, tokens and latency per role, tokens per decision, installed versions | what is wearing out, what is wasteful, what is fragile |
-| `quant_auditor` | what the deciding analyst said, intents and their size, the conviction behind them, the claimed edge, the cost it was priced at, what was left after cost, which gate refused the rest, and the round trips a session actually closed with their excursions | whether the desk's own declarations are earning what they cost |
+| `quant_auditor` | what the deciding analyst said, intents and their size, the conviction behind them, the claimed edge, the cost it was priced at, what was left after cost, which gate refused the rest, the round trips a session or the venue actually closed with their excursions, and the last `tra hindsight` report: what each gate's refusals would have done |  whether the desk's own declarations are earning what they cost |
 
 Both answer in the same shape: findings, each tied to figures from the brief with their values, each
 carrying a proposal, and at most one proposed configuration change with the value it has now and the
