@@ -1102,6 +1102,11 @@ def _regime(raw: dict[str, Any]) -> RegimeRule:
             trend_above=_dec(table, "trend_above") if "trend_above" in table else Decimal("2.0"),
             range_below=_dec(table, "range_below") if "range_below" in table else Decimal("1.0"),
             setups_must_fit=fit,
+            fade_below_variance_ratio=(
+                _dec(table, "fade_below_variance_ratio")
+                if "fade_below_variance_ratio" in table
+                else Decimal("1.0")
+            ),
         )
     except RegimeError as exc:
         raise ConfigError(str(exc)) from exc

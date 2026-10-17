@@ -808,6 +808,8 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         window_move_bps=technical.features.window_move_bps,
         position_in_range=technical.features.position_in_range,
         trend_strength=technical.features.trend_strength,
+        variance_ratio=technical.features.variance_ratio,
+        fade_below=float(cfg.regime.fade_below_variance_ratio),
     )
     if misfit_why and cfg.regime.setups_must_fit:
         result.refusals.append(f"regime: {misfit_why} ([regime].setups_must_fit)")

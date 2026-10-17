@@ -51,6 +51,11 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- A range fade is refused where the window's moves have been carrying on: the technical brief
+  carries `variance_ratio` (four-bar against one-bar return variance), and `range_reversion` needs
+  it below `[regime].fade_below_variance_ratio`, 1 by default, 0 to turn it off. On the demo desks
+  the fades it would have refused averaged -101 bps net against -46 for the rest. The analyst's
+  instructions name `range_breakout` or flat for a range whose moves carry on.
 - Every MCP tool says what it is for, when to use it against its siblings, what it returns and
   that it only reads, and every argument carries a description in the input schema. The server's
   instructions give the order of work an idea follows through the tools.

@@ -254,6 +254,7 @@ kill_switch = "KILL"               # touch this file to flatten and stop
 # trend_above = 2.0                # at or above: trending
 # range_below = 1.0                # at or below: ranging; in between: mixed
 # setups_must_fit = true           # false: a misfit is written down and the trade goes on
+# fade_below_variance_ratio = 1.0  # a range fade needs the window's moves to have turned back
 
 # What this desk may be carrying across every instrument at once. Every limit above is about one
 # trade; these are about the book. A per-trade limit of fifty basis points is a different promise

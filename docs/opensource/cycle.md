@@ -258,6 +258,7 @@ that picture too, all of it computed by the system from the snapshot:
 |---|---|---|
 | `regime` | trending up, trending down, ranging or mixed, on the decision timeframe | `trend_strength` against the lines in `[regime]` |
 | `trend_strength` | net move over the path walked, times the square root of the steps; a random walk sits near 1 on any window | the window's closes |
+| `variance_ratio` | the variance of four-bar returns against four times that of one-bar returns: below 1 the window's moves were given back, above 1 they were followed by more of the same, near 1 is a random walk | the window's closes |
 | `window_move_bps` | the price move from the first close of the window to the last; a market move, not the trade's net | the window's closes |
 | `timeframes.<tf>` | the same regime, net move, z-score and position in range on each higher timeframe | `[run].context_intervals`, one candle pull each |
 | `book_imbalance` | resting bids against resting asks over the first 10 levels, from -1 to 1; positive leans to the bid | the order book already in the snapshot |
@@ -276,6 +277,7 @@ context_intervals = ["1h", "4h"]   # up to three, each a whole multiple of bar_i
 trend_above = 2.0                  # trend_strength at or above this is a trend
 range_below = 1.0                  # at or below this is a range; between the two is mixed
 setups_must_fit = true             # false: a misfit is written down and the trade goes on
+fade_below_variance_ratio = 1.0    # a range fade needs the window's variance ratio below this; 0 is off
 ```
 
 **A setup has to fit what the system measured.** Each setup is a claim with a direction built into it,
@@ -284,7 +286,7 @@ and the figures that make the claim are in the brief. On the decision timeframe,
 | Setup | Refused when |
 |---|---|
 | `trend_continuation`, `pullback_in_trend` | the market is not measured as trending (ranging or mixed), or the trade points against the trend |
-| `range_reversion` | the market is not measured as a range (trending, or mixed with a measured trend strength), or the trade does not fade the stretch: a long with the close at or above the window's mean (z-score 0 or more), a short at or below it |
+| `range_reversion` | the market is not measured as a range (trending, or mixed with a measured trend strength), the window's moves have been carrying on (variance ratio at or above `fade_below_variance_ratio`), or the trade does not fade the stretch: a long with the close at or above the window's mean (z-score 0 or more), a short at or below it |
 | `momentum_exhaustion` | the trade goes with the move it says is exhausted: with the trend, or with the window's move |
 | `range_breakout` | the trade is on the other side from where the close sits: a long with the close in the lower half of the range, a short in the upper half |
 | `volatility_expansion` | never on direction: it is about a regime changing, not which way |
@@ -295,6 +297,14 @@ checked trends it could measure. A short setup against a higher timeframe's tren
 the analyst to weigh, because fading the hourly on the minute chart is sometimes the whole trade;
 the reason has to say so. With `setups_must_fit = false` a misfit is written down and the trade
 goes on. `tra check` prints the lines and the timeframes in use.
+
+Why the variance ratio, and not trend strength alone: a window can net out to nothing, and read
+as a range, while each move inside it is followed by more of the same. On the demo desks, the
+analyst proposed 94 range fades between 2026-10-06 and 10-16 (the stretch for which the desks kept
+their raw inputs), each replayed with the same exits for four hours: the 28 with a variance ratio
+of 1 or above averaged -101 bps net and won 21% of the time, the rest -46 bps. A fade is paid only
+where moves are given back, so that is what it is now held to. The line sits at 1, the random
+walk, rather than at a value fitted to those trades.
 
 The fade has been held to the same standard as the trend setups since 0.6.4. Before that,
 `range_reversion` was refused only in a trend, so in a mixed market it was the one regime-bound

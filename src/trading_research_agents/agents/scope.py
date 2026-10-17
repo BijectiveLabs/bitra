@@ -122,6 +122,7 @@ SCOPES: dict[str, Scope] = {
             "position_in_range",
             "window_move_bps",
             "trend_strength",
+            "variance_ratio",
             "range_high",
             "range_low",
             "atr",

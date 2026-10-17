@@ -324,3 +324,50 @@ def test_a_fade_needs_a_measured_range_as_a_trend_setup_needs_a_trend() -> None:
     assert not misfit("range_reversion", "short", "mixed", zscore=1.4)
     # The setups that presuppose no regime stay open in a mixed market.
     assert not misfit("range_breakout", "long", "mixed", position_in_range=0.97, trend_strength=1.6)
+
+
+def test_the_variance_ratio_tells_moves_given_back_from_moves_carried_on() -> None:
+    from trading_research_agents.agents.technical_analyst.tools import variance_ratio
+
+    back = [100.0 + (1.0 if i % 2 else 0.0) for i in range(60)]
+    on: list[float] = [100.0]
+    for i in range(59):
+        # Runs of four bars the same way: every move followed by more of the same.
+        on.append(on[-1] * (1.002 if (i // 4) % 2 == 0 else 0.998))
+    low, high = variance_ratio(back), variance_ratio(on)
+    assert low is not None and low < 0.5
+    assert high is not None and high > 1.5
+    assert variance_ratio(back[:10]) is None
+    assert variance_ratio([100.0] * 60) is None
+
+
+def test_a_fade_where_moves_have_been_carrying_on_is_refused() -> None:
+    # Seen across 94 range fades proposed from 2026-10-06 to 10-16: at a variance ratio of 1 or
+    # above they averaged -101 bps net, 21% won; below it, -46 bps.
+    why = misfit(
+        "range_reversion", "short", "ranging", zscore=1.4, variance_ratio=1.12, fade_below=1.0
+    )
+    assert "variance ratio of 1.12" in why and "below 1" in why
+    assert not misfit(
+        "range_reversion", "short", "ranging", zscore=1.4, variance_ratio=0.8, fade_below=1.0
+    )
+    # Off, or not measured, it refuses nothing; other setups are not asked about it.
+    assert not misfit("range_reversion", "short", "ranging", zscore=1.4, variance_ratio=1.5)
+    assert not misfit("range_reversion", "short", "ranging", zscore=1.4, fade_below=1.0)
+    assert not misfit(
+        "range_breakout",
+        "long",
+        "ranging",
+        position_in_range=0.97,
+        variance_ratio=1.5,
+        fade_below=1.0,
+    )
+
+
+def test_the_fade_line_is_declared_and_checked() -> None:
+    cfg = parse_strategy_config(agent_raw(regime={"fade_below_variance_ratio": Decimal("0.9")}))
+    assert cfg.regime.fade_below_variance_ratio == Decimal("0.9")
+    assert parse_strategy_config(agent_raw()).regime.fade_below_variance_ratio == Decimal("1.0")
+    assert RegimeRule().record()["fade_below_variance_ratio"] == "1.0"
+    with pytest.raises(ConfigError, match="zero"):
+        parse_strategy_config(agent_raw(regime={"fade_below_variance_ratio": Decimal("-1")}))
