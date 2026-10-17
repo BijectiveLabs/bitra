@@ -51,6 +51,10 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- The technical brief carries the last swing high and low and the structure the last two of each
+  make (higher highs and higher lows, lower highs and lower lows, or a mix). The analyst's
+  instructions told it to place a stop beyond the swing from "the bars themselves", which it was
+  never given; they now name the figures it has.
 - A range fade is refused where the window's moves have been carrying on: the technical brief
   carries `variance_ratio` (four-bar against one-bar return variance), and `range_reversion` needs
   it below `[regime].fade_below_variance_ratio`, 1 by default, 0 to turn it off. On the demo desks

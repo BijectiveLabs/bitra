@@ -258,6 +258,7 @@ that picture too, all of it computed by the system from the snapshot:
 |---|---|---|
 | `regime` | trending up, trending down, ranging or mixed, on the decision timeframe | `trend_strength` against the lines in `[regime]` |
 | `trend_strength` | net move over the path walked, times the square root of the steps; a random walk sits near 1 on any window | the window's closes |
+| `swing_high`, `swing_low`, `structure` | the last bar whose high stands above the two bars on each side, the last whose low stands below them, and what the last two of each make: higher highs and higher lows, lower highs and lower lows, or one of the two mixes | the window's bars |
 | `variance_ratio` | the variance of four-bar returns against four times that of one-bar returns: below 1 the window's moves were given back, above 1 they were followed by more of the same, near 1 is a random walk | the window's closes |
 | `window_move_bps` | the price move from the first close of the window to the last; a market move, not the trade's net | the window's closes |
 | `timeframes.<tf>` | the same regime, net move, z-score and position in range on each higher timeframe | `[run].context_intervals`, one candle pull each |
