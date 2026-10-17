@@ -2384,9 +2384,16 @@ def _fill_account_fees(
     good: list[str] = []
     bad: list[str] = []
     changed = False
+    with_spot = {name for _, m, name, _, _, _ in found_lines if m == "spot"}
     for market in sorted({m for _, m, _, _, _, _ in found_lines}):
         group = [row for row in found_lines if row[1] == market]
         priced_as_spot = market == "spot" or "linear perpetual" not in markets
+        if market == "" and priced_as_spot:
+            # A spot-only desk prices with a channel's spot table when it has one; its base fees
+            # are then never used, so they are not held to the spot pair.
+            group = [row for row in group if row[2] not in with_spot]
+            if not group:
+                continue
         if priced_as_spot and spot_symbol is None:
             continue
         fees, said = _read_fees(

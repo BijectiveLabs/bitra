@@ -584,3 +584,34 @@ def test_spot_fees_are_checked_against_the_spot_pair_and_base_fees_against_the_p
         "fees: envelope.toml prices bybit/taker-taker spot taker at 8 bps and your account pays "
         "10; the cost gate would price trades too cheap"
     ]
+
+
+def test_a_spot_only_desk_does_not_hold_a_channels_unused_base_fees_to_the_spot_pair(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+
+    cli = __import__("importlib").import_module("trading_research_agents.cli.main")
+    envelope = tmp_path / "envelope.toml"
+    envelope.write_text(
+        '[[channel]]\nvenue = "bybit"\nname = "taker-taker"\nentry_fee_bps = 5.5\n'
+        "exit_fee_bps = 5.5\n\n[channel.spot]\nentry_fee_bps = 10\nexit_fee_bps = 10\n",
+        encoding="utf-8",
+    )
+    cfg = SimpleNamespace(
+        execution=SimpleNamespace(venue="bybit", environment="demo", markets=("spot",)),
+        run=SimpleNamespace(venue_key="bybit/taker-taker", instrument="SOLUSDT"),
+        live=None,
+    )
+    monkeypatch.setattr(cli, "_symbol_for", lambda *a: "SOL/USDT")
+    monkeypatch.setattr(
+        cli, "_read_fees", lambda *a: ((Decimal(10), Decimal(10)), "read from your demo account")
+    )
+    good, bad = cli._fill_account_fees(
+        envelope,
+        cfg,
+        {"BYBIT_API_KEY": "k", "BYBIT_API_SECRET": "s"},
+        datetime(2026, 10, 17, tzinfo=UTC),
+    )
+    assert bad == [] and any(line.startswith("fees spot: ") for line in good)
