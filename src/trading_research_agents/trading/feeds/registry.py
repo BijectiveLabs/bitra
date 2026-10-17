@@ -49,7 +49,10 @@ def _streamed() -> tuple[str, ...]:
         pro = import_module("ccxt.pro")
     except ImportError:
         return ()
-    return tuple(str(name) for name in getattr(pro, "exchanges", ()))
+    from trading_research_agents.data.sources.ccxt_client import is_prediction, venues
+
+    streamed = {str(name) for name in getattr(pro, "exchanges", ())}
+    return tuple(sorted(streamed | {name for name in venues() if is_prediction(name)}))
 
 
 def live_feed(name: str) -> LiveFeedFactory:

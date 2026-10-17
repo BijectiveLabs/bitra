@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from trading_research_agents.agents import (
+    event_analyst,
     macro_analyst,
     onchain_analyst,
     sentiment_analyst,
@@ -83,6 +84,7 @@ from trading_research_agents.execution.conviction import (
 )
 from trading_research_agents.execution.desk import Desk, DeskVerdict, Open, within_desk
 from trading_research_agents.execution.mandate import MODES as MANDATE_MODES
+from trading_research_agents.execution.outcome import BPS, OutcomeError, outcome_edge
 from trading_research_agents.execution.pretrade import PreTradeVerdict, admit
 from trading_research_agents.execution.regime import RegimeRule, misfit
 from trading_research_agents.execution.risk import RiskVerdict, within_risk
@@ -131,6 +133,7 @@ from trading_research_agents.trading.capital import (
     drawdown_bps,
     sizing_equity,
 )
+from trading_research_agents.trading.market import Market
 
 # The third mode sends orders, and it only exists when the caller hands the cycle something to
 # send them with. That hand is built by the CLI, and only after the mandate has cleared.
@@ -259,6 +262,9 @@ class CycleConfig:
     # hours: with equity_session "regular" an entry waits for the session and a hold may not run
     # past its close; on-chain figures do not bear on a share, so that analyst is not asked.
     asset_class: str = "crypto"
+    # The market itself, as the venue describes it. A prediction outcome is decided by the event
+    # analyst on a probability, priced to resolution, and sized by its stake.
+    market: Market | None = None
     equity_session: str = "any"
     equity_closed: tuple[date, ...] = ()
     # A reading analyst is asked only when the roster names it. `tra run` names the ones with a
@@ -493,7 +499,8 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
     where = CycleDir(root=cfg.root, cycle=cycle).make()
     spent_before = cfg.usage.cost
     calls_before = len(cfg.usage.records)
-    kinds = [k for k in cfg.chains if not (cfg.spot and k in CONTRACT_KINDS)]
+    no_contract = cfg.spot or (cfg.market is not None and cfg.market.outcome)
+    kinds = [k for k in cfg.chains if not (no_contract and k in CONTRACT_KINDS)]
     announce(cfg.watch, "data", RUNNING, f"{len(kinds)} kind(s)")
     # What the operator declared per kind in data.toml, then the window this cycle needs. A venue
     # quirk lives in that file, so dropping it here would be dropping the operator's own decision.
@@ -638,6 +645,9 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
             announce(cfg.watch, "desk", HELD, "a position is already open")
             _finish(cfg, where, result)
             return result
+
+    if cfg.market is not None and cfg.market.outcome:
+        return _decide_on_an_outcome(cfg, where, result, snapshot, cycle, equity, cfg.market)
 
     # The reading briefs come first: what the operator's thresholds say on them is code, known
     # before any model is asked, and the technical analyst decides with it in front of it.
@@ -1152,7 +1162,175 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
     announce(cfg.watch, "intent", DONE, f"{analyst.target} {size} on {analyst.setup}")
     append_line(where.path / "intents.jsonl", result.intent, durable=True)
 
-    if cfg.mode == "venue" and cfg.place is not None:
+    return _send(cfg, where, result)
+
+
+def _decide_on_an_outcome(
+    cfg: CycleConfig,
+    where: CycleDir,
+    result: CycleResult,
+    snapshot: Snapshot,
+    cycle: str,
+    equity: Decimal | None,
+    market: Market,
+) -> CycleResult:
+    """A prediction outcome: the event analyst's probability against the ask, held to resolution.
+
+    The share pays 1 or nothing, so what it can lose is its cost: that is the stop, and the size
+    is cut until that cost fits the risk per trade. The take profit is the analyst's own
+    probability, offered on the book after the fill; otherwise the share is held to resolution or
+    until time closes it.
+    """
+    bid, ask = _prices(snapshot)
+    if ask is None:
+        return _stop_before_asking(
+            cfg, where, result, "outcome: the book has no ask, so the share cannot be priced"
+        )
+    fees = _channel(cfg).outcome_fees()
+    if fees is None:
+        why = (
+            f"outcome: channel {cfg.venue_key} declares no fees for a prediction outcome; add "
+            "[channel.prediction] with fee_coefficient or entry_fee_bps and exit_fee_bps"
+        )
+        return _stop_before_asking(cfg, where, result, why, step="cost")
+    coefficient, fee_bps = fees
+    now = cfg.clock()
+    candles = _candles(snapshot)
+    brief: dict[str, Any] = {
+        "instrument": cfg.instrument,
+        "question": market.question,
+        "outcome": market.outcome_label,
+        "resolves_at": None
+        if market.expiry is None
+        else datetime.fromtimestamp(int(market.expiry) / 1000, tz=UTC).isoformat(),
+        "hours_to_resolution": None
+        if market.expiry is None
+        else str(((Decimal(market.expiry) / 1000) - Decimal(now.timestamp())) / 3600)[:10],
+        "bid": None if bid is None else str(bid),
+        "ask": str(ask),
+        "mid": None if bid is None else str((bid + ask) / 2),
+        "closes": [str(getattr(c, "close", "")) for c in candles[-24:]],
+        "calendar": [e.record() for e in _calendar(cfg, result)],
+    }
+    write_json(where.brief(event_analyst.ROLE), brief)
+    announce(cfg.watch, event_analyst.ROLE, RUNNING)
+    try:
+        answer = _ask(cfg, event_analyst.ROLE, brief, event_analyst.SCHEMA)
+        analyst = event_analyst.parse(answer)
+    except Exception as exc:
+        why = f"{event_analyst.ROLE}: {exc.__class__.__name__}: {exc}"
+        result.refusals.append(why)
+        result.stopped_by = why
+        _finish(cfg, where, result)
+        return result
+    write_json(where.answer(event_analyst.ROLE), json.loads(answer))
+    kept, lost = survived(analyst.figures_used, figures_of(brief))
+    result.cited = [figure.record() for figure in kept]
+    for gone in lost:
+        result.refusals.append(f"{event_analyst.ROLE}: discarded a citation, {gone}")
+    result.briefs["event"] = {
+        "probability": str(analyst.probability),
+        "confidence": analyst.confidence,
+        "reason": analyst.reason,
+    }
+    announce(cfg.watch, event_analyst.ROLE, DONE, f"probability {analyst.probability}")
+    if not kept:
+        result.refusals.append(
+            f"{event_analyst.ROLE}: not one figure from its brief survived the check, so the "
+            "probability rests on nothing this cycle measured"
+        )
+        _finish(cfg, where, result)
+        return result
+    if analyst.confidence < cfg.min_confidence:
+        result.refusals.append(
+            f"{event_analyst.ROLE}: confidence {analyst.confidence} below the declared "
+            f"{cfg.min_confidence}"
+        )
+        _finish(cfg, where, result)
+        return result
+
+    try:
+        edge = outcome_edge(
+            analyst.probability,
+            ask,
+            margin_bps=cfg.margin_bps,
+            coefficient=coefficient,
+            fee_bps=fee_bps,
+        )
+    except OutcomeError as exc:
+        return _stop_before_asking(cfg, where, result, f"outcome: {exc}", step="cost")
+    result.briefs["outcome"] = edge.record()
+    write_json(where.brief("cost"), edge.record())
+    announce(cfg.watch, "cost gate", DONE if edge.admitted else REFUSED, edge.reason)
+    if not edge.admitted:
+        result.refusals.append(f"cost gate: {edge.reason}")
+        _finish(cfg, where, result)
+        return result
+
+    each = ask + edge.fee
+    size = cfg.size if cfg.size_quote is None else cfg.size_quote / ask
+    caps = [size]
+    if cfg.max_position_quote is not None:
+        caps.append(cfg.max_position_quote / ask)
+    if cfg.max_position is not None:
+        caps.append(cfg.max_position)
+    if equity is not None and cfg.max_risk_per_trade_bps is not None:
+        # The whole stake is what is at risk, so the risk rule caps the stake itself.
+        caps.append(equity * cfg.max_risk_per_trade_bps / BPS / each)
+    size = _quantized(min(caps), cfg.size_step)
+    if size <= 0:
+        return _stop_before_asking(
+            cfg, where, result, f"size: the caps leave less than one step of {cfg.size_step}"
+        )
+    stake = size * each
+    risk_bps = None if equity in (None, 0) else stake / equity * BPS
+
+    if cfg.desk.bounds_a_trade and risk_bps is not None:
+        held, source = _held(cfg, result)
+        book = within_desk(
+            cfg.desk, instrument=cfg.instrument, adding_bps=risk_bps, held=held, source=source
+        )
+        result.book = book
+        for reason in book.reasons:
+            result.refusals.append(f"desk: {reason}")
+        if not book.admitted:
+            _finish(cfg, where, result)
+            return result
+
+    take = analyst.probability
+    if market.price_max is not None:
+        take = min(take, market.price_max)
+    result.intent = {
+        "instrument": cfg.instrument,
+        "target": "long",
+        "setup": "event",
+        "size": str(size),
+        "risk_bps": None if risk_bps is None else str(risk_bps.quantize(Decimal("0.01"))),
+        "confidence": analyst.confidence,
+        "probability": str(analyst.probability),
+        "reason": analyst.reason,
+        "cited": result.cited,
+        "edge_bps": str(edge.edge_bps.quantize(Decimal("0.01"))),
+        "edge_source": "event_analyst",
+        "stake": str(stake.quantize(Decimal("0.0001"))),
+        "mode": cfg.mode,
+        "mid": str(ask if bid is None else (bid + ask) / 2),
+        "at": cycle,
+        **_touch(snapshot),
+        "stop_price": None,
+        "take_price": str(take),
+        "exits": "bounded",
+        "channel": cfg.venue_key,
+        "entry_role": _channel(cfg).entry_role,
+    }
+    announce(cfg.watch, "intent", DONE, f"buy {size} at {ask} on a probability of {take}")
+    append_line(where.path / "intents.jsonl", result.intent, durable=True)
+    return _send(cfg, where, result)
+
+
+def _send(cfg: CycleConfig, where: CycleDir, result: CycleResult) -> CycleResult:
+    """Send the intent already on disk, in venue mode, and write the cycle down either way."""
+    if cfg.mode == "venue" and cfg.place is not None and result.intent is not None:
         # The intent is already on disk. Whatever the venue does next, the record of what this
         # cycle decided survives it.
         announce(cfg.watch, "venue", RUNNING)

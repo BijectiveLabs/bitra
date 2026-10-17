@@ -337,6 +337,13 @@ class Keeper:
         base = _base(hand)
         fees = sum((_fee_in_quote(f, base) for f in (*opening, *exits)), Decimal(0))
         amount = sum((Decimal(str(f.get("amount") or 0)) for f in exits), Decimal(0))
+        if amount == 0:
+            # Held to resolution: no sale, the venue settled the shares at 1 or 0 instead.
+            settled = _settled(hand, since)
+            if settled is not None:
+                exits = [settled]
+                amount = Decimal(str(settled["amount"]))
+                trip["settled"] = "won" if settled["price"] == 1 else "lost"
         last_exit = max((f.get("timestamp") or 0 for f in exits), default=None)
         if amount > 0:
             paid = sum(
@@ -405,6 +412,24 @@ def _contract_unit(hand: Any) -> Decimal:
     """How much of the base one of the venue's contracts is; 1 for a hand that does not say."""
     size = getattr(hand, "contract_size", None)
     return Decimal(1) if size is None else Decimal(size())
+
+
+def _settled(hand: Any, since: int) -> dict[str, Any] | None:
+    """A prediction outcome's settlement since `since`, as an exit fill at its payout price."""
+    read = getattr(hand, "settlement", None)
+    if read is None:
+        return None
+    with suppress(Exception):
+        found = read(since)
+        if found is not None:
+            return {
+                "side": "sell",
+                "amount": found["amount"],
+                "price": found["price"],
+                "fee": {"cost": 0},
+                "timestamp": found.get("timestamp") or 0,
+            }
+    return None
 
 
 def _base(hand: Any) -> str:

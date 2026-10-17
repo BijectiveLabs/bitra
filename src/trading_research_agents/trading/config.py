@@ -469,6 +469,8 @@ KNOWN_ROLES = (
     "auditor",
     # One stance is one call, so a validator may run on its own model like any other role.
     "validator",
+    # The deciding role on a prediction market outcome.
+    "event_analyst",
 )
 # The llm layer owns this vocabulary; it is repeated here because the gates never import it, and
 # repeated in one place so a bad spelling is refused while reading the file rather than mid-cycle.

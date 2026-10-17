@@ -2282,9 +2282,11 @@ def _read_fees(
     from trading_research_agents.trading.dispatch import DispatchError, account_fees, hand_for
 
     try:
-        import ccxt
+        from trading_research_agents.data.sources.ccxt_client import build
 
-        public = getattr(ccxt, venue)({"enableRateLimit": True})
+        public = build(venue, {"enableRateLimit": True})
+        if public is None:
+            raise AttributeError(f"ccxt has no exchange named {venue!r}")
         public.load_markets()
         # The symbol orders go out under, when the caller knows it: a spot pair and the perpetual
         # on the same coin are charged different fees.
@@ -3151,6 +3153,7 @@ def run_cycle_command(args: argparse.Namespace) -> int:
         place=hand,
         spot=facts[0],
         asset_class=facts[1],
+        market=facts[2],
         equity_session=cfg.execution.equity_session,
         equity_closed=tuple(date.fromisoformat(d) for d in cfg.execution.equity_closed),
         matrix=cfg.confluence,
@@ -3275,6 +3278,7 @@ def run_cycle_command(args: argparse.Namespace) -> int:
                             instrument=instrument,
                             spot=chosen_facts[0],
                             asset_class=chosen_facts[1],
+                            market=chosen_facts[2],
                             size_step=_step_for(cfg, instrument),
                             # The risk manager's cut, if one is in force; the client's caps apply
                             # after it as always.
@@ -3616,9 +3620,11 @@ def _discovered_universe(cfg: Any) -> tuple[Any, dict[str, Any] | None, list[str
     try:
         client = _DISCOVERY_CLIENTS.get(venue)
         if client is None:
-            import ccxt
+            from trading_research_agents.data.sources.ccxt_client import build
 
-            client = getattr(ccxt, venue)({"enableRateLimit": True})
+            client = build(venue, {"enableRateLimit": True})
+            if client is None:
+                raise AttributeError(f"ccxt has no exchange named {venue!r}")
             _DISCOVERY_CLIENTS[venue] = client
         found = discover(client, venue, rules)
     except (DiscoverError, ImportError, AttributeError) as exc:
@@ -4359,7 +4365,9 @@ def _venue_hand(
     )
 
 
-def _market_facts(cfg: Any, project: Path, instrument: str, hand: Any = None) -> tuple[bool, str]:
+def _market_facts(
+    cfg: Any, project: Path, instrument: str, hand: Any = None
+) -> tuple[bool, str, Any]:
     """Whether the instrument is spot on the venue orders go to, and what its underlying is.
 
     In venue mode the hand that will send says so. Elsewhere the venue's market list is asked,
@@ -4367,6 +4375,7 @@ def _market_facts(cfg: Any, project: Path, instrument: str, hand: Any = None) ->
     that cannot be read leaves the cycle as it always was, since nothing is sent outside venue
     mode. An instrument named in [execution].equities is an equity whatever the venue says.
     """
+    from trading_research_agents.data.sources.ccxt_client import market_of
     from trading_research_agents.trading.market import Market
 
     markets = tuple(cfg.execution.markets)
@@ -4374,17 +4383,18 @@ def _market_facts(cfg: Any, project: Path, instrument: str, hand: Any = None) ->
     market = None
     if hand is not None:
         market = hand.market()
-    elif "spot" in markets or not cfg.universe.crypto_only:
+    elif "spot" in markets or "prediction" in markets or not cfg.universe.crypto_only:
         try:
             client = _execution_client(cfg)
             symbol = _symbol_for(cfg, project, instrument)
             venue = cfg.execution.venue or cfg.run.venue_key.partition("/")[0]
-            market = Market.from_ccxt(venue, symbol, client.market(symbol))
+            market = Market.from_ccxt(venue, symbol, market_of(client, symbol))
         except Exception:
             market = None
     spot = "spot" in markets and market is not None and market.held_as_balance
     asset = "equity" if declared else (market.asset_class if market is not None else "crypto")
-    return spot, asset
+    outcome = market if market is not None and market.outcome and "prediction" in markets else None
+    return spot, asset, outcome
 
 
 def _symbol_for(cfg: Any, project: Path, instrument: str = "") -> str:
@@ -4414,13 +4424,15 @@ def _execution_client(cfg: Any) -> Any:
     size or lot: MET is 1 coin a contract live and 10 on the demo. Whatever an order is sized,
     stepped or resolved by has to come from the list the order will be checked against.
     """
-    import ccxt
+    from trading_research_agents.data.sources.ccxt_client import build
 
     venue = cfg.execution.venue or cfg.run.venue_key.partition("/")[0]
     environment = _declared_environment(cfg)
     key = (venue, environment)
     if key not in _EXECUTION_CLIENTS:
-        client = getattr(ccxt, venue)({"enableRateLimit": True})
+        client = build(venue, {"enableRateLimit": True})
+        if client is None:
+            raise AttributeError(f"ccxt has no exchange named {venue!r}")
         if environment == "demo":
             client.enable_demo_trading(True)
         elif environment == "testnet":

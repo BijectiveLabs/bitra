@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from importlib import import_module
 from importlib.metadata import entry_points
 from typing import Any, Protocol
 
@@ -75,11 +74,9 @@ def _discover() -> None:
 
 
 def _ccxt_venues() -> tuple[str, ...]:
-    try:
-        ccxt = import_module("ccxt")
-    except ImportError:
-        return ()
-    return tuple(str(name) for name in getattr(ccxt, "exchanges", ()))
+    from trading_research_agents.data.sources.ccxt_client import venues
+
+    return venues()
 
 
 def live_venue(name: str) -> LiveVenueFactory:

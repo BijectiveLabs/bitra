@@ -67,9 +67,13 @@ def _channel(index: int, raw: Any) -> Channel:
     measured = raw.get("measured_round_trip_bps")
     gas = raw.get("gas_quote")
     markets: list[tuple[str, Decimal, Decimal]] = []
+    coefficient = None
     for market in MARKET_FEES:
         table = raw.get(market)
         if table is None:
+            continue
+        if market == "prediction" and isinstance(table, dict) and "fee_coefficient" in table:
+            coefficient = _decimal(f"{where}.prediction.fee_coefficient", table["fee_coefficient"])
             continue
         if not isinstance(table, dict) or not {"entry_fee_bps", "exit_fee_bps"} <= set(table):
             raise EnvelopeError(f"{where}.{market} declares entry_fee_bps and exit_fee_bps")
@@ -90,6 +94,7 @@ def _channel(index: int, raw: Any) -> Channel:
         ),
         gas_quote=None if gas is None else _decimal(f"{where}.gas_quote", gas),
         market_fees=tuple(markets),
+        fee_coefficient=coefficient,
     )
 
 

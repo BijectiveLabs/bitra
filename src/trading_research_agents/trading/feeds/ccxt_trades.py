@@ -108,7 +108,11 @@ class CcxtTradeFeed:
             import ccxt.pro as pro
         except ImportError as exc:  # pragma: no cover - exercised only without the extra
             raise FeedError(f"ccxt is not installed; {install_hint('ccxt')}") from exc
-        factory = getattr(pro, self.venue, None)
+        from trading_research_agents.data.sources.ccxt_client import exchange_class, is_prediction
+
+        # A prediction venue's class is already the async, streaming one.
+        factory = exchange_class(self.venue) if is_prediction(self.venue) else None
+        factory = factory or getattr(pro, self.venue, None)
         if factory is None:
             raise FeedError(f"ccxt does not stream {self.venue!r}")
         return factory({"enableRateLimit": True})

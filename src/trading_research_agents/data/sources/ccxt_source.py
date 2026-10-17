@@ -32,6 +32,7 @@ from trading_research_agents.data.sources.base import (
     OrderBook,
     SourceError,
 )
+from trading_research_agents.data.sources.ccxt_client import build
 from trading_research_agents.data.sources.resolve import ResolveError, resolve
 from trading_research_agents.extras import install_hint
 
@@ -103,14 +104,13 @@ class CcxtSource:
 
     def _build(self, settings: dict[str, Any]) -> Any:
         try:
-            import ccxt
+            import ccxt  # noqa: F401
         except ImportError as exc:  # pragma: no cover - exercised only without the extra
             raise SourceError(f"ccxt is not installed; {install_hint('ccxt')}") from exc
-        factory = getattr(ccxt, self.venue, None)
-        if factory is None:
-            raise SourceError(f"ccxt has no exchange named {self.venue!r}")
         # Public data only: no key, no secret, and the library's own rate limiter on.
-        client = factory({"enableRateLimit": True, **settings})
+        client = build(self.venue, {"enableRateLimit": True, **settings})
+        if client is None:
+            raise SourceError(f"ccxt has no exchange named {self.venue!r}")
         if self.environment == "demo":
             client.enable_demo_trading(True)
         elif self.environment == "testnet":

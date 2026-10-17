@@ -56,6 +56,11 @@ class Market:
     # What the underlying is: crypto, equity (a stock perpetual or a tokenized stock), commodity,
     # forex. The order path is the same; what differs is when the underlying's own market trades.
     asset_class: str = "crypto"
+    # A prediction outcome: a share priced between price_min and price_max that pays 1 if it wins.
+    price_min: Decimal | None = None
+    price_max: Decimal | None = None
+    question: str = ""
+    outcome_label: str = ""
 
     @classmethod
     def from_ccxt(cls, venue: str, symbol: str, market: Mapping[str, Any] | None) -> Market:
@@ -69,6 +74,8 @@ class Market:
                 kind = flag
         limits = found.get("limits") or {}
         expiry = _decimal(found.get("expiry"))
+        info = found.get("info") or {}
+        outcome = found.get("outcome") or {}
         return cls(
             venue=venue,
             symbol=str(found.get("symbol") or symbol),
@@ -87,6 +94,10 @@ class Market:
             taker=_decimal(found.get("taker")),
             described=True,
             asset_class=asset_class_of(venue, found),
+            price_min=_decimal((limits.get("price") or {}).get("min")),
+            price_max=_decimal((limits.get("price") or {}).get("max")),
+            question=str(info.get("question") or info.get("title") or ""),
+            outcome_label=str(outcome.get("label") or "") if isinstance(outcome, dict) else "",
         )
 
     @property
@@ -120,9 +131,14 @@ class Market:
         return self.described and self.kind in ("spot", "margin")
 
     @property
+    def outcome(self) -> bool:
+        """A prediction outcome share: bought, held to a price or to resolution; never shorted."""
+        return self.described and self.kind == "prediction"
+
+    @property
     def shortable(self) -> bool:
-        """A short sells what is not held: a contract can, a spot pair would need a borrow."""
-        return not self.held_as_balance
+        """A short sells what is not held: a contract can; a spot pair or an outcome cannot."""
+        return not (self.held_as_balance or self.outcome)
 
     def unit(self) -> Decimal:
         """How much of the base one order unit is: a contract, or 1 for a market sized in the base.

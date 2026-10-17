@@ -51,8 +51,8 @@ I accept that the losses are mine.
 
 MARGIN_MODES = ("isolated", "cross")
 # The market types the order path is built for, in the words `trading.market.Market` labels them.
-# Tokenized stocks and prediction markets join this list as each is built and run end to end.
-MARKETS = ("linear perpetual", "spot")
+# Stock perpetuals and tokenized stocks are linear perpetuals and spot pairs to the order path.
+MARKETS = ("linear perpetual", "spot", "prediction")
 # Perpetuals only unless the operator lists more: a market type is a choice, not a default.
 DEFAULT_MARKETS = ("linear perpetual",)
 HOLD_LIMITS = ("timeout", "horizon", "none")
