@@ -108,7 +108,8 @@ jobs:
           docker run --rm tra --version
           docker run --rm tra --plain
 
-      # The image Glama builds from glama.json: it has to start and answer MCP introspection.
+      # The MCP server as Glama builds it: it has to start and answer MCP introspection, both from
+      # glama/Dockerfile and from the build spec on Glama's admin page, which that file records.
       - name: MCP server image
         run: |
           docker build -f glama/Dockerfile -t tra-mcp .
@@ -116,6 +117,10 @@ jobs:
             echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}'
             echo '{"jsonrpc":"2.0","method":"notifications/initialized"}'
             echo '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
-          } | timeout 60 docker run -i --rm tra-mcp > answers.jsonl
+          } > requests.jsonl
+          timeout 60 docker run -i --rm tra-mcp < requests.jsonl > answers.jsonl
           grep -q '"serverInfo"' answers.jsonl
           grep -q '"cost_floor_check"' answers.jsonl
+          docker run --rm -v "$PWD:/src" -w /src ghcr.io/astral-sh/uv:python3.12-bookworm-slim uv sync -q --locked --no-dev --extra mcp
+          timeout 60 docker run -i --rm -v "$PWD:/src" -w /src ghcr.io/astral-sh/uv:python3.12-bookworm-slim uv run --no-sync trading-research-agents mcp serve < requests.jsonl > spec.jsonl
+          grep -q '"cost_floor_check"' spec.jsonl

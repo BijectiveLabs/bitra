@@ -1,5 +1,13 @@
-# The MCP server for Glama's build: the package from this checkout with the [mcp] extra only,
+# The MCP server as Glama builds it: the package from this checkout with the [mcp] extra only,
 # served over stdio by a non-root user. The tools read under /work and never trade.
+#
+# Glama does not read this file; it builds from the spec on the server's admin page
+# (glama.ai/mcp/servers/BijectiveLabs/trading-research-agents/admin/dockerfile). That spec is:
+#   build steps   uv sync --locked --no-dev --extra mcp
+#   CMD           mcp-proxy -- uv run --no-sync trading-research-agents mcp serve
+# The MCP SDK lives in the [mcp] extra, so a plain `uv sync` leaves it out and the server exits
+# without listing a tool. This file is the same build, to check locally:
+#   docker build -f glama/Dockerfile -t tra-mcp . && docker run -i --rm tra-mcp
 
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=0 UV_PROJECT_ENVIRONMENT=/app/.venv

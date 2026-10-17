@@ -45,6 +45,10 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- Glama builds the MCP server from the spec on its admin page, not from a file in the repository;
+  `glama.json` no longer names one, and `glama/Dockerfile` records that spec
+  (`uv sync --locked --no-dev --extra mcp`, `uv run --no-sync trading-research-agents mcp serve`).
+  CI checks that both start and list their tools.
 - The welcome panel spells the name: TRADING RESEARCH AGENTS on one line from 185 columns,
   TRADING RESEARCH above AGENTS from 129, and TRA below that, each block centred, with the package
   name, the tagline and the version centred beneath.
