@@ -45,6 +45,9 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- Every MCP tool says what it is for, when to use it against its siblings, what it returns and
+  that it only reads, and every argument carries a description in the input schema. The server's
+  instructions give the order of work an idea follows through the tools.
 - Glama builds the MCP server from the spec on its admin page, not from a file in the repository;
   `glama.json` no longer names one, and `glama/Dockerfile` records that spec
   (`uv sync --locked --no-dev --extra mcp`, `uv run --no-sync trading-research-agents mcp serve`).

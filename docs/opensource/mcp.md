@@ -49,8 +49,8 @@ trades: it can ask whether a claimed edge clears the round-trip cost, whether a 
 test on, and what a validation run decided. Every tool reads; none sends an order, writes a
 ledger row or moves the ladder. The entry for the MCP Registry is `server.json` at the root of the
 repository, under the name `io.github.BijectiveLabs/trading-research-agents`. Glama builds the
-server from the build spec on its admin page (`uv sync --locked --no-dev --extra mcp`, then
-`uv run --no-sync trading-research-agents mcp serve` behind its `mcp-proxy`), which
+server from the build spec on its admin page (Python 3.12, `uv sync --locked --no-dev --extra mcp`,
+then `uv run --no-sync trading-research-agents mcp serve` behind its `mcp-proxy`), which
 `glama/Dockerfile` records and reproduces, and CI checks on every change that both start and list
 their tools.
 

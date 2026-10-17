@@ -61,6 +61,24 @@ def test_the_server_lists_exactly_the_read_tools() -> None:
     assert forbidden.isdisjoint(listed)
 
 
+def test_every_tool_and_every_argument_is_described_for_the_model() -> None:
+    from trading_research_agents.surface import PARAMETERS
+
+    async def listed() -> list[Any]:
+        async with Client(build_server(), raise_exceptions=True) as client:
+            return list((await client.list_tools()).tools)
+
+    for tool in run(listed()):
+        # A host shows the model this text and nothing else: what it is for, when to use it,
+        # what it returns, and that it only reads.
+        assert len(tool.description or "") > 200 and "Read-only" in tool.description, tool.name
+        properties = tool.input_schema["properties"]
+        assert set(properties) == set(PARAMETERS[tool.name]), tool.name
+        for argument, schema in properties.items():
+            assert schema.get("description") == PARAMETERS[tool.name][argument], argument
+    assert run(call("ledger_search", {"ledger_path": "missing.jsonl", "query": "x"})).is_error
+
+
 def test_cost_floor_returns_structured_content() -> None:
     result = run(
         call(

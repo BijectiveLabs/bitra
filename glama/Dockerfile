@@ -3,10 +3,14 @@
 #
 # Glama does not read this file; it builds from the spec on the server's admin page
 # (glama.ai/mcp/servers/BijectiveLabs/trading-research-agents/admin/dockerfile). That spec is:
-#   build steps   uv sync --locked --no-dev --extra mcp
-#   CMD           mcp-proxy -- uv run --no-sync trading-research-agents mcp serve
-# The MCP SDK lives in the [mcp] extra, so a plain `uv sync` leaves it out and the server exits
-# without listing a tool. This file is the same build, to check locally:
+#   Python version  3.12
+#   Build steps     ["uv sync --locked --no-dev --extra mcp"]
+#   CMD arguments   ["mcp-proxy", "--", "uv", "run", "--no-sync", "trading-research-agents",
+#                    "mcp", "serve"]
+# CMD is one array element per argument. The MCP SDK lives in the [mcp] extra, so a plain
+# `uv sync` leaves it out and the server exits without listing a tool. Python 3.15 has no wheels
+# yet for pydantic-core, which the SDK needs, so a build on it has to compile that from Rust
+# source. This file is the same build, to check locally:
 #   docker build -f glama/Dockerfile -t tra-mcp . && docker run -i --rm tra-mcp
 
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder

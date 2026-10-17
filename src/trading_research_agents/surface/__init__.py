@@ -15,6 +15,7 @@ from trading_research_agents.surface.actions import (
     tighten_limits,
 )
 from trading_research_agents.surface.tools import (
+    PARAMETERS,
     READ_TOOLS,
     audit_dataset,
     check_registration,
@@ -30,6 +31,7 @@ from trading_research_agents.surface.tools import (
 
 __all__ = [
     "FORBIDDEN",
+    "PARAMETERS",
     "READ_TOOLS",
     "ActionRefusedError",
     "Tightened",

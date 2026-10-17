@@ -9,13 +9,14 @@ annotation that becomes the tool's output schema. `serve()` blocks on stdio, whi
 from __future__ import annotations
 
 import functools
-from collections.abc import Callable, Sequence
+import inspect
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, ParamSpec, TypeVar
+from typing import Annotated, Any, ParamSpec, TypeVar, get_type_hints
 
 from trading_research_agents import __version__
 from trading_research_agents.extras import install_hint
-from trading_research_agents.surface import READ_TOOLS
+from trading_research_agents.surface import PARAMETERS, READ_TOOLS
 from trading_research_agents.surface.confine import confined, roots_of
 
 P = ParamSpec("P")
@@ -25,7 +26,11 @@ INSTRUCTIONS = (
     "These tools read the gates of a trading research record: the cost floor, a sealed "
     "pre-registration, a dataset audit, a layer-5 validation, the kill ledger, the promotion "
     "ladder and a run report. They measure; they never trade, promote or record. Every number "
-    "in basis points is a Decimal string; every time is UTC."
+    "in basis points is a Decimal string; every time is UTC. Paths resolve under the directory "
+    "the server was started in, and hidden files are never read. The order of work an idea "
+    "follows: ledger_search (did it already die?), cost_floor_check, audit_dataset, "
+    "observe_events, check_registration, validate_trades; run_report and runs_index read what "
+    "a run did."
 )
 
 
@@ -37,6 +42,27 @@ def _sdk() -> tuple[Any, Any, Any]:
     except ImportError as exc:  # pragma: no cover - exercised only without the extra
         raise ImportError(f"the MCP SDK is not installed; {install_hint('mcp')}") from exc
     return MCPServer, ToolAnnotations, ToolError
+
+
+def _described(fn: Callable[..., Any], tool: Callable[P, R], notes: Mapping[str, str]) -> None:
+    """Give `tool` the signature of `fn` with each argument described, for the input schema."""
+    from pydantic import Field
+
+    hints = get_type_hints(fn)
+    signature = inspect.signature(fn)
+    parameters = [
+        param.replace(
+            annotation=(
+                Annotated[hints[param.name], Field(description=notes[param.name])]
+                if param.name in notes
+                else hints[param.name]
+            )
+        )
+        for param in signature.parameters.values()
+    ]
+    tool.__signature__ = signature.replace(  # type: ignore[attr-defined]
+        parameters=parameters, return_annotation=hints.get("return", signature.return_annotation)
+    )
 
 
 def build_server(roots: Sequence[Path] | None = None) -> Any:
@@ -67,7 +93,9 @@ def build_server(roots: Sequence[Path] | None = None) -> Any:
         return wrapper
 
     for name, title, fn in READ_TOOLS:
-        mcp.tool(name=name, title=title, annotations=reads)(guarded(confined(fn, allowed)))
+        tool = guarded(confined(fn, allowed))
+        _described(fn, tool, PARAMETERS.get(name, {}))
+        mcp.tool(name=name, title=title, annotations=reads)(tool)
     return mcp
 
 
