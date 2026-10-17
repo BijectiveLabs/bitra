@@ -12,7 +12,6 @@ All notable changes to this project are recorded here. The format follows
   spot cycle is priced at them; the base fees stay the perpetual's. `tra check` compares the base
   fees with the perpetual and the spot fees with the pair, and names the market when one is priced
   below what the venue charges.
-
 - Spot, on the same order path as perpetuals. A desk lists it in `[execution].markets` (the default
   stays perpetuals only). Read from the market's own facts: long only, since a short on spot needs a
   borrow; paid in full against the free quote balance, with no leverage set; the position is the
@@ -22,6 +21,19 @@ All notable changes to this project are recorded here. The format follows
   bought is counted in the quote currency. In the cycle, a short on spot is refused by code before
   it is priced, and funding and open interest are not asked for. Run end to end on the Bybit and
   OKX demos on SOL/USDT, and as a full desk cycle in sandbox and venue mode on the Bybit demo.
+
+## [0.7.1] - 2026-10-17
+
+### Added
+
+- `glama/Dockerfile`, named in `glama.json`, which Glama builds the MCP server from: the package
+  with its `[mcp]` extra, served over stdio by a non-root user. CI builds the image on every change
+  and checks that it starts and lists its tools.
+
+### Changed
+
+- The console's welcome header is the TRA wordmark in block letters, which fits a terminal of 31
+  columns. A console whose code page has no block characters gets the ASCII wordmark instead.
 
 ## [0.7.0] - 2026-10-16
 
