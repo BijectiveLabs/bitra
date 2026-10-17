@@ -48,7 +48,9 @@ What your agent gets is the same set of checks this package's own roles use, and
 trades: it can ask whether a claimed edge clears the round-trip cost, whether a dataset is fit to
 test on, and what a validation run decided. Every tool reads; none sends an order, writes a
 ledger row or moves the ladder. The entry for the MCP Registry is `server.json` at the root of the
-repository, under the name `io.github.BijectiveLabs/trading-research-agents`.
+repository, under the name `io.github.BijectiveLabs/trading-research-agents`. Glama builds the
+server from `glama/Dockerfile`, named in `glama.json`, and CI checks on every change that the image
+starts and lists its tools.
 
 ## Tools
 
