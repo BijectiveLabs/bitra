@@ -21,6 +21,7 @@ from types import TracebackType
 from typing import Any
 
 from rich import box
+from rich.align import Align
 from rich.console import Console, Group
 from rich.live import Live
 from rich.panel import Panel
@@ -36,9 +37,9 @@ BANNER = r"""
   |_|  |_| \_\/_/   \_\
 """.strip("\n")
 
+NAME = "trading-research-agents"
 TAGLINE = (
-    "trading-research-agents: autonomous trading agents with deterministic execution; "
-    "the agents propose, the system decides"
+    "autonomous trading agents with deterministic execution; the agents propose, the system decides"
 )
 _console: Console | None = None
 
@@ -151,9 +152,15 @@ def _bps(value: Any) -> Text:
 def home(version: str, good: Sequence[str], bad: Sequence[str], next_command: str) -> None:
     """`tra` with nothing else: who this is, what is ready, what to type next."""
     c = console()
-    head = Text(banner(c.width, c.encoding), style="bold cyan")
-    head.append(f"\n{TAGLINE}\n", style="dim")
-    head.append(f"tra {version}  by Bijective", style="dim")
+    lines = banner(c.width, c.encoding).splitlines()
+    # One width for every row of the wordmark, so centring moves it as a block, not row by row.
+    wide = max(len(line) for line in lines)
+    head = Group(
+        Align.center(Text("\n".join(line.ljust(wide) for line in lines), style="bold cyan")),
+        Text(NAME, style="bold", justify="center"),
+        Text(TAGLINE, style="dim", justify="center"),
+        Text(f"tra {version}  by Bijective", style="dim", justify="center"),
+    )
     c.print(Panel(head, box=box.ROUNDED, padding=(0, 2)))
     c.print(check_table(good, bad))
     c.print(Text("next: ", style="dim") + Text(next_command, style="bold"))

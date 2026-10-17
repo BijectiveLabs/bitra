@@ -6,6 +6,11 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The welcome panel is centred: the TRA wordmark as one block, the package name on the line below
+  it, then the tagline and the version.
+
 ### Added
 
 - Stock perpetuals and tokenized stocks, through the same order path as crypto: a stock perpetual
