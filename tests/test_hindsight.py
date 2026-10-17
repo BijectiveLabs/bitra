@@ -294,12 +294,11 @@ def test_tra_hindsight_replays_a_desk_and_writes_its_report(
     monkeypatch.chdir(target)
     capsys.readouterr()
     cycles = target / "runs" / "cycles"
-    for i, (gate_fields, target_side) in enumerate(
-        [
-            ({"intent": {"mid": "100"}, "placed": {"sent": True}}, "long"),
-            ({"refusals": ["regime: fading a trend"]}, "short"),
-        ]
-    ):
+    written: list[tuple[dict[str, Any], str]] = [
+        ({"intent": {"mid": "100"}, "placed": {"sent": True}}, "long"),
+        ({"refusals": ["regime: fading a trend"]}, "short"),
+    ]
+    for i, (gate_fields, target_side) in enumerate(written):
         folder = cycles / f"2026-10-10T12-0{i}-00Z-BTCUSDT"
         folder.mkdir(parents=True)
         rec = record(
