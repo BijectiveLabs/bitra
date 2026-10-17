@@ -14,8 +14,12 @@ All notable changes to this project are recorded here. The format follows
   coin the account holds, with residue under the venue's minimum counted as nothing; exits attached
   with the entry; a close cancels the resting exits wherever the venue keeps them (OKX keeps them as
   algo orders) and sells what is held, rounded down to the venue's step; a fee charged in the coin
-  bought is counted in the quote currency. Run end to end on the Bybit and OKX demos on SOL/USDT.
-  A full desk cycle on a spot instrument is still being finished.
+  bought is counted in the quote currency. In the cycle, a short on spot is refused by code before
+  it is priced, and funding and open interest are not asked for. Run end to end on the Bybit and
+  OKX demos on SOL/USDT, and as a full desk cycle in sandbox and venue mode on the Bybit demo.
+- `tra check` reads the fee for the symbol orders actually go to (the spot pair, when the desk lists
+  spot) and says when a channel prices a fee below the venue's standard tier, not only below what
+  the account reports.
 
 ## [0.7.0] - 2026-10-16
 

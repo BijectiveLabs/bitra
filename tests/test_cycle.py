@@ -1302,3 +1302,20 @@ def test_the_desk_analyst_is_told_the_regime_picks_the_setup(
     # The desk's prompt, not the research core's sealed pre-registration.
     assert told == prompt("technical_analyst_live")
     assert "it is not the only setup you may name" in told and "pre-registration" not in told
+
+
+def test_a_short_on_a_spot_market_is_refused_before_it_is_priced(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    cfg, _, _ = cycle_config(tmp_path, envelope, [analyst_answer("short")], spot=True)
+    result = run_cycle(cfg)
+    assert result.intent is None and result.verdict is None
+    assert any("is a spot market; a short would sell coins" in r for r in result.refusals)
+    assert not (Path(str(result.path)) / "briefs" / "cost.json").exists()
+    # The same market, a long: everything else applies as on a perpetual.
+    long_cfg, _, _ = cycle_config(tmp_path, envelope, [analyst_answer("long")], spot=True)
+    spot_long = run_cycle(long_cfg)
+    assert spot_long.intent is not None
+    # Funding belongs to contracts: on spot it is not asked for, and so not refused either.
+    assert "funding" not in spot_long.snapshot.values
+    assert not any(r.startswith("data funding") for r in spot_long.refusals)

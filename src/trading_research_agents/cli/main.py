@@ -2263,7 +2263,12 @@ def _account_fees(
 
 
 def _read_fees(
-    venue: str, keys: list[str], env: Mapping[str, str], environment: str, instrument: str
+    venue: str,
+    keys: list[str],
+    env: Mapping[str, str],
+    environment: str,
+    instrument: str,
+    symbol: str | None = None,
 ) -> tuple[tuple[Decimal, Decimal] | None, str]:
     """Maker and taker in bps: the account's own, else the venue's standard tier, else nothing.
 
@@ -2281,7 +2286,9 @@ def _read_fees(
 
         public = getattr(ccxt, venue)({"enableRateLimit": True})
         public.load_markets()
-        symbol = resolve(instrument, public.markets_by_id, public.markets.values())
+        # The symbol orders go out under, when the caller knows it: a spot pair and the perpetual
+        # on the same coin are charged different fees.
+        symbol = symbol or resolve(instrument, public.markets_by_id, public.markets.values())
     except (ResolveError, ImportError, AttributeError) as exc:
         return None, str(exc)
     except Exception as exc:
@@ -2374,7 +2381,13 @@ def _fill_account_fees(
     if not blanks and not ours and any(not env.get(k) for k in keys):
         # Nothing to fill, and no account to check a written fee against: no call is worth making.
         return [], []
-    fees, said = _read_fees(venue, keys, env, _declared_environment(cfg), cfg.run.instrument)
+    symbol = None
+    if "spot" in getattr(cfg.execution, "markets", ()):
+        with contextlib.suppress(Exception):
+            symbol = _symbol_for(cfg, envelope.parent, cfg.run.instrument)
+    fees, said = _read_fees(
+        venue, keys, env, _declared_environment(cfg), cfg.run.instrument, symbol
+    )
     good: list[str] = []
     bad: list[str] = []
     if fees is None:
@@ -2409,6 +2422,12 @@ def _fill_account_fees(
                 f"fees: {envelope.name} prices {venue}/{name} {role} at {_bps(declared)} bps "
                 f"and your account pays {_bps(by_role[role])}; the cost gate would price trades "
                 "too cheap"
+            )
+        elif not from_account and declared < by_role[role]:
+            bad.append(
+                f"fees: {envelope.name} prices {venue}/{name} {role} at {_bps(declared)} bps and "
+                f"{venue}'s standard tier is {_bps(by_role[role])}; unless your account is on a "
+                "better tier, the cost gate would price trades too cheap"
             )
     if written and not bad and from_account:
         good.append(f"fees: {envelope.name} matches or exceeds what your {venue} account pays")
@@ -3087,6 +3106,7 @@ def run_cycle_command(args: argparse.Namespace) -> int:
         min_confidence=a.min_confidence,
         mode=mode,
         place=hand,
+        spot=_spot_market(cfg, beside, instrument, hand),
         matrix=cfg.confluence,
         conviction=cfg.conviction,
         max_position=cfg.limits.max_position,
@@ -3206,6 +3226,7 @@ def run_cycle_command(args: argparse.Namespace) -> int:
                         replace(
                             cycle_cfg,
                             instrument=instrument,
+                            spot=_spot_market(cfg, beside, instrument, sends),
                             size_step=_step_for(cfg, instrument),
                             # The risk manager's cut, if one is in force; the client's caps apply
                             # after it as always.
@@ -4288,6 +4309,29 @@ def _venue_hand(
         rate=rate,
         env=env,
     )
+
+
+def _spot_market(cfg: Any, project: Path, instrument: str, hand: Any = None) -> bool:
+    """Whether the instrument is a spot market on the venue orders go to.
+
+    In venue mode the hand that will send says so. Elsewhere the venue's market list is asked,
+    keyless; a list that cannot be read leaves the cycle as it always was, since every other gate
+    still applies and nothing is sent outside venue mode.
+    """
+    from trading_research_agents.trading.market import Market
+
+    if "spot" not in cfg.execution.markets:
+        # A desk that does not list spot sends nothing to it, so nothing needs asking.
+        return False
+    if hand is not None:
+        return bool(hand.market().held_as_balance)
+    try:
+        client = _execution_client(cfg)
+        symbol = _symbol_for(cfg, project, instrument)
+        venue = cfg.execution.venue or cfg.run.venue_key.partition("/")[0]
+        return Market.from_ccxt(venue, symbol, client.market(symbol)).held_as_balance
+    except Exception:
+        return False
 
 
 def _symbol_for(cfg: Any, project: Path, instrument: str = "") -> str:

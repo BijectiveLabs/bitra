@@ -537,3 +537,36 @@ def test_a_standard_tier_fee_is_replaced_by_the_accounts_own_once_it_reports_one
     assert load_envelope(envelope).channels[0].entry_fee_bps == Decimal("4")
     assert "read from your okx account" in envelope.read_text(encoding="utf-8")
     assert "written into envelope.toml" in good[0]
+
+
+def test_a_written_fee_under_the_venues_standard_tier_is_said_to_price_too_cheap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+
+    cli = __import__("importlib").import_module("trading_research_agents.cli.main")
+    envelope = tmp_path / "envelope.toml"
+    # A perpetual's fee, written for a desk that now trades the spot pair, which costs more.
+    envelope.write_text(
+        '[[channel]]\nvenue = "bybit"\nname = "taker-taker"\nentry_fee_bps = 5.5\n'
+        "exit_fee_bps = 5.5\n",
+        encoding="utf-8",
+    )
+    cfg = SimpleNamespace(
+        execution=SimpleNamespace(venue="bybit", environment="demo", markets=("linear perpetual",)),
+        run=SimpleNamespace(venue_key="bybit/taker-taker", instrument="SOLUSDT"),
+        live=None,
+    )
+    monkeypatch.setattr(
+        cli,
+        "_read_fees",
+        lambda *a: ((Decimal("10"), Decimal("10")), "bybit's standard tier from its market list"),
+    )
+    _, bad = cli._fill_account_fees(
+        envelope,
+        cfg,
+        {"BYBIT_API_KEY": "k", "BYBIT_API_SECRET": "s"},
+        datetime(2026, 10, 17, tzinfo=UTC),
+    )
+    assert any("taker at 5.5 bps and bybit's standard tier is 10" in line for line in bad)

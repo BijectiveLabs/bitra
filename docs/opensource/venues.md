@@ -134,11 +134,21 @@ What the same order path does when the market is spot:
 - **Fees in the coin.** A spot buy is often charged in the coin bought; the round trip counts that
   fee in the quote currency at the fill price.
 
-Spot was run end to end on the Bybit demo and the OKX demo on SOL/USDT on 2026-10-17: entry with
-the exits attached, the exits found at the venue, close, flat. The order path and the position
-keeper are built for it. A full desk cycle on a spot instrument, with its data chain and screener,
-is the step still open, so name a spot symbol in `data.toml` under `[data].symbols` and try it on a
-practice account first.
+And in the cycle, before any order:
+
+- **A short is refused by code** before it is priced, whatever the analyst proposed.
+- **Funding and open interest are not asked for.** They belong to contracts; on spot they would be
+  refused every cycle and wake the technical auditor for nothing.
+- **The fees are the spot pair's.** One channel prices one fee, and a spot pair usually costs more
+  than the perpetual on the same coin (on Bybit, 10 bps a side against 5.5). `tra check` reads the
+  fee for the symbol orders go to and says so when the channel prices it lower.
+
+To set a desk up for spot, name the pair in `data.toml` under `[data].symbols` (for example
+`SOLUSDT = "SOL/USDT"`), list `spot` in `[execution].markets`, and price the channel at the spot
+fee. Spot was run on 2026-10-17: the order path end to end on the Bybit demo and the OKX demo
+(SOL/USDT; entry with the exits attached, the exits found at the venue, close, flat), and a full
+desk cycle on SOL/USDT in sandbox and in venue mode on the Bybit demo, which priced the round trip
+at the spot fee and refused the trade on its break-even rate. Start on a practice account.
 
 ## Trading on another exchange
 

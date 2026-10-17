@@ -152,6 +152,10 @@ READING: dict[str, Any] = {
 }
 
 
+# What a contract market has and a spot pair does not.
+CONTRACT_KINDS = ("funding", "open_interest")
+
+
 class CycleError(ValueError):
     """The cycle cannot run as configured, or cannot run at all on what the engine returned."""
 
@@ -246,6 +250,10 @@ class CycleConfig:
     regime: RegimeRule = field(default_factory=RegimeRule)
     # What actually sends an order, when the operator is in venue mode and the mandate cleared.
     place: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None
+    # The instrument is a spot market on the venue orders go to. A short there needs a borrow, so it
+    # is refused by code before it is priced; funding and open interest belong to contracts, so
+    # they are not asked for, rather than asked for and refused every cycle.
+    spot: bool = False
     # A reading analyst is asked only when the roster names it. `tra run` names the ones with a
     # declared source, because paying a model to say it was given nothing is waste; an operator who
     # wants a role asked anyway, on notes alone, names it in [agents].analysts.
@@ -477,7 +485,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
     where = CycleDir(root=cfg.root, cycle=cycle).make()
     spent_before = cfg.usage.cost
     calls_before = len(cfg.usage.records)
-    kinds = list(cfg.chains)
+    kinds = [k for k in cfg.chains if not (cfg.spot and k in CONTRACT_KINDS)]
     announce(cfg.watch, "data", RUNNING, f"{len(kinds)} kind(s)")
     # What the operator declared per kind in data.toml, then the window this cycle needs. A venue
     # quirk lives in that file, so dropping it here would be dropping the operator's own decision.
@@ -732,6 +740,14 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
     if analyst.target == "flat":
         result.refusals.append("technical: flat, so there is nothing to price")
         announce(cfg.watch, "technical", DONE, "flat")
+        _finish(cfg, where, result)
+        return result
+    if cfg.spot and analyst.target == "short":
+        result.refusals.append(
+            f"market: {cfg.instrument} is a spot market; a short would sell coins the account "
+            "does not hold, so it is not taken"
+        )
+        announce(cfg.watch, "technical", REFUSED, "short on a spot market")
         _finish(cfg, where, result)
         return result
     if not kept:

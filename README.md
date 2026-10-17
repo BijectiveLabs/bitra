@@ -385,12 +385,12 @@ your own is about thirty lines ([Model providers](https://docs.bijectivelabs.dev
 
 What it trades today: **linear perpetual futures** (USDT- or USDC-margined swaps) on any venue
 ccxt reaches, long and short, with the leverage and margin mode you declare. That is where the
-project started, not where it stops. Spot is built in the order path, long only and paid in full,
-for a desk that lists it in `[execution].markets`; a full desk cycle on a spot instrument is being
-finished. Dated futures, inverse contracts and options are on the way, each with its own cost
-model, exit rules and tests. Until a market type has those, venue mode checks the type on every
-order and refuses it, because a market the system cannot yet price and protect is not one it should
-send to. [Boundaries](https://docs.bijectivelabs.dev/opensource/boundaries) says what each one takes.
+project started, not where it stops. Spot is built too, long only and paid in full, for a desk
+that lists it in `[execution].markets`; [Venues](https://docs.bijectivelabs.dev/opensource/venues#where-an-order-goes-and-what-an-instrument-is)
+says how to set one up. Dated futures, inverse contracts and options are on the way, each with its
+own cost model, exit rules and tests. Until a market type has those, venue mode checks the type on
+every order and refuses it, because a market the system cannot yet price and protect is not one it
+should send to. [Boundaries](https://docs.bijectivelabs.dev/opensource/boundaries) says what each one takes.
 
 An agent desk goes through three steps, and you can stay at any of them as long as you like:
 
@@ -561,7 +561,7 @@ yours to declare.
 The project is in active development, and what this page describes is where it stands today, not
 where it stops.
 
-- **More market types.** Spot is built in the order path; inverse and dated futures, options,
+- **More market types.** Spot is built; inverse and dated futures, options,
   tokenized stocks and prediction markets follow, each added with its own cost model, exit rules,
   sizing and tests before venue mode accepts it.
 - **More venues run end to end.** Every venue ccxt supports already goes through the same order
