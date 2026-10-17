@@ -136,6 +136,10 @@ def measured(snapshot: Snapshot, interval_s: int, rule: RegimeRule) -> dict[str,
         candles = list(snapshot.get("ohlcv").value or ())
     except KeyError:
         return {}
+    if any(candle.volume <= 0 for candle in candles):
+        # The bar features weigh by volume; a venue that publishes prices without one (a
+        # prediction outcome) is screened on its move alone.
+        return {}
     computed = features(bars_of(candles, interval_s)) if len(candles) >= 2 else None
     if computed is None:
         return {}

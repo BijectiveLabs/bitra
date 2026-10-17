@@ -6,33 +6,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
-### Changed
-
-- The welcome panel is centred: the TRA wordmark as one block, the package name on the line below
-  it, then the tagline and the version.
-
 ### Added
 
-- Stock perpetuals and tokenized stocks, through the same order path as crypto: a stock perpetual
-  is a linear perpetual and a tokenized stock is a spot pair. What the underlying is comes from the
-  venue's own fields (Bybit `stock` and `xstocks`, OKX `instCategory` 3) or from
-  `[execution].equities`. With `[execution].equity_session = "regular"`, the default, a cycle on an
-  equity waits while the US regular session is closed and refuses a hold past its close; holidays
-  are declared in `[execution].equity_closed`; the on-chain analyst is not asked. Run on the Bybit
-  demo (AAPLX/USDT) and the OKX demo (TSLA/USDT:USDT).
-- A taker price is held inside a venue's published price band (OKX), where an order priced past it
-  is refused whole.
-
-### Fixed
-
-- A close the venue accepted but did not fill was recorded as closed. It is now confirmed against
-  the account: when the account still holds the position the unfilled close is cancelled, the
-  record says it did not fill, the exits at the venue keep standing, and the next pass tries again.
-
-- A channel can carry a spot pair's fees beside the perpetual's, as a `[channel.spot]` table, and a
-  spot cycle is priced at them; the base fees stay the perpetual's. `tra check` compares the base
-  fees with the perpetual and the spot fees with the pair, and names the market when one is priced
-  below what the venue charges.
 - Spot, on the same order path as perpetuals. A desk lists it in `[execution].markets` (the default
   stays perpetuals only). Read from the market's own facts: long only, since a short on spot needs a
   borrow; paid in full against the free quote balance, with no leverage set; the position is the
@@ -42,6 +17,38 @@ All notable changes to this project are recorded here. The format follows
   bought is counted in the quote currency. In the cycle, a short on spot is refused by code before
   it is priced, and funding and open interest are not asked for. Run end to end on the Bybit and
   OKX demos on SOL/USDT, and as a full desk cycle in sandbox and venue mode on the Bybit demo.
+- A channel can carry a spot pair's fees beside the perpetual's, as a `[channel.spot]` table, and a
+  spot cycle is priced at them; the base fees stay the perpetual's. `tra check` compares the base
+  fees with the perpetual and the spot fees with the pair, and names the market when one is priced
+  below what the venue charges.
+- Stock perpetuals and tokenized stocks, through the same order path as crypto: a stock perpetual
+  is a linear perpetual and a tokenized stock is a spot pair. What the underlying is comes from the
+  venue's own fields (Bybit `stock` and `xstocks`, OKX `instCategory` 3) or from
+  `[execution].equities`. With `[execution].equity_session = "regular"`, the default, a cycle on an
+  equity waits while the US regular session is closed and refuses a hold past its close; holidays
+  are declared in `[execution].equity_closed`; the on-chain analyst is not asked. Run on the Bybit
+  demo (AAPLX/USDT) and the OKX demo (TSLA/USDT:USDT).
+- Prediction market outcomes, as a third market type a desk lists in `[execution].markets`. ccxt's
+  prediction venues (Kalshi, Polymarket and others) are reached like any exchange: their async
+  clients run behind a synchronous bridge, so one client type serves the whole package. An outcome
+  is decided by a new role, the event analyst, which answers with a probability; code prices the
+  share to resolution (`probability - ask - fee`) against the margin, sizes it so its whole cost
+  fits the risk per trade, rests the take profit at the venue after the fill, sells at the venue's
+  floor to close, and writes a share held to resolution up at its payout. The channel declares the
+  fee as `[channel.prediction]`, a coefficient on `price x (1 - price)` or a flat rate.
+- A taker price is held inside a venue's published price band (OKX), where an order priced past it
+  is refused whole.
+
+### Changed
+
+- The welcome panel is centred: the TRA wordmark as one block, the package name on the line below
+  it, then the tagline and the version.
+
+### Fixed
+
+- A close the venue accepted but did not fill was recorded as closed. It is now confirmed against
+  the account: when the account still holds the position the unfilled close is cancelled, the
+  record says it did not fill, the exits at the venue keep standing, and the next pass tries again.
 
 ## [0.7.1] - 2026-10-17
 

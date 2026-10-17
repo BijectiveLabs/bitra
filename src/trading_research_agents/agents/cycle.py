@@ -1205,7 +1205,11 @@ def _decide_on_an_outcome(
         else datetime.fromtimestamp(int(market.expiry) / 1000, tz=UTC).isoformat(),
         "hours_to_resolution": None
         if market.expiry is None
-        else str(((Decimal(market.expiry) / 1000) - Decimal(now.timestamp())) / 3600)[:10],
+        else str(
+            ((Decimal(market.expiry) / 1000 - Decimal(str(now.timestamp()))) / 3600).quantize(
+                Decimal("0.1")
+            )
+        ),
         "bid": None if bid is None else str(bid),
         "ask": str(ask),
         "mid": None if bid is None else str((bid + ask) / 2),

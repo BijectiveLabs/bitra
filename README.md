@@ -388,10 +388,11 @@ ccxt reaches, long and short, with the leverage and margin mode you declare. Tha
 project started, not where it stops. Spot is built too, long only and paid in full, for a desk
 that lists it in `[execution].markets`; [Venues](https://docs.bijectivelabs.dev/opensource/venues#where-an-order-goes-and-what-an-instrument-is)
 says how to set one up. Stock perpetuals and tokenized stocks on the same venues go through the
-same path, with the underlying exchange's hours respected. Dated futures, inverse contracts and
-options are on the way, each with its own cost model, exit rules and tests. Until a market type has
-those, venue mode checks the type on every order and refuses it, because a market the system cannot
-yet price and protect is not one it should send to. [Boundaries](https://docs.bijectivelabs.dev/opensource/boundaries) says what each one takes.
+same path, with the underlying exchange's hours respected, and so do prediction market outcomes,
+decided on a probability by their own analyst. Dated futures, inverse contracts and options are on
+the way, each with its own cost model, exit rules and tests. Until a market type has those, venue
+mode checks the type on every order and refuses it, because a market the system cannot yet price
+and protect is not one it should send to. [Boundaries](https://docs.bijectivelabs.dev/opensource/boundaries) says what each one takes.
 
 An agent desk goes through three steps, and you can stay at any of them as long as you like:
 
@@ -562,8 +563,8 @@ yours to declare.
 The project is in active development, and what this page describes is where it stands today, not
 where it stops.
 
-- **More market types.** Spot, stock perpetuals and tokenized stocks are built; inverse and dated
-  futures, options and prediction markets follow, each added with its own cost model, exit rules,
+- **More market types.** Spot, stock perpetuals, tokenized stocks and prediction markets are
+  built; inverse and dated futures and options follow, each added with its own cost model, exit rules,
   sizing and tests before venue mode accepts it.
 - **More venues run end to end.** Every venue ccxt supports already goes through the same order
   path and gates. Each one joins Bybit and OKX in the last column of the venues table after a full

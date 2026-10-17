@@ -32,7 +32,7 @@ from trading_research_agents.data.sources.base import (
     OrderBook,
     SourceError,
 )
-from trading_research_agents.data.sources.ccxt_client import build
+from trading_research_agents.data.sources.ccxt_client import build, is_prediction
 from trading_research_agents.data.sources.resolve import ResolveError, resolve
 from trading_research_agents.extras import install_hint
 
@@ -190,10 +190,15 @@ class CcxtSource:
         now = self.clock()
         interval_ms = interval_s * 1000
         candles: list[Candle] = []
+        # A prediction venue publishes an outcome's prices without a volume. That absence is said
+        # in the snapshot's detail; nothing downstream of an outcome reads the volume.
+        unpublished = is_prediction(self.venue) and all(row[5] is None for row in rows)
         for row in rows:
             start_ms = int(row[0])
             if (start_ms + interval_ms) / 1000 > now:
                 continue
+            if unpublished:
+                row = [*row[:5], 0]
             candles.append(
                 Candle(
                     start_ns=start_ms * 1_000_000,
@@ -220,6 +225,7 @@ class CcxtSource:
                 "interval_s": interval_s,
                 "last_close": str(window[-1].close),
                 "symbol": symbol,
+                **({"volume": "not published by the venue"} if unpublished else {}),
             },
         )
 

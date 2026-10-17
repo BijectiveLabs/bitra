@@ -199,6 +199,62 @@ sat outside its band, and the reduce-only close was accepted but not filled; the
 confirmed against the account, recorded as not closed when the account still holds, and tried again
 on the next pass, while the exits at the venue keep standing.
 
+## Prediction markets
+
+ccxt reaches prediction venues too (Kalshi, Polymarket, Limitless, Myriad and others, in its
+`ccxt.prediction` namespace), and a desk names one the way it names an exchange: `kalshi`,
+`polymarket`. Two names live on both sides, so their prediction venues are `prediction.binance`
+and `prediction.hyperliquid`. ccxt's prediction clients are async; the package runs them on a loop
+of their own, so everything above sees the same client it sees for an exchange.
+
+What is traded is an outcome: a share of one answer to one question (YES on "will the Fed cut in
+December"), priced between the venue's floor and ceiling, paying 1 if it wins and nothing if it
+loses. The venue addresses it by a handle, `MARKET:YES`, and that handle goes in `data.toml`:
+
+```toml
+[data]
+symbols = { FEDCUT = "FED_CUTS_IN_DECEMBER:YES" }
+```
+
+List `prediction` in `[execution].markets`, and the cycle on that instrument is decided by a
+different role:
+
+- **The event analyst decides**, not the technical analyst: it reads the question, the outcome,
+  when it resolves, the book, the recent prices and your dated notes, and answers with the
+  probability that the outcome wins. With nothing beyond the price to go on, the answer is the
+  mid with a low confidence, and the desk does nothing.
+- **Code prices it to resolution.** Bought at the ask with a fee per share, the share is worth
+  `probability - ask - fee`; the desk buys only when that, as a share of the ask, clears the margin.
+  A probability that cites nothing from its brief is refused.
+- **The stake is the stop.** A share cannot lose more than it cost, so the size is cut until its
+  whole cost fits `[controls].max_risk_per_trade_bps` and the position caps. Long only: to bet the
+  other way, buy the other outcome.
+- **The take profit rests at the venue.** After the fill, the shares are offered at the analyst's
+  probability as a resting limit sell; otherwise they are held to resolution or until time closes
+  them. A close takes that offer off and sells at the venue's floor, immediate or cancel, since
+  these venues take no market order. A share held to resolution is written up at its payout.
+- **Funding and open interest are not asked for**, and the screen reads an outcome by its move,
+  since the venues publish its prices without a volume.
+
+How a venue charges goes on the channel, as one of two forms:
+
+```toml
+[channel.prediction]
+fee_coefficient = 0.07     # 0.07 x shares x price x (1 - price), the way Kalshi charges
+# or a flat rate on what the share costs:
+# entry_fee_bps = 100
+# exit_fee_bps = 100
+```
+
+A channel that says neither is refused rather than priced at zero.
+
+Run on 2026-10-17: a sandbox cycle on Polymarket's public data (an outcome on the 2028 US
+presidential election), where the event analyst answered with the mid and a confidence of 0.2,
+citing the book, and the cycle stopped at the confidence floor. The order path is covered by tests
+against ccxt's prediction shapes. Sending orders needs a practice account: Kalshi has a demo
+environment that ccxt reaches (an API key and an RSA private key); Polymarket signs with a wallet
+and has no practice environment.
+
 ## Trading on another exchange
 
 The route is the same for any venue ccxt can take orders on. OKX is the example, and its demo is

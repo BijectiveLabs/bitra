@@ -43,7 +43,7 @@ decides how much margin that size ties up and how far away liquidation sits.
 | `[execution].equity_session` | `regular` | `regular`: an entry on an equity underlying only while the US regular session trades, and no hold past its close; `any`: every hour ([Venues](/opensource/venues#stocks-on-a-crypto-venue)) |
 | `[execution].equity_closed` | none | exchange holidays, as dates; the package carries no calendar |
 | `[execution].equities` | none | instruments to treat as equities on a venue that does not mark them |
-| `[execution].markets` | `["linear perpetual"]` | the market types this desk may send to; `linear perpetual` and `spot` are built ([Venues](/opensource/venues#where-an-order-goes-and-what-an-instrument-is)) |
+| `[execution].markets` | `["linear perpetual"]` | the market types this desk may send to; `linear perpetual`, `spot` and `prediction` are built ([Venues](/opensource/venues#where-an-order-goes-and-what-an-instrument-is)) |
 | `[execution].max_notional` | none: required | the most one order may be worth |
 | `[run].equity` | none | the most equity you allow this desk; sizing uses the smaller of this and the account |
 | `[controls].daily_loss_limit_bps` | `300` | no new entry once equity has fallen this far on the day |

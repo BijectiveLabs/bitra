@@ -390,3 +390,24 @@ def test_a_channel_without_outcome_fees_refuses_rather_than_guess_zero(tmp_path:
     result = run_cycle(cfg)
     assert result.intent is None and fake.calls == []
     assert "declares no fees for a prediction outcome" in str(result.stopped_by)
+
+
+def test_an_outcome_without_published_volume_is_screened_on_its_move_alone() -> None:
+    from trading_research_agents.agents.screen import measured
+    from trading_research_agents.execution.regime import RegimeRule
+    from trading_research_agents.store.snapshot import Snapshot
+
+    snap = Snapshot(cycle="2026-10-17T12-00-00Z", instrument="FEDCUT")
+    snap.put(
+        Fetched(
+            kind="ohlcv",
+            instrument="FEDCUT",
+            value=candles(["0.40", "0.41", "0.42"], volume="0"),
+            source="ccxt:kalshi",
+            tier="free",
+            fetched_at=NOW,
+            as_of_ns=int(NOW * 1_000_000_000),
+            detail={"volume": "not published by the venue"},
+        )
+    )
+    assert measured(snap, 3600, RegimeRule()) == {}

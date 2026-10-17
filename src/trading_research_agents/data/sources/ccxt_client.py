@@ -13,6 +13,8 @@ A venue name resolves in `ccxt` first and then in `ccxt.prediction`. Two names l
 from __future__ import annotations
 
 import asyncio
+import atexit
+import contextlib
 import inspect
 import threading
 from collections.abc import Mapping
@@ -117,6 +119,9 @@ class SyncBridge:
         thread = threading.Thread(target=loop.run_forever, daemon=True)
         thread.start()
         object.__setattr__(self, "_loop", loop)
+        object.__setattr__(self, "_closed", False)
+        # The async client holds open sockets that only its own close() releases.
+        atexit.register(self._close_quietly)
 
     def _run(self, call: Any) -> Any:
         future = asyncio.run_coroutine_threadsafe(call, self._loop)
@@ -137,7 +142,15 @@ class SyncBridge:
 
     def close(self) -> None:
         """Close the client's sessions, then stop its loop."""
+        if self._closed:
+            return
+        object.__setattr__(self, "_closed", True)
         try:
             self._run(self._client.close())
         finally:
             self._loop.call_soon_threadsafe(self._loop.stop)
+
+    def _close_quietly(self) -> None:
+        # At exit there is nobody left to tell.
+        with contextlib.suppress(Exception):
+            self.close()
