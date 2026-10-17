@@ -205,8 +205,9 @@ def test_the_market_types_a_desk_sends_to_are_one_setting() -> None:
 
     assert read({}) == ("linear perpetual",)
     assert read({"markets": ["linear perpetual", "linear perpetual"]}) == ("linear perpetual",)
-    with pytest.raises(ConfigError, match=r"\['spot'\] not built yet"):
-        read({"markets": ["spot"]})
+    assert read({"markets": ["linear perpetual", "spot"]}) == ("linear perpetual", "spot")
+    with pytest.raises(ConfigError, match=r"\['option'\] not built yet"):
+        read({"markets": ["spot", "option"]})
     with pytest.raises(ConfigError, match="at least one market type"):
         read({"markets": []})
     with pytest.raises(ConfigError, match="is a list of market types"):

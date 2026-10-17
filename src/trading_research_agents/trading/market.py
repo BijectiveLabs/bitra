@@ -108,6 +108,16 @@ class Market:
         """Leverage, margin and liquidation apply: true of every contract market."""
         return self.contract
 
+    @property
+    def held_as_balance(self) -> bool:
+        """A position here is coins in the account rather than a position the venue reports."""
+        return self.described and self.kind in ("spot", "margin")
+
+    @property
+    def shortable(self) -> bool:
+        """A short sells what is not held: a contract can, a spot pair would need a borrow."""
+        return not self.held_as_balance
+
     def unit(self) -> Decimal:
         """How much of the base one order unit is: a contract, or 1 for a market sized in the base.
 

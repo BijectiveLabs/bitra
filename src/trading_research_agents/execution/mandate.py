@@ -51,8 +51,10 @@ I accept that the losses are mine.
 
 MARGIN_MODES = ("isolated", "cross")
 # The market types the order path is built for, in the words `trading.market.Market` labels them.
-# Spot, tokenized stocks and prediction markets join this list as each is built and run end to end.
-MARKETS = ("linear perpetual",)
+# Tokenized stocks and prediction markets join this list as each is built and run end to end.
+MARKETS = ("linear perpetual", "spot")
+# Perpetuals only unless the operator lists more: a market type is a choice, not a default.
+DEFAULT_MARKETS = ("linear perpetual",)
 HOLD_LIMITS = ("timeout", "horizon", "none")
 
 
@@ -105,7 +107,7 @@ class Mandate:
     # Where orders go: demo, testnet or mainnet. Empty falls back to [live].environment, then demo.
     environment: str = ""
     # Which market types this desk may send to. The venue and the symbol say where; this says what.
-    markets: tuple[str, ...] = MARKETS
+    markets: tuple[str, ...] = DEFAULT_MARKETS
 
     def __post_init__(self) -> None:
         if self.mode not in MODES:

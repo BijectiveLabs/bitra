@@ -6,6 +6,17 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Spot, on the same order path as perpetuals. A desk lists it in `[execution].markets` (the default
+  stays perpetuals only). Read from the market's own facts: long only, since a short on spot needs a
+  borrow; paid in full against the free quote balance, with no leverage set; the position is the
+  coin the account holds, with residue under the venue's minimum counted as nothing; exits attached
+  with the entry; a close cancels the resting exits wherever the venue keeps them (OKX keeps them as
+  algo orders) and sells what is held, rounded down to the venue's step; a fee charged in the coin
+  bought is counted in the quote currency. Run end to end on the Bybit and OKX demos on SOL/USDT.
+  A full desk cycle on a spot instrument is still being finished.
+
 ## [0.7.0] - 2026-10-16
 
 ### Added

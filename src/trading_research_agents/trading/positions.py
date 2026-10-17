@@ -334,10 +334,8 @@ class Keeper:
         ]
         exits = _up_to(exits and [f for f in ordered if f.get("side") == exit_side], entry.size)
         opening = _up_to(opening, entry.size)
-        fees = sum(
-            (Decimal(str((f.get("fee") or {}).get("cost") or 0)) for f in (*opening, *exits)),
-            Decimal(0),
-        )
+        base = _base(hand)
+        fees = sum((_fee_in_quote(f, base) for f in (*opening, *exits)), Decimal(0))
         amount = sum((Decimal(str(f.get("amount") or 0)) for f in exits), Decimal(0))
         last_exit = max((f.get("timestamp") or 0 for f in exits), default=None)
         if amount > 0:
@@ -407,6 +405,21 @@ def _contract_unit(hand: Any) -> Decimal:
     """How much of the base one of the venue's contracts is; 1 for a hand that does not say."""
     size = getattr(hand, "contract_size", None)
     return Decimal(1) if size is None else Decimal(size())
+
+
+def _base(hand: Any) -> str:
+    with suppress(Exception):
+        return str(hand.market().base)
+    return str(getattr(hand, "symbol", "")).partition("/")[0]
+
+
+def _fee_in_quote(fill: Mapping[str, Any], base: str) -> Decimal:
+    """A fill's fee in the quote currency. A spot buy is often charged in the coin it bought."""
+    fee = fill.get("fee") or {}
+    cost = Decimal(str(fee.get("cost") or 0))
+    if base and str(fee.get("currency") or "") == base:
+        return cost * Decimal(str(fill.get("price") or 0))
+    return cost
 
 
 def _settlement(hand: Any) -> str:

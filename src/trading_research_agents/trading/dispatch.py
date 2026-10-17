@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
 
-from trading_research_agents.execution.mandate import MARKETS
+from trading_research_agents.execution.mandate import DEFAULT_MARKETS, MARKETS
 from trading_research_agents.extras import install_hint
 from trading_research_agents.trading.capital import (
     CapitalError,
@@ -43,6 +43,7 @@ from trading_research_agents.trading.capital import (
 )
 from trading_research_agents.trading.market import Market, MarketError
 from trading_research_agents.trading.venues.accounts import account_refusal
+from trading_research_agents.trading.venues.exits import exit_cancel_params, exit_reads
 
 SIDES = {"long": "buy", "short": "sell"}
 # Read from ccxt 4.5 on 2026-09-29: a venue reaches its demo environment through
@@ -152,7 +153,7 @@ class VenueHand:
     max_slippage_bps: Decimal = Decimal(20)
     max_margin_share: Decimal = Decimal("0.5")
     liquidation_buffer_bps: Decimal = Decimal(50)
-    markets: tuple[str, ...] = MARKETS
+    markets: tuple[str, ...] = DEFAULT_MARKETS
     # Shared by every hand in a run: [controls].max_orders_per_minute is the desk's, not a hand's.
     rate: OrderRate | None = None
     client: Any = None
@@ -253,10 +254,12 @@ class VenueHand:
             skew = self.clock_skew()
             if skew:
                 return skew
-            hedged = self.hedged()
+            market = self.market()
+            derivative = not market.held_as_balance
+            hedged = self.hedged() if derivative else ""
             if hedged:
                 return hedged
-            setting = account_refusal(self.venue, self.client)
+            setting = account_refusal(self.venue, self.client, derivative=derivative)
             if setting:
                 return setting
             self._open_orders()
@@ -283,15 +286,16 @@ class VenueHand:
         if self.sent_count:
             # One decision, one order. A hand asked twice is a wiring fault, not a second trade.
             return {"sent": False, "refused": "this hand has already sent its one order"}
-        kind = self.market().label
+        market = self.market()
+        kind = market.label
         if kind not in MARKETS and kind != UNDESCRIBED:
-            # Leverage, margin, liquidation and reduce-only exits are all perpetual-futures
-            # mechanics; a spot or option symbol here would be priced and protected wrongly.
+            # A type with no rules here would be priced and protected by another type's rules.
             return {
                 "sent": False,
                 "refused": (
-                    f"{self.symbol} is a {kind} market; venue mode trades linear perpetual "
-                    "futures today, and other market types are not built yet"
+                    f"{self.symbol} is a {kind} market; venue mode trades "
+                    f"{' and '.join(MARKETS)} markets today, and other market types are not "
+                    "built yet"
                 ),
             }
         if kind not in self.markets and kind != UNDESCRIBED:
@@ -305,6 +309,15 @@ class VenueHand:
         target = str(intent.get("target", ""))
         if target not in SIDES:
             return {"sent": False, "refused": f"target {target!r} is not an order"}
+        if target == "short" and not market.shortable:
+            return {
+                "sent": False,
+                "refused": (
+                    f"{self.symbol} is a {kind} market; a short there sells coins the account "
+                    "does not hold, which needs a borrow this desk does not take"
+                ),
+            }
+        derivative = not market.held_as_balance
         side = SIDES[target]
         size = Decimal(str(intent.get("size", "0")))
         mid = Decimal(str(intent.get("mid", "0")))
@@ -333,11 +346,11 @@ class VenueHand:
             if skew:
                 return {"sent": False, "refused": skew}
             self.skew_checked = True
-        hedged = self.hedged()
+        hedged = self.hedged() if derivative else ""
         if hedged:
             return {"sent": False, "refused": hedged}
         if not self.account_checked:
-            setting = account_refusal(self.venue, self.client)
+            setting = account_refusal(self.venue, self.client, derivative=derivative)
             if setting:
                 return {"sent": False, "refused": setting}
             self.account_checked = True
@@ -391,10 +404,14 @@ class VenueHand:
             }
         fresh = {"bid": now_bid, "ask": now_ask} if now_bid and now_ask else None
 
-        held_back = self._ensure_leverage()
+        held_back = self._ensure_leverage() if derivative else ""
         if held_back:
             return {"sent": False, "refused": held_back}
-        carried = self._capital(notional, side, mid, intent)
+        carried = (
+            self._capital(notional, side, mid, intent)
+            if derivative
+            else self._cash(notional, market)
+        )
         if isinstance(carried, str):
             return {"sent": False, "refused": carried}
         if self.rate is not None:
@@ -657,6 +674,9 @@ class VenueHand:
         A hand that cannot read the account does not send: an order into a position nobody can see
         is the one mistake that cannot be undone by reading the record afterwards.
         """
+        market = self.market()
+        if market.held_as_balance:
+            return self._holding(market)
         fetch = getattr(self.client, "fetch_position", None)
         if fetch is None:
             return None
@@ -678,6 +698,24 @@ class VenueHand:
             return Decimal(0)
         signed = Decimal(str(contracts)) * self.contract_size()
         return -signed if str(held.get("side", "")).lower() == "short" else signed
+
+    def _holding(self, market: Market) -> Decimal:
+        """The base coin the account holds; under the venue's minimum order it is nothing.
+
+        A spot desk's position is coins in the account, and the account is the desk's. An amount
+        too small to sell is fee residue, not a position, and not a reason to refuse an entry.
+        """
+        try:
+            balance = self.client.fetch_balance()
+        except Exception as exc:
+            raise DispatchError(
+                self.redact(f"cannot read the account: {exc.__class__.__name__}: {exc}")
+            ) from exc
+        row = balance.get(market.base) or {}
+        total = Decimal(str(row.get("total") or 0))
+        if total <= 0 or (market.amount_min is not None and total < market.amount_min):
+            return Decimal(0)
+        return total
 
     def _ensure_leverage(self) -> str:
         """Apply the declared leverage and margin mode at the venue, then confirm them.
@@ -773,6 +811,30 @@ class VenueHand:
             )
         return record
 
+    def _cash(self, notional: Decimal, market: Market) -> dict[str, str] | str:
+        """Is there quote currency for this order? A spot order is paid in full, fee included."""
+        currency = market.quote
+        if not currency:
+            return f"the quote currency of {self.symbol} is unknown; nothing was sent"
+        try:
+            account = read_account(self.client, currency)
+        except CapitalError as exc:
+            return self.redact(str(exc))
+        fee_bps = (market.taker or Decimal(0)) * BPS
+        needed = notional + notional * fee_bps / BPS
+        allowed = account.free * self.max_margin_share
+        if needed > allowed:
+            return (
+                f"this order costs {needed:.2f} {currency} with its fee and "
+                f"{self.max_margin_share} of the free {account.free:.2f} is {allowed:.2f}; "
+                "nothing was sent"
+            )
+        return {
+            "cash_needed": str(needed.quantize(Decimal("0.01"))),
+            "free_cash": str(account.free),
+            "equity": str(account.equity),
+        }
+
     def account(self) -> Any:
         """The account in this symbol's settlement currency, read through this hand's client."""
         currency = self.market().settlement
@@ -818,14 +880,28 @@ class VenueHand:
         if not held:
             return {"closed": False, "note": "nothing is held"}
         side = "sell" if held > 0 else "buy"
+        spot = self.market().held_as_balance
+        if spot:
+            # The stop and take profit rest as orders that can hold the coins; a sale needs them.
+            self.cancel_open_orders()
+            held = self._holding(self.market())
+            if not held:
+                return {"closed": False, "note": "nothing is held once the exits were cancelled"}
+        amount = abs(held) / self.contract_size()
+        to_step = getattr(self.client, "amount_to_precision", None)
+        if to_step is not None:
+            # Down to the venue's step, never above what is held: a spot sale cannot be
+            # reduce-only, so the step is the guard.
+            with suppress(Exception):
+                amount = Decimal(str(to_step(self.symbol, float(amount))))
         try:
             order = self.client.create_order(
                 self.symbol,
                 "market",
                 side,
-                float(abs(held) / self.contract_size()),
+                float(amount),
                 None,
-                {"reduceOnly": True},
+                {} if spot else {"reduceOnly": True},
             )
         except Exception as exc:
             return {
@@ -837,13 +913,13 @@ class VenueHand:
             "closed": True,
             "reason": reason,
             "side": side,
-            "size": str(abs(held)),
+            "size": f"{amount * self.contract_size():f}",
             "order_id": str(order.get("id", "")),
             "average": None if order.get("average") is None else str(order["average"]),
         }
 
     def cancel_open_orders(self) -> int:
-        """Cancel every working order on the symbol. How many went."""
+        """Cancel every working order on the symbol, attached exits included. How many went."""
         fetch = getattr(self.client, "fetch_open_orders", None)
         if fetch is None:
             return 0
@@ -852,6 +928,13 @@ class VenueHand:
             for order in fetch(self.symbol) or []:
                 if not self._cancel(str(order.get("id", ""))):
                     gone += 1
+        extra = exit_cancel_params(self.venue)
+        for read in exit_reads(self.venue):
+            # One kind the venue will not list is not a reason to skip the others.
+            with suppress(Exception):
+                for order in fetch(self.symbol, None, None, dict(read)) or []:
+                    if not self._cancel(str(order.get("id", "")), extra):
+                        gone += 1
         return gone
 
     def _touch_now(self) -> tuple[Decimal | None, Decimal | None]:
@@ -1000,13 +1083,16 @@ class VenueHand:
                 return self.in_base(found, self.contract_size())
         return None
 
-    def _cancel(self, order_id: str) -> str:
+    def _cancel(self, order_id: str, params: Mapping[str, Any] | None = None) -> str:
         """Empty when the venue took the cancel; otherwise what it said, in its own words."""
         cancel = getattr(self.client, "cancel_order", None)
         if cancel is None:
             return "this venue has no cancel through ccxt"
         try:
-            cancel(order_id, self.symbol)
+            if params:
+                cancel(order_id, self.symbol, dict(params))
+            else:
+                cancel(order_id, self.symbol)
         except Exception as exc:
             return self.redact(f"{exc.__class__.__name__}: {exc}")[:200]
         return ""
@@ -1116,7 +1202,7 @@ def hand_for(
     max_slippage_bps: Decimal = Decimal(20),
     max_margin_share: Decimal = Decimal("0.5"),
     liquidation_buffer_bps: Decimal = Decimal(50),
-    markets: tuple[str, ...] = MARKETS,
+    markets: tuple[str, ...] = DEFAULT_MARKETS,
     rate: OrderRate | None = None,
 ) -> VenueHand:
     """A hand for `venue`, reading whatever credentials that venue signs with."""

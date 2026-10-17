@@ -110,10 +110,35 @@ practice environment first.
 What kind of market a desk may send to is one setting, `[execution].markets`. Every market, on
 every venue, is read into one shape from what ccxt reports (see
 [Architecture](/opensource/architecture#adoption-rules)), and the order path decides from that
-shape what applies: contracts, margin, leverage, where the exits go. Today the list holds one type,
-`linear perpetual`, and a symbol of any other type is refused by name before anything is sent.
-Spot, tokenized stocks and prediction markets join the list as each is built and run end to end on
-a practice account; the venue and the symbol stay where they are, in the same settings.
+shape what applies: contracts, margin, leverage, where the exits go. Two types are built,
+`linear perpetual` and `spot`. The list defaults to perpetuals only, a desk adds spot by naming it
+(`markets = ["linear perpetual", "spot"]`), and a symbol of a type not listed, or not built, is
+refused by name before anything is sent. Tokenized stocks and prediction markets join as each is
+built and run end to end on a practice account; the venue and the symbol stay where they are, in
+the same settings.
+
+What the same order path does when the market is spot:
+
+- **Long only.** A short on spot sells coins the account does not hold, which needs a borrow; it is
+  refused.
+- **Paid in full.** No leverage is set and no liquidation is estimated. The order and its fee must
+  fit in `[execution].max_margin_share` of the free quote balance.
+- **The position is the coin in the account.** An amount under the venue's minimum order is fee
+  residue and counts as nothing; anything above it is the desk's position, so an entry is refused
+  while the account already holds the coin. Run a spot desk on an account, or a subaccount, that
+  is the desk's own.
+- **Exits at the venue.** The stop and take profit go with the entry, as on perpetuals. Bybit keeps
+  them as one order with both prices; OKX keeps them as an OCO algo order. Both hold the coins.
+- **Closes free the coins first.** A close, by time or by the kill switch, cancels the resting exits,
+  wherever the venue keeps them, then sells what is held, rounded down to the venue's step.
+- **Fees in the coin.** A spot buy is often charged in the coin bought; the round trip counts that
+  fee in the quote currency at the fill price.
+
+Spot was run end to end on the Bybit demo and the OKX demo on SOL/USDT on 2026-10-17: entry with
+the exits attached, the exits found at the venue, close, flat. The order path and the position
+keeper are built for it. A full desk cycle on a spot instrument, with its data chain and screener,
+is the step still open, so name a spot symbol in `data.toml` under `[data].symbols` and try it on a
+practice account first.
 
 ## Trading on another exchange
 

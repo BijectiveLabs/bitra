@@ -18,7 +18,7 @@ from trading_research_agents.execution.confluence import STANCES, ConfluenceErro
 from trading_research_agents.execution.conviction import Conviction, ConvictionError, Tier
 from trading_research_agents.execution.cost import CostError, FundingSchedule
 from trading_research_agents.execution.desk import Desk, DeskError
-from trading_research_agents.execution.mandate import MARKETS, Mandate, MandateError
+from trading_research_agents.execution.mandate import DEFAULT_MARKETS, Mandate, MandateError
 from trading_research_agents.execution.regime import REGIME_KEYS, RegimeError, RegimeRule
 from trading_research_agents.execution.stops import MODES, StopError, VolatilityExit
 from trading_research_agents.execution.targets import TargetError, Targets
@@ -735,7 +735,7 @@ def _mandate(raw: dict[str, Any], venue_key: str) -> Mandate:
 
 def _markets(table: Mapping[str, Any]) -> tuple[str, ...]:
     if "markets" not in table:
-        return MARKETS
+        return DEFAULT_MARKETS
     listed = table["markets"]
     if not isinstance(listed, list) or not all(isinstance(kind, str) for kind in listed):
         raise ConfigError('[execution].markets is a list of market types: ["linear perpetual"]')
