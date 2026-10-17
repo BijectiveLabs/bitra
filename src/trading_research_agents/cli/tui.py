@@ -44,26 +44,44 @@ TAGLINE = (
 _console: Console | None = None
 
 
-def banner(width: int, encoding: str = "utf-8") -> str:
-    """The wordmark in block letters where the terminal can draw them, plain ASCII otherwise.
+# Widest first: the full name on one line, then on two, then the short name a narrow terminal fits.
+WORDMARKS = (
+    ("name.txt",),
+    ("trading-research.txt", "agents.txt"),
+    ("tra.txt",),
+)
+PANEL_EDGE = 6
 
-    The block letters live in a text file beside this module, not in source. A console whose
+
+def _block(name: str, encoding: str) -> str | None:
+    try:
+        text = files("trading_research_agents.cli").joinpath(f"static/wordmark/{name}")
+        drawn = text.read_text("utf-8")
+        drawn.encode(encoding or "ascii")
+    except (OSError, TypeError, LookupError, UnicodeError):
+        return None
+    lines = [line.rstrip() for line in drawn.splitlines()]
+    while lines and not lines[-1]:
+        lines.pop()
+    return "\n".join(lines) or None
+
+
+def wordmark(width: int, encoding: str = "utf-8") -> list[str]:
+    """The wordmark as the blocks a console centres one under another.
+
+    The block letters live in text files beside this module, not in source. A console whose
     encoding has no block characters, a legacy Windows code page, gets the ASCII one rather than a
     row of question marks or an encoding error.
     """
-    try:
-        text = (
-            files("trading_research_agents.cli").joinpath("static/welcome.txt").read_text("utf-8")
-        )
-        text.encode(encoding or "ascii")
-    except (OSError, TypeError, LookupError, UnicodeError):
-        return BANNER
-    lines = [line.rstrip() for line in text.splitlines()]
-    while lines and not lines[-1]:
-        lines.pop()
-    if not lines or max(len(line) for line in lines) + 6 > width:
-        return BANNER
-    return "\n".join(lines)
+    for names in WORDMARKS:
+        blocks = [_block(name, encoding) for name in names]
+        drawn = [block for block in blocks if block is not None]
+        if len(drawn) != len(names):
+            continue
+        widest = max(len(line) for block in drawn for line in block.splitlines())
+        if widest + PANEL_EDGE <= width:
+            return drawn
+    return [BANNER]
 
 
 def console(safe: bool = False) -> Console:
@@ -152,11 +170,14 @@ def _bps(value: Any) -> Text:
 def home(version: str, good: Sequence[str], bad: Sequence[str], next_command: str) -> None:
     """`tra` with nothing else: who this is, what is ready, what to type next."""
     c = console()
-    lines = banner(c.width, c.encoding).splitlines()
-    # One width for every row of the wordmark, so centring moves it as a block, not row by row.
-    wide = max(len(line) for line in lines)
+    rows: list[Any] = []
+    for block in wordmark(c.width, c.encoding):
+        lines = block.splitlines()
+        # One width for every row of a block, so centring moves it whole, not row by row.
+        wide = max(len(line) for line in lines)
+        rows.append(Align.center(Text("\n".join(line.ljust(wide) for line in lines), "bold cyan")))
     head = Group(
-        Align.center(Text("\n".join(line.ljust(wide) for line in lines), style="bold cyan")),
+        *rows,
         Text(NAME, style="bold", justify="center"),
         Text(TAGLINE, style="dim", justify="center"),
         Text(f"tra {version}  by Bijective", style="dim", justify="center"),

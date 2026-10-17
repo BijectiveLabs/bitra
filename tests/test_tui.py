@@ -27,15 +27,38 @@ def recorded(monkeypatch: pytest.MonkeyPatch) -> Console:
     return console
 
 
-def test_the_block_wordmark_is_drawn_only_where_it_fits_and_can_be_encoded() -> None:
-    drawn = tui.banner(80)
-    lines = drawn.splitlines()
-    assert len(lines) == 6 and max(len(line) for line in lines) == 25
-    assert "█" in drawn and "╗" in drawn
-    # Too narrow for it, or a console code page without block characters: the ASCII one.
-    assert tui.banner(28) == tui.BANNER and tui.BANNER.isascii()
-    assert tui.banner(80, "cp1252") == tui.BANNER
-    assert tui.banner(80, "cp437") == drawn
+def test_the_wordmark_spells_the_name_where_it_fits_and_shortens_where_it_does_not() -> None:
+    def widths(blocks: list[str]) -> list[int]:
+        return [max(len(line) for line in block.splitlines()) for block in blocks]
+
+    one_line = tui.wordmark(200)
+    assert widths(one_line) == [179] and "█" in one_line[0]
+    # Too narrow for the name on one line: TRADING RESEARCH above AGENTS.
+    stacked = tui.wordmark(140)
+    assert widths(stacked) == [123, 52]
+    assert all(len(block.splitlines()) == 6 for block in stacked)
+    # Narrower still: the short name.
+    assert widths(tui.wordmark(100)) == [25]
+    assert tui.wordmark(28) == [tui.BANNER] and tui.BANNER.isascii()
+    # A console code page without block characters gets the ASCII one at any width.
+    assert tui.wordmark(200, "cp1252") == [tui.BANNER]
+    assert tui.wordmark(200, "cp437") == one_line
+
+
+def test_the_stacked_wordmark_is_centred_line_by_line(monkeypatch: pytest.MonkeyPatch) -> None:
+    wide = Console(file=io.StringIO(), width=140, record=True)
+    monkeypatch.setattr(tui, "_console", wide)
+    tui.home("1.0.0", [], [], "tra init my-desk")
+    drawn = wide.export_text().splitlines()
+    top = next(line for line in drawn if "████████╗██████╗" in line)
+    agents = next(line for line in drawn if line.strip("│ ").startswith("█████╗  ██████╗"))
+
+    def centre(line: str) -> float:
+        inner = line.strip().strip("│")
+        left = len(inner) - len(inner.lstrip())
+        return left + len(inner.strip()) / 2
+
+    assert abs(centre(top) - centre(agents)) <= 1
 
 
 def test_the_console_is_off_for_scripts_and_json(monkeypatch: pytest.MonkeyPatch) -> None:

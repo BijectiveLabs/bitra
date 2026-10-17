@@ -376,8 +376,25 @@ def test_check_says_what_the_three_files_add_up_to(
     main(["check"])
     out = capsys.readouterr().out
     assert "ok    symbols: BTCUSDT is BTC/USDT:USDT to the sources" in out
-    # The shipped chains fail over to a second venue, and a desk should know it prices only one.
-    assert "venues: fees are priced on bybit, data also comes from binance" in out
+    # The shipped chains read the venue the desk trades on, and only that one.
+    assert "data also comes from" not in out
+
+    # Candles from a second venue are allowed, and said, because a desk prices only one.
+    data = target / "data.toml"
+    shipped = data.read_text("utf-8")
+    data.write_text(
+        shipped.replace(
+            'chain = ["venue", "file:data"]\nttl = "90s"',
+            'chain = ["venue", "ccxt:binance", "file:data"]\nttl = "90s"',
+            1,
+        ),
+        "utf-8",
+    )
+    main(["check"])
+    assert (
+        "venues: fees are priced on bybit, data also comes from binance" in capsys.readouterr().out
+    )
+    data.write_text(shipped, "utf-8")
 
     # An order that would go to one venue at another's fee is a refusal, not a note.
     config = target / "strategy.toml"
@@ -400,10 +417,12 @@ def test_init_for_a_venue_wires_data_orders_and_fees_for_that_venue(tmp_path: Pa
     assert main(["init", str(target), "--profile", "autonomous", "--venue", "okx"]) == 0
 
     data = (target / "data.toml").read_text(encoding="utf-8")
-    assert "bybit" not in data and "ccxt:okx" in data and "intervalTime" not in data
-    # The book comes from the practice account the orders go to.
-    assert 'chain = ["ccxt:okx@testnet"]' in data
-    load_data_config(target / "data.toml")
+    assert "bybit" not in data and "intervalTime" not in data
+    assert '[data.orderbook]\nchain = ["venue"]' in data
+    # Read for the desk, the book comes from the practice account the orders go to.
+    desk = load_data_config(target / "data.toml").on_venue("okx", "testnet")
+    assert desk.for_kind("orderbook").chain == ("ccxt:okx@testnet",)
+    assert desk.for_kind("ohlcv").chain == ("ccxt:okx", "file:data")
 
     strategy = (target / "strategy.toml").read_text(encoding="utf-8")
     assert 'venue_key = "okx/taker-taker"' in strategy and "[live]" not in strategy.replace(
@@ -615,3 +634,53 @@ def test_a_spot_only_desk_does_not_hold_a_channels_unused_base_fees_to_the_spot_
         datetime(2026, 10, 17, tzinfo=UTC),
     )
     assert bad == [] and any(line.startswith("fees spot: ") for line in good)
+
+
+def test_a_desk_changes_venue_in_one_line_and_never_prices_on_another_venue(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from trading_research_agents.cli.main import _desk_data
+    from trading_research_agents.data.sources import DataConfigError
+    from trading_research_agents.trading.config import load_strategy_config
+
+    target = tmp_path / "desk"
+    assert main(["init", str(target), "--profile", "autonomous"]) == 0
+    config, data = target / "strategy.toml", target / "data.toml"
+
+    def chains(mode: str | None = None) -> dict[str, tuple[str, ...]]:
+        declared = _desk_data(data, load_strategy_config(config), mode)
+        return {kind.kind: kind.chain for kind in declared.kinds}
+
+    assert chains()["orderbook"] == ("ccxt:bybit",)
+    config.write_text(
+        config.read_text("utf-8").replace(
+            'venue_key = "bybit/taker-taker"', 'venue_key = "okx/taker-taker"', 1
+        ),
+        "utf-8",
+    )
+    moved = chains()
+    assert moved["orderbook"] == ("ccxt:okx",) and moved["funding"] == ("ccxt:okx", "file:data")
+    assert all("bybit" not in name for chain in moved.values() for name in chain)
+
+    # Orders going to OKX, priced on another venue's book: refused before anything is pulled.
+    data.write_text(
+        data.read_text("utf-8").replace(
+            '[data.orderbook]\nchain = ["venue"]',
+            '[data.orderbook]\nchain = ["venue", "ccxt:bybit"]',
+            1,
+        ),
+        "utf-8",
+    )
+    assert chains("sandbox")["orderbook"] == ("ccxt:okx", "ccxt:bybit")
+    with pytest.raises(DataConfigError, match="orderbook: ccxt:bybit"):
+        chains("venue")
+
+
+def test_venue_params_reach_only_their_own_venue() -> None:
+    from trading_research_agents.data.sources.ccxt_source import _params
+
+    scoped = {"params": {"bybit": {"intervalTime": "5min"}}}
+    assert _params(scoped, "bybit") == {"intervalTime": "5min"}
+    assert _params(scoped, "okx") == {}
+    assert _params({"params": {"category": "linear"}}, "okx") == {"category": "linear"}
+    assert _params({}, "okx") == {}

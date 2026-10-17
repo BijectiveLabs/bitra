@@ -255,6 +255,68 @@ against ccxt's prediction shapes. Sending orders needs a practice account: Kalsh
 environment that ccxt reaches (an API key and an RSA private key); Polymarket signs with a wallet
 and has no practice environment.
 
+## Which venue the data comes from
+
+A desk trades on one venue, the one `[run].venue_key` names, and by default it reads from that
+venue alone. The shipped `data.toml` says `venue` in every chain rather than an exchange's name:
+
+```toml
+[data.ohlcv]
+chain = ["venue", "file:data"]
+
+[data.orderbook]
+chain = ["venue"]
+```
+
+`venue` is read as the venue orders go to. Candles, funding and open interest come from its live
+markets. The book comes from the environment the orders meet, so a desk trading on a practice
+account prices on that account's book (`ccxt:okx@testnet`, `ccxt:bybit@demo`), and a desk trading
+on mainnet prices on the live one.
+
+What decides and what pays are then the same venue, which is how a professional desk separates
+them:
+
+| Figure | Where it may come from | Why |
+|---|---|---|
+| Order book (spread, depth, the cost a trade is priced at) | the execution venue only | another venue's book is not the book the order meets |
+| Funding | the execution venue, or `file:data` | the funding a position pays is its own venue's |
+| Candles, open interest | the execution venue, or another venue on purpose | a signal can read a deeper market; it never prices the order |
+| The price an order is sent at | the execution venue's book, read again at the moment of sending | the snapshot is as old as the analysts were slow |
+
+In venue mode the first two are enforced: a chain that reads the book or the funding from any
+venue other than the one orders go to is refused before anything is pulled, with the line that
+names it. A candle chain may fall back to another venue deliberately,
+`chain = ["venue", "ccxt:binance", "file:data"]`, and `tra check` says so every time. Whatever the
+chains say, an order is priced once more against the execution venue's own book when it is sent:
+the drift check refuses a decision the market has moved away from, and the slippage bound is
+measured from that venue's touch.
+
+## Changing venue, and turning the others off
+
+A desk talks to the venues its files name, and nothing else. With the shipped `data.toml` that is
+one venue, so the venue a desk trades on is also the only exchange it opens a connection to. Keys
+are read for the execution venue only; data sources are never given a key.
+
+Changing venue is one line:
+
+```toml
+[run]
+venue_key = "okx/taker-taker"        # was "bybit/taker-taker"
+```
+
+The chains that say `venue` follow. Two things have to exist on the new venue first, and `tra
+check` names whichever is missing: a channel for it in `envelope.toml` with the fees your account
+pays there (`tra venues okx --setup` reads them and prints the lines), and its keys in `.env`.
+A desk made with `tra init --venue` also names the venue and the environment in `[execution]`;
+change those with it, or `tra check` refuses the mismatch, since an order would otherwise go to
+one venue at the other's fee.
+
+To trade two venues at once, run two desks, one per venue: each has its own account, positions,
+limits and kill switch, and stopping one never touches the other. To stop trading on a venue,
+stop its desk (the kill switch flattens and stops it). To stop reading from one, take its name out
+of the chains: a kind of data with no source left is refused rather than guessed, and the cycle
+says which kind and why. Nothing needs uninstalling, and no code changes.
+
 ## Trading on another exchange
 
 The route is the same for any venue ccxt can take orders on. OKX is the example, and its demo is
@@ -268,7 +330,7 @@ tra check                                             # fills the fees, then say
 tra keys --probe                                      # reads the account, sends nothing
 ```
 
-What `--venue` does: the data chains read from that venue, `[run].venue_key` and
+What `--venue` does: the data chains read from the venue the desk trades on, `[run].venue_key` and
 `[execution].venue` name it, `[execution].environment` is its practice account where it has one,
 the order mode stays `sandbox`, and `.env.example` lists the keys that venue signs with. Sizes use
 the venue's own step, so there is no table of increments to copy.
@@ -286,10 +348,11 @@ OKX's demo trading is reached through ccxt's sandbox switch, so in this project 
 `environment = "testnet"`. A demo key only works on the demo.
 
 A practice account has its own order book, and it can sit apart from the live one: on 2026-10-10
-OKX's demo FIL book was 6 bps wide against 1 bps live. So `--venue` points the order book chain at
-the practice environment (`ccxt:okx@testnet`, `ccxt:bybit@demo`), and the drift check, the spread
-and the slippage a desk records are measured on the book its orders meet. Candles, funding and open
-interest stay on the live market. Any `ccxt:<venue>` source takes `@demo` or `@testnet`.
+OKX's demo FIL book was 6 bps wide against 1 bps live. So the book a desk prices on is the
+practice environment's when its orders go there (`venue` reads as `ccxt:okx@testnet` or
+`ccxt:bybit@demo`), and the drift check, the spread and the slippage a desk records are measured on
+the book its orders meet. Candles, funding and open interest stay on the live market. Any
+`ccxt:<venue>` source takes `@demo` or `@testnet`.
 
 The price can drift too. On OKX's demo account, in 6 of 52 decisions recorded to 2026-10-13, the
 demo book's mid sat outside the live market's range for that minute: 30 to 40 bps on NEAR and 149
@@ -370,13 +433,6 @@ What protects you once orders flow, on any venue: a size off the venue's step or
 is refused rather than quietly rounded by ccxt; the account is read before every order; an open
 position or a working order refuses a second entry; and a maker order that does not fill is
 cancelled, never chased.
-
-## Stopping a venue
-
-Take it out of the chains in `data.toml`. A kind of data with no source left is refused rather than
-guessed, and the cycle says which kind and why. If it was the venue you traded on, change
-`[run].venue_key` to a channel you still have, and `tra check` will tell you if anything still
-points at the old one. Nothing needs uninstalling, and no code changes.
 
 ## A venue ccxt does not know
 

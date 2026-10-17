@@ -54,10 +54,19 @@ DEFAULT_LIMIT = 240
 DEFAULT_BOOK_LEVELS = 25
 
 
-def _params(options: Mapping[str, Any]) -> dict[str, Any]:
-    """The venue-specific table the operator declared, or nothing at all."""
+def _params(options: Mapping[str, Any], venue: str) -> dict[str, Any]:
+    """The venue-specific table the operator declared, or nothing at all.
+
+    A table of tables is keyed by venue, `{ bybit = { intervalTime = "5min" } }`, so a chain that
+    follows the desk to another venue does not hand one venue's spelling to the next.
+    """
     declared = options.get("params")
-    return dict(declared) if isinstance(declared, Mapping) else {}
+    if not isinstance(declared, Mapping):
+        return {}
+    if declared and all(isinstance(value, Mapping) for value in declared.values()):
+        own = declared.get(venue)
+        return dict(own) if isinstance(own, Mapping) else {}
+    return dict(declared)
 
 
 def _decimal(value: Any, label: str) -> Decimal:
@@ -184,7 +193,9 @@ class CcxtSource:
             raise SourceError("limit is positive")
         timeframe = self._timeframe(interval_s)
         # One extra row: the last one is usually still forming and is dropped below.
-        rows = self._client.fetch_ohlcv(symbol, timeframe, None, limit + 1, _params(options))
+        rows = self._client.fetch_ohlcv(
+            symbol, timeframe, None, limit + 1, _params(options, self.venue)
+        )
         if not rows:
             raise SourceError(f"{self.name}: no candles for {symbol}")
         now = self.clock()
@@ -233,7 +244,7 @@ class CcxtSource:
         levels = int(options.get("levels", DEFAULT_BOOK_LEVELS))
         if levels <= 0:
             raise SourceError("levels is positive")
-        raw = self._client.fetch_order_book(symbol, levels, _params(options))
+        raw = self._client.fetch_order_book(symbol, levels, _params(options, self.venue))
         # A level is [price, size], and some venues append more after those two (OKX adds the
         # count of orders), so only the first two are read.
         bids = tuple(
@@ -262,7 +273,7 @@ class CcxtSource:
         )
 
     def _funding(self, instrument: str, symbol: str, **options: Any) -> Fetched:
-        raw = self._client.fetch_funding_rate(symbol, _params(options))
+        raw = self._client.fetch_funding_rate(symbol, _params(options, self.venue))
         rate = _decimal(raw.get("fundingRate"), "fundingRate")
         now = self.clock()
         # Never the venue's fundingTimestamp: that is the next settlement, in the future (seen on
@@ -285,7 +296,7 @@ class CcxtSource:
         )
 
     def _open_interest(self, instrument: str, symbol: str, **options: Any) -> Fetched:
-        raw = self._client.fetch_open_interest(symbol, _params(options))
+        raw = self._client.fetch_open_interest(symbol, _params(options, self.venue))
         amount = raw.get("openInterestAmount")
         value = raw.get("openInterestValue")
         if amount is None and value is None:
@@ -308,6 +319,6 @@ class CcxtSource:
                 "value": None if value is None else str(value),
                 # Some venues answer with the last bucket rather than the moment; the age this
                 # carries is what the chain's ttl judges, so the bucket is worth recording.
-                "params": {str(k): str(v) for k, v in _params(options).items()},
+                "params": {str(k): str(v) for k, v in _params(options, self.venue).items()},
             },
         )

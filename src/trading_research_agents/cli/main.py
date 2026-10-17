@@ -1913,6 +1913,30 @@ def _has_live_plugin(name: str) -> bool:
     return True
 
 
+def _desk_data(path: Path, cfg: Any, mode: str | None = None) -> Any:
+    """data.toml as this desk reads it: `venue` is the venue it trades on.
+
+    In venue mode the book and the funding an order is priced on must be that venue's own, so a
+    chain that reads them from another venue is refused here rather than noticed in a fill.
+    """
+    from trading_research_agents.data.sources import DataConfigError, load_data_config
+
+    mode = mode or cfg.execution.mode
+    venue = cfg.execution.venue or cfg.run.venue_key.partition("/")[0]
+    environment = (
+        _declared_environment(cfg) if cfg.execution.environment or mode == "venue" else "mainnet"
+    )
+    declared = load_data_config(path).on_venue(venue, environment)
+    elsewhere = declared.off_venue(venue)
+    if mode == "venue" and elsewhere:
+        raise DataConfigError(
+            f"orders go to {venue}, but data.toml prices them on {'; '.join(elsewhere)}. The book "
+            f"and the funding an order is priced on are the venue's own: write `venue` (or "
+            f'"ccxt:{venue}") in those chains'
+        )
+    return declared
+
+
 def _declared_environment(cfg: Any) -> str:
     """Where orders go: [execution].environment, else the live session's, else the venue's demo."""
     if cfg.execution.environment:
@@ -2683,13 +2707,6 @@ def _for_venue(name: str, text: str, able: Any, keys: list[str], starter: str) -
     venue = able.venue
     if name == "data.toml":
         text = re.sub(r'"ccxt:[a-z0-9_]+"(?:, "ccxt:[a-z0-9_]+")*', f'"ccxt:{venue}"', text)
-        practice = "demo" if able.demo else "testnet" if able.testnet else ""
-        if practice and able.level != "data":
-            # The book is priced where orders meet it: a practice account's book is its own.
-            text = text.replace(
-                f'[data.orderbook]{chr(10)}chain = ["ccxt:{venue}"]',
-                f'[data.orderbook]{chr(10)}chain = ["ccxt:{venue}@{practice}"]',
-            )
         start = text.find("# Measured on ")
         if start != -1:
             text = text[:start].rstrip("\n") + "\n"
@@ -3048,7 +3065,6 @@ class Schedule:
 def run_cycle_command(args: argparse.Namespace) -> int:
     """One cycle, end to end, from the files in the project."""
     from trading_research_agents.agents.cycle import CycleConfig
-    from trading_research_agents.data.sources import load_data_config
     from trading_research_agents.execution.targets import reward_risk
     from trading_research_agents.llm.usage import (
         BudgetLimits,
@@ -3069,7 +3085,7 @@ def run_cycle_command(args: argparse.Namespace) -> int:
     magnitude = a.magnitude_bps
     if magnitude is None:
         raise ConfigError("the claimed edge: [agents].magnitude_bps in strategy.toml")
-    data_cfg = load_data_config(args.data_config)
+    data_cfg = _desk_data(args.data_config, cfg, args.mode or cfg.execution.mode)
     chains = {declared.kind: data_cfg.chain(declared.kind) for declared in data_cfg.kinds}
     instrument = args.instrument or cfg.run.instrument
     out = args.out or Path("runs") / "cycles"
@@ -4217,10 +4233,10 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
         bad.extend(missing)
         data_config = args.config.resolve().parent / "data.toml"
         if data_config.is_file():
-            from trading_research_agents.data.sources import DataConfigError, load_data_config
+            from trading_research_agents.data.sources import DataConfigError
 
             try:
-                declared_data = load_data_config(data_config)
+                declared_data = _desk_data(data_config, cfg)
             except DataConfigError as exc:
                 bad.append(f"data.toml: {exc}")
             else:
@@ -5337,12 +5353,17 @@ def data_pull(args: argparse.Namespace) -> int:
     from trading_research_agents.store import cycle_id, take_snapshot
 
     _load_env(args)
-    cfg = load_data_config(args.data_config)
+    desk = load_strategy_config(args.config) if args.config.is_file() else None
+    cfg = (
+        _desk_data(args.data_config, desk)
+        if desk is not None
+        else load_data_config(args.data_config).on_venue("")
+    )
     instrument = args.instrument
     if instrument is None:
-        if not args.config.is_file():
+        if desk is None:
             raise ValueError("name an instrument, or run inside a project with strategy.toml")
-        instrument = load_strategy_config(args.config).run.instrument
+        instrument = desk.run.instrument
     kinds = list(args.kind) if args.kind else [k.kind for k in cfg.kinds]
     chains = {kind: cfg.chain(kind) for kind in kinds}
     options = {k.kind: dict(k.options) for k in cfg.kinds}

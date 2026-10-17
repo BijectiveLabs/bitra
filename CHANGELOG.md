@@ -38,14 +38,22 @@ All notable changes to this project are recorded here. The format follows
   fee as `[channel.prediction]`, a coefficient on `price x (1 - price)` or a flat rate.
 - A taker price is held inside a venue's published price band (OKX), where an order priced past it
   is refused whole.
+- `venue` as a source in `data.toml`: the venue the desk trades on, from `[run].venue_key`, with
+  the book read from the environment orders go to. The shipped chains use it, so a desk reads one
+  venue by default and changes venue by changing `venue_key`. `params` may be keyed by venue,
+  `{ bybit = { intervalTime = "5min" } }`, so one venue's spelling never reaches another.
 
 ### Changed
 
-- The welcome panel is centred: the TRA wordmark as one block, the package name on the line below
-  it, then the tagline and the version.
+- The welcome panel spells the name: TRADING RESEARCH AGENTS on one line from 185 columns,
+  TRADING RESEARCH above AGENTS from 129, and TRA below that, each block centred, with the package
+  name, the tagline and the version centred beneath.
 
 ### Fixed
 
+- In venue mode, a `data.toml` that priced orders on another venue's book or funding was accepted.
+  It is refused before anything is pulled: the book and the funding an order is priced on are the
+  execution venue's own. Candles may still fall back to another venue deliberately.
 - A close the venue accepted but did not fill was recorded as closed. It is now confirmed against
   the account: when the account still holds the position the unfilled close is cancelled, the
   record says it did not fill, the exits at the venue keep standing, and the next pass tries again.
