@@ -107,3 +107,15 @@ jobs:
         run: |
           docker run --rm tra --version
           docker run --rm tra --plain
+
+      # The image Glama builds from glama.json: it has to start and answer MCP introspection.
+      - name: MCP server image
+        run: |
+          docker build -f glama/Dockerfile -t tra-mcp .
+          {
+            echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}'
+            echo '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+            echo '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+          } | timeout 60 docker run -i --rm tra-mcp > answers.jsonl
+          grep -q '"serverInfo"' answers.jsonl
+          grep -q '"cost_floor_check"' answers.jsonl

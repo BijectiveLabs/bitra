@@ -43,13 +43,19 @@ TAGLINE = (
 _console: Console | None = None
 
 
-def banner(width: int) -> str:
-    """The full wordmark when the terminal is wide enough for it, the short one otherwise."""
+def banner(width: int, encoding: str = "utf-8") -> str:
+    """The wordmark in block letters where the terminal can draw them, plain ASCII otherwise.
+
+    The block letters live in a text file beside this module, not in source. A console whose
+    encoding has no block characters, a legacy Windows code page, gets the ASCII one rather than a
+    row of question marks or an encoding error.
+    """
     try:
         text = (
             files("trading_research_agents.cli").joinpath("static/welcome.txt").read_text("utf-8")
         )
-    except (OSError, TypeError):
+        text.encode(encoding or "ascii")
+    except (OSError, TypeError, LookupError, UnicodeError):
         return BANNER
     lines = [line.rstrip() for line in text.splitlines()]
     while lines and not lines[-1]:
@@ -145,7 +151,7 @@ def _bps(value: Any) -> Text:
 def home(version: str, good: Sequence[str], bad: Sequence[str], next_command: str) -> None:
     """`tra` with nothing else: who this is, what is ready, what to type next."""
     c = console()
-    head = Text(banner(c.width), style="bold cyan")
+    head = Text(banner(c.width, c.encoding), style="bold cyan")
     head.append(f"\n{TAGLINE}\n", style="dim")
     head.append(f"tra {version}  by Bijective", style="dim")
     c.print(Panel(head, box=box.ROUNDED, padding=(0, 2)))

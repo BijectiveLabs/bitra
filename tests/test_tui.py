@@ -27,10 +27,15 @@ def recorded(monkeypatch: pytest.MonkeyPatch) -> Console:
     return console
 
 
-def test_the_wordmark_fits_or_the_short_banner_is_used() -> None:
-    wide = tui.banner(140)
-    assert len(wide.splitlines()) == 6 and "/____/" in wide and wide.isascii()
-    assert tui.banner(80) == tui.BANNER and tui.BANNER.isascii()
+def test_the_block_wordmark_is_drawn_only_where_it_fits_and_can_be_encoded() -> None:
+    drawn = tui.banner(80)
+    lines = drawn.splitlines()
+    assert len(lines) == 6 and max(len(line) for line in lines) == 25
+    assert "█" in drawn and "╗" in drawn
+    # Too narrow for it, or a console code page without block characters: the ASCII one.
+    assert tui.banner(28) == tui.BANNER and tui.BANNER.isascii()
+    assert tui.banner(80, "cp1252") == tui.BANNER
+    assert tui.banner(80, "cp437") == drawn
 
 
 def test_the_console_is_off_for_scripts_and_json(monkeypatch: pytest.MonkeyPatch) -> None:

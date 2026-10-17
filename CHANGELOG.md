@@ -6,6 +6,19 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-17
+
+### Added
+
+- `glama/Dockerfile`, named in `glama.json`, which Glama builds the MCP server from: the package
+  with its `[mcp]` extra, served over stdio by a non-root user. CI builds the image on every change
+  and checks that it starts and lists its tools.
+
+### Changed
+
+- The console's welcome header is the TRA wordmark in block letters, which fits a terminal of 31
+  columns. A console whose code page has no block characters gets the ASCII wordmark instead.
+
 ## [0.7.0] - 2026-10-16
 
 ### Added
