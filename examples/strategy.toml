@@ -156,6 +156,7 @@ kill_switch = "KILL"               # touch this file to flatten and stop
 # validator_weight = 1.0
 # min_score = 0.4                  # below this the desk does not trade, whatever the matrix said
 # max_leverage = 3.0               # notional against [run].equity; a ceiling, never a target
+# reader_labels = 0.5             # a reading analyst's own label counts where nothing is declared
 #
 # The ladder from score to size. Written top down or bottom up, it is read from the top.
 # [[conviction.ladder]]

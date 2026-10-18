@@ -99,24 +99,6 @@ def test_features_come_from_closed_bars_only_and_carry_the_window() -> None:
     assert short is not None and short.returns_bps[5] is None and short.returns_bps[20] is None
 
 
-def test_the_structure_comes_from_the_last_two_swings_each_way() -> None:
-    from trading_research_agents.agents.technical_analyst.tools import swings
-
-    # A zigzag stepping up: every peak and every trough above the one before.
-    lows = [100, 103, 106, 103, 100, 104, 108, 105, 102, 106, 110, 107, 104, 108, 112, 109, 106]
-    window = [bar(i, str(c), str(c + 1), str(c - 1), str(c)) for i, c in enumerate(lows)]
-    highs, troughs = swings(window)
-    assert highs == [Decimal("107"), Decimal("109"), Decimal("111"), Decimal("113")]
-    assert troughs == [Decimal("99"), Decimal("101"), Decimal("103")]
-    f = features(window)
-    assert f is not None and f.structure == "higher highs, higher lows"
-    assert (f.swing_high, f.swing_low) == (Decimal("113"), Decimal("103"))
-    falling = [bar(i, str(c), str(c + 1), str(c - 1), str(c)) for i, c in enumerate(lows[::-1])]
-    down = features(falling)
-    assert down is not None and down.structure == "lower highs, lower lows"
-    assert features(window[:6]) is not None and features(window[:6]).structure is None  # type: ignore[union-attr]
-
-
 # macro and on-chain briefs
 
 

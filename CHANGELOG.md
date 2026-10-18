@@ -42,6 +42,23 @@ All notable changes to this project are recorded here. The format follows
   the book read from the environment orders go to. The shipped chains use it, so a desk reads one
   venue by default and changes venue by changing `venue_key`. `params` may be keyed by venue,
   `{ bybit = { intervalTime = "5min" } }`, so one venue's spelling never reaches another.
+- Data the analysts are handed, from more places, in one `fetch` line each:
+  - the venues' public positioning, free and without a key: `binance-futures`, `bybit` and `okx`
+    presets for long/short account ratios, taker buy and sell volume and open interest history,
+    refreshed every five minutes;
+  - paid vendors by their published references: `coinglass` (liquidations, open interest,
+    long/short, taker volume across venues), `glassnode`, `cryptoquant` and `arkham`, each with
+    its key read from the environment and sent where the vendor asks for it;
+  - `params` for any fetch, and `tra sources add --param FIELD=VALUE`; rows that arrive as arrays
+    are read by position.
+- News and public sentiment: a `[[news]]` entry fetches an RSS or Atom feed or a JSON news API into
+  its file, as plain dated lines kept for `keep` and refreshed every `refresh`; `tra run` and
+  `tra sources pull` refresh them. A feed that declares a document type is refused.
+- `positioning` in the technical brief: the derivatives series declared for the traded asset, with
+  each one's change over the last hour, age and declared state.
+- `[conviction].reader_labels`: how strongly a reading analyst's own label counts where its series
+  declare nothing (headlines, say), provided it cited what it read. 0, the default, keeps labels
+  out.
 - `tra hindsight`: every directional decision a desk recorded, replayed on the candles that followed
   it with its own stop, take and hold, grouped by the gate that stopped it. Each gate's refusals
   are set beside what it let through, with a verdict that says when the sample is too small, and
@@ -51,8 +68,12 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
-- The technical brief carries the last swing high and low and the structure the last two of each
-  make (higher highs and higher lows, lower highs and lower lows, or a mix). The analyst's
+- Market structure, read by the system on the decision timeframe and every context timeframe:
+  alternating swings labelled HH, HL, LH, LL, the trend they make (uptrend, downtrend, range), the
+  last break of structure or change of character (closes only), the level whose loss changes the
+  trend, and the nearest unbroken support and resistance. The technical brief carries it as
+  `market_structure`, `tra run` prints it beside the regime, and a trend setup that points against
+  the structure is refused unless the structure has just changed character. The analyst's
   instructions told it to place a stop beyond the swing from "the bars themselves", which it was
   never given; they now name the figures it has.
 - A range fade is refused where the window's moves have been carrying on: the technical brief

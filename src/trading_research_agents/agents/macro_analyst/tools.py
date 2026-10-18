@@ -77,6 +77,9 @@ def macro_brief(
             "thresholds; correlations are measured on the operator's data and carry n"
         ),
         "series": rows,
-        "events": [e.record() for e in upcoming(events, at_ns, horizon=horizon)],
+        "events": [
+            {"name": f"event_{n}", **e.record()}
+            for n, e in enumerate(upcoming(events, at_ns, horizon=horizon), start=1)
+        ],
         "horizon": str(horizon),
     }

@@ -654,7 +654,11 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=(
             "example: tra sources add macro us10y --from fred --id DGS10 --high bearish; "
             "tra sources add onchain eth_net_flow --from coinmetrics --id FlowInExNtv "
-            "--minus FlowOutExNtv --fetch-asset eth --asset ETH --high bearish --band 10"
+            "--minus FlowOutExNtv --fetch-asset eth --asset ETH --high bearish --band 10; "
+            "tra sources add derivatives btc_liquidations --from coinglass "
+            "--id futures/liquidation/aggregated-history --param symbol=BTC --param interval=1h "
+            "--value aggregated_short_liquidation_usd --minus aggregated_long_liquidation_usd "
+            "--asset BTC --high bullish"
         ),
     )
     add.add_argument("kind", choices=("macro", "sentiment", "onchain", "derivatives"))
@@ -663,6 +667,13 @@ def build_parser() -> argparse.ArgumentParser:
     add.add_argument("--id", default=None, help="the source's own name for the series")
     add.add_argument("--minus", default=None, help="a second series subtracted from the first")
     add.add_argument("--fetch-asset", default=None, help="the asset the source is asked about")
+    add.add_argument(
+        "--param",
+        action="append",
+        default=[],
+        metavar="FIELD=VALUE",
+        help="a query field the source asks for, such as symbol=BTCUSDT; repeat for more",
+    )
     for flag in (
         "--url",
         "--rows",
@@ -2213,6 +2224,10 @@ def sources_pull(args: argparse.Namespace) -> int:
         )
         for r in rows
     ]
+    shelf = declared_in(args.config.resolve().parent)
+    for name, path in sorted(shelf.classes.items()):
+        if name in TEXT_CLASSES:
+            lines.extend(_refresh_news(path, datetime.now(UTC), every=True))
     emit({"pulled": rows}, args.json, lines or ["no series declared under sources/"])
     return 1 if any("error" in r for r in rows) else 0
 
@@ -2240,6 +2255,11 @@ def sources_add(args: argparse.Namespace) -> int:
     ):
         if value is not None:
             fetch[key] = value
+    if args.param:
+        pairs = [item.partition("=") for item in args.param]
+        if any(not field or not sep for field, sep, _ in pairs):
+            raise ConfigError("--param is FIELD=VALUE, such as symbol=BTCUSDT")
+        fetch["params"] = {field.strip(): value.strip() for field, _, value in pairs}
     try:
         added = add_series(
             args.config.resolve().parent,
@@ -4843,6 +4863,7 @@ def _refresh_sources(declarations: Iterable[Path]) -> list[str]:
         try:
             specs = load_series_map(path)
         except SeriesError:
+            said.extend(_refresh_news(path, now))
             continue
         base = path.resolve().parent
         for spec in specs:
@@ -4857,6 +4878,30 @@ def _refresh_sources(declarations: Iterable[Path]) -> list[str]:
                 )
             else:
                 said.append(f"sources: {got.series} refreshed, {got.added} new, last {got.last}")
+    return said
+
+
+def _refresh_news(path: Path, now: datetime, *, every: bool = False) -> list[str]:
+    """Fetch each feed a news declaration names, when it is due or `every` says so."""
+    from trading_research_agents.data.news import news_due, pull_news
+    from trading_research_agents.data.pull import PullError
+    from trading_research_agents.data.series import SeriesError, load_news_map
+
+    try:
+        specs = load_news_map(path)
+    except SeriesError:
+        return []
+    said: list[str] = []
+    base = path.resolve().parent
+    for spec in specs:
+        if spec.fetch is None or not (every or news_due(spec, base, now)):
+            continue
+        try:
+            got = pull_news(spec, base, now=now)
+        except PullError as exc:
+            said.append(f"news: {exc}; the file on disk is read as it is")
+        else:
+            said.append(f"news: {got.series} refreshed, {got.added} new, {got.rows} kept")
     return said
 
 

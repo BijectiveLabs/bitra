@@ -18,20 +18,13 @@ from itertools import pairwise
 from typing import Any
 
 from trading_research_agents.execution.stops import StopError, average_true_range
+from trading_research_agents.execution.structure import Structure, read
 from trading_research_agents.strategy.core import Bar
 
 HORIZONS = (1, 5, 20)
 ATR_BARS = 14
 # Four bars against one: on 15m decisions, an hour's moves against fifteen minutes'.
 VARIANCE_RATIO_BARS = 4
-# A swing high is a bar whose high stands above this many bars on each side; a swing low the same.
-SWING_BARS = 2
-STRUCTURES = {
-    (True, True): "higher highs, higher lows",
-    (False, False): "lower highs, lower lows",
-    (True, False): "higher highs, lower lows",
-    (False, True): "lower highs, higher lows",
-}
 
 
 @dataclass(frozen=True)
@@ -51,10 +44,7 @@ class Features:
     range_high: Decimal | None = None
     range_low: Decimal | None = None
     atr: Decimal | None = None
-    # The last swing high and low, and what the last two of each make.
-    swing_high: Decimal | None = None
-    swing_low: Decimal | None = None
-    structure: str | None = None
+    structure: Structure | None = None
 
     def record(self) -> dict[str, Any]:
         r = {
@@ -83,9 +73,7 @@ class Features:
             "range_high": None if self.range_high is None else str(self.range_high),
             "range_low": None if self.range_low is None else str(self.range_low),
             "atr": None if self.atr is None else str(self.atr),
-            "swing_high": None if self.swing_high is None else str(self.swing_high),
-            "swing_low": None if self.swing_low is None else str(self.swing_low),
-            "structure": self.structure,
+            "market_structure": None if self.structure is None else self.structure.record(),
             "atr_bps": (
                 None
                 if self.atr is None or self.close <= 0
@@ -127,7 +115,6 @@ def features(window: Sequence[Bar]) -> Features | None:
     close = bars[-1].close
     if close is None:  # pragma: no cover - filtered above
         return None
-    swing_highs, swing_lows = swings(bars)
     return Features(
         bars=len(bars),
         close=close,
@@ -143,29 +130,8 @@ def features(window: Sequence[Bar]) -> Features | None:
         range_high=max(b.high for b in bars if b.high is not None),
         range_low=min(b.low for b in bars if b.low is not None),
         atr=_atr(bars),
-        swing_high=swing_highs[-1] if swing_highs else None,
-        swing_low=swing_lows[-1] if swing_lows else None,
-        structure=(
-            STRUCTURES[(swing_highs[-1] > swing_highs[-2], swing_lows[-1] > swing_lows[-2])]
-            if len(swing_highs) >= 2 and len(swing_lows) >= 2
-            else None
-        ),
+        structure=read(bars),
     )
-
-
-def swings(bars: Sequence[Bar], side: int = SWING_BARS) -> tuple[list[Decimal], list[Decimal]]:
-    """Swing highs and lows, oldest first: a high above the `side` bars on each side of it, a low
-    below them. The last `side` bars cannot be one yet, since what follows them has not closed."""
-    highs: list[Decimal] = []
-    lows: list[Decimal] = []
-    for i in range(side, len(bars) - side):
-        high, low = bars[i].high, bars[i].low
-        around = [b for j, b in enumerate(bars[i - side : i + side + 1]) if j != side]
-        if high is not None and all(b.high is not None and high > b.high for b in around):
-            highs.append(high)
-        if low is not None and all(b.low is not None and low < b.low for b in around):
-            lows.append(low)
-    return highs, lows
 
 
 def _atr(bars: Sequence[Bar]) -> Decimal | None:

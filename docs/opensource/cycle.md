@@ -258,10 +258,11 @@ that picture too, all of it computed by the system from the snapshot:
 |---|---|---|
 | `regime` | trending up, trending down, ranging or mixed, on the decision timeframe | `trend_strength` against the lines in `[regime]` |
 | `trend_strength` | net move over the path walked, times the square root of the steps; a random walk sits near 1 on any window | the window's closes |
-| `swing_high`, `swing_low`, `structure` | the last bar whose high stands above the two bars on each side, the last whose low stands below them, and what the last two of each make: higher highs and higher lows, lower highs and lower lows, or one of the two mixes | the window's bars |
+| `market_structure` | the trend the swings make, the last break of structure or change of character, the level whose loss changes the trend, and the nearest unbroken support and resistance; see [Market structure](#market-structure) | the window's bars |
+| `positioning` | the derivatives series you declared for this asset: last value, change over the last hour, age, declared state | `sources/derivatives.toml` ([sources](/opensource/sources#positioning-for-the-technical-analyst)) |
 | `variance_ratio` | the variance of four-bar returns against four times that of one-bar returns: below 1 the window's moves were given back, above 1 they were followed by more of the same, near 1 is a random walk | the window's closes |
 | `window_move_bps` | the price move from the first close of the window to the last; a market move, not the trade's net | the window's closes |
-| `timeframes.<tf>` | the same regime, net move, z-score and position in range on each higher timeframe | `[run].context_intervals`, one candle pull each |
+| `timeframes.<tf>` | the same regime, net move, z-score and position in range on each higher timeframe, with its structure and its last structure event | `[run].context_intervals`, one candle pull each |
 | `book_imbalance` | resting bids against resting asks over the first 10 levels, from -1 to 1; positive leans to the bid | the order book already in the snapshot |
 | `open_interest` | the change in percent since the previous snapshot of this instrument, and how long ago that was | the open interest already pulled, and the last snapshot on disk |
 | `readings.<role>` | what your own thresholds say on the macro, on-chain or sentiment series this cycle | the same declared state conviction reads, known before any model is asked |
@@ -281,12 +282,47 @@ setups_must_fit = true             # false: a misfit is written down and the tra
 fade_below_variance_ratio = 1.0    # a range fade needs the window's variance ratio below this; 0 is off
 ```
 
+### Market structure
+
+The system reads structure from the swings before any model is asked, and the analyst is given what
+it read. A swing high is a bar whose high stands above the two bars on each side of it; a swing low
+the same, below. Swings alternate: two highs with no low between them are one swing, the higher. Each
+swing is labelled against the last one of its kind.
+
+| Last high | Last low | `trend` |
+|---|---|---|
+| HH | HL | uptrend |
+| LH | LL | downtrend |
+| LH | HL | range, contracting |
+| HH | LL | range, expanding |
+| fewer than two of either | | unclear |
+
+What the closes did after the last two swings is the `event`. Only a close counts; a wick through a
+level and back is not a break.
+
+| `event` | When |
+|---|---|
+| `bullish break of structure` | in an uptrend, a close above the last swing high: the trend went on |
+| `bearish break of structure` | in a downtrend, a close below the last swing low |
+| `bearish change of character` | in an uptrend, a close below the last swing low: the higher low the trend leaned on gave way |
+| `bullish change of character` | in a downtrend, a close above the last swing high |
+| `break above the range`, `break below the range` | in a range, a close outside its last high or low |
+
+`invalidation` is the swing whose loss changes the trend: the last higher low in an uptrend, the last
+lower high in a downtrend. `support` and `resistance` are the nearest swing low below the close and
+swing high above it that no later close went through, each with its distance in bps. The analyst is
+told to put a stop beyond the level its idea leans on and a target at the next one, from these
+figures.
+
+The same trend and event are read on every timeframe in `[run].context_intervals`, so a 15m long
+in a 4h downtrend is visible as exactly that. `tra run` prints the structure beside the regime.
+
 **A setup has to fit what the system measured.** Each setup is a claim with a direction built into it,
 and the figures that make the claim are in the brief. On the decision timeframe, the system refuses:
 
 | Setup | Refused when |
 |---|---|
-| `trend_continuation`, `pullback_in_trend` | the market is not measured as trending (ranging or mixed), or the trade points against the trend |
+| `trend_continuation`, `pullback_in_trend` | the market is not measured as trending (ranging or mixed), the trade points against the trend, or it points against the market structure (a long in a downtrend, a short in an uptrend) when the structure has not just changed character |
 | `range_reversion` | the market is not measured as a range (trending, or mixed with a measured trend strength), the window's moves have been carrying on (variance ratio at or above `fade_below_variance_ratio`), or the trade does not fade the stretch: a long with the close at or above the window's mean (z-score 0 or more), a short at or below it |
 | `momentum_exhaustion` | the trade goes with the move it says is exhausted: with the trend, or with the window's move |
 | `range_breakout` | the trade is on the other side from where the close sits: a long with the close in the lower half of the range, a short in the upper half |

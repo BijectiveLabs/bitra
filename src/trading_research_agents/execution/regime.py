@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
+
+from trading_research_agents.execution.structure import against, fading_a_break
 
 REGIMES = ("trending up", "trending down", "ranging", "mixed")
 TREND_SETUPS = ("trend_continuation", "pullback_in_trend")
@@ -66,6 +69,7 @@ def misfit(
     trend_strength: float | None = None,
     variance_ratio: float | None = None,
     fade_below: float = 0.0,
+    structure: Mapping[str, Any] | None = None,
 ) -> str:
     """Why this setup does not fit what code measured, or empty when it does.
 
@@ -74,6 +78,14 @@ def misfit(
     named shape on a trade that came from somewhere else, so it is refused by name. A figure
     that was not measured does not refuse anything.
     """
+    if setup in TREND_SETUPS:
+        crossed = against(target, structure)
+        if crossed:
+            return f"{setup} {target} while {crossed}; a trend setup trades with the structure"
+    if setup in RANGE_SETUPS:
+        broke = fading_a_break(target, structure)
+        if broke:
+            return f"{setup} {target} into {broke}; a fade does not stand in front of a fresh break"
     if setup in TREND_SETUPS and regime not in ("trending up", "trending down"):
         return f"{setup} in a market measured as {regime}; a trend setup needs a measured trend"
     if regime in ("trending up", "trending down"):

@@ -757,7 +757,14 @@ def _markets(table: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(kind.strip() for kind in listed))
 
 
-CONVICTION_KEYS = ("weights", "validator_weight", "min_score", "max_leverage", "ladder")
+CONVICTION_KEYS = (
+    "weights",
+    "validator_weight",
+    "min_score",
+    "max_leverage",
+    "ladder",
+    "reader_labels",
+)
 
 
 def _conviction(raw: dict[str, Any]) -> Conviction:
@@ -795,6 +802,9 @@ def _conviction(raw: dict[str, Any]) -> Conviction:
             min_score=_dec(table, "min_score") if "min_score" in table else Decimal(0),
             ladder=tuple(rungs),
             max_leverage=_dec(table, "max_leverage") if "max_leverage" in table else None,
+            reader_labels=(
+                _dec(table, "reader_labels") if "reader_labels" in table else Decimal(0)
+            ),
         )
     except ConvictionError as exc:
         raise ConfigError(str(exc)) from exc

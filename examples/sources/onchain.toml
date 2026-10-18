@@ -9,8 +9,14 @@
 # publish_lag matters more here than anywhere else: chain aggregates are usually published hours
 # after the blocks they describe, and a figure used before it was knowable is a look-ahead.
 
-# A paid subscription is one fetch line: { from = "http", url = "https://...", ... } with the path,
-# the field names and the key's place taken from your vendor's docs (macro.toml lists the fields).
+# A paid subscription is one fetch line. Presets carry the vendor's address and where its key goes:
+#   { from = "glassnode", id = "transactions/transfers_volume_exchanges_net",
+#     params = { a = "BTC", i = "1h" } }                                  GLASSNODE_API_KEY
+#   { from = "cryptoquant", id = "btc/exchange-flows/netflow",
+#     params = { exchange = "...", window = "hour" }, value = "netflow_total" }  CRYPTOQUANT_API_KEY
+#   { from = "arkham", id = "...", rows = "...", ts = "...", value = "..." }   ARKHAM_API_KEY
+# Anything else is { from = "http", url = "https://...", ... } with the path, the field names and
+# the key's place taken from your vendor's docs (macro.toml lists the fields).
 # Set max_age to what the vendor actually delivers, so a feed that stops is noticed, not trusted.
 
 # Two free feeds need no key: Coin Metrics community (many assets; exchange flows, active

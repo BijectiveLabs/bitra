@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -309,7 +310,7 @@ def test_a_short_reads_its_exits_as_gains_and_losses_to_the_position(
     ],
 )
 def test_a_setup_trades_the_direction_its_own_figures_point(
-    setup: str, target: str, figures: dict[str, float], refused: bool
+    setup: str, target: str, figures: dict[str, Any], refused: bool
 ) -> None:
     assert bool(misfit(setup, target, "mixed", **figures)) is refused
 
