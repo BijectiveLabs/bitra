@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "trading-research-agents"
-version = "0.7.1"
+version = "0.8.0"
 description = "Autonomous trading agents with deterministic execution. The agents propose; the system decides."
 dynamic = ["readme"]
 requires-python = ">=3.11"
