@@ -401,3 +401,109 @@ def test_a_position_on_an_instrument_no_longer_listed_is_still_looked_after(
         follow_records=True,
     )
     assert any("past its timeout limit" in line for line in following.run())
+
+
+class SeparateVenue(Venue):
+    """Takes no stop with the entry, only as orders of their own, as Binance futures do."""
+
+    def __init__(
+        self, *, refuse: str = "", resting: list[dict[str, Any]] | None = None, stuck: bool = False
+    ) -> None:
+        super().__init__()
+        self.has = {"createStopLossOrder": True, "createTakeProfitOrder": True}
+        self.refuse, self.resting, self.stuck = refuse, list(resting or []), stuck
+        self.cancel_params: list[dict[str, Any]] = []
+
+    def create_order(
+        self,
+        symbol: str,
+        kind: str,
+        side: str,
+        amount: float,
+        price: Any,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        said = dict(params or {})
+        if self.refuse and self.refuse in said:
+            raise RuntimeError("the venue said no")
+        if "stopLossPrice" in said or "takeProfitPrice" in said:
+            self.orders.append({"type": kind, "side": side, "amount": amount, "params": said})
+            return {"id": f"exit-{len(self.orders)}"}
+        placed = super().create_order(symbol, kind, side, amount, price, params)
+        if not said.get("reduceOnly"):
+            self.held = Decimal(str(amount)) * (1 if side == "buy" else -1)
+        return placed
+
+    def fetch_open_orders(
+        self, symbol: str, since: Any = None, limit: Any = None, params: Any = None
+    ) -> list[dict[str, Any]]:
+        return list(self.resting) if (params or {}).get("trigger") else []
+
+    def cancel_order(self, order_id: str, symbol: str, params: Any = None) -> None:
+        if self.stuck:
+            raise RuntimeError("unknown order")
+        self.cancelled.append(order_id)
+        self.cancel_params.append(dict(params or {}))
+
+
+def separate(client: SeparateVenue, venue: str = "binance") -> VenueHand:
+    # A venue whose resting exits are read: separate exits refuse anywhere else.
+    built = hand(client, exits="separate")
+    built.venue = venue
+    return built
+
+
+def test_separate_exits_follow_the_fill_as_reduce_only_orders() -> None:
+    venue = SeparateVenue()
+    placed = separate(venue)(LONG)
+    assert placed["sent"] is True and set(placed["exit_orders"]) == {"stop", "take"}
+    entry, stop, take = venue.orders[-3:]
+    assert "stopLoss" not in entry["params"] and "takeProfit" not in entry["params"]
+    assert (stop["side"], stop["amount"], stop["params"]["stopLossPrice"]) == (
+        "sell",
+        0.01,
+        99000.0,
+    )
+    assert (take["side"], take["params"]["takeProfitPrice"]) == ("sell", 102000.0)
+    assert stop["params"]["reduceOnly"] and take["params"]["reduceOnly"]
+    assert stop["params"]["clientOrderId"] != take["params"]["clientOrderId"]
+
+
+def test_a_fill_whose_exit_cannot_be_placed_is_closed_at_once() -> None:
+    venue = SeparateVenue(refuse="takeProfitPrice")
+    placed = separate(venue)(LONG)
+    assert (
+        placed["exit_orders"] is None and "the take could not be placed" in placed["exits_refused"]
+    )
+    # The stop that did go out comes off, and the position goes with a reduce-only close.
+    assert placed["closed_unprotected"]["closed"] is True and venue.held == 0
+    assert "exit-2" in venue.cancelled
+    assert venue.orders[-1]["params"] == {"reduceOnly": True}
+
+
+def test_an_exit_left_from_an_earlier_position_comes_off_before_the_entry() -> None:
+    venue = SeparateVenue(resting=[{"id": "old-take"}])
+    placed = separate(venue)(LONG)
+    assert placed["sent"] is True and placed["earlier_exits_cancelled"] == 1
+    assert venue.cancelled[0] == "old-take" and venue.cancel_params[0] == {"trigger": True}
+
+    stuck = SeparateVenue(resting=[{"id": "old-take"}], stuck=True)
+    refused = separate(stuck)(LONG)
+    assert refused["sent"] is False and "would not come off" in refused["refused"]
+    assert stuck.orders == []
+
+
+def test_a_venue_that_cannot_attach_points_to_separate_exits() -> None:
+    placed = hand(SeparateVenue())(LONG)
+    assert placed["sent"] is False and 'exits = "separate"' in placed["refused"]
+    # Where resting exits are not read yet, separate exits are refused rather than left to chance.
+    unread = separate(SeparateVenue(), venue="acme")(LONG)
+    assert unread["sent"] is False and "not read here yet" in unread["refused"]
+
+
+def test_the_mandate_takes_separate_exits() -> None:
+    from trading_research_agents.execution.mandate import Mandate, MandateError
+
+    assert Mandate(exits="separate").exits == "separate"
+    with pytest.raises(MandateError, match="separate"):
+        Mandate(exits="later")

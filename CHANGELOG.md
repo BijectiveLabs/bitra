@@ -8,6 +8,13 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- `[execution].exits = "separate"` for a venue that takes no stop with the entry, Binance futures
+  first: the stop and take profit follow the fill as two reduce-only orders. A fill they cannot be
+  placed for is closed at once; exits left resting by an earlier position are taken off before the
+  next entry, and an entry is refused while one will not come off; a close by time takes them off
+  too. Refused on spot and on a venue whose resting exits are not read yet. `tra venues --setup`
+  suggests it where it applies. Built against ccxt 4.5.85 and tested offline; its run on the
+  Binance demo API comes next.
 - `[execution].ccxt_options`: a table set on ccxt's client for the execution venue, over the
   package's own defaults. Credentials are refused in it.
 

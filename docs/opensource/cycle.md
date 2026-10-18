@@ -1150,9 +1150,11 @@ computes both against the price the cost gate priced on, from the market's own r
 the fixed fractions ([where they sit](#where-the-stop-and-the-take-profit-sit)), so no model is
 ever asked where a stop belongs. A filled position with no
 exit is the one state this software must never create, because it is the state that survives our
-process dying - and if the venue cannot take them with the entry, the order is not sent at all. An
-operator who carries the exits in their own system says so with `[execution].exits = "none"`, and
-`tra check` lists that as something to fix rather than a setting to admire.
+process dying - and if the venue cannot take them with the entry, the order is not sent at all,
+unless `[execution].exits = "separate"` places them as reduce-only orders the moment it fills
+([Venues](/opensource/venues#exits-a-venue-will-not-take-with-the-entry)). An operator who carries
+the exits in their own system says so with `[execution].exits = "none"`, and `tra check` lists that
+as something to fix rather than a setting to admire.
 
 The same read that protects against a wrong-way position protects against a second one: any open
 position on the instrument refuses a new entry unless `adopt_open_position` says otherwise, because

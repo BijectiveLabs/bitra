@@ -116,3 +116,17 @@ def test_the_record_is_what_the_json_output_carries() -> None:
     record: dict[str, Any] = capability_of("bybit", client=Exchange(PERPETUAL)).record()
     assert set(record) == {"venue", "data", "execution", "demo", "testnet", "level", "verdict"}
     assert record["execution"]["attached_exits"] is True
+
+
+def test_a_venue_that_takes_exits_as_their_own_orders_is_told_to_place_them_separately() -> None:
+    separate = {
+        **PERPETUAL,
+        "createOrderWithTakeProfitAndStopLoss": False,
+        "createStopLossOrder": True,
+        "createTakeProfitOrder": True,
+    }
+    able = capability_of("acme", client=Exchange(separate))
+    assert able.level == "exits-none" and able.can_place_exits
+    assert 'exits = "separate"' in able.verdict()
+    bare = capability_of("acme", client=Exchange({**separate, "createTakeProfitOrder": False}))
+    assert not bare.can_place_exits and 'exits = "none"' in bare.verdict()

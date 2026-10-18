@@ -129,8 +129,8 @@ class Mandate:
             raise MandateError(
                 "[execution].max_orders_per_cycle is 1: one decision sends at most one order"
             )
-        if self.exits not in ("attached", "none"):
-            raise MandateError('[execution].exits is "attached" or "none"')
+        if self.exits not in ("attached", "separate", "none"):
+            raise MandateError('[execution].exits is "attached", "separate" or "none"')
         if self.limit_timeout_s <= 0:
             raise MandateError("[execution].limit_timeout_s is positive")
         if self.price_offset_bps < 0:

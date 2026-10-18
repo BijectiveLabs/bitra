@@ -38,7 +38,7 @@ we have run end to end, and what ccxt says a venue can do. The second is read fr
 | BingX | everything | testnet | `BINGX_API_KEY`, `BINGX_API_SECRET` | ready for its run; [report wanted](https://github.com/BijectiveLabs/trading-research-agents/issues/6) |
 | KuCoin Futures | everything | none | `KUCOINFUTURES_API_KEY`, `KUCOINFUTURES_API_SECRET`, `KUCOINFUTURES_API_PASSPHRASE` | integrated; it has no practice environment to run on |
 | Hyperliquid | everything | testnet | `HYPERLIQUID_WALLET_ADDRESS`, `HYPERLIQUID_PRIVATE_KEY` | ready for its run; [report wanted](https://github.com/BijectiveLabs/trading-research-agents/issues/7) |
-| Binance | orders, but you carry the stop yourself (`exits = "none"`) | demo, testnet | `BINANCE_API_KEY`, `BINANCE_API_SECRET` | ready for its run; it is the data fallback in the default project |
+| Binance | orders, with the stop and take profit placed right after the fill (`exits = "separate"`) | demo, testnet | `BINANCE_API_KEY`, `BINANCE_API_SECRET` | ready for its run; it is the data fallback in the default project |
 | Deribit, HTX, Gate, MEXC | orders with `exits = "none"` | varies, see `tra venues` | `<VENUE>_API_KEY`, `<VENUE>_API_SECRET` | ready for its run |
 | Kraken, Kraken Futures, Phemex | data for now: ccxt does not report their positions, and the venue hand will not send without one | | | |
 
@@ -292,6 +292,36 @@ chains say, an order is priced once more against the execution venue's own book 
 the drift check refuses a decision the market has moved away from, and the slippage bound is
 measured from that venue's touch.
 
+## Exits a venue will not take with the entry
+
+Some venues take an order and a stop, but not both in one request. Binance futures is the largest
+of them. `[execution].exits` says what the desk does there:
+
+| Setting | What happens |
+|---|---|
+| `"attached"` (default) | the stop and take profit go out with the entry; a venue that cannot take them refuses the order before anything is sent |
+| `"separate"` | the entry goes out alone; the moment it fills, the stop and take profit follow as two reduce-only orders of their own, for what filled |
+| `"none"` | no exit at the venue; you carry them yourself, and `tra check` lists that as something to fix |
+
+With `"separate"`, three things keep a position from ever standing unprotected:
+
+1. **A fill whose exits cannot be placed is closed at once.** The leg that did go out comes off, a
+   reduce-only market order closes the position, and the record says why.
+2. **Exits outlive the position when one of them fires.** The stop closes the trade and the take
+   profit is still resting, sized for a position that is gone. Before the next entry on that
+   instrument, with nothing held, the desk takes off every exit it finds resting. One that will
+   not come off refuses the entry. A close by time or by `tra kill` takes them off as well.
+3. **It runs only where the resting exits are read.** Binance keeps a futures stop and take profit
+   as algo orders, which ccxt lists and cancels only when asked for them by kind, and that read is
+   built in. On a venue where it is not, `"separate"` is refused rather than left to chance.
+
+It is for positions the venue can reduce: perpetuals and futures. A spot desk on the same venue
+keeps `"attached"` where the venue takes it, or `"none"`.
+
+There is a moment between the fill and the exits, the time two orders take to send. A desk that
+cannot accept it trades where exits go with the entry. The path is built against ccxt 4.5.85's
+Binance code and tested offline; it has not yet had its run on the demo API.
+
 ## Broker tags
 
 Exchanges run broker programmes. Software that sends orders for its users identifies itself with
@@ -442,8 +472,9 @@ tra venues okx --setup
 It prints what goes in `envelope.toml` (two channels, taker and maker), the line to change in
 `data.toml`, the `[run]`, `[execution]` and `[live]` tables for `strategy.toml` with the practice
 environment already chosen, and the variable names for `.env`. For a venue that cannot attach exits
-it adds `exits = "none"` and says why; for one that can only feed data it prints the data line and
-nothing else.
+it adds `exits = "separate"` where the venue takes them as orders of their own and this package
+reads where they rest, else `exits = "none"`, and says why; for one that can only feed data it
+prints the data line and nothing else.
 
 The fee lines come filled in. The fee is the biggest number in the cost gate and it depends on
 your account's tier, so the setup asks the account first and falls back to the venue's standard

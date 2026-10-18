@@ -318,7 +318,8 @@ it has been tested, the last:
 | **Bybit** (the default) | everything: orders with the stop and take profit attached | demo, testnet | **yes**, on the demo API: real orders, exits attached, a resting order cancelled |
 | **OKX** | everything | demo (ccxt's testnet switch) | **yes**, on the demo API: real orders, exits attached, closed by the venue's own exits |
 | Bitget, BingX, KuCoin Futures, Hyperliquid | everything | varies, see `tra venues` | ready for its run; reports wanted for [Bitget](https://github.com/BijectiveLabs/trading-research-agents/issues/5), [BingX](https://github.com/BijectiveLabs/trading-research-agents/issues/6), [Hyperliquid](https://github.com/BijectiveLabs/trading-research-agents/issues/7) |
-| Binance, Deribit, HTX, Gate, MEXC | orders, but you carry the stop yourself (`exits = "none"`) | varies | ready for its run |
+| Binance | orders, with the stop and take profit placed right after the fill (`exits = "separate"`) | demo, testnet | ready for its run |
+| Deribit, HTX, Gate, MEXC | orders, but you carry the stop yourself (`exits = "none"`) | varies | ready for its run |
 | Kraken, Kraken Futures, Phemex | data for now: ccxt does not report their positions, and no order is sent into a position nobody can see | | |
 
 "Everything" means ccxt reports the five things a safe order needs: send it, attach the exits, read

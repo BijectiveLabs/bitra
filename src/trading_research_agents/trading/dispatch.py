@@ -58,7 +58,7 @@ SIDES = {"long": "buy", "short": "sell"}
 # both at once. Mainnet is the client's own default and is never switched into.
 ENVIRONMENTS = ("demo", "testnet", "mainnet")
 ROLES = ("maker", "taker")
-EXITS = ("attached", "none")
+EXITS = ("attached", "separate", "none")
 # A venue that does not describe its markets through ccxt is let through: the size, margin and
 # exit checks that follow still read the account, and refuse on what they find there.
 UNDESCRIBED = "unknown"
@@ -377,6 +377,19 @@ class VenueHand:
                 ),
                 "position": str(standing),
             }
+        if self.exits == "separate" and not derivative:
+            return {
+                "sent": False,
+                "refused": (
+                    f"{self.symbol} is a {kind} market; exits placed after the fill are "
+                    "reduce-only orders, which a coin balance does not take; use "
+                    'exits = "attached" here'
+                ),
+            }
+        # Only with nothing held: an adopted position keeps the exits that protect it.
+        swept = self._sweep_exits() if self.exits == "separate" and not standing else 0
+        if isinstance(swept, str):
+            return {"sent": False, "refused": swept}
         resting = self._open_orders()
         if resting:
             return {
@@ -499,6 +512,10 @@ class VenueHand:
         elif placed["filled"] is None:
             placed.update(self._taken(str(placed["order_id"])))
         placed["slippage_bps"] = _slippage_bps(placed.get("average"), mid, side)
+        if swept:
+            placed["earlier_exits_cancelled"] = swept
+        if self.exits == "separate":
+            placed.update(self._place_exits(placed, intent, side, unit, order_id))
         if market.outcome:
             placed["exits"] = "bounded"
             placed.update(self._rest_take(placed, intent))
@@ -562,14 +579,32 @@ class VenueHand:
                 "[exit].stop_frac and [exit].take_profit_frac, or say "
                 '[execution].exits = "none" and carry the exits yourself'
             )
-        if not self._can_attach():
-            return (
-                f"{self.venue} cannot take a stop and a take profit with the entry through ccxt; "
-                'set [execution].exits = "none" only if you are carrying the exits yourself'
-            )
         low, high = Decimal(str(stop)), Decimal(str(take))
         if (target == "long" and low >= high) or (target == "short" and low <= high):
             return f"the stop {stop} and the take profit {take} are the wrong way round"
+        if self.exits == "separate":
+            if not self._can_place_exits():
+                return (
+                    f"{self.venue} cannot take a stop or a take profit as an order of its own "
+                    "through ccxt, so exits placed after the fill are not possible there"
+                )
+            if not exit_reads(self.venue):
+                # Exits placed on their own outlive the position they protect when one leg fires.
+                # Where they rest is read per venue; one not read yet could meet the next entry.
+                return (
+                    f"where {self.venue} keeps a stop placed on its own is not read here yet, so "
+                    "one left from an earlier position could not be taken off before the next "
+                    'entry; use exits = "attached" or "none"'
+                )
+            return {}
+        if not self._can_attach():
+            hint = (
+                '[execution].exits = "separate" places them as reduce-only orders right after '
+                "the fill"
+                if self._can_place_exits()
+                else '[execution].exits = "none" is for a desk carrying the exits itself'
+            )
+            return f"{self.venue} cannot take a stop and a take profit with the entry; {hint}"
         return {
             "stopLoss": {"triggerPrice": float(low)},
             "takeProfit": {"triggerPrice": float(high)},
@@ -699,6 +734,92 @@ class VenueHand:
     def _can_attach(self) -> bool:
         has = getattr(self.client, "has", {}) or {}
         return bool(has.get("createOrderWithTakeProfitAndStopLoss"))
+
+    def _can_place_exits(self) -> bool:
+        has = getattr(self.client, "has", {}) or {}
+        return bool(has.get("createStopLossOrder")) and bool(has.get("createTakeProfitOrder"))
+
+    def _place_exits(
+        self,
+        placed: Mapping[str, Any],
+        intent: Mapping[str, Any],
+        side: str,
+        unit: Decimal,
+        order_id: str,
+    ) -> dict[str, Any]:
+        """The stop and the take profit as reduce-only orders of their own, for what filled.
+
+        The venue cannot take them with the entry, so they follow it at once. A fill they cannot be
+        placed for is closed in the same breath: a position with no exit at the venue is the one
+        state this desk does not leave behind, even for a cycle.
+        """
+        try:
+            filled = Decimal(str(placed.get("filled") or 0))
+        except ArithmeticError:
+            filled = Decimal(0)
+        if filled <= 0:
+            # A fill the venue has not reported yet is still a position if the account says so.
+            filled = abs(self.position() or Decimal(0))
+        if filled <= 0:
+            return {"exit_orders": None}
+        amount = float(filled / unit)
+        away = "sell" if side == "buy" else "buy"
+        legs = (
+            ("stop", "stopLossPrice", intent.get("stop_price"), "s"),
+            ("take", "takeProfitPrice", intent.get("take_price"), "t"),
+        )
+        made: dict[str, str] = {}
+        for leg, key, level, mark in legs:
+            params = {
+                **self.params,
+                key: float(Decimal(str(level))),
+                "reduceOnly": True,
+                "clientOrderId": f"{order_id[:31]}{mark}",
+            }
+            try:
+                order = self.client.create_order(self.symbol, "market", away, amount, None, params)
+            except Exception as exc:
+                why = self.redact(f"{exc.__class__.__name__}: {exc}")[:200]
+                extra = exit_cancel_params(self.venue)
+                for left in made.values():
+                    self._cancel(left, extra)
+                return {
+                    "exit_orders": None,
+                    "exits_refused": f"the {leg} could not be placed: {why}",
+                    "closed_unprotected": self.close_position(f"no {leg} at the venue: {why}"),
+                }
+            made[leg] = str(order.get("id", ""))
+        return {"exit_orders": made}
+
+    def _sweep_exits(self) -> int | str:
+        """Take off exits an earlier position left resting, before a new position can meet them.
+
+        Called with nothing held, so anything found is reduce-only and belongs to a position that
+        is gone. A take profit sized for that one would close part of the next. One that will not
+        come off is a refusal, never a guess.
+        """
+        fetch = getattr(self.client, "fetch_open_orders", None)
+        reads = exit_reads(self.venue)
+        if fetch is None or not reads:
+            return 0
+        extra = exit_cancel_params(self.venue)
+        gone = 0
+        for read in reads:
+            try:
+                found = list(fetch(self.symbol, None, None, dict(read)) or [])
+            except Exception as exc:
+                return self.redact(
+                    f"cannot read the resting exits: {exc.__class__.__name__}: {exc}"
+                )
+            for order in found:
+                why = self._cancel(str(order.get("id", "")), extra)
+                if why:
+                    return (
+                        f"an exit left from an earlier position on {self.symbol} is still resting "
+                        f"and would not come off ({why}); a new entry would meet it"
+                    )
+                gone += 1
+        return gone
 
     def _open_orders(self) -> int:
         """How many orders still work on this instrument. A hand that cannot ask does not guess."""
@@ -1030,7 +1151,7 @@ class VenueHand:
                     "the venue still stand, and the next pass tries again"
                 ),
             }
-        return {
+        closed: dict[str, Any] = {
             "closed": True,
             "reason": reason,
             "side": side,
@@ -1038,6 +1159,10 @@ class VenueHand:
             "order_id": order_id,
             "average": None if average is None else str(average),
         }
+        if self.exits == "separate":
+            swept = self._sweep_exits()
+            closed["exits_cancelled" if isinstance(swept, int) else "exits_left"] = swept
+        return closed
 
     def settlement(self, since_ms: int) -> dict[str, Any] | None:
         """How this outcome settled since `since_ms`: shares, the price paid out (1 or 0), when.

@@ -2758,6 +2758,8 @@ def venue_setup(
     purpose: a fee is the largest figure in the cost gate, and a placeholder number would price
     every trade at a rate nobody checked. A blank one makes the file refuse to load, and says why.
     """
+    from trading_research_agents.trading.venues.exits import exit_reads
+
     name = able.venue
     serves = list(able.serves_data)
     environment = "demo" if able.demo else "testnet" if able.testnet else "mainnet"
@@ -2799,7 +2801,12 @@ def venue_setup(
         "leverage = 3                     # yours to choose; applied at the venue and read back",
         'margin_mode = "isolated"         # isolated keeps one position from drawing on the rest',
     ]
-    if able.level == "exits-none":
+    if able.level == "exits-none" and able.can_place_exits and exit_reads(name):
+        out += [
+            'exits = "separate"               # no stop with the entry here; both go out as',
+            "                                 # reduce-only orders right after the fill",
+        ]
+    elif able.level == "exits-none":
         out += [
             'exits = "none"                   # this venue cannot attach a stop to the entry;',
             "                                 # you carry the stop and take profit yourself",
@@ -4865,6 +4872,11 @@ def _gate_lines(
                 good.append(
                     "execution: the stop and the take profit go to the venue with the entry, so a "
                     "fill is never left unattended"
+                )
+            elif mandate.exits == "separate":
+                good.append(
+                    "execution: the stop and the take profit go to the venue as reduce-only orders "
+                    "right after the fill; a fill they cannot be placed for is closed at once"
                 )
             else:
                 bad.append(

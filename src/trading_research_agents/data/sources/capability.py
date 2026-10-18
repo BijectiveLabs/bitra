@@ -34,6 +34,8 @@ EXECUTION_METHODS = {
     "position": ("fetchPosition", "refusing to add to a position you already hold"),
     "open_orders": ("fetchOpenOrders", "refusing a second decision while one is still working"),
     "cancel": ("cancelOrder", "cancelling a resting maker order that did not fill"),
+    "stop_order": ("createStopLossOrder", "a stop placed on its own right after the fill"),
+    "take_order": ("createTakeProfitOrder", "a take profit placed on its own after the fill"),
 }
 
 
@@ -72,6 +74,10 @@ class Capability:
         return bool(self.execution.get("attached_exits"))
 
     @property
+    def can_place_exits(self) -> bool:
+        return bool(self.execution.get("stop_order")) and bool(self.execution.get("take_order"))
+
+    @property
     def guards(self) -> bool:
         """Whether the two reads that stop a second position are both available."""
         return bool(self.execution.get("position")) and bool(self.execution.get("open_orders"))
@@ -95,6 +101,12 @@ class Capability:
             return (
                 f"data only for a cycle; it cannot report {unread}, and the venue hand refuses "
                 "to send without reading the account"
+            )
+        if not self.can_attach_exits and self.can_place_exits:
+            return (
+                "it cannot take a stop and a take profit with the entry, and ccxt can place them "
+                'as reduce-only orders right after the fill: [execution].exits = "separate" where '
+                'this package reads the exits it rests (`tra venues --setup` says), else "none"'
             )
         if not self.can_attach_exits:
             return (
