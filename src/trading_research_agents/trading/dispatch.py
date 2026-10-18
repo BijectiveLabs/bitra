@@ -32,8 +32,12 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
 
+from trading_research_agents.data.sources.ccxt_client import (
+    SIGNED_DEFAULTS,
+    exchange_class,
+    market_of,
+)
 from trading_research_agents.data.sources.ccxt_client import build as build_client
-from trading_research_agents.data.sources.ccxt_client import exchange_class, market_of
 from trading_research_agents.execution.mandate import DEFAULT_MARKETS, MARKETS
 from trading_research_agents.extras import install_hint
 from trading_research_agents.trading.capital import (
@@ -206,7 +210,9 @@ class VenueHand:
             if _namespace_missing():  # pragma: no cover - exercised only without the extra
                 raise DispatchError(f"ccxt is not installed; {install_hint('ccxt')}")
             raise DispatchError(f"ccxt has no exchange named {self.venue!r}")
-        client = build_client(self.venue, {**held, "enableRateLimit": True, **self.options})
+        config = {**held, "enableRateLimit": True, **self.options}
+        config["options"] = {**SIGNED_DEFAULTS, **dict(config.get("options") or {})}
+        client = build_client(self.venue, config)
         self.to_environment(client)
         return client
 
@@ -1379,6 +1385,7 @@ def hand_for(
     liquidation_buffer_bps: Decimal = Decimal(50),
     markets: tuple[str, ...] = DEFAULT_MARKETS,
     rate: OrderRate | None = None,
+    ccxt_options: Mapping[str, Any] | None = None,
 ) -> VenueHand:
     """A hand for `venue`, reading whatever credentials that venue signs with."""
     return VenueHand(
@@ -1405,6 +1412,7 @@ def hand_for(
         liquidation_buffer_bps=liquidation_buffer_bps,
         markets=markets,
         rate=rate,
+        options={"options": dict(ccxt_options)} if ccxt_options else {},
     )
 
 

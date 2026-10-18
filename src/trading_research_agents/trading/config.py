@@ -729,6 +729,7 @@ EXECUTION_KEYS = (
     "hold_limit",
     "adopt_open_position",
     "params",
+    "ccxt_options",
     "environment",
     "markets",
     "equity_session",
@@ -763,6 +764,7 @@ def _mandate(raw: dict[str, Any], venue_key: str) -> Mandate:
             ),
             adopt_open_position=_flag(table, "adopt_open_position"),
             params=dict(table.get("params") or {}),
+            ccxt_options=_ccxt_options(table),
             environment=str(table.get("environment", "")),
             max_drift_bps=_dec(table, "max_drift_bps") if "max_drift_bps" in table else None,
             max_decision_age_s=float(table.get("max_decision_age_s", 120.0)),
@@ -787,6 +789,23 @@ def _mandate(raw: dict[str, Any], venue_key: str) -> Mandate:
         )
     except MandateError as exc:
         raise ConfigError(str(exc)) from exc
+
+
+# The names ccxt signs with, beyond the words SECRET_LIKE already catches.
+CREDENTIAL_LIKE = (*SECRET_LIKE, "wallet", "uid", "twofa", "login")
+
+
+def _ccxt_options(table: Mapping[str, Any]) -> dict[str, Any]:
+    options = table.get("ccxt_options", {})
+    if not isinstance(options, dict):
+        raise ConfigError("[execution].ccxt_options is a table, as in { builderFee = true }")
+    leaked = sorted(k for k in options if any(word in k.lower() for word in CREDENTIAL_LIKE))
+    if leaked:
+        raise ConfigError(
+            f"[execution].ccxt_options carries {leaked}; "
+            "keys come from the environment, never a file"
+        )
+    return dict(options)
 
 
 def _execution_names(table: Mapping[str, Any], key: str) -> tuple[str, ...]:

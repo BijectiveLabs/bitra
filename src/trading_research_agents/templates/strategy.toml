@@ -204,6 +204,7 @@ kill_switch = "KILL"               # `tra kill` sets it: flatten and stop; `tra 
 #                                  # between the snapshot it was priced on and sending it
 # adopt_open_position = false      # deliberately add to a position this desk did not open
 # params = { positionIdx = 0 }     # handed to the venue verbatim, like data.toml's params
+# ccxt_options = { builderFee = true }   # set on ccxt's client for this venue; never a key
 #
 # The order follows the channel. [run].venue_key names a channel in envelope.toml, and a channel
 # named maker-taker was priced at the maker fee, so its entry rests on the book as a post-only

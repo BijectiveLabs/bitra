@@ -83,8 +83,8 @@ class DataConfig:
         """This declaration with `venue` read as the venue orders go to.
 
         Public data comes from the venue's live markets; the book comes from the environment the
-        orders meet, since a practice account's book is its own. A desk that names `venue` changes
-        venue by changing [run].venue_key and nothing in this file.
+        orders meet, since a demo or testnet API's book is its own. A desk that names `venue`
+        changes venue by changing [run].venue_key and nothing in this file.
         """
         practice = environment if environment in PRACTICE else ""
         kinds = []

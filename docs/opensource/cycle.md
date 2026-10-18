@@ -1071,7 +1071,7 @@ Venue mode does not start until all of this is true, and `tra check` names whate
 3. `[execution].max_notional` caps one order, and `[execution].leverage` is chosen. Neither has
    a default: both are what a defect would cost you.
 4. On mainnet, the ladder stands at `CANARY`, promoted with evidence and a signature. A demo or
-   testnet account holds no capital, so it is where that evidence is earned and does not wait on
+   testnet API holds no capital, so it is where that evidence is earned and does not wait on
    the ladder.
 5. The venue's keys are in the environment: the shell, an `--env-file` you name, or the `.env`
    beside `strategy.toml`, never `strategy.toml` itself. They are read by the execution layer alone,
@@ -1209,7 +1209,7 @@ hindsight: 81 decisions replayed over 7 day(s), 43 of them independent, each hel
   side: the model's -79.5 bps against 36.4 on the reverse; the reverse of the model's side did better; its calls carried no edge
 ```
 
-That is a real desk: an OKX demo account, decisions from 8 to 16 October 2026. Read it the way it is
+That is a real desk on OKX's demo API, with decisions from 8 to 16 October 2026. Read it the way it is
 meant to be read. The targets gate kept out trades that would have lost far more than the ones it admitted.
 The regime gate kept out trades that would have done better, on eleven decisions, which is a reason
 to watch it, not yet a reason to switch it off. And the last line is the one that matters most: on

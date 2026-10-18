@@ -726,7 +726,7 @@ def build_parser() -> argparse.ArgumentParser:
     venues_cmd.add_argument(
         "--environment",
         choices=("demo", "testnet", "mainnet"),
-        help="with --setup: where to read your fees; default is the venue's practice account",
+        help="with --setup: where to read your fees; default is the venue's demo or testnet API",
     )
     venues_cmd.add_argument(
         "--instrument", default="BTCUSDT", help="with --setup: the market to read fees for"
@@ -2535,8 +2535,8 @@ def _read_fees(
 ) -> tuple[tuple[Decimal, Decimal] | None, str]:
     """Maker and taker in bps: the account's own, else the venue's standard tier, else nothing.
 
-    The account's figure is the true one, and it is asked for first. Some practice accounts do not
-    report fees at all (one demo answers every fee request with a parameter error), and a
+    The account's figure is the true one, and it is asked for first. Some demo and testnet APIs
+    do not report fees at all (one demo answers every fee request with a parameter error), and a
     desk without keys yet has no account to ask. Then the venue's standard tier from its own
     market list is used and said to be: it is the base tier, the one a new account pays, so an
     account on a better tier pays less than the gate prices, never more.
@@ -2572,7 +2572,7 @@ def _read_fees(
             fees = account_fees(
                 venue, symbol=symbol, env=env, environment=environment, client=probe.client
             )
-            return fees, f"read from your {environment} account for {symbol}"
+            return fees, f"read from your {environment} API for {symbol}"
         except DispatchError as exc:
             why = str(exc)
         except Exception as exc:
@@ -2682,7 +2682,7 @@ def _fill_account_fees(
         by_role = {"maker": fees[0], "taker": fees[1]}
         stamp = f"{when:%Y-%m-%d}"
         origin = (
-            f"read from your {venue} account on {stamp}"
+            f"read from your {venue} API on {stamp}"
             if from_account
             else f"{venue} {STANDARD_MARK}, {stamp}; replaced once your account reports its own"
         )
@@ -2813,7 +2813,7 @@ def venue_setup(
 
 def _environment_words(able: Any) -> str:
     if able.demo:
-        return "this venue's demo account"
+        return "this venue's demo API"
     if able.testnet:
         return "ccxt's sandbox switch, which is this venue's demo or testnet"
     return "this venue has no practice environment through ccxt"
@@ -4627,6 +4627,7 @@ def _venue_hand(
         markets=mandate.markets,
         rate=rate,
         env=env,
+        ccxt_options=mandate.ccxt_options,
     )
 
 

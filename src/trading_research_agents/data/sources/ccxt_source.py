@@ -100,7 +100,7 @@ class CcxtSource:
                 f"a ccxt source environment is demo, testnet or mainnet, not {environment!r}"
             )
         self.venue = venue.strip()
-        # A practice account has its own order book, which can sit apart from the live one (OKX's
+        # A demo or testnet API has its own order book, which can sit apart from the live one (OKX's
         # demo FIL book was 6 bps wide against 1 live on 2026-10-10). A desk that trades there
         # prices on the book its orders meet, so the drift and slippage it measures are real.
         self.environment = "" if environment == "mainnet" else environment

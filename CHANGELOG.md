@@ -6,6 +6,19 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `[execution].ccxt_options`: a table set on ccxt's client for the execution venue, over the
+  package's own defaults. Credentials are refused in it.
+
+### Changed
+
+- ccxt's Hyperliquid builder fee (1 bp on every order, on top of the venue's fee and outside the
+  round trip the gates price) is off by default on every client that signs with the operator's
+  keys. `ccxt_options = { builderFee = true }` turns it back on.
+- Docs, site and messages say demo API and testnet API rather than account: the software reaches
+  an exchange's practice environment through its API, not through an app.
+
 ### Fixed
 
 - In venue mode, a book or funding source from a plugin is now held to the execution venue too. It
@@ -14,9 +27,8 @@ All notable changes to this project are recorded here. The format follows
 
 ### Documentation
 
-- Venues: a "Broker tags" section with what ccxt adds to orders on each venue. On Hyperliquid that
-  is a 1 bp builder fee per order on top of the venue's fee, which `envelope.toml` does not price
-  unless it is added; the shipped envelope now says so beside the Hyperliquid channels.
+- Venues: a "Broker tags" section with what ccxt adds to orders on each venue, and the default
+  this package sets on Hyperliquid's builder fee.
 
 ## [0.8.0] - 2026-10-18
 
@@ -256,7 +268,7 @@ All notable changes to this project are recorded here. The format follows
 - One address per role: the product page `www.bijectivelabs.dev/open-source` is the homepage on
   PyPI, in the citation and in the README's web badge; the docs stay at `docs.bijectivelabs.dev`;
   company links go to `www.bijectivelabs.dev` without a redirect.
-- Docs: the venues page says Bybit and OKX have both been run end to end on demo, matching its own
+- Docs: the venues page says Bybit and OKX have both been run end to end on the demo API, matching its own
   table; the providers page names all three providers with a default model.
 - Locked dependencies move to newer minor and patch releases: anthropic 1.13, openai 3.28,
   google-genai 2.29 and mcp 2.3; ruff 0.17 and mypy 2.4 for development.
@@ -366,7 +378,7 @@ All notable changes to this project are recorded here. The format follows
 - Docs brought in line with the code: `--every 15m` throughout, no `--env-file .env` where the
   `.env` beside the config is read anyway, the ladder at CANARY only on mainnet, `max_notional`
   among what venue mode needs, the risk manager's part in `tra run`, OKX run end to end on its
-  demo account, and fees filled in from the account rather than left blank.
+  demo API, and fees filled in from the account rather than left blank.
 - The screen `tra` opens on is called the console everywhere; the word cockpit is gone from the
   docs, the code and the screenshot names.
 - The README published to PyPI points its images at this release's tag, so each version's page
@@ -414,7 +426,7 @@ All notable changes to this project are recorded here. The format follows
 - Simpler setup. `[controls]` figures have standard defaults (risk per trade 50 bps, daily loss
   300 bps, 6 orders a minute; `max_position` optional). An agent desk can leave out `[exit]`
   (volatility stops, 240-bar timeout) and the research cost figures in `[run]`. Venue mode on a
-  demo or testnet account no longer waits on the ladder, and no longer needs a `[canary]` table,
+  demo or testnet API no longer waits on the ladder, and no longer needs a `[canary]` table,
   which only `tra live` reads. `[execution].max_orders_per_cycle` is out of the template.
 - Unknown keys in `[controls]` are refused.
 - `tra init --agent` writes a 15-minute decision timeframe with 1h and 4h as context.
@@ -442,7 +454,7 @@ All notable changes to this project are recorded here. The format follows
 - Docs: why the exits are built the way they are, and a table of when each auditor is asked.
 - Unknown keys in `[exit]` are refused.
 - A ccxt data source can read a venue's practice environment: `ccxt:okx@testnet`, `ccxt:bybit@demo`.
-  `tra init --venue` points the order book there, so a desk trading a practice account prices,
+  `tra init --venue` points the order book there, so a desk trading a demo or testnet API prices,
   checks drift and measures slippage on the book its orders meet. Seen on OKX's demo: 9.22 bps of
   "drift" that was the gap between the live and the demo book.
 - The sentiment prompt asks for figures named in full, as the macro and on-chain ones do.
@@ -460,7 +472,7 @@ All notable changes to this project are recorded here. The format follows
   (`trading/venues/accounts.py`). The first: an OKX account in Spot mode, which refuses every
   perpetual order with sCode 51010, is named with the setting to change.
 - Everything an order is sized, stepped or resolved by is read from the market list of the
-  environment orders go to, not the live one. A practice account is not a copy of live: OKX's demo
+  environment orders go to, not the live one. A demo or testnet API is not a copy of live: OKX's demo
   listed 155 linear perpetuals against 485 live, and 50 of the 138 on both had another contract
   size or lot (MET: 1 coin a contract live, 10 on the demo). Discovery still ranks on the live
   market and keeps only what the environment lists, with its steps.
@@ -477,7 +489,7 @@ All notable changes to this project are recorded here. The format follows
 - `tra keys --probe` reads the account before the mandate is signed; a key that cannot reach the
   account is worth knowing first. A refused key shows in `tra check`.
 - Fees fill themselves. `tra check` and `tra run` read the maker and taker fee from the account
-  and write them on blank `envelope.toml` lines, labelled. Without keys, or on a practice account
+  and write them on blank `envelope.toml` lines, labelled. Without keys, or on a demo or testnet API
   that does not report fees, the venue's standard tier from its market list is written instead,
   labelled, and replaced by the account's own once it reports one. A fee the operator wrote is kept
   and checked: one below what the account pays is reported.

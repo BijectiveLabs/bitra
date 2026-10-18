@@ -142,7 +142,7 @@ def test_venue_mode_names_everything_standing_in_the_way(tmp_path: Path) -> None
     assert any("names the live venue" in s for s in stops)
     assert any("max_notional" in s for s in stops)
     assert any("ladder is at SHADOW" in s for s in stops)
-    # A practice account is where the ladder's evidence is earned, so it does not wait on it.
+    # A demo or testnet API is where the ladder's evidence is earned, so it does not wait on it.
     practice = blocking(Mandate(mode="venue"), project=tmp_path, tier="SHADOW", practice=True)
     assert not any("ladder" in s for s in practice)
 
@@ -685,7 +685,7 @@ def test_the_setup_for_a_venue_without_a_live_plugin_has_no_live_table() -> None
         able,
         ["OKX_API_KEY"],
         fees=(Decimal("2.0"), Decimal("5.0")),
-        fees_note="read from your testnet account for BTC/USDT:USDT",
+        fees_note="read from your testnet API for BTC/USDT:USDT",
     )
     assert "[live]" not in text and 'environment = "testnet"' in text
     assert "size_step" not in text.split("# 3.")[1].split("# 4.")[0].replace("[run].size_step", "")

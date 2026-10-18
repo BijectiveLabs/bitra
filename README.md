@@ -142,7 +142,7 @@ tra run
 tra run --every 15m
 ```
 
-**6. When you want real orders.** Start on the exchange's practice account:
+**6. When you want real orders.** Start on the exchange's demo or testnet API:
 - put its keys in `.env`;
 - read the mandate with `tra mandate`, then sign it with `tra mandate --sign "Your Name"`;
 - in `[execution]` of `strategy.toml`, set `mode = "venue"`, a `leverage` and `max_notional` (the
@@ -315,15 +315,15 @@ it has been tested, the last:
 
 | Venue | What a cycle can do there | Practice environment | Run end to end by us |
 |---|---|---|---|
-| **Bybit** (the default) | everything: orders with the stop and take profit attached | demo, testnet | **yes**, on demo: real orders, exits attached, a resting order cancelled |
-| **OKX** | everything | demo (ccxt's testnet switch) | **yes**, on demo: real orders, exits attached, closed by the venue's own exits |
+| **Bybit** (the default) | everything: orders with the stop and take profit attached | demo, testnet | **yes**, on the demo API: real orders, exits attached, a resting order cancelled |
+| **OKX** | everything | demo (ccxt's testnet switch) | **yes**, on the demo API: real orders, exits attached, closed by the venue's own exits |
 | Bitget, BingX, KuCoin Futures, Hyperliquid | everything | varies, see `tra venues` | ready for its run; reports wanted for [Bitget](https://github.com/BijectiveLabs/trading-research-agents/issues/5), [BingX](https://github.com/BijectiveLabs/trading-research-agents/issues/6), [Hyperliquid](https://github.com/BijectiveLabs/trading-research-agents/issues/7) |
 | Binance, Deribit, HTX, Gate, MEXC | orders, but you carry the stop yourself (`exits = "none"`) | varies | ready for its run |
 | Kraken, Kraken Futures, Phemex | data for now: ccxt does not report their positions, and no order is sent into a position nobody can see | | |
 
 "Everything" means ccxt reports the five things a safe order needs: send it, attach the exits, read
 the position, read the open orders, cancel. "Run end to end" is the stronger claim, a full run
-with real orders on the venue's practice account, and Bybit and OKX are the two that have had it
+with real orders on the venue's demo or testnet API, and Bybit and OKX are the two that have had it
 so far. Any other venue that takes orders can have that run at any time: start on its practice environment, watch a
 few cycles and read what it sends. Each report moves a venue into the last column.
 
@@ -399,10 +399,10 @@ An agent desk goes through three steps, and you can stay at any of them as long 
 | Step | How | What happens | Needs |
 |---|---|---|---|
 | 1. Sandbox | `tra run` | the full cycle on live data; every decision written down, no order sent | a model key |
-| 2. Practice account | `tra run` with `[execution].mode = "venue"` and `environment = "demo"` or `"testnet"` | real orders on the exchange's practice account, exits attached, positions looked after | a signed mandate, a leverage, `max_notional`, practice keys |
+| 2. Demo or testnet API | `tra run` with `[execution].mode = "venue"` and `environment = "demo"` or `"testnet"` | real orders on the exchange's demo or testnet API, exits attached, positions looked after | a signed mandate, a leverage, `max_notional`, practice keys |
 | 3. Real capital | the same, with `environment = "mainnet"` | real orders with real money | all of the above, plus the ladder at its canary tier (`tra ladder promote`, with evidence) |
 
-Steps 1 and 2 have been run end to end on Bybit's and OKX's practice accounts. Step 3 has not
+Steps 1 and 2 have been run end to end on Bybit's and OKX's demo APIs. Step 3 has not
 been run by us; treat it as yours to verify, small, first.
 
 If you bring a scripted strategy of your own instead of the agents, it has a research path of its
@@ -499,7 +499,7 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | `tra check` | every setting read against the others, with what to fix |
 | `tra keys --probe` | proves every key works; no key is printed, no prompt or order sent |
 | `tra models groq` | the models your key can use on a provider, read from the vendor; no prompt sent |
-| `tra init my-desk --profile autonomous --venue okx` | a desk wired for one exchange: data, orders, practice account, keys |
+| `tra init my-desk --profile autonomous --venue okx` | a desk wired for one exchange: data, orders, demo or testnet API, keys |
 | `tra venues` | every venue the docs describe, and what each can do |
 | `tra venues okx --setup` | what a venue can do, and the blocks to paste to trade on it |
 | `tra mandate` | the text venue mode requires; `--sign "Your Name"` keeps it as `MANDATE.md` and signs `[execution]` in one step |
@@ -568,7 +568,7 @@ where it stops.
   sizing and tests before venue mode accepts it.
 - **More venues run end to end.** Every venue ccxt supports already goes through the same order
   path and gates. Each one joins Bybit and OKX in the last column of the venues table after a full
-  run on its practice account, ours or yours.
+  run on its demo or testnet API, ours or yours.
 - **The rest of the not-built-yet list,** one piece at a time, without weakening a guarantee.
 
 **Use the release.** What PyPI installs is the latest release, and it is the version to run.

@@ -22,6 +22,11 @@ from importlib import import_module
 from typing import Any
 
 PREDICTION = "prediction."
+# Set on every client that signs with the operator's keys, under [execution].ccxt_options. ccxt's
+# Hyperliquid class otherwise approves a builder fee for ccxt's own address and charges it on every
+# order, on top of the venue's fee and outside the round trip the gates price. Switched off, ccxt
+# still attaches its builder at zero, which costs nothing.
+SIGNED_DEFAULTS: dict[str, Any] = {"builderFee": False}
 # Long enough for a venue's slowest documented call; a hung socket must not hang the desk.
 CALL_TIMEOUT_S = 60.0
 
