@@ -285,11 +285,38 @@ them:
 
 In venue mode the first two are enforced: a chain that reads the book or the funding from any
 venue other than the one orders go to is refused before anything is pulled, with the line that
-names it. A candle chain may fall back to another venue deliberately,
+names it. A source from a plugin is asked which venue it serves (its `venue` attribute), and one
+that does not say is refused the same way: a book of unknown origin is not the venue's book. A candle chain may fall back to another venue deliberately,
 `chain = ["venue", "ccxt:binance", "file:data"]`, and `tra check` says so every time. Whatever the
 chains say, an order is priced once more against the execution venue's own book when it is sent:
 the drift check refuses a decision the market has moved away from, and the slippage bound is
 measured from that venue's touch.
+
+## Broker tags
+
+Exchanges run broker programmes. Software that sends orders for its users identifies itself with
+a tag, and the exchange shares part of the fee it already charges with whoever made the software.
+On most venues the user pays the same fee either way. Hyperliquid is the exception: there the
+software's share is charged on top.
+
+This package adds no tag of its own today. ccxt, which sends the orders, adds its own on several
+venues. As read from ccxt 4.5.85:
+
+| Venue | What ccxt sends | What it costs you |
+|---|---|---|
+| Bybit | `Referer: CCXT` on every signed request | nothing extra; the share comes out of Bybit's fee |
+| BingX | `X-SOURCE-KEY: CCXT` | nothing extra |
+| Bitget | `X-CHANNEL-API-CODE` with ccxt's channel code | nothing extra |
+| MEXC | `source: CCXT` | nothing extra |
+| OKX, Binance, HTX | a broker prefix on the client order id, but only when the order carries no id of its own | nothing, and no tag either: the desk always sends its own client order id |
+| Hyperliquid | on the first private call, an approval signed with your wallet for ccxt's builder address at up to 0.01%; then a builder fee of 1 basis point on every order | **1 bp per order on top of Hyperliquid's fee**, which `envelope.toml` does not price unless you add it |
+
+Until a setting for it ships, a Hyperliquid desk should add 1 bp to each side of its channel's
+fees in `envelope.toml`, so the round trip the gates price is the one you pay.
+
+Bijective plans to join these programmes as a software vendor. When a venue issues an id, it will
+be a setting per venue, shown by `tra check`, that you can replace or leave empty. The venue will
+be listed on this page first. Until then nothing this package sends carries a Bijective tag.
 
 ## Changing venue, and turning the others off
 

@@ -353,3 +353,45 @@ def test_a_dataset_written_under_the_old_package_name_still_reads(tmp_path: Path
     pq.write_table(table, bare)
     with pytest.raises(ParquetError, match="not a trading-research-agents dataset"):
         read_scales(bare)
+
+
+class _Relay:
+    """A vendor's relay of some venue's book, as a client's plugin would ship it."""
+
+    def __init__(self, venue: str | None) -> None:
+        if venue is not None:
+            self.venue = venue
+
+    name = "vendor:relay"
+    tier = "paid"
+
+    def kinds(self) -> tuple[str, ...]:
+        return ("orderbook",)
+
+    def fetch(self, kind: str, instrument: str, **options: Any) -> Any:
+        raise AssertionError("the venue check builds a source; it never fetches")
+
+
+@pytest.mark.parametrize(
+    ("served", "refused"),
+    [("bybit", False), ("BYBIT", False), ("okx", True), (None, True)],
+)
+def test_a_plugin_book_is_held_to_the_execution_venue(
+    monkeypatch: pytest.MonkeyPatch, served: str | None, refused: bool
+) -> None:
+    from trading_research_agents.data.sources import registry
+    from trading_research_agents.data.sources.config import DataConfig, KindSettings
+
+    registry.schemes()
+    monkeypatch.setitem(registry._registry, "vendor", lambda target, settings: _Relay(served))
+    declared = DataConfig(
+        kinds=(
+            KindSettings("orderbook", ("vendor:relay", "ccxt:bybit"), 10.0, "refuse", {}),
+            KindSettings("ohlcv", ("vendor:relay",), 90.0, "refuse", {}),
+        ),
+        settings={},
+    )
+    found = declared.off_venue("bybit")
+    # Candles may come from anywhere; only what an order is priced on is held to the venue.
+    assert bool(found) is refused
+    assert all(row.startswith("orderbook: vendor:relay") for row in found)

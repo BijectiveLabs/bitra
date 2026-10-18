@@ -6,6 +6,18 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- In venue mode, a book or funding source from a plugin is now held to the execution venue too. It
+  is asked which venue it serves, and one that does not say is refused, where before only `ccxt:`
+  sources were checked.
+
+### Documentation
+
+- Venues: a "Broker tags" section with what ccxt adds to orders on each venue. On Hyperliquid that
+  is a 1 bp builder fee per order on top of the venue's fee, which `envelope.toml` does not price
+  unless it is added; the shipped envelope now says so beside the Hyperliquid channels.
+
 ## [0.8.0] - 2026-10-18
 
 ### Added

@@ -13,7 +13,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from trading_research_agents.data.sources.base import KINDS
+from trading_research_agents.data.sources.base import KINDS, SourceError
 from trading_research_agents.data.sources.chain import POLICIES, SourceChain
 from trading_research_agents.data.sources.registry import build
 
@@ -105,15 +105,33 @@ class DataConfig:
         return replace(self, kinds=tuple(kinds))
 
     def off_venue(self, venue: str) -> list[str]:
-        """The sources that would price an order on another venue's figures, as `kind: source`."""
+        """The sources that would price an order on another venue's figures, as `kind: source`.
+
+        A ccxt source names its venue; a plugin is built and asked for its `venue`. A plugin that
+        does not say is counted here too, since an order priced on a book of unknown origin is
+        priced on someone else's book until shown otherwise.
+        """
         found = []
         for declared in self.kinds:
             if declared.kind not in PRICED_ON_THE_VENUE:
                 continue
             for name in declared.chain:
                 scheme, _, target = name.partition(":")
-                if scheme == "ccxt" and target.partition("@")[0] != venue:
-                    found.append(f"{declared.kind}: {name}")
+                scheme = scheme.strip().lower()
+                if name == EXECUTION_VENUE or scheme == "file":
+                    continue
+                if scheme == "ccxt":
+                    if target.partition("@")[0] != venue:
+                        found.append(f"{declared.kind}: {name}")
+                    continue
+                try:
+                    served = str(getattr(build(name, dict(self.settings)), "venue", "") or "")
+                except (KeyError, SourceError) as exc:
+                    raise DataConfigError(f"[data.{declared.kind}]: {exc}") from exc
+                if not served:
+                    found.append(f"{declared.kind}: {name} (it does not say which venue it serves)")
+                elif served.strip().lower() != venue.strip().lower():
+                    found.append(f"{declared.kind}: {name} (serves {served})")
         return found
 
     def chain(self, kind: str) -> SourceChain:
