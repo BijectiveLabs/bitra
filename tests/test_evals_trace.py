@@ -170,7 +170,7 @@ def test_a_trace_reads_a_session_and_a_run_back_in_order(
     audit_steps = [
         {
             "action": "call",
-            "tool": "ledger_search",
+            "tool": "search_ledger",
             "arguments": {"ledger_path": str(tmp_path / "none.jsonl"), "query": "funding"},
             "answer": {},
             "thought": "look",
@@ -192,7 +192,7 @@ def test_a_trace_reads_a_session_and_a_run_back_in_order(
         "auditor",
     ]
     assert session.roles[0].detail == "kept ['AAAUSDT'], excluded 1"
-    assert session.roles[4].kind == "step" and session.roles[4].detail.startswith("ledger_search(")
+    assert session.roles[4].kind == "step" and session.roles[4].detail.startswith("search_ledger(")
     assert "->" in session.roles[4].detail and session.roles[5].detail == "answered"
     # ten answers plus the auditor's one tool step
     assert len(session.calls) == 11 and session.calls[0].who == "market_screener"

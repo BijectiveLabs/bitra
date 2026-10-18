@@ -110,10 +110,212 @@ practice environment first.
 What kind of market a desk may send to is one setting, `[execution].markets`. Every market, on
 every venue, is read into one shape from what ccxt reports (see
 [Architecture](/opensource/architecture#adoption-rules)), and the order path decides from that
-shape what applies: contracts, margin, leverage, where the exits go. Today the list holds one type,
-`linear perpetual`, and a symbol of any other type is refused by name before anything is sent.
-Spot, tokenized stocks and prediction markets join the list as each is built and run end to end on
-a practice account; the venue and the symbol stay where they are, in the same settings.
+shape what applies: contracts, margin, leverage, where the exits go. Two types are built,
+`linear perpetual` and `spot`. The list defaults to perpetuals only, a desk adds spot by naming it
+(`markets = ["linear perpetual", "spot"]`), and a symbol of a type not listed, or not built, is
+refused by name before anything is sent. Tokenized stocks and prediction markets join as each is
+built and run end to end on a practice account; the venue and the symbol stay where they are, in
+the same settings.
+
+What the same order path does when the market is spot:
+
+- **Long only.** A short on spot sells coins the account does not hold, which needs a borrow; it is
+  refused.
+- **Paid in full.** No leverage is set and no liquidation is estimated. The order and its fee must
+  fit in `[execution].max_margin_share` of the free quote balance.
+- **The position is the coin in the account.** An amount under the venue's minimum order is fee
+  residue and counts as nothing; anything above it is the desk's position, so an entry is refused
+  while the account already holds the coin. Run a spot desk on an account, or a subaccount, that
+  is the desk's own.
+- **Exits at the venue.** The stop and take profit go with the entry, as on perpetuals. Bybit keeps
+  them as one order with both prices; OKX keeps them as an OCO algo order. Both hold the coins.
+- **Closes free the coins first.** A close, by time or by the kill switch, cancels the resting exits,
+  wherever the venue keeps them, then sells what is held, rounded down to the venue's step.
+- **Fees in the coin.** A spot buy is often charged in the coin bought; the round trip counts that
+  fee in the quote currency at the fill price.
+
+And in the cycle, before any order:
+
+- **A short is refused by code** before it is priced, whatever the analyst proposed.
+- **Funding and open interest are not asked for.** They belong to contracts; on spot they would be
+  refused every cycle and wake the technical auditor for nothing.
+- **The fees are the spot pair's.** A spot pair usually costs more than the perpetual on the same
+  coin (on Bybit, 10 bps a side against 5.5), so a channel can carry both: its own fees for the
+  perpetual and a `[channel.spot]` table for the pair, and a spot cycle is priced at the second.
+  `tra check` compares each with what the venue charges for that market and says so when one is
+  priced lower.
+
+To set a desk up for spot, name the pair in `data.toml` under `[data].symbols` (for example
+`SOLUSDT = "SOL/USDT"`), list `spot` in `[execution].markets`, and add the pair's fees to the
+channel:
+
+```toml
+[[channel]]
+venue = "bybit"
+name = "taker-taker"
+entry_fee_bps = 5.5
+exit_fee_bps = 5.5
+
+[channel.spot]
+entry_fee_bps = 10
+exit_fee_bps = 10
+```
+ Spot was run on 2026-10-17: the order path end to end on the Bybit demo and the OKX demo
+(SOL/USDT; entry with the exits attached, the exits found at the venue, close, flat), and a full
+desk cycle on SOL/USDT in sandbox and in venue mode on the Bybit demo, which priced the round trip
+at the spot fee and refused the trade on its break-even rate. Start on a practice account.
+
+## Stocks on a crypto venue
+
+Several venues list equities as crypto instruments, and they arrive through the same order path as
+any other market, because to the venue they are one: a stock perpetual is a linear perpetual (Bybit
+`AAPL/USDT:USDT`, OKX `TSLA/USDT:USDT`, Bitget `NVDA/USDT:USDT`), and a tokenized stock is a spot
+pair (Bybit `AAPLX/USDT`). Leverage, contract size, exits and closes work as they do for crypto;
+the market's own facts decide.
+
+What is different is the underlying. Its exchange keeps hours, and the token does not: it quotes
+on a Sunday at a price nobody is making. So:
+
+- **What the underlying is comes from the venue.** Bybit marks stock perpetuals `stock` and
+  tokenized stocks `xstocks`; OKX marks contracts with `instCategory` 3. A venue that does not say
+  (Bitget, among others) is read as crypto, and you name its equities in `[execution].equities`.
+- **An entry waits for the session.** With `[execution].equity_session = "regular"` (the default)
+  a cycle on an equity does not ask anyone while the US regular session is closed (09:30 to 16:00
+  New York time, Monday to Friday, daylight saving from the time zone database), and refuses a
+  trade whose hold would run past that day's close, because the next open can gap past the stop.
+  `"any"` trades at every hour, deliberately.
+- **Holidays are yours to declare.** The package carries no exchange calendar; list the closed
+  dates in `[execution].equity_closed`.
+- **On-chain figures do not bear on a share**, so the on-chain analyst is not asked.
+- **Some accounts need a step first.** Bybit refuses a stock perpetual until the account has
+  signed its agreement for them, in the app or on the website; the refusal names it.
+- **Prices stay inside the venue's band.** OKX refuses an order priced outside its current price
+  limit, and publishes the limit; a taker entry there is held inside it.
+
+Run on 2026-10-17: a tokenized stock round trip on the Bybit demo (AAPLX/USDT: entry with its
+exits, close, flat) and a stock perpetual on the OKX demo (TSLA/USDT:USDT, five contracts of 0.01:
+the entry filled inside the price band with its exits attached). That weekend the OKX demo's book
+sat outside its band, and the reduce-only close was accepted but not filled; the close is now
+confirmed against the account, recorded as not closed when the account still holds, and tried again
+on the next pass, while the exits at the venue keep standing.
+
+## Prediction markets
+
+ccxt reaches prediction venues too (Kalshi, Polymarket, Limitless, Myriad and others, in its
+`ccxt.prediction` namespace), and a desk names one the way it names an exchange: `kalshi`,
+`polymarket`. Two names live on both sides, so their prediction venues are `prediction.binance`
+and `prediction.hyperliquid`. ccxt's prediction clients are async; the package runs them on a loop
+of their own, so everything above sees the same client it sees for an exchange.
+
+What is traded is an outcome: a share of one answer to one question (YES on "will the Fed cut in
+December"), priced between the venue's floor and ceiling, paying 1 if it wins and nothing if it
+loses. The venue addresses it by a handle, `MARKET:YES`, and that handle goes in `data.toml`:
+
+```toml
+[data]
+symbols = { FEDCUT = "FED_CUTS_IN_DECEMBER:YES" }
+```
+
+List `prediction` in `[execution].markets`, and the cycle on that instrument is decided by a
+different role:
+
+- **The event analyst decides**, not the technical analyst: it reads the question, the outcome,
+  when it resolves, the book, the recent prices and your dated notes, and answers with the
+  probability that the outcome wins. With nothing beyond the price to go on, the answer is the
+  mid with a low confidence, and the desk does nothing.
+- **Code prices it to resolution.** Bought at the ask with a fee per share, the share is worth
+  `probability - ask - fee`; the desk buys only when that, as a share of the ask, clears the margin.
+  A probability that cites nothing from its brief is refused.
+- **The stake is the stop.** A share cannot lose more than it cost, so the size is cut until its
+  whole cost fits `[controls].max_risk_per_trade_bps` and the position caps. Long only: to bet the
+  other way, buy the other outcome.
+- **The take profit rests at the venue.** After the fill, the shares are offered at the analyst's
+  probability as a resting limit sell; otherwise they are held to resolution or until time closes
+  them. A close takes that offer off and sells at the venue's floor, immediate or cancel, since
+  these venues take no market order. A share held to resolution is written up at its payout.
+- **Funding and open interest are not asked for**, and the screen reads an outcome by its move,
+  since the venues publish its prices without a volume.
+
+How a venue charges goes on the channel, as one of two forms:
+
+```toml
+[channel.prediction]
+fee_coefficient = 0.07     # 0.07 x shares x price x (1 - price), the way Kalshi charges
+# or a flat rate on what the share costs:
+# entry_fee_bps = 100
+# exit_fee_bps = 100
+```
+
+A channel that says neither is refused rather than priced at zero.
+
+Run on 2026-10-17: a sandbox cycle on Polymarket's public data (an outcome on the 2028 US
+presidential election), where the event analyst answered with the mid and a confidence of 0.2,
+citing the book, and the cycle stopped at the confidence floor. The order path is covered by tests
+against ccxt's prediction shapes. Sending orders needs a practice account: Kalshi has a demo
+environment that ccxt reaches (an API key and an RSA private key); Polymarket signs with a wallet
+and has no practice environment.
+
+## Which venue the data comes from
+
+A desk trades on one venue, the one `[run].venue_key` names, and by default it reads from that
+venue alone. The shipped `data.toml` says `venue` in every chain rather than an exchange's name:
+
+```toml
+[data.ohlcv]
+chain = ["venue", "file:data"]
+
+[data.orderbook]
+chain = ["venue"]
+```
+
+`venue` is read as the venue orders go to. Candles, funding and open interest come from its live
+markets. The book comes from the environment the orders meet, so a desk trading on a practice
+account prices on that account's book (`ccxt:okx@testnet`, `ccxt:bybit@demo`), and a desk trading
+on mainnet prices on the live one.
+
+What decides and what pays are then the same venue, which is how a professional desk separates
+them:
+
+| Figure | Where it may come from | Why |
+|---|---|---|
+| Order book (spread, depth, the cost a trade is priced at) | the execution venue only | another venue's book is not the book the order meets |
+| Funding | the execution venue, or `file:data` | the funding a position pays is its own venue's |
+| Candles, open interest | the execution venue, or another venue on purpose | a signal can read a deeper market; it never prices the order |
+| The price an order is sent at | the execution venue's book, read again at the moment of sending | the snapshot is as old as the analysts were slow |
+
+In venue mode the first two are enforced: a chain that reads the book or the funding from any
+venue other than the one orders go to is refused before anything is pulled, with the line that
+names it. A candle chain may fall back to another venue deliberately,
+`chain = ["venue", "ccxt:binance", "file:data"]`, and `tra check` says so every time. Whatever the
+chains say, an order is priced once more against the execution venue's own book when it is sent:
+the drift check refuses a decision the market has moved away from, and the slippage bound is
+measured from that venue's touch.
+
+## Changing venue, and turning the others off
+
+A desk talks to the venues its files name, and nothing else. With the shipped `data.toml` that is
+one venue, so the venue a desk trades on is also the only exchange it opens a connection to. Keys
+are read for the execution venue only; data sources are never given a key.
+
+Changing venue is one line:
+
+```toml
+[run]
+venue_key = "okx/taker-taker"        # was "bybit/taker-taker"
+```
+
+The chains that say `venue` follow. Two things have to exist on the new venue first, and `tra
+check` names whichever is missing: a channel for it in `envelope.toml` with the fees your account
+pays there (`tra venues okx --setup` reads them and prints the lines), and its keys in `.env`.
+A desk made with `tra init --venue` also names the venue and the environment in `[execution]`;
+change those with it, or `tra check` refuses the mismatch, since an order would otherwise go to
+one venue at the other's fee.
+
+To trade two venues at once, run two desks, one per venue: each has its own account, positions,
+limits and kill switch, and stopping one never touches the other. To stop trading on a venue,
+stop its desk (the kill switch flattens and stops it). To stop reading from one, take its name out
+of the chains: a kind of data with no source left is refused rather than guessed, and the cycle
+says which kind and why. Nothing needs uninstalling, and no code changes.
 
 ## Trading on another exchange
 
@@ -128,7 +330,7 @@ tra check                                             # fills the fees, then say
 tra keys --probe                                      # reads the account, sends nothing
 ```
 
-What `--venue` does: the data chains read from that venue, `[run].venue_key` and
+What `--venue` does: the data chains read from the venue the desk trades on, `[run].venue_key` and
 `[execution].venue` name it, `[execution].environment` is its practice account where it has one,
 the order mode stays `sandbox`, and `.env.example` lists the keys that venue signs with. Sizes use
 the venue's own step, so there is no table of increments to copy.
@@ -146,10 +348,11 @@ OKX's demo trading is reached through ccxt's sandbox switch, so in this project 
 `environment = "testnet"`. A demo key only works on the demo.
 
 A practice account has its own order book, and it can sit apart from the live one: on 2026-10-10
-OKX's demo FIL book was 6 bps wide against 1 bps live. So `--venue` points the order book chain at
-the practice environment (`ccxt:okx@testnet`, `ccxt:bybit@demo`), and the drift check, the spread
-and the slippage a desk records are measured on the book its orders meet. Candles, funding and open
-interest stay on the live market. Any `ccxt:<venue>` source takes `@demo` or `@testnet`.
+OKX's demo FIL book was 6 bps wide against 1 bps live. So the book a desk prices on is the
+practice environment's when its orders go there (`venue` reads as `ccxt:okx@testnet` or
+`ccxt:bybit@demo`), and the drift check, the spread and the slippage a desk records are measured on
+the book its orders meet. Candles, funding and open interest stay on the live market. Any
+`ccxt:<venue>` source takes `@demo` or `@testnet`.
 
 The price can drift too. On OKX's demo account, in 6 of 52 decisions recorded to 2026-10-13, the
 demo book's mid sat outside the live market's range for that minute: 30 to 40 bps on NEAR and 149
@@ -230,13 +433,6 @@ What protects you once orders flow, on any venue: a size off the venue's step or
 is refused rather than quietly rounded by ccxt; the account is read before every order; an open
 position or a working order refuses a second entry; and a maker order that does not fill is
 cancelled, never chased.
-
-## Stopping a venue
-
-Take it out of the chains in `data.toml`. A kind of data with no source left is refused rather than
-guessed, and the cycle says which kind and why. If it was the venue you traded on, change
-`[run].venue_key` to a channel you still have, and `tra check` will tell you if anything still
-points at the old one. Nothing needs uninstalling, and no code changes.
 
 ## A venue ccxt does not know
 

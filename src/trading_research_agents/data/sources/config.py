@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import tomllib
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +18,11 @@ from trading_research_agents.data.sources.chain import POLICIES, SourceChain
 from trading_research_agents.data.sources.registry import build
 
 UNITS = {"s": 1.0, "m": 60.0, "h": 3600.0, "d": 86400.0}
+EXECUTION_VENUE = "venue"
+PRACTICE = ("demo", "testnet")
+# The figures an order is priced and carried on. They have to be the execution venue's own: another
+# venue's book is not the book the order meets, and another venue's funding is not what it pays.
+PRICED_ON_THE_VENUE = ("orderbook", "funding")
 
 
 class DataConfigError(ValueError):
@@ -74,11 +79,52 @@ class DataConfig:
                 return declared
         raise DataConfigError(f"no [data.{kind}] declared in {self.path or 'the config'}")
 
+    def on_venue(self, venue: str, environment: str = "") -> DataConfig:
+        """This declaration with `venue` read as the venue orders go to.
+
+        Public data comes from the venue's live markets; the book comes from the environment the
+        orders meet, since a practice account's book is its own. A desk that names `venue` changes
+        venue by changing [run].venue_key and nothing in this file.
+        """
+        practice = environment if environment in PRACTICE else ""
+        kinds = []
+        for declared in self.kinds:
+            if EXECUTION_VENUE not in declared.chain:
+                kinds.append(declared)
+                continue
+            if not venue:
+                raise DataConfigError(
+                    f"[data.{declared.kind}].chain names `venue`, the venue orders go to, and "
+                    "there is no strategy.toml here to say which one that is"
+                )
+            own = f"ccxt:{venue}"
+            if practice and declared.kind == "orderbook":
+                own = f"{own}@{practice}"
+            chain = tuple(own if name == EXECUTION_VENUE else name for name in declared.chain)
+            kinds.append(replace(declared, chain=chain))
+        return replace(self, kinds=tuple(kinds))
+
+    def off_venue(self, venue: str) -> list[str]:
+        """The sources that would price an order on another venue's figures, as `kind: source`."""
+        found = []
+        for declared in self.kinds:
+            if declared.kind not in PRICED_ON_THE_VENUE:
+                continue
+            for name in declared.chain:
+                scheme, _, target = name.partition(":")
+                if scheme == "ccxt" and target.partition("@")[0] != venue:
+                    found.append(f"{declared.kind}: {name}")
+        return found
+
     def chain(self, kind: str) -> SourceChain:
         """Build the chain for one kind. Sources are built here, not when the file is read."""
         declared = self.for_kind(kind)
         sources = []
         for name in declared.chain:
+            if name == EXECUTION_VENUE:
+                raise DataConfigError(
+                    f"[data.{kind}].chain names `venue`, which is read against strategy.toml"
+                )
             source = build(name, dict(self.settings))
             if kind not in source.kinds():
                 raise DataConfigError(f"{name} does not serve {kind}")

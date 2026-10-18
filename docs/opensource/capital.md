@@ -22,6 +22,9 @@ them. A venue that cannot answer one gets a named refusal or a note in the recor
 | when a position is closed by time | you | `[execution].hold_limit` |
 | whether the account can carry it | the system | the checks below |
 
+On a spot market none of the leverage, margin or liquidation settings apply: the order is paid in
+full, and must fit in `max_margin_share` of the free quote balance with its fee.
+
 Leverage never makes a trade bigger. The size comes from the risk at the stop. Leverage only
 decides how much margin that size ties up and how far away liquidation sits.
 
@@ -37,7 +40,10 @@ decides how much margin that size ties up and how far away liquidation sits.
 | `[execution].max_drift_bps` | none | refuse when the mid moved this far against the trade since it was priced |
 | `[execution].max_decision_age_s` | `120` | refuse a decision older than this, counted from the start of its cycle to the moment of sending |
 | `[execution].hold_limit` | `timeout` | `timeout`, `horizon` or `none`: when time closes a position |
-| `[execution].markets` | `["linear perpetual"]` | the market types this desk may send to; the one built today ([Venues](/opensource/venues#where-an-order-goes-and-what-an-instrument-is)) |
+| `[execution].equity_session` | `regular` | `regular`: an entry on an equity underlying only while the US regular session trades, and no hold past its close; `any`: every hour ([Venues](/opensource/venues#stocks-on-a-crypto-venue)) |
+| `[execution].equity_closed` | none | exchange holidays, as dates; the package carries no calendar |
+| `[execution].equities` | none | instruments to treat as equities on a venue that does not mark them |
+| `[execution].markets` | `["linear perpetual"]` | the market types this desk may send to; `linear perpetual`, `spot` and `prediction` are built ([Venues](/opensource/venues#where-an-order-goes-and-what-an-instrument-is)) |
 | `[execution].max_notional` | none: required | the most one order may be worth |
 | `[run].equity` | none | the most equity you allow this desk; sizing uses the smaller of this and the account |
 | `[controls].daily_loss_limit_bps` | `300` | no new entry once equity has fallen this far on the day |

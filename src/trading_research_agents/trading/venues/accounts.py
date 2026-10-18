@@ -98,7 +98,12 @@ def key_refusal(
     return check(client, ip_unbound_ok=ip_unbound_ok, now=time.time() if now is None else now)
 
 
-def account_refusal(venue: str, client: Any) -> str:
-    """Why this account cannot take the order as configured, or nothing."""
+def account_refusal(venue: str, client: Any, *, derivative: bool = True) -> str:
+    """Why this account cannot take the order as configured, or nothing.
+
+    The checks here are about derivatives accounts; a spot order is not refused for them.
+    """
+    if not derivative:
+        return ""
     check = CHECKS.get(venue.strip().lower())
     return check(client) if check is not None else ""

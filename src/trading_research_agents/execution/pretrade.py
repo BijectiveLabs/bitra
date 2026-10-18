@@ -173,7 +173,8 @@ def pre_trade_cost(
             name="fee_round_trip",
             bps=channel.entry_fee_bps + channel.exit_fee_bps,
             certainty=Certainty.DECLARED,
-            source=f"envelope channel {channel.key}",
+            source=f"envelope channel {channel.key}"
+            + (f", its {channel.market} fees" if channel.market else ""),
         ),
         CostComponent(
             name="spread_cost",

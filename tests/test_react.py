@@ -11,7 +11,7 @@ import pytest
 from trading_research_agents.agents.react import ToolLoopError, catalog_text, run_tool_loop
 from trading_research_agents.llm import FakeCompleter
 from trading_research_agents.llm.usage import BudgetLimits, MeteredCompleter, UsageLedger
-from trading_research_agents.surface import ledger_search, runs_index
+from trading_research_agents.surface import list_runs, search_ledger
 
 ANSWER_SCHEMA = {"type": "object", "properties": {"ok": {"type": "boolean"}}, "required": ["ok"]}
 
@@ -175,11 +175,11 @@ def test_recall_tools_search_the_ledger_and_index_runs(tmp_path: Path) -> None:
             blocking_axis=Axis.DATA,
         )
     )
-    hit = ledger_search(str(tmp_path / "ledger.jsonl"), "funding settlement")
+    hit = search_ledger(str(tmp_path / "ledger.jsonl"), "funding settlement")
     assert hit["matched"] == 1 and hit["rows"][0]["entry_id"] == "H-1"
-    assert ledger_search(str(tmp_path / "ledger.jsonl"), "nothing here")["matched"] == 0
+    assert search_ledger(str(tmp_path / "ledger.jsonl"), "nothing here")["matched"] == 0
     with pytest.raises(ValueError, match="at least one word"):
-        ledger_search(str(tmp_path / "ledger.jsonl"), "  ")
+        search_ledger(str(tmp_path / "ledger.jsonl"), "  ")
 
     run = tmp_path / "runs" / "r1"
     run.mkdir(parents=True)
@@ -189,8 +189,8 @@ def test_recall_tools_search_the_ledger_and_index_runs(tmp_path: Path) -> None:
         ),
         "utf-8",
     )
-    index = runs_index(str(tmp_path / "runs"))
+    index = list_runs(str(tmp_path / "runs"))
     assert index["total"] == 1 and index["runs"][0]["instrument"] == "BTCUSDT"
-    assert runs_index(str(tmp_path / "runs"), instrument="ETHUSDT")["total"] == 0
+    assert list_runs(str(tmp_path / "runs"), instrument="ETHUSDT")["total"] == 0
     with pytest.raises(FileNotFoundError):
-        runs_index(str(tmp_path / "nowhere"))
+        list_runs(str(tmp_path / "nowhere"))

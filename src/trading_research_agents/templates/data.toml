@@ -2,10 +2,17 @@
 # Agents never read this file and never fetch anything: the engine fetches, writes a snapshot,
 # and the agents read the snapshot. `tra data pull` runs one round of this file.
 #
-# A source name is scheme:target.
-#   ccxt:<venue>   public endpoints of that venue through ccxt (pip install '...[ccxt]')
+# A source name is scheme:target, or `venue`.
+#   venue          the venue this desk trades on ([run].venue_key); its book is the one orders meet,
+#                  the practice account's book when orders go there. Change venue in strategy.toml
+#                  and every chain that says `venue` follows.
+#   ccxt:<venue>   public endpoints of a named venue through ccxt (pip install '...[ccxt]')
 #   file:data      whatever `tra data get` already wrote into data/, no network, no keys
 #   <your own>      register under the `trading_research_agents.sources` entry point
+#
+# In venue mode the book and the funding have to come from the venue orders go to; a chain that
+# reads them from another venue is refused. Candles may fall back to another venue on purpose:
+# chain = ["venue", "ccxt:binance", "file:data"].
 #
 # Order matters: the first source that answers inside `ttl` wins, and every attempt is written
 # into the snapshot, so a rate limit is visible instead of silent.
@@ -15,26 +22,26 @@
 symbols = { BTCUSDT = "BTC/USDT:USDT" }
 
 [data.ohlcv]
-chain = ["ccxt:bybit", "ccxt:binance", "file:data"]
+chain = ["venue", "file:data"]
 ttl = "90s"                    # a minute bar plus the time it takes to publish; a longer bar adds its own wait
 interval_s = 60                # for `tra data pull`; a cycle asks for [run].bar_interval_s
 limit = 240                    # and [agents].lookback_bars instead
 on_exhausted = "refuse"        # refuse | use_stale_with_flag
 
 [data.orderbook]
-chain = ["ccxt:bybit"]
+chain = ["venue"]
 ttl = "10s"                    # the book is the fastest thing here; nothing older is a book
 levels = 25                    # deep enough to walk for the size a decision is about
 
 [data.funding]
-chain = ["ccxt:bybit", "file:data"]
+chain = ["venue", "file:data"]
 ttl = "8h"                     # one settlement interval: the rate does not change between them
 
 [data.open_interest]
-chain = ["ccxt:bybit"]
+chain = ["venue"]
 ttl = "10m"
 # Measured on 2026-09-28: asked plainly, this venue answers with the last hourly bucket, so the
 # figure arrives up to an hour old and a tight ttl refuses by construction. Asked for a finer
-# bucket it answers about two minutes back. `params` is handed to the venue verbatim, which is
-# where a vendor's own spelling belongs.
-params = { intervalTime = "5min" }
+# bucket it answers about two minutes back. `params` is handed to the venue verbatim, keyed by
+# venue, which is where a vendor's own spelling belongs.
+params = { bybit = { intervalTime = "5min" } }

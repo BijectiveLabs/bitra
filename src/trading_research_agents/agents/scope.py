@@ -122,6 +122,8 @@ SCOPES: dict[str, Scope] = {
             "position_in_range",
             "window_move_bps",
             "trend_strength",
+            "variance_ratio",
+            "market_structure",
             "range_high",
             "range_low",
             "atr",
@@ -131,6 +133,7 @@ SCOPES: dict[str, Scope] = {
             "book_imbalance",
             "open_interest",
             "readings",
+            "positioning",
         ),
         answers=(
             "target",

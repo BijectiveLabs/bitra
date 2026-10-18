@@ -28,6 +28,7 @@ from trading_research_agents.data.series import (
     moment,
     read_series,
 )
+from trading_research_agents.data.sources.positioning import PRESETS as VENUE_PRESETS
 
 # Endpoints checked by hand against their public documentation. Anything else is `from = "http"`.
 PRESETS: dict[str, dict[str, Any]] = {
@@ -75,7 +76,50 @@ PRESETS: dict[str, dict[str, Any]] = {
         "value": "{id}",
         "asset": "btc",
     },
+    # Paid vendors, as their published API references describe them. The key stays in your
+    # environment, under the name below; `id` is the endpoint path the vendor documents, `params`
+    # its query and `value` the field.
+    #   coinglass    futures/liquidation/aggregated-history, futures/open-interest/aggregated-
+    #                history, futures/global-long-short-account-ratio/history,
+    #                futures/v2/taker-buy-sell-volume/history
+    #   glassnode    a metric path such as transactions/transfers_volume_exchanges_net
+    #   cryptoquant  a path such as btc/exchange-flows/netflow, window = hour or day; a daily
+    #                window stamps rows with `date`, so set ts = "date"
+    #   arkham       any documented endpoint; give rows, ts and value from its reference
+    "coinglass": {
+        "url": "https://open-api-v4.coinglass.com/api/{id}",
+        "rows": "data",
+        "ts": "time",
+        "ts_unit": "ms",
+        "key_env": "COINGLASS_API_KEY",
+        "key_header": "CG-API-KEY",
+    },
+    "glassnode": {
+        "url": "https://api.glassnode.com/v1/metrics/{id}",
+        "rows": "",
+        "ts": "t",
+        "ts_unit": "s",
+        "value": "v",
+        "key_env": "GLASSNODE_API_KEY",
+        "key_header": "X-Api-Key",
+    },
+    "cryptoquant": {
+        "url": "https://api.cryptoquant.com/v1/{id}",
+        "rows": "result.data",
+        "ts": "datetime",
+        "ts_unit": "iso8601",
+        "key_env": "CRYPTOQUANT_API_KEY",
+        "key_header": "Authorization",
+        "key_prefix": "Bearer ",
+    },
+    "arkham": {
+        "url": "https://api.arkm.com/{id}",
+        "key_env": "ARKHAM_API_KEY",
+        "key_header": "API-Key",
+    },
 }
+# The venues' public positioning endpoints sit with the other venue code.
+PRESETS.update(VENUE_PRESETS)
 FETCH_KEYS = (
     "from",
     "id",
@@ -90,6 +134,7 @@ FETCH_KEYS = (
     "key_param",
     "key_header",
     "key_prefix",
+    "params",
 )
 TIMEOUT_S = 20
 MAX_BYTES = 20_000_000
@@ -118,6 +163,9 @@ def plan(fetch: Mapping[str, Any], name: str) -> dict[str, Any]:
     if origin != "http" and origin not in PRESETS:
         raise PullError(f"{name}: fetch.from is 'http' or one of {sorted(PRESETS)}, not {origin!r}")
     out = {**PRESETS.get(origin, {}), **{k: v for k, v in fetch.items() if k != "from"}}
+    params = out.pop("params", None) or {}
+    if not isinstance(params, Mapping):
+        raise PullError(f"{name}: fetch.params is a table of query fields")
     wanted = [str(out["id"])] if out.get("id") else []
     if out.get("minus"):
         wanted.append(str(out["minus"]))
@@ -130,10 +178,15 @@ def plan(fetch: Mapping[str, Any], name: str) -> dict[str, Any]:
         if hole in str(out.get("url", "")) or hole == out.get("value"):
             if not value:
                 raise PullError(f"{name}: fetch from {origin} needs {hole.strip('{}')}")
-            out["url"] = str(out["url"]).replace(hole, urllib.parse.quote(value, safe=","))
+            # A path id keeps its slashes; anything else that would change the URL is quoted.
+            out["url"] = str(out["url"]).replace(hole, urllib.parse.quote(value, safe=",/"))
             if out.get("value") == hole:
                 out["value"] = value
     url = str(out.get("url", ""))
+    if params:
+        query = urllib.parse.urlencode({str(k): str(v) for k, v in params.items()})
+        url = f"{url}{'&' if '?' in url else '?'}{query}"
+        out["url"] = url
     if not url.startswith("https://"):
         # A key in the clear, or a figure anyone on the path could change, is not worth reading.
         raise PullError(f"{name}: fetch.url is an https address")
@@ -158,26 +211,7 @@ def pull(
     if not spec.has_header or spec.file.lower().endswith(".json"):
         raise PullError(f"{spec.name}: a fetched series is written as a CSV with a header row")
     how = plan(spec.fetch, spec.name)
-    held = os.environ if env is None else env
-    url, headers = str(how["url"]), {"User-Agent": "trading-research-agents", "Accept": "*/*"}
-    secret = ""
-    if how.get("key_env"):
-        secret = held.get(str(how["key_env"]), "")
-        if not secret:
-            raise PullError(
-                f"{spec.name}: {how['key_env']} is not in the environment; set it in the shell "
-                "or in the .env beside this desk's strategy.toml (a .env anywhere else is not read)"
-            )
-        if how.get("key_header"):
-            headers[str(how["key_header"])] = f"{how.get('key_prefix', '')}{secret}"
-        else:
-            joiner = "&" if "?" in url else "?"
-            param = urllib.parse.quote(str(how.get("key_param") or "api_key"))
-            url = f"{url}{joiner}{param}={urllib.parse.quote(secret, safe='')}"
-    try:
-        body = (get or _get)(url, headers)
-    except (OSError, ValueError) as exc:
-        raise PullError(_hide(f"{spec.name}: {exc.__class__.__name__}: {exc}", secret)) from None
+    body = request(how, spec.name, env=env, get=get)
     fresh = _points(body, how, spec.name)
     path = (base / spec.file) if not Path(spec.file).is_absolute() else Path(spec.file)
     known: dict[int, Decimal] = {}
@@ -198,6 +232,36 @@ def pull(
         rows=len(known),
         last=None if last is None else moment(last).isoformat(),
     )
+
+
+def request(
+    how: Mapping[str, Any],
+    name: str,
+    *,
+    env: Mapping[str, str] | None = None,
+    get: Getter | None = None,
+) -> bytes:
+    """The answer at `how["url"]`, with the key from the environment where the vendor wants it."""
+    held = os.environ if env is None else env
+    url, headers = str(how["url"]), {"User-Agent": "trading-research-agents", "Accept": "*/*"}
+    secret = ""
+    if how.get("key_env"):
+        secret = held.get(str(how["key_env"]), "")
+        if not secret:
+            raise PullError(
+                f"{name}: {how['key_env']} is not in the environment; set it in the shell "
+                "or in the .env beside this desk's strategy.toml (a .env anywhere else is not read)"
+            )
+        if how.get("key_header"):
+            headers[str(how["key_header"])] = f"{how.get('key_prefix', '')}{secret}"
+        else:
+            joiner = "&" if "?" in url else "?"
+            param = urllib.parse.quote(str(how.get("key_param") or "api_key"))
+            url = f"{url}{joiner}{param}={urllib.parse.quote(secret, safe='')}"
+    try:
+        return (get or _get)(url, headers)
+    except (OSError, ValueError) as exc:
+        raise PullError(_hide(f"{name}: {exc.__class__.__name__}: {exc}", secret)) from None
 
 
 class _HttpsOnly(urllib.request.HTTPRedirectHandler):
@@ -236,6 +300,9 @@ def _points(body: bytes, how: Mapping[str, Any], name: str) -> dict[int, Decimal
         raise PullError(f"{name}: {how['rows'] or 'the answer'} is not a list of rows")
     out: dict[int, Decimal] = {}
     for row in loaded:
+        if isinstance(row, list):
+            # Some venues answer each row as an array; its fields are named by position.
+            row = {str(i): field for i, field in enumerate(row)}
         if not isinstance(row, Mapping) or how["ts"] not in row or how["value"] not in row:
             continue
         try:

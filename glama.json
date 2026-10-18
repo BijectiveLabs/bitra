@@ -9,6 +9,5 @@
     "url": "https://github.com/BijectiveLabs/trading-research-agents"
   },
   "homepage": "https://docs.bijectivelabs.dev/opensource/mcp",
-  "transport": "stdio",
-  "dockerfile": "glama/Dockerfile"
+  "transport": "stdio"
 }

@@ -1,11 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 
 
 class EnvelopeError(ValueError):
     """Raised when an envelope is incomplete or contradicts itself."""
+
+
+# Market types a channel can carry fees of its own for, besides the base (perpetual) fees.
+MARKET_FEES = ("spot", "prediction")
 
 
 @dataclass(frozen=True)
@@ -26,6 +30,14 @@ class Channel:
     # A chain's own cost of a round trip, in quote currency, for venues where settlement is paid
     # rather than netted out of the fee. Priced as a component like any other.
     gas_quote: Decimal | None = None
+    # Fees for another market type on the same venue, as (market, entry, exit): a spot pair is
+    # usually charged more than the perpetual on the same coin, and one channel prices one fee.
+    market_fees: tuple[tuple[str, Decimal, Decimal], ...] = ()
+    # Which market's fees this channel carries, once `for_market` has chosen; empty is the base.
+    market: str = ""
+    # A prediction venue's fee as a coefficient on price x (1 - price) per share, the way one
+    # venue charges it, declared as [channel.prediction].fee_coefficient instead of a flat rate.
+    fee_coefficient: Decimal | None = None
 
     def __post_init__(self) -> None:
         if not self.venue.strip() or not self.name.strip():
@@ -47,6 +59,43 @@ class Channel:
             not isinstance(self.gas_quote, Decimal) or self.gas_quote < 0
         ):
             raise EnvelopeError("gas_quote must be a non-negative Decimal")
+        for market, entry, exit_ in self.market_fees:
+            if market not in MARKET_FEES:
+                raise EnvelopeError(
+                    f"[channel.{market}] is not a market type with fees of its own; "
+                    f"have {list(MARKET_FEES)}"
+                )
+            if not all(isinstance(v, Decimal) and v >= 0 for v in (entry, exit_)):
+                raise EnvelopeError(f"[channel.{market}] fees are non-negative numbers")
+        if self.fee_coefficient is not None and (
+            not isinstance(self.fee_coefficient, Decimal) or self.fee_coefficient < 0
+        ):
+            raise EnvelopeError("[channel.prediction].fee_coefficient is a non-negative number")
+
+    def outcome_fees(self) -> tuple[Decimal | None, Decimal | None] | None:
+        """How this channel charges a prediction outcome: (coefficient, flat bps), or None when
+        it does not say, which is a refusal rather than a guess at zero."""
+        if self.fee_coefficient is not None:
+            return self.fee_coefficient, None
+        for name, entry, _ in self.market_fees:
+            if name == "prediction":
+                return None, entry
+        return None
+
+    def for_market(self, market: str) -> Channel:
+        """This channel priced for `market`: its own fees when declared, the base ones otherwise."""
+        for name, entry, exit_ in self.market_fees:
+            if name == market:
+                # The measured round trip was measured on the base market, so it does not carry.
+                return replace(
+                    self,
+                    entry_fee_bps=entry,
+                    exit_fee_bps=exit_,
+                    measured_round_trip_bps=None,
+                    market_fees=(),
+                    market=name,
+                )
+        return self
 
     @property
     def key(self) -> str:

@@ -1,4 +1,4 @@
-"""Seven read tools over the gates. Plain functions; every caller wraps them the same way.
+"""Ten read tools over the gates. Plain functions; every caller wraps them the same way.
 
 Paths are resolved on the machine running the tool; every number in basis points is a decimal
 string; every time is UTC. A refusal from a gate is a `ValueError`, `KeyError`, `OSError` or
@@ -54,8 +54,16 @@ def _decimal(text: str, label: str) -> Decimal:
     return value
 
 
-def cost_floor_check(envelope_path: str, magnitude_bps: str, venue: str = "") -> dict[str, Any]:
-    """Is a claimed edge, in basis points, plausible against the cheapest round trip?"""
+def check_cost_floor(envelope_path: str, magnitude_bps: str, venue: str = "") -> dict[str, Any]:
+    """Check whether a claimed edge can pay for trading it, before any data is touched.
+
+    Reads the fee channels declared in envelope.toml, takes the cheapest round trip (on `venue`
+    when given, else across every channel) and compares the claimed magnitude with it. Use it
+    first: an idea whose edge is below the round trip stops here, and no backtest can rescue it.
+    Read-only. Returns `outcome` ("cleared" or "stop"), the channel used, its round trip and the
+    margin (magnitude minus round trip) in bps as decimal strings, and the measured round trip
+    when the channel records one.
+    """
     envelope = load_envelope(_path(envelope_path, kind="envelope"))
     check = cost_floor(envelope, _decimal(magnitude_bps, "magnitude_bps"), venue=venue or None)
     c = check.channel
@@ -73,7 +81,14 @@ def cost_floor_check(envelope_path: str, magnitude_bps: str, venue: str = "") ->
 
 
 def check_registration(registration_path: str) -> dict[str, Any]:
-    """Parse a preregistration.json, verify its seal, and list its kill criteria."""
+    """Read a sealed pre-registration: its hypothesis, universe, power and kill criteria.
+
+    Use it before `validate_trades`, to see what a validation will be judged against, or to
+    confirm that a registration has not been edited since it was sealed: the seal is recomputed
+    from the file. Read-only. Returns the name, the seal, the horizon, the instruments, the sample
+    the power analysis requires, each kill criterion (metric, comparison, threshold, verdict) and
+    the registration it amends, if any. A file that does not parse is refused with the reason.
+    """
     record = json.loads(_path(registration_path, kind="registration").read_text("utf-8"))
     prereg = prereg_from_record(record)
     return {
@@ -96,7 +111,14 @@ def check_registration(registration_path: str) -> dict[str, Any]:
 
 
 def observe_events(dataset_path: str, observation_path: str) -> dict[str, Any]:
-    """Layer 1: does the event declared in observation.toml recur in a Parquet dataset?"""
+    """Layer 1: count whether the event declared in observation.toml recurs in a dataset.
+
+    Marks every occurrence of the declared event in a Parquet trade dataset, measures the
+    response over the declared horizon and counts it per subperiod, so an event that happened in
+    one week only is seen as such. Use it after `check_cost_floor` and before writing a
+    pre-registration. Read-only. Returns the declaration and the report: events found, their
+    spread across subperiods and whether the declared recurrence holds.
+    """
     from trading_research_agents.data.parquet import read_trades as read_prints
 
     dataset = _path(dataset_path, kind="dataset")
@@ -111,7 +133,15 @@ def audit_dataset(
     mapping_path: str = "",
     max_gap_minutes: int = 5,
 ) -> dict[str, Any]:
-    """Is this trade file safe to backtest on? Give a venue plugin name or a column map."""
+    """Audit a raw trade archive before anything is tested on it.
+
+    Normalises the file through a venue plugin (`venue`) or a column map (`mapping_path`), exactly
+    one of the two, and checks it: rows that do not become trades, gaps longer than
+    `max_gap_minutes`, price and size scales that change inside the file, and days that carry most
+    of the rows. Use it on any new dataset; `observe_events` and a backtest assume a file that
+    passed. Read-only. Returns `passed`, accepted and rejected row counts, the first and last
+    timestamps, and each finding with its severity ("fail" or "warn").
+    """
     archive = _path(archive_path, kind="archive")
     if bool(venue) == bool(mapping_path):
         raise ValueError("name exactly one of venue or mapping_path")
@@ -152,7 +182,16 @@ def validate_trades(
     seed: int = 0,
     null_mode: str = "sign",
 ) -> dict[str, Any]:
-    """Run the eight validation requirements on trades.jsonl against a sealed registration."""
+    """Layer 5: judge a set of closed trades against the registration sealed before them.
+
+    Rejects trades outside the registered universe or era, subtracts `cost_bps` from every trade,
+    then runs the eight requirements of layer 5, among them a block bootstrap interval, a
+    permutation test against a null (`null_mode` "sign" or "cross_sectional") and the power
+    achieved against the power required, and applies the registration's kill criteria.
+    Deterministic for a given `seed`. Use it once per registration; running it again with other
+    settings is the forking the seal exists to prevent. Read-only: the verdict is returned, never
+    written to the ledger.
+    """
     registration = prereg_from_record(
         json.loads(_path(registration_path, kind="registration").read_text("utf-8"))
     )
@@ -171,8 +210,13 @@ def validate_trades(
     return dict(validation_record(result))
 
 
-def ledger_show(ledger_path: str = "ledger.jsonl") -> dict[str, Any]:
-    """Every row that stands, and the count per verdict."""
+def show_ledger(ledger_path: str = "ledger.jsonl") -> dict[str, Any]:
+    """List the kill ledger: every verdict that stands, and the count per verdict.
+
+    The ledger is the research memory: what was falsified, closed, not proven or validated, on
+    which axis, and at which fee it would reverse. A retracted row is left out. Use it for the
+    whole picture; `search_ledger` finds the rows about one idea. Read-only.
+    """
     ledger = Ledger(_path(ledger_path, kind="ledger"))
     rows = ledger.effective()
     return {
@@ -181,14 +225,25 @@ def ledger_show(ledger_path: str = "ledger.jsonl") -> dict[str, Any]:
     }
 
 
-def ladder_show(ladder_path: str = "ladder.json") -> dict[str, Any]:
-    """The current tier and the history of promotions and demotions."""
+def show_ladder(ladder_path: str = "ladder.json") -> dict[str, Any]:
+    """Show the promotion ladder: the tier a strategy is on and how it got there.
+
+    Tiers run research, paper, shadow, canary, production; canary and production send real
+    orders. Use it before acting on a run, to know what the strategy is allowed to do. Read-only:
+    promotion is never available through this surface. Returns the tier and every promotion and
+    demotion with its reason.
+    """
     ladder = Ladder(_path(ladder_path, kind="ladder"))
     return {"tier": ladder.tier.name, "history": list(ladder.history)}
 
 
-def run_report(run_dir: str) -> dict[str, Any]:
-    """run.json of a replay, shadow or canary run, with its closed round trips counted."""
+def read_run_report(run_dir: str) -> dict[str, Any]:
+    """Read one run's report: what a replay, shadow or canary run did, and how it ended.
+
+    Returns run.json as written (label, instrument, strategy, prints, bars, intents, refusals,
+    fills, net bps, what stopped it) and the count of closed round trips in its trades.jsonl. Use
+    `list_runs` to find the run directory first. Read-only.
+    """
     directory = Path(run_dir).expanduser()
     summary = _path(str(directory / "run.json"), kind="run report")
     report = json.loads(summary.read_text("utf-8"))
@@ -201,11 +256,13 @@ def run_report(run_dir: str) -> dict[str, Any]:
     return dict(report)
 
 
-def ledger_search(ledger_path: str, query: str, limit: int = 10) -> dict[str, Any]:
-    """Rows that stand whose subject, note, evidence or axis mention the words in `query`.
+def search_ledger(ledger_path: str, query: str, limit: int = 10) -> dict[str, Any]:
+    """Search the kill ledger for verdicts that mention the words in `query`.
 
-    The kill ledger is the research memory: what died, of what, and at which fee it reverses.
-    A role that is about to propose something asks here first.
+    Matches the subject, note, evidence and axis of every row that stands, and ranks rows by how
+    many words they contain. Ask here before proposing an idea: if it already died, the row says
+    of what and at which fee it would reverse. Read-only. Returns the query, the number of rows
+    matched and up to `limit` of them, best first.
     """
     words = [w.lower() for w in query.split() if w.strip()]
     if not words:
@@ -222,8 +279,14 @@ def ledger_search(ledger_path: str, query: str, limit: int = 10) -> dict[str, An
     return {"query": query, "matched": len(hits), "rows": [r for _, r in hits[: max(limit, 1)]]}
 
 
-def runs_index(runs_dir: str, instrument: str = "") -> dict[str, Any]:
-    """Every run under a directory, newest first, with its summary; filtered by instrument."""
+def list_runs(runs_dir: str, instrument: str = "") -> dict[str, Any]:
+    """List past runs under a directory, newest first, with the summary of each.
+
+    Finds every run.json below `runs_dir` and returns its directory, label, instrument, strategy,
+    round trips, net bps, what stopped it and when it finished; at most 50, with the total.
+    Filter by `instrument` to compare runs on one market. Use `read_run_report` for one run in full.
+    Read-only.
+    """
     root = Path(runs_dir).expanduser()
     if not root.is_dir():
         raise FileNotFoundError(f"runs directory {runs_dir!r} does not exist")
@@ -250,16 +313,61 @@ def runs_index(runs_dir: str, instrument: str = "") -> dict[str, Any]:
     return {"runs": rows[:50], "total": len(rows)}
 
 
+# What each argument means, for the schema a host shows the model.
+PARAMETERS: dict[str, dict[str, str]] = {
+    "check_cost_floor": {
+        "envelope_path": "path to envelope.toml, the declared fee channels",
+        "magnitude_bps": "the claimed edge per round trip, in basis points, as a decimal string",
+        "venue": "only this venue's channels; empty for the cheapest across all",
+    },
+    "observe_events": {
+        "dataset_path": "path to a Parquet trade dataset written by `tra data get`",
+        "observation_path": "path to observation.toml, the declared event and recurrence",
+    },
+    "check_registration": {
+        "registration_path": "path to a preregistration.json",
+    },
+    "audit_dataset": {
+        "archive_path": "path to the raw trade archive (csv, csv.gz or zip)",
+        "instrument": "the instrument the archive should contain, e.g. BTCUSDT",
+        "venue": "an archive venue plugin name; leave empty when giving mapping_path",
+        "mapping_path": "path to a column map (mapping.toml); leave empty when giving venue",
+        "max_gap_minutes": "a gap between trades longer than this is reported",
+    },
+    "validate_trades": {
+        "registration_path": "path to the sealed preregistration.json",
+        "trades_path": "path to trades.jsonl, the closed trades to judge",
+        "cost_bps": "round-trip cost subtracted from every trade, in bps, as a decimal string",
+        "block_length": "block length of the bootstrap, in trades",
+        "n_resamples": "bootstrap resamples",
+        "n_perm": "permutations of the null",
+        "seed": "random seed; the same seed gives the same verdict",
+        "null_mode": '"sign" (flip each trade\'s sign) or "cross_sectional"',
+    },
+    "show_ledger": {"ledger_path": "path to the kill ledger, ledger.jsonl"},
+    "show_ladder": {"ladder_path": "path to the promotion ladder, ladder.json"},
+    "read_run_report": {"run_dir": "a run's directory, the one holding run.json"},
+    "search_ledger": {
+        "ledger_path": "path to the kill ledger, ledger.jsonl",
+        "query": "words to look for; a row matches when it contains any of them",
+        "limit": "most rows to return",
+    },
+    "list_runs": {
+        "runs_dir": "directory to search for run.json files, e.g. runs",
+        "instrument": "only runs on this instrument; empty for all",
+    },
+}
+
 # Name, title, function. The order is the order a host lists them in.
 READ_TOOLS: tuple[tuple[str, str, Callable[..., dict[str, Any]]], ...] = (
-    ("cost_floor_check", "Cost floor (layer 0)", cost_floor_check),
+    ("check_cost_floor", "Cost floor (layer 0)", check_cost_floor),
     ("observe_events", "Market observation (layer 1)", observe_events),
     ("check_registration", "Check a pre-registration (layer 3)", check_registration),
     ("audit_dataset", "Audit a dataset (data gate)", audit_dataset),
     ("validate_trades", "Validate trades (layer 5)", validate_trades),
-    ("ledger_show", "Show the kill ledger", ledger_show),
-    ("ladder_show", "Show the promotion ladder", ladder_show),
-    ("run_report", "Read a run report", run_report),
-    ("ledger_search", "Search the kill ledger", ledger_search),
-    ("runs_index", "List past runs", runs_index),
+    ("show_ledger", "Show the kill ledger", show_ledger),
+    ("show_ladder", "Show the promotion ladder", show_ladder),
+    ("read_run_report", "Read a run report", read_run_report),
+    ("search_ledger", "Search the kill ledger", search_ledger),
+    ("list_runs", "List past runs", list_runs),
 )

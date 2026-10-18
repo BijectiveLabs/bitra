@@ -109,7 +109,33 @@ in the code is tied to a vendor, and a vendor with no declaration is not read.
 | `fred` (with `id`, such as `DGS10`) | Federal Reserve Economic Data: yields, the dollar, inflation, thousands more | `FRED_API_KEY`, free from fred.stlouisfed.org |
 | `coinmetrics` (with `id`, optional `asset`, `minus`) | Coin Metrics community API: exchange flows, active addresses, supply, for many assets; `minus` subtracts a second metric, so inflow less outflow is one net-flow series | none |
 | `blockchain.info` (with `id`, such as `n-unique-addresses`) | Blockchain.com charts, Bitcoin only | none |
+| `binance-futures` (with `id`, `params`, `value`) | Binance USD-M public data: `globalLongShortAccountRatio`, `takerlongshortRatio`, `openInterestHist`, five-minute steps | none |
+| `bybit` (with `id`, `params`, `value`) | Bybit public market data: `account-ratio` (long/short accounts), `open-interest` | none |
+| `okx` (with `id`, `params`, `value`) | OKX public statistics: `contracts/long-short-account-ratio`, `taker-volume`; rows are arrays, so `value` is a position such as `"1"` | none |
+| `coinglass` (with `id`, `params`, `value`) | CoinGlass API v4: aggregated liquidations, open interest, long/short ratios, taker volume, across venues | `COINGLASS_API_KEY`, sent as `CG-API-KEY` |
+| `glassnode` (with `id`, `params`) | Glassnode metrics, such as `transactions/transfers_volume_exchanges_net` with `params = { a = "BTC", i = "1h" }` | `GLASSNODE_API_KEY`, sent as `X-Api-Key` |
+| `cryptoquant` (with `id`, `params`, `value`) | CryptoQuant, such as `btc/exchange-flows/netflow` with `window = "hour"` and `value = "netflow_total"` | `CRYPTOQUANT_API_KEY`, sent as a bearer token |
+| `arkham` (with `id`, `rows`, `ts`, `value`) | Arkham's API at `api.arkm.com`; the endpoint and its fields come from its reference | `ARKHAM_API_KEY`, sent as `API-Key` |
 | `http` | any endpoint that answers JSON over https, including paid on-chain and derivatives vendors | whatever the vendor asks for |
+
+The venue presets were read live on 2026-10-18. The paid presets follow each vendor's published
+reference (CoinGlass's v4 endpoints, Glassnode's `t`/`v` rows, CryptoQuant's `result.data` with a
+bearer token, Arkham's `API-Key` header); none has been run against a paid key here, so the first
+`tra sources add` with your key is the check. `params` is the query a preset leaves to you:
+
+```toml
+fetch = { from = "coinglass", id = "futures/liquidation/aggregated-history",
+          params = { symbol = "BTC", interval = "1h", exchange_list = "Binance,OKX,Bybit" },
+          value = "aggregated_short_liquidation_usd", minus = "aggregated_long_liquidation_usd" }
+```
+
+On the command line it is one `--param` per field:
+
+```bash
+tra sources add derivatives btc_long_short --from bybit --id account-ratio \
+  --param category=linear --param symbol=BTCUSDT --param period=5min --param limit=500 \
+  --value buyRatio --asset BTC --high bearish
+```
 
 A paid vendor is one line. Take the path, the field names and where the key goes from the vendor's
 own docs:
@@ -134,9 +160,55 @@ A pull merges into the file, so history you already had stays. A pull that fails
 it was and says why, with the key blanked out of the message. The desk keeps running; the file's age
 decides whether its last value still counts.
 
-Text is never fetched. Headlines from a news API or posts from a forum need your own small exporter,
-written under that service's terms, into a `news.toml` file. Scores built from them go in
-`sentiment.toml`, which can fetch.
+## News and public sentiment
+
+A `[[news]]` entry can fetch too: an RSS or Atom feed, or any JSON news API. The headlines land in
+the entry's file as `when,what,source` rows, merged with what it held, and anything older than
+`keep` is let go. The macro analyst reads them as events and the sentiment analyst as notes.
+
+```toml
+[[news]]
+name = "coindesk"
+file = "news/coindesk.csv"
+fetch = { from = "rss", url = "https://www.coindesk.com/arc/outboundfeeds/rss/" }
+
+[[news]]
+name = "reddit_cryptocurrency"
+file = "news/reddit_cryptocurrency.csv"
+source = "r/CryptoCurrency"
+refresh = "15m"                      # the default; keep = "7d" is the other
+fetch = { from = "rss", url = "https://www.reddit.com/r/CryptoCurrency/top/.rss", params = { t = "day" } }
+
+[[news]]
+name = "wire"
+file = "news/wire.csv"
+fetch = { from = "http", url = "https://api.your-news.example/posts/", rows = "results",
+          ts = "published_at", text = "title", source = "source.title",
+          key_env = "NEWS_API_KEY", key_param = "auth_token" }
+```
+
+A headline is stored as one plain line: markup and entities resolved, control characters removed,
+at most 280 characters. A feed that declares a document type is refused, so no entity is ever
+expanded. Fetch only what the service's terms allow you to fetch.
+
+A reading analyst whose series declare nothing, which is what a file of headlines is, has no
+declared state for conviction to read; its label is recorded and counts for nothing. To let it
+count, give it a strength:
+
+```toml
+[conviction]
+reader_labels = 0.5     # 0 (the default) keeps labels out; 1 counts a label like a full reading
+```
+
+The label counts only when the analyst cited what it read; an answer that points at nothing is
+still nothing.
+
+## Positioning for the technical analyst
+
+Series in `sources/derivatives.toml` on the traded instrument's asset (or with no asset) are handed
+to the technical analyst as `positioning`: each one's last value, its change over the last hour, its
+age and your declared state. With the venue presets above, refreshed every five minutes, that is
+who is long against who is short and who is buying against who is selling, as of the decision.
 
 ## When an analyst is not asked
 

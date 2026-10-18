@@ -6,10 +6,36 @@
 # decides on come through data.toml, from the venue, with their age attached. Keeping them apart is
 # what stops a stale daily file from standing in for a number that has to be fresh.
 
-# A paid derivatives feed is one fetch line, declared as in onchain.toml; macro.toml lists the fields.
+# The series here on the traded instrument's asset also reach the technical analyst, as
+# `positioning`: last value, change over the last hour, age, declared state.
+#
+# Free, from the venues themselves, no key, five-minute steps (set `asset`, and the symbol in
+# params, per instrument):
+#   from = "bybit",           id = "account-ratio",                       value = "buyRatio"
+#   from = "binance-futures", id = "takerlongshortRatio",                 value = "buySellRatio"
+#   from = "okx",             id = "contracts/long-short-account-ratio",  value = "1"
+# Paid, with your key in the environment:
+#   from = "coinglass", id = "futures/liquidation/aggregated-history"     (COINGLASS_API_KEY)
+# `tra sources add derivatives NAME --from ... --param symbol=BTCUSDT ...` writes the block and draws
+# its lines from the series' own history.
 
 # Nothing is switched on yet. Uncomment an entry and put the file where it points; the on-chain
 # analyst reads this class beside onchain.toml.
+
+# [[series]]
+# name = "btc_long_short"
+# file = "derivatives/btc_long_short.csv"   # share of accounts long on the venue
+# ts = "date"
+# ts_unit = "iso8601"
+# value = "value"
+# unit = "share"
+# publish_lag = "0s"
+# source = "bybit account-ratio"
+# max_age = "1h"
+# refresh = "5m"
+# asset = "BTC"
+# fetch = { from = "bybit", id = "account-ratio", value = "buyRatio", params = { category = "linear", symbol = "BTCUSDT", period = "5min", limit = "500" } }
+# threshold = { bearish_above = 0.66, bullish_below = 0.55 }   # a crowded long is fuel for a flush
 
 # [[series]]
 # name = "funding_8h"

@@ -18,7 +18,7 @@ from trading_research_agents.execution.confluence import STANCES, ConfluenceErro
 from trading_research_agents.execution.conviction import Conviction, ConvictionError, Tier
 from trading_research_agents.execution.cost import CostError, FundingSchedule
 from trading_research_agents.execution.desk import Desk, DeskError
-from trading_research_agents.execution.mandate import MARKETS, Mandate, MandateError
+from trading_research_agents.execution.mandate import DEFAULT_MARKETS, Mandate, MandateError
 from trading_research_agents.execution.regime import REGIME_KEYS, RegimeError, RegimeRule
 from trading_research_agents.execution.stops import MODES, StopError, VolatilityExit
 from trading_research_agents.execution.targets import TargetError, Targets
@@ -158,6 +158,10 @@ class AgentSettings:
     # off mid-answer costs the call and returns a worse decision, so a ceiling is something an
     # operator asks for deliberately, not something this software assumes on their behalf.
     token_budget: int | None = None
+    # Per UTC day, across runs and restarts, every role and both auditors: past either one the desk
+    # asks no model until the next day, and open positions keep their exits.
+    daily_token_budget: int | None = None
+    daily_cost_budget: Decimal | None = None
     max_calls_per_hour: int | None = None
     min_interval_s: int = 0
     call_timeout_s: int = 60
@@ -257,6 +261,8 @@ class StrategyConfig:
     kill_switch: Path | None
     run: RunSettings
     registration_seal: str | None
+    # A file whose presence holds every new entry and keeps every open position looked after.
+    pause_switch: Path | None = Path("PAUSE")
     live: LiveSettings | None = None
     canary: CanaryLimits | None = None
     funding: FundingSchedule | None = None
@@ -393,6 +399,7 @@ def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> S
         exit_rule=exit_rule,
         limits=limits,
         kill_switch=Path(str(kill)) if kill else None,
+        pause_switch=Path(str(controls_raw.get("pause_switch", "PAUSE"))),
         run=run,
         registration_seal=seal,
         live=_live(raw, run.venue_key),
@@ -469,6 +476,8 @@ KNOWN_ROLES = (
     "auditor",
     # One stance is one call, so a validator may run on its own model like any other role.
     "validator",
+    # The deciding role on a prediction market outcome.
+    "event_analyst",
 )
 # The llm layer owns this vocabulary; it is repeated here because the gates never import it, and
 # repeated in one place so a bad spelling is refused while reading the file rather than mid-cycle.
@@ -554,6 +563,36 @@ def _effort(raw: Any) -> str | None:
     return raw
 
 
+AGENTS_KEYS = (
+    "provider",
+    "model",
+    "base_url",
+    "mechanism",
+    "pricing",
+    "min_confidence",
+    "token_budget",
+    "daily_token_budget",
+    "daily_cost_budget",
+    "max_calls_per_hour",
+    "min_interval_s",
+    "call_timeout_s",
+    "lookback_bars",
+    "decide_every_bars",
+    "max_output_tokens",
+    "max_retries",
+    "max_retry_wait_s",
+    "effort",
+    "magnitude_bps",
+    "screen",
+    "roles",
+    "analysts",
+    "validators",
+    "on_missing_validator",
+    "reuse_reading_for",
+    "fallback",
+)
+
+
 def _agents(raw: dict[str, Any], strategy_raw: dict[str, Any]) -> AgentSettings | None:
     role = strategy_raw.get("agent")
     if role is None:
@@ -565,6 +604,11 @@ def _agents(raw: dict[str, Any], strategy_raw: dict[str, Any]) -> AgentSettings 
     table = raw.get("agents")
     if not isinstance(table, dict):
         raise ConfigError("[agents] is required when [strategy].agent is set")
+    # A misspelt budget is a budget that is not there; it is refused rather than ignored.
+    unknown = sorted(set(table) - set(AGENTS_KEYS))
+    _no_secrets(unknown, "[agents]")
+    if unknown:
+        raise ConfigError(f"[agents]: unknown {unknown}; have {list(AGENTS_KEYS)}")
     provider = str(table.get("provider", ""))
     if not provider:
         raise ConfigError("[agents].provider names the model provider")
@@ -586,6 +630,12 @@ def _agents(raw: dict[str, Any], strategy_raw: dict[str, Any]) -> AgentSettings 
         base_url=str(table["base_url"]) if table.get("base_url") else None,
         mechanism=mechanism,
         token_budget=_int(table, "token_budget") if "token_budget" in table else None,
+        daily_token_budget=(
+            _int(table, "daily_token_budget") if "daily_token_budget" in table else None
+        ),
+        daily_cost_budget=(
+            _dec(table, "daily_cost_budget") if "daily_cost_budget" in table else None
+        ),
         max_calls_per_hour=(
             _int(table, "max_calls_per_hour") if "max_calls_per_hour" in table else None
         ),
@@ -681,6 +731,9 @@ EXECUTION_KEYS = (
     "params",
     "environment",
     "markets",
+    "equity_session",
+    "equity_closed",
+    "equities",
 )
 
 
@@ -728,21 +781,38 @@ def _mandate(raw: dict[str, Any], venue_key: str) -> Mandate:
             ),
             hold_limit=str(table.get("hold_limit", "timeout")),
             markets=_markets(table),
+            equity_session=str(table.get("equity_session", "regular")),
+            equity_closed=_execution_names(table, "equity_closed"),
+            equities=tuple(n.upper() for n in _execution_names(table, "equities")),
         )
     except MandateError as exc:
         raise ConfigError(str(exc)) from exc
 
 
+def _execution_names(table: Mapping[str, Any], key: str) -> tuple[str, ...]:
+    listed = table.get(key, [])
+    if not isinstance(listed, list) or not all(isinstance(n, str) for n in listed):
+        raise ConfigError(f"[execution].{key} is a list of strings")
+    return tuple(n.strip() for n in listed if n.strip())
+
+
 def _markets(table: Mapping[str, Any]) -> tuple[str, ...]:
     if "markets" not in table:
-        return MARKETS
+        return DEFAULT_MARKETS
     listed = table["markets"]
     if not isinstance(listed, list) or not all(isinstance(kind, str) for kind in listed):
         raise ConfigError('[execution].markets is a list of market types: ["linear perpetual"]')
     return tuple(dict.fromkeys(kind.strip() for kind in listed))
 
 
-CONVICTION_KEYS = ("weights", "validator_weight", "min_score", "max_leverage", "ladder")
+CONVICTION_KEYS = (
+    "weights",
+    "validator_weight",
+    "min_score",
+    "max_leverage",
+    "ladder",
+    "reader_labels",
+)
 
 
 def _conviction(raw: dict[str, Any]) -> Conviction:
@@ -780,6 +850,9 @@ def _conviction(raw: dict[str, Any]) -> Conviction:
             min_score=_dec(table, "min_score") if "min_score" in table else Decimal(0),
             ladder=tuple(rungs),
             max_leverage=_dec(table, "max_leverage") if "max_leverage" in table else None,
+            reader_labels=(
+                _dec(table, "reader_labels") if "reader_labels" in table else Decimal(0)
+            ),
         )
     except ConvictionError as exc:
         raise ConfigError(str(exc)) from exc
@@ -1087,6 +1160,11 @@ def _regime(raw: dict[str, Any]) -> RegimeRule:
             trend_above=_dec(table, "trend_above") if "trend_above" in table else Decimal("2.0"),
             range_below=_dec(table, "range_below") if "range_below" in table else Decimal("1.0"),
             setups_must_fit=fit,
+            fade_below_variance_ratio=(
+                _dec(table, "fade_below_variance_ratio")
+                if "fade_below_variance_ratio" in table
+                else Decimal("1.0")
+            ),
         )
     except RegimeError as exc:
         raise ConfigError(str(exc)) from exc
@@ -1347,6 +1425,9 @@ CONTROLS_KEYS = (
     "max_drawdown_bps",
     "on_drawdown",
     "kill_switch",
+    "pause_switch",
+    "max_trades_per_day",
+    "max_losing_streak",
 )
 
 
@@ -1376,6 +1457,12 @@ def _limits(table: dict[str, Any]) -> Limits:
             max_position_quote=optional("max_position_quote"),
             max_drawdown_bps=optional("max_drawdown_bps"),
             on_drawdown=str(table.get("on_drawdown", "stop")),
+            max_trades_per_day=(
+                _int(table, "max_trades_per_day") if "max_trades_per_day" in table else None
+            ),
+            max_losing_streak=(
+                _int(table, "max_losing_streak") if "max_losing_streak" in table else None
+            ),
         )
     except ControlError as exc:
         raise ConfigError(f"[controls]: {exc}") from exc

@@ -31,6 +31,8 @@ FIGURES = (
     "position_in_range",
     "window_move_bps",
     "trend_strength",
+    "variance_ratio",
+    "market_structure",
     "regime",
     "spread_bps",
     "funding_rate",
@@ -108,6 +110,9 @@ def _recompute(folder: Path) -> list[str]:
                 trend_above=Decimal(str(regime.get("trend_above", "2.0"))),
                 range_below=Decimal(str(regime.get("range_below", "1.0"))),
                 setups_must_fit=bool(regime.get("setups_must_fit", True)),
+                fade_below_variance_ratio=Decimal(
+                    str(regime.get("fade_below_variance_ratio", "1.0"))
+                ),
             ),
             context=context,
         ).record()

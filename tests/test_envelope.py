@@ -121,3 +121,41 @@ def test_a_channel_may_carry_the_chains_own_cost(tmp_path: Path) -> None:
             exit_fee_bps=Decimal(1),
             gas_quote=Decimal(-1),
         )
+
+
+SPOT_PRICED = """
+[[channel]]
+venue = "bybit"
+name = "taker-taker"
+entry_fee_bps = 5.5
+exit_fee_bps = 5.5
+measured_round_trip_bps = 15.02
+
+[channel.spot]
+entry_fee_bps = 10
+exit_fee_bps = 10
+"""
+
+
+def test_a_channel_carries_the_spot_pairs_fees_beside_the_perpetuals() -> None:
+    channel = parse_envelope(SPOT_PRICED).channels[0]
+    assert channel.round_trip_bps == Decimal("11.0") and channel.key == "bybit/taker-taker"
+    spot = channel.for_market("spot")
+    assert spot.round_trip_bps == Decimal(20) and spot.key == channel.key
+    # Measured on the perpetual, so not carried over to a market it was not measured on.
+    assert spot.market == "spot" and spot.measured_round_trip_bps is None
+    plain = parse_envelope(SPOT_PRICED.split("[channel.spot]")[0]).channels[0]
+    assert plain.for_market("spot") is plain
+
+
+def test_fees_for_a_market_type_without_its_own_are_refused() -> None:
+    with pytest.raises(EnvelopeError, match="declares entry_fee_bps and exit_fee_bps"):
+        parse_envelope(SPOT_PRICED.replace("exit_fee_bps = 10\n", ""))
+    with pytest.raises(EnvelopeError, match="not a market type with fees of its own"):
+        Channel(
+            "v",
+            "taker-taker",
+            Decimal(1),
+            Decimal(1),
+            market_fees=(("option", Decimal(1), Decimal(1)),),
+        )

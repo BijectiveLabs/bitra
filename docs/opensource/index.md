@@ -101,8 +101,9 @@ is guaranteed, what is not built yet, and what adding each piece would take.
 
 The project is in active development, and these pages describe where it stands today.
 
-- **More market types:** spot, inverse and dated futures, and options, each added with its own
-  cost model, exit rules, sizing and tests before venue mode accepts it.
+- **More market types:** spot, stock perpetuals, tokenized stocks and prediction markets are
+  built; inverse and dated futures and options follow, each with its own cost model, exit rules, sizing
+  and tests before venue mode accepts it.
 - **More venues run end to end:** each joins Bybit and OKX after a full run on its practice
   account, ours or yours.
 - **The rest of the not-built-yet list** in [Boundaries](/opensource/boundaries), one piece at a

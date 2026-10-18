@@ -37,6 +37,8 @@ def sentiment_brief(
     notes: Sequence[Event] = (),
     look_back: timedelta = timedelta(days=7),
     zscore_points: int = 30,
+    notes_window: timedelta = timedelta(hours=24),
+    max_notes: int = 40,
 ) -> dict[str, Any]:
     """Scores and dated notes as of one moment. No source declared is a state, not a zero."""
     window = f"{len(times_ns)} steps" if times_ns else "no steps"
@@ -61,17 +63,17 @@ def sentiment_brief(
                 ),
             }
         )
-    recent = [
-        e.record()
-        for e in notes
-        if at_ns - int(look_back.total_seconds() * NS_PER_S) <= e.when_ns <= at_ns
-    ]
+    # Headlines age by the hour, not the week; the newest of the last day are what is read. Each is
+    # named, so an answer can point at the one it rests on and code can check it.
+    since = at_ns - int(min(look_back, notes_window).total_seconds() * NS_PER_S)
+    fresh = [e for e in notes if since <= e.when_ns <= at_ns][-max_notes:]
+    recent = [{"name": f"note_{n}", **e.record()} for n, e in enumerate(fresh, start=1)]
     return {
         "as_of": datetime.fromtimestamp(at_ns / NS_PER_S, tz=UTC).isoformat(),
         "basis": (
             "scores are the last known before as_of; states come from operator-declared "
-            "thresholds; correlations are measured on the operator's data and carry n; nothing "
-            "here was scraped"
+            "thresholds; correlations are measured on the operator's data and carry n; notes are "
+            "dated text from the feeds and files the operator declared, and nothing else"
         ),
         "declared": bool(series or recent),
         "series": rows,

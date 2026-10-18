@@ -32,7 +32,9 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
 
-from trading_research_agents.execution.mandate import MARKETS
+from trading_research_agents.data.sources.ccxt_client import build as build_client
+from trading_research_agents.data.sources.ccxt_client import exchange_class, market_of
+from trading_research_agents.execution.mandate import DEFAULT_MARKETS, MARKETS
 from trading_research_agents.extras import install_hint
 from trading_research_agents.trading.capital import (
     CapitalError,
@@ -43,6 +45,8 @@ from trading_research_agents.trading.capital import (
 )
 from trading_research_agents.trading.market import Market, MarketError
 from trading_research_agents.trading.venues.accounts import account_refusal
+from trading_research_agents.trading.venues.exits import exit_cancel_params, exit_reads
+from trading_research_agents.trading.venues.limits import price_band
 
 SIDES = {"long": "buy", "short": "sell"}
 # Read from ccxt 4.5 on 2026-09-29: a venue reaches its demo environment through
@@ -97,6 +101,14 @@ class OrderRate:
         return ""
 
 
+def _namespace_missing() -> bool:
+    try:
+        import ccxt  # noqa: F401
+    except ImportError:
+        return True
+    return False
+
+
 def credentials_for(venue: str, client: Any = None) -> dict[str, str]:
     """What this venue signs with, as ccxt field -> environment variable.
 
@@ -108,13 +120,8 @@ def credentials_for(venue: str, client: Any = None) -> dict[str, str]:
         return {}
     required: dict[str, Any] = {}
     if client is None:
-        try:
-            import ccxt
-
-            factory = getattr(ccxt, venue.strip().lower(), None)
-            client = factory() if factory is not None else None
-        except ImportError:  # pragma: no cover - exercised only without the extra
-            client = None
+        factory = exchange_class(venue)
+        client = factory() if factory is not None else None
     if client is not None:
         required = dict(getattr(client, "requiredCredentials", None) or {})
     fields = [name for name in CREDENTIAL_ENV if required.get(name)] or list(PLAIN_PAIR)
@@ -152,7 +159,7 @@ class VenueHand:
     max_slippage_bps: Decimal = Decimal(20)
     max_margin_share: Decimal = Decimal("0.5")
     liquidation_buffer_bps: Decimal = Decimal(50)
-    markets: tuple[str, ...] = MARKETS
+    markets: tuple[str, ...] = DEFAULT_MARKETS
     # Shared by every hand in a run: [controls].max_orders_per_minute is the desk's, not a hand's.
     rate: OrderRate | None = None
     client: Any = None
@@ -195,14 +202,11 @@ class VenueHand:
                 f"{' and '.join(missing)} not set: not in the shell and not in the .env beside "
                 "strategy.toml, the only two places keys are read from"
             )
-        try:
-            import ccxt
-        except ImportError as exc:  # pragma: no cover - exercised only without the extra
-            raise DispatchError(f"ccxt is not installed; {install_hint('ccxt')}") from exc
-        factory = getattr(ccxt, self.venue, None)
-        if factory is None:
+        if exchange_class(self.venue) is None:
+            if _namespace_missing():  # pragma: no cover - exercised only without the extra
+                raise DispatchError(f"ccxt is not installed; {install_hint('ccxt')}")
             raise DispatchError(f"ccxt has no exchange named {self.venue!r}")
-        client = factory({**held, "enableRateLimit": True, **self.options})
+        client = build_client(self.venue, {**held, "enableRateLimit": True, **self.options})
         self.to_environment(client)
         return client
 
@@ -253,10 +257,12 @@ class VenueHand:
             skew = self.clock_skew()
             if skew:
                 return skew
-            hedged = self.hedged()
+            market = self.market()
+            derivative = not (market.held_as_balance or market.outcome)
+            hedged = self.hedged() if derivative else ""
             if hedged:
                 return hedged
-            setting = account_refusal(self.venue, self.client)
+            setting = account_refusal(self.venue, self.client, derivative=derivative)
             if setting:
                 return setting
             self._open_orders()
@@ -283,15 +289,16 @@ class VenueHand:
         if self.sent_count:
             # One decision, one order. A hand asked twice is a wiring fault, not a second trade.
             return {"sent": False, "refused": "this hand has already sent its one order"}
-        kind = self.market().label
+        market = self.market()
+        kind = market.label
         if kind not in MARKETS and kind != UNDESCRIBED:
-            # Leverage, margin, liquidation and reduce-only exits are all perpetual-futures
-            # mechanics; a spot or option symbol here would be priced and protected wrongly.
+            # A type with no rules here would be priced and protected by another type's rules.
             return {
                 "sent": False,
                 "refused": (
-                    f"{self.symbol} is a {kind} market; venue mode trades linear perpetual "
-                    "futures today, and other market types are not built yet"
+                    f"{self.symbol} is a {kind} market; venue mode trades "
+                    f"{' and '.join(MARKETS)} markets today, and other market types are not "
+                    "built yet"
                 ),
             }
         if kind not in self.markets and kind != UNDESCRIBED:
@@ -305,6 +312,15 @@ class VenueHand:
         target = str(intent.get("target", ""))
         if target not in SIDES:
             return {"sent": False, "refused": f"target {target!r} is not an order"}
+        if target == "short" and not market.shortable:
+            return {
+                "sent": False,
+                "refused": (
+                    f"{self.symbol} is a {kind} market; a short there sells coins the account "
+                    "does not hold, which needs a borrow this desk does not take"
+                ),
+            }
+        derivative = not (market.held_as_balance or market.outcome)
         side = SIDES[target]
         size = Decimal(str(intent.get("size", "0")))
         mid = Decimal(str(intent.get("mid", "0")))
@@ -333,11 +349,11 @@ class VenueHand:
             if skew:
                 return {"sent": False, "refused": skew}
             self.skew_checked = True
-        hedged = self.hedged()
+        hedged = self.hedged() if derivative else ""
         if hedged:
             return {"sent": False, "refused": hedged}
         if not self.account_checked:
-            setting = account_refusal(self.venue, self.client)
+            setting = account_refusal(self.venue, self.client, derivative=derivative)
             if setting:
                 return {"sent": False, "refused": setting}
             self.account_checked = True
@@ -391,10 +407,14 @@ class VenueHand:
             }
         fresh = {"bid": now_bid, "ask": now_ask} if now_bid and now_ask else None
 
-        held_back = self._ensure_leverage()
+        held_back = self._ensure_leverage() if derivative else ""
         if held_back:
             return {"sent": False, "refused": held_back}
-        carried = self._capital(notional, side, mid, intent)
+        carried = (
+            self._capital(notional, side, mid, intent)
+            if derivative
+            else self._cash(notional, market, size, mid)
+        )
         if isinstance(carried, str):
             return {"sent": False, "refused": carried}
         if self.rate is not None:
@@ -403,8 +423,11 @@ class VenueHand:
                 return {"sent": False, "refused": busy}
 
         order_id = _client_id(intent)
-        params: dict[str, Any] = {"clientOrderId": order_id, **dict(self.params)}
-        protective = self._protective(intent, target)
+        # The prediction venues take no client id through ccxt; their orders are matched by the id
+        # the venue returns, and one decision still sends one order.
+        params: dict[str, Any] = {} if market.outcome else {"clientOrderId": order_id}
+        params.update(self.params)
+        protective = {} if market.outcome else self._protective(intent, target)
         if isinstance(protective, str):
             return {"sent": False, "refused": protective}
         params.update(protective)
@@ -470,7 +493,37 @@ class VenueHand:
         elif placed["filled"] is None:
             placed.update(self._taken(str(placed["order_id"])))
         placed["slippage_bps"] = _slippage_bps(placed.get("average"), mid, side)
+        if market.outcome:
+            placed["exits"] = "bounded"
+            placed.update(self._rest_take(placed, intent))
         return placed
+
+    def _rest_take(self, placed: Mapping[str, Any], intent: Mapping[str, Any]) -> dict[str, Any]:
+        """An outcome's exit: what it filled, offered at the take price, resting at the venue.
+
+        An outcome share cannot lose more than it cost, so the stake is the stop; the take profit
+        is the price the analyst's probability says the share is worth, left on the book so it
+        outlives this process the way an attached exit does.
+        """
+        filled = Decimal(str(placed.get("filled") or 0))
+        take = intent.get("take_price")
+        if filled <= 0 or not take:
+            return {"take_order": None}
+        try:
+            order = self.client.create_order(
+                self.symbol,
+                "limit",
+                "sell",
+                float(filled),
+                float(Decimal(str(take))),
+                {**self.params, "timeInForce": "GTC"},
+            )
+        except Exception as exc:
+            return {
+                "take_order": None,
+                "take_refused": self.redact(f"{exc.__class__.__name__}: {exc}")[:200],
+            }
+        return {"take_order": str(order.get("id", "")), "take_size": f"{filled:f}"}
 
     def _taken(self, order_id: str, tries: int = 4) -> dict[str, Any]:
         """What an IOC entry actually filled. Some venues answer a create with only an id."""
@@ -612,6 +665,8 @@ class VenueHand:
         minimum are in contracts, so the size is judged as contracts.
         """
         to_step = getattr(self.client, "amount_to_precision", None)
+        if self.market().outcome:
+            to_step = getattr(self.client, "amount_to_prediction_precision", None)
         if to_step is None:
             return ""
         shown = f"{size} ({contracts} contracts of {unit})" if unit != 1 else f"{size}"
@@ -657,6 +712,11 @@ class VenueHand:
         A hand that cannot read the account does not send: an order into a position nobody can see
         is the one mistake that cannot be undone by reading the record afterwards.
         """
+        market = self.market()
+        if market.held_as_balance:
+            return self._holding(market)
+        if market.outcome:
+            return self._shares()
         fetch = getattr(self.client, "fetch_position", None)
         if fetch is None:
             return None
@@ -678,6 +738,50 @@ class VenueHand:
             return Decimal(0)
         signed = Decimal(str(contracts)) * self.contract_size()
         return -signed if str(held.get("side", "")).lower() == "short" else signed
+
+    def _shares(self) -> Decimal:
+        """The shares of this outcome the account holds, as the venue's positions report them.
+
+        A venue that books a binary market as one position reports the NO side as a short on the
+        YES outcome, so a NO handle is also matched against its YES sibling held short.
+        """
+        try:
+            rows = list(self.client.fetch_positions() or [])
+        except Exception as exc:
+            raise DispatchError(
+                self.redact(f"cannot read the positions: {exc.__class__.__name__}: {exc}")
+            ) from exc
+        handle = self.symbol
+        sibling = handle[: -len(":NO")] + ":YES" if handle.upper().endswith(":NO") else ""
+        held = Decimal(0)
+        for row in rows:
+            name = str(row.get("outcome") or "")
+            side = str(row.get("side") or "long").lower()
+            if row.get("resolved"):
+                continue
+            if (name == handle and side == "long") or (
+                sibling and name == sibling and side == "short"
+            ):
+                held += Decimal(str(row.get("contracts") or 0))
+        return held
+
+    def _holding(self, market: Market) -> Decimal:
+        """The base coin the account holds; under the venue's minimum order it is nothing.
+
+        A spot desk's position is coins in the account, and the account is the desk's. An amount
+        too small to sell is fee residue, not a position, and not a reason to refuse an entry.
+        """
+        try:
+            balance = self.client.fetch_balance()
+        except Exception as exc:
+            raise DispatchError(
+                self.redact(f"cannot read the account: {exc.__class__.__name__}: {exc}")
+            ) from exc
+        row = balance.get(market.base) or {}
+        total = Decimal(str(row.get("total") or 0))
+        if total <= 0 or (market.amount_min is not None and total < market.amount_min):
+            return Decimal(0)
+        return total
 
     def _ensure_leverage(self) -> str:
         """Apply the declared leverage and margin mode at the venue, then confirm them.
@@ -773,6 +877,42 @@ class VenueHand:
             )
         return record
 
+    def _cash(
+        self, notional: Decimal, market: Market, size: Decimal, price: Decimal
+    ) -> dict[str, str] | str:
+        """Is there quote currency for this order? A spot order is paid in full, fee included."""
+        currency = market.quote
+        if not currency:
+            return f"the quote currency of {self.symbol} is unknown; nothing was sent"
+        try:
+            account = read_account(self.client, currency)
+        except CapitalError as exc:
+            return self.redact(str(exc))
+        fee = self._fee(notional, market, size, price)
+        needed = notional + fee
+        allowed = account.free * self.max_margin_share
+        if needed > allowed:
+            return (
+                f"this order costs {needed:.2f} {currency} with its fee and "
+                f"{self.max_margin_share} of the free {account.free:.2f} is {allowed:.2f}; "
+                "nothing was sent"
+            )
+        return {
+            "cash_needed": str(needed.quantize(Decimal("0.01"))),
+            "free_cash": str(account.free),
+            "equity": str(account.equity),
+        }
+
+    def _fee(self, notional: Decimal, market: Market, size: Decimal, price: Decimal) -> Decimal:
+        """The fee of buying `size` at `price`: the venue's own calculation for an outcome, since a
+        prediction venue's fee is not a flat rate (one charges 0.07 x shares x p x (1 - p))."""
+        calculate = getattr(self.client, "calculate_fee", None)
+        if market.outcome and calculate is not None:
+            with suppress(Exception):
+                found = calculate(self.symbol, "limit", "buy", float(size), float(price))
+                return Decimal(str(found["cost"]))
+        return notional * (market.taker or Decimal(0))
+
     def account(self) -> Any:
         """The account in this symbol's settlement currency, read through this hand's client."""
         currency = self.market().settlement
@@ -789,10 +929,7 @@ class VenueHand:
             load = getattr(self.client, "load_markets", None)
             if load is not None:
                 load()
-            found = self.client.market(self.symbol)
-            if found:
-                return dict(found)
-        return {}
+        return market_of(self.client, self.symbol)
 
     def _protected_price(self, touch: Mapping[str, Any], side: str) -> Decimal | None:
         """The far edge of the band a taker order may fill within, on the venue's tick."""
@@ -802,7 +939,20 @@ class VenueHand:
         edge = Decimal(str(raw))
         step = edge * self.max_slippage_bps / BPS
         price = edge + step if side == "buy" else edge - step
+        # Held inside the venue's own band where it publishes one: an order priced past it is
+        # refused whole, and the band's edge is never a worse price than the slippage bound.
+        high, low = price_band(self.venue, self.client, self.symbol)
+        market = self.market()
+        # An outcome share trades between the venue's own floor and ceiling, never at 0 or 1.
+        high = market.price_max if high is None and market.outcome else high
+        low = market.price_min if low is None and market.outcome else low
+        if side == "buy" and high is not None and price > high:
+            price = high
+        elif side == "sell" and low is not None and price < low:
+            price = low
         to_tick = getattr(self.client, "price_to_precision", None)
+        if market.outcome:
+            to_tick = getattr(self.client, "price_to_prediction_precision", None)
         if to_tick is not None:
             with suppress(Exception):
                 price = Decimal(str(to_tick(self.symbol, float(price))))
@@ -818,14 +968,32 @@ class VenueHand:
         if not held:
             return {"closed": False, "note": "nothing is held"}
         side = "sell" if held > 0 else "buy"
+        market = self.market()
+        spot = market.held_as_balance or market.outcome
+        if market.outcome:
+            self.cancel_open_orders()
+            return self._sell_outcome(held, reason)
+        if spot:
+            # The stop and take profit rest as orders that can hold the coins; a sale needs them.
+            self.cancel_open_orders()
+            held = self._holding(self.market())
+            if not held:
+                return {"closed": False, "note": "nothing is held once the exits were cancelled"}
+        amount = abs(held) / self.contract_size()
+        to_step = getattr(self.client, "amount_to_precision", None)
+        if to_step is not None:
+            # Down to the venue's step, never above what is held: a spot sale cannot be
+            # reduce-only, so the step is the guard.
+            with suppress(Exception):
+                amount = Decimal(str(to_step(self.symbol, float(amount))))
         try:
             order = self.client.create_order(
                 self.symbol,
                 "market",
                 side,
-                float(abs(held) / self.contract_size()),
+                float(amount),
                 None,
-                {"reduceOnly": True},
+                {} if spot else {"reduceOnly": True},
             )
         except Exception as exc:
             return {
@@ -833,17 +1001,100 @@ class VenueHand:
                 "error": self.redact(f"{exc.__class__.__name__}: {exc}")[:300],
                 "reason": reason,
             }
+        order_id = str(order.get("id", ""))
+        state = str(order.get("status") or "")
+        average = order.get("average")
+        if order_id and state not in ("closed", "filled", *ENDED):
+            taken = self._taken(order_id)
+            state, average = str(taken.get("status") or state), taken.get("average", average)
+        # Accepted is not filled. Seen on a demo on 2026-10-17: a reduce-only market close on a
+        # stock perpetual whose book sat outside the venue's price band rested unfilled, and the
+        # account still held the position. The record says closed only when the account agrees.
+        after = self.position()
+        if after and (after > 0) == (held > 0):
+            if order_id and state not in ("closed", "filled", *ENDED):
+                self._cancel(order_id)
+            return {
+                "closed": False,
+                "reason": reason,
+                "order_id": order_id,
+                "error": (
+                    f"the close did not fill: the venue reports {state or 'no status'} and the "
+                    f"account still holds {after}; the unfilled close was cancelled, the exits at "
+                    "the venue still stand, and the next pass tries again"
+                ),
+            }
         return {
             "closed": True,
             "reason": reason,
             "side": side,
-            "size": str(abs(held)),
-            "order_id": str(order.get("id", "")),
+            "size": f"{amount * self.contract_size():f}",
+            "order_id": order_id,
+            "average": None if average is None else str(average),
+        }
+
+    def settlement(self, since_ms: int) -> dict[str, Any] | None:
+        """How this outcome settled since `since_ms`: shares, the price paid out (1 or 0), when.
+
+        None when the venue reports no settlement for it, or none through ccxt.
+        """
+        has = getattr(self.client, "has", {}) or {}
+        if not has.get("fetchSettlements"):
+            return None
+        rows = self.client.fetch_settlements(self.symbol, since_ms) or []
+        for row in rows:
+            if str(row.get("outcome") or "") != self.symbol or row.get("amount") is None:
+                continue
+            return {
+                "amount": Decimal(str(row["amount"])),
+                "price": Decimal(str(row.get("price") or 0)),
+                "won": bool(row.get("won")),
+                "timestamp": row.get("timestamp") or 0,
+            }
+        return None
+
+    def _sell_outcome(self, held: Decimal, reason: str) -> dict[str, Any]:
+        """Sell an outcome's shares now: these venues take no market order, so a limit at the
+        venue's floor, immediate or cancel, which is a market order that cannot rest."""
+        floor = self.market().price_min or Decimal("0.01")
+        try:
+            order = self.client.create_order(
+                self.symbol,
+                "limit",
+                "sell",
+                float(held),
+                float(floor),
+                {**self.params, "timeInForce": "IOC"},
+            )
+        except Exception as exc:
+            return {
+                "closed": False,
+                "error": self.redact(f"{exc.__class__.__name__}: {exc}")[:300],
+                "reason": reason,
+            }
+        order_id = str(order.get("id", ""))
+        after = self._shares()
+        if after > 0:
+            return {
+                "closed": False,
+                "reason": reason,
+                "order_id": order_id,
+                "error": (
+                    f"the sale did not fill: the account still holds {after} shares; the next pass "
+                    "tries again"
+                ),
+            }
+        return {
+            "closed": True,
+            "reason": reason,
+            "side": "sell",
+            "size": f"{held:f}",
+            "order_id": order_id,
             "average": None if order.get("average") is None else str(order["average"]),
         }
 
     def cancel_open_orders(self) -> int:
-        """Cancel every working order on the symbol. How many went."""
+        """Cancel every working order on the symbol, attached exits included. How many went."""
         fetch = getattr(self.client, "fetch_open_orders", None)
         if fetch is None:
             return 0
@@ -852,6 +1103,13 @@ class VenueHand:
             for order in fetch(self.symbol) or []:
                 if not self._cancel(str(order.get("id", ""))):
                     gone += 1
+        extra = exit_cancel_params(self.venue)
+        for read in exit_reads(self.venue):
+            # One kind the venue will not list is not a reason to skip the others.
+            with suppress(Exception):
+                for order in fetch(self.symbol, None, None, dict(read)) or []:
+                    if not self._cancel(str(order.get("id", "")), extra):
+                        gone += 1
         return gone
 
     def _touch_now(self) -> tuple[Decimal | None, Decimal | None]:
@@ -1000,13 +1258,16 @@ class VenueHand:
                 return self.in_base(found, self.contract_size())
         return None
 
-    def _cancel(self, order_id: str) -> str:
+    def _cancel(self, order_id: str, params: Mapping[str, Any] | None = None) -> str:
         """Empty when the venue took the cancel; otherwise what it said, in its own words."""
         cancel = getattr(self.client, "cancel_order", None)
         if cancel is None:
             return "this venue has no cancel through ccxt"
         try:
-            cancel(order_id, self.symbol)
+            if params:
+                cancel(order_id, self.symbol, dict(params))
+            else:
+                cancel(order_id, self.symbol)
         except Exception as exc:
             return self.redact(f"{exc.__class__.__name__}: {exc}")[:200]
         return ""
@@ -1116,7 +1377,7 @@ def hand_for(
     max_slippage_bps: Decimal = Decimal(20),
     max_margin_share: Decimal = Decimal("0.5"),
     liquidation_buffer_bps: Decimal = Decimal(50),
-    markets: tuple[str, ...] = MARKETS,
+    markets: tuple[str, ...] = DEFAULT_MARKETS,
     rate: OrderRate | None = None,
 ) -> VenueHand:
     """A hand for `venue`, reading whatever credentials that venue signs with."""

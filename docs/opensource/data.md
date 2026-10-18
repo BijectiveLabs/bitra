@@ -101,7 +101,7 @@ tra data pull BTCUSDT                       # chains from data.toml, snapshot in
 
 ```toml
 [data.ohlcv]
-chain = ["ccxt:bybit", "ccxt:binance", "file:data"]
+chain = ["venue", "file:data"]
 ttl = "90s"                    # older than this is not a price, it is a memory
 interval_s = 60
 limit = 240
@@ -124,9 +124,11 @@ Three rules do the work.
 - **Public data only.** These sources are never given a key, which is why they cannot place an
   order even by accident. Execution reads its own credentials in its own package.
 
-Source names are `scheme:target`. `ccxt:<venue>` is that venue's public endpoints through ccxt,
-which speaks one interface to more than a hundred venues; `file:data` is the project's own
-directory. A Client with a paid on-chain or derivatives vendor registers a source under the
+Source names are `scheme:target`, or `venue`. `venue` is the venue the desk trades on, read from
+`[run].venue_key`, so the chains follow the desk when it moves
+([Venues](/opensource/venues#which-venue-the-data-comes-from)). `ccxt:<venue>` is a named venue's
+public endpoints through ccxt, which speaks one interface to more than a hundred venues;
+`file:data` is the project's own directory. A Client with a paid on-chain or derivatives vendor registers a source under the
 `trading_research_agents.sources` entry point and then names it in a chain, exactly like a venue
 plugin: this package never depends on a vendor to support one.
 
@@ -164,10 +166,14 @@ about two minutes back:
 
 ```
 [data.open_interest]
-chain = ["ccxt:bybit"]
+chain = ["venue"]
 ttl = "10m"
-params = { intervalTime = "5min" }
+params = { bybit = { intervalTime = "5min" } }
 ```
+
+Keyed by venue, a parameter reaches only the venue that spells it that way, so the same chain can
+follow the desk to another venue. A flat table, `params = { intervalTime = "5min" }`, goes to
+every venue in the chain.
 
 The parameters a kind was fetched with are recorded beside the value, because they are part of why
 the age is what it is. Both `tra data pull` and `tra run` pass them.

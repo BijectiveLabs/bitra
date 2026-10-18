@@ -92,7 +92,7 @@ agent that survived a session can be taken up the ladder like any scripted strat
 ### The auditor reads before it answers
 
 The auditor is not handed one brief; it works a bounded tool loop over the read surface:
-`run_report`, `ledger_show`, `ledger_search`, `runs_index`, `ladder_show`. Each step is one
+`read_run_report`, `show_ledger`, `search_ledger`, `list_runs`, `show_ladder`. Each step is one
 model call that either names a tool with its arguments or carries the final answer. The loop
 is closed at its edges: a tool outside the catalog is refused by name, arguments are checked
 against the function before it runs, an observation is cut at 6000 characters, the budget
@@ -124,12 +124,37 @@ size, or declared by the operator and labelled as such.
 | Role | Tools (`agents/<role>/tools.py`) | What the brief carries |
 |---|---|---|
 | `market_screener` | `screen_figures` | per instrument: rows, print rate, realised volatility, first-lag autocorrelation, the 1:10 variance ratio, largest gap, last-hour volume against the average, turnover, the cost floor for the claimed edge, and a regime the system proposes from a written rule (`[agents.screen]` sets the two thresholds: `min_prints_per_minute`, `volatile_above_bps`) |
-| `technical_analyst` | `features` | on each closed bar: returns over 1, 5 and 20 bars, the close as a z-score of the window, the gap to VWAP, the last bar's volume and range against the window's, the position between the window's high and low, the net move and trend strength with the regime they give; the same on each higher timeframe in `[run].context_intervals`; the book imbalance, the open interest change since the last snapshot, and the declared state of the other series (see [the cycle](/opensource/cycle#the-market-around-the-decision)) |
+| `technical_analyst` | `features` | on each closed bar: returns over 1, 5 and 20 bars, the close as a z-score of the window, the gap to VWAP, the last bar's volume and range against the window's, the position between the window's high and low, the net move and trend strength with the regime they give, the variance ratio, and the market structure (swings labelled HH, HL, LH, LL, the trend they make, the last break of structure or change of character, invalidation, support and resistance); the same regime and structure on each higher timeframe in `[run].context_intervals`; the book imbalance, the open interest change since the last snapshot, the derivatives positioning declared for its asset, and the declared state of the other series (see [the cycle](/opensource/cycle#the-market-around-the-decision)) |
 | `macro_analyst` | `macro_brief` over `data/series.py` | per series in `series.toml`: the value known at the time and when it became known (publication lag honoured), the state against the operator's declared threshold, the correlation and strongest lead-lag with the instrument's returns measured on the operator's data with n, the calendar events inside the horizon |
 | `onchain_analyst` | `onchain_brief` | the same engine, plus the net over a window and the last value as a z-score of its own history |
 | `risk_manager` | `risk_brief` | per run: latency from intent to fill (median, max, n, ratio to the declared), net per round trip overall and over the last window against the claimed magnitude, maximum drawdown, the favourable and adverse excursions of the closed round trips with what the winners gave back, which control refused and how often |
 | `executor` | `size_for`, `rate_budget`, `export_signals` | a size that never exceeds a cap, rounded down to the venue's step; what the minute still allows; the run's admitted intents as `signals.jsonl` or CSV for execution elsewhere (`tra signals export RUN`) |
-| `auditor` | `audit_brief`, then a tool loop over `run_report`, `ledger_show`, `ledger_search`, `runs_index`, `ladder_show` | usage per role with tokens per closed round trip, each promotion with whether its evidence names a gate, and a run against its replay trade by trade; then whatever it chooses to read, up to six calls |
+| `auditor` | `audit_brief`, then a tool loop over `read_run_report`, `show_ledger`, `search_ledger`, `list_runs`, `show_ladder` | usage per role with tokens per closed round trip, each promotion with whether its evidence names a gate, and a run against its replay trade by trade; then whatever it chooses to read, up to six calls |
+
+### Reading, not calculating
+
+In a cycle no role calculates. The system pulls the data, computes every figure, checks its age, and
+hands each role a brief; the role reads it and answers in a fixed schema: a side, a label, levels, a
+confidence, a reason, and the figures it rested on, by name and value. Code then checks every cited
+figure against the brief and throws away the ones that do not hold. This is deliberate: a model
+adding up bars gets the arithmetic wrong at a price per token, two runs of the same model would
+compute two different numbers, and a decision built on numbers nobody can recompute cannot be
+audited. Every figure a role saw is in its brief on disk, and `tra runs verify` recomputes them from
+the raw inputs.
+
+The one role that calls tools is the research session's auditor, which may read up to six records
+(`read_run_report`, `search_ledger` and the rest) before it answers. The MCP server exposes the same
+read-only tools to any host.
+
+What a role's answer does differs:
+
+| Role | What its answer decides |
+|---|---|
+| `technical_analyst` | the side, the setup and the levels; every gate after it works on these |
+| `macro_analyst`, `onchain_analyst`, `sentiment_analyst` | nothing directly: confluence and conviction read the state the system derives from your thresholds on the same figures, and the label is recorded beside it. With `[conviction].reader_labels` above 0, a label counts where nothing is declared, as with a file of headlines |
+| validators | one vote each in conviction, after their claims are checked |
+| `market_screener` | which instruments, from code's own order, get a cycle; it may drop, never add |
+| `risk_manager` | between cycles: size cuts, pauses, a halt; never a loosening |
 
 ### Risk: one role after the runs, one step inside each decision
 
@@ -162,7 +187,7 @@ of a cycle.
 | Auditor | Reads | Looks for |
 |---|---|---|
 | `tech_auditor` | calls answered and failed per role, median seconds, where each kind of data came from and how old it was, what was refused or stale, tokens and latency per role, tokens per decision, installed versions | what is wearing out, what is wasteful, what is fragile |
-| `quant_auditor` | what the deciding analyst said, intents and their size, the conviction behind them, the claimed edge, the cost it was priced at, what was left after cost, which gate refused the rest, and the round trips a session actually closed with their excursions | whether the desk's own declarations are earning what they cost |
+| `quant_auditor` | what the deciding analyst said, intents and their size, the conviction behind them, the claimed edge, the cost it was priced at, what was left after cost, which gate refused the rest, the round trips a session or the venue actually closed with their excursions, and the last `tra hindsight` report: what each gate's refusals would have done |  whether the desk's own declarations are earning what they cost |
 
 Both answer in the same shape: findings, each tied to figures from the brief with their values, each
 carrying a proposal, and at most one proposed configuration change with the value it has now and the

@@ -87,6 +87,17 @@ def test_the_candle_the_venue_is_still_building_is_dropped() -> None:
     assert client.seen[0][1][:4] == ("BTC/USDT:USDT", "1m", None, 4)
 
 
+def test_from_a_start_the_window_runs_forward_from_it() -> None:
+    client = FakeCcxt(fetch_ohlcv=rows(6))
+    src = source(client, now_ms=OPEN_AT + 10 * MINUTE_MS)
+
+    got = src.fetch("ohlcv", "BTCUSDT", interval_s=60, limit=3, since_ms=OPEN_AT)
+    assert [c.start_ns for c in got.value] == [
+        (OPEN_AT + i * MINUTE_MS) * 1_000_000 for i in range(3)
+    ]
+    assert client.seen[0][1][:4] == ("BTC/USDT:USDT", "1m", OPEN_AT, 4)
+
+
 def test_only_closed_candles_means_a_venue_can_have_none_yet() -> None:
     client = FakeCcxt(fetch_ohlcv=rows(1))
     src = source(client, now_ms=OPEN_AT + 10_000)

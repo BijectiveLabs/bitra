@@ -16,6 +16,9 @@ name = "taker-taker"
 entry_fee_bps = 5.5
 exit_fee_bps = 5.5
 measured_round_trip_bps = 15.02
+# [channel.spot]                # the spot pair's fees on the same channel, for a desk that
+# entry_fee_bps = 10             # lists spot in [execution].markets; a spot pair usually costs
+# exit_fee_bps = 10              # more than the perpetual on the same coin
 
 [[channel]]
 venue = "bybit"
@@ -49,3 +52,14 @@ exit_fee_bps = 1.5
 # entry_fee_bps = 3.0
 # exit_fee_bps = 3.0
 # gas_quote = 1.40
+
+# A prediction venue, for a desk that lists "prediction" in [execution].markets. Its outcome
+# fee is not a flat rate on most venues; say how it is charged:
+# [[channel]]
+# venue = "kalshi"
+# name = "taker-taker"
+# entry_fee_bps = 0
+# exit_fee_bps = 0
+#
+# [channel.prediction]
+# fee_coefficient = 0.07           # 0.07 x shares x price x (1 - price)

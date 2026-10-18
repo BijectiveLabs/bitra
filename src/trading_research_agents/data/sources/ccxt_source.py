@@ -32,6 +32,7 @@ from trading_research_agents.data.sources.base import (
     OrderBook,
     SourceError,
 )
+from trading_research_agents.data.sources.ccxt_client import build, is_prediction
 from trading_research_agents.data.sources.resolve import ResolveError, resolve
 from trading_research_agents.extras import install_hint
 
@@ -53,10 +54,19 @@ DEFAULT_LIMIT = 240
 DEFAULT_BOOK_LEVELS = 25
 
 
-def _params(options: Mapping[str, Any]) -> dict[str, Any]:
-    """The venue-specific table the operator declared, or nothing at all."""
+def _params(options: Mapping[str, Any], venue: str) -> dict[str, Any]:
+    """The venue-specific table the operator declared, or nothing at all.
+
+    A table of tables is keyed by venue, `{ bybit = { intervalTime = "5min" } }`, so a chain that
+    follows the desk to another venue does not hand one venue's spelling to the next.
+    """
     declared = options.get("params")
-    return dict(declared) if isinstance(declared, Mapping) else {}
+    if not isinstance(declared, Mapping):
+        return {}
+    if declared and all(isinstance(value, Mapping) for value in declared.values()):
+        own = declared.get(venue)
+        return dict(own) if isinstance(own, Mapping) else {}
+    return dict(declared)
 
 
 def _decimal(value: Any, label: str) -> Decimal:
@@ -103,14 +113,13 @@ class CcxtSource:
 
     def _build(self, settings: dict[str, Any]) -> Any:
         try:
-            import ccxt
+            import ccxt  # noqa: F401
         except ImportError as exc:  # pragma: no cover - exercised only without the extra
             raise SourceError(f"ccxt is not installed; {install_hint('ccxt')}") from exc
-        factory = getattr(ccxt, self.venue, None)
-        if factory is None:
-            raise SourceError(f"ccxt has no exchange named {self.venue!r}")
         # Public data only: no key, no secret, and the library's own rate limiter on.
-        client = factory({"enableRateLimit": True, **settings})
+        client = build(self.venue, {"enableRateLimit": True, **settings})
+        if client is None:
+            raise SourceError(f"ccxt has no exchange named {self.venue!r}")
         if self.environment == "demo":
             client.enable_demo_trading(True)
         elif self.environment == "testnet":
@@ -183,17 +192,26 @@ class CcxtSource:
         if limit <= 0:
             raise SourceError("limit is positive")
         timeframe = self._timeframe(interval_s)
+        since = options.get("since_ms")
+        since = None if since is None else int(since)
         # One extra row: the last one is usually still forming and is dropped below.
-        rows = self._client.fetch_ohlcv(symbol, timeframe, None, limit + 1, _params(options))
+        rows = self._client.fetch_ohlcv(
+            symbol, timeframe, since, limit + 1, _params(options, self.venue)
+        )
         if not rows:
             raise SourceError(f"{self.name}: no candles for {symbol}")
         now = self.clock()
         interval_ms = interval_s * 1000
         candles: list[Candle] = []
+        # A prediction venue publishes an outcome's prices without a volume. That absence is said
+        # in the snapshot's detail; nothing downstream of an outcome reads the volume.
+        unpublished = is_prediction(self.venue) and all(row[5] is None for row in rows)
         for row in rows:
             start_ms = int(row[0])
             if (start_ms + interval_ms) / 1000 > now:
                 continue
+            if unpublished:
+                row = [*row[:5], 0]
             candles.append(
                 Candle(
                     start_ns=start_ms * 1_000_000,
@@ -206,7 +224,8 @@ class CcxtSource:
             )
         if not candles:
             raise SourceError(f"{self.name}: no closed candle for {symbol} yet")
-        window = candles[-limit:]
+        # From a start, the window runs forward from it; without one, it ends at the newest bar.
+        window = candles[-limit:] if since is None else candles[:limit]
         return Fetched(
             kind="ohlcv",
             instrument=instrument,
@@ -220,6 +239,7 @@ class CcxtSource:
                 "interval_s": interval_s,
                 "last_close": str(window[-1].close),
                 "symbol": symbol,
+                **({"volume": "not published by the venue"} if unpublished else {}),
             },
         )
 
@@ -227,7 +247,7 @@ class CcxtSource:
         levels = int(options.get("levels", DEFAULT_BOOK_LEVELS))
         if levels <= 0:
             raise SourceError("levels is positive")
-        raw = self._client.fetch_order_book(symbol, levels, _params(options))
+        raw = self._client.fetch_order_book(symbol, levels, _params(options, self.venue))
         # A level is [price, size], and some venues append more after those two (OKX adds the
         # count of orders), so only the first two are read.
         bids = tuple(
@@ -256,7 +276,7 @@ class CcxtSource:
         )
 
     def _funding(self, instrument: str, symbol: str, **options: Any) -> Fetched:
-        raw = self._client.fetch_funding_rate(symbol, _params(options))
+        raw = self._client.fetch_funding_rate(symbol, _params(options, self.venue))
         rate = _decimal(raw.get("fundingRate"), "fundingRate")
         now = self.clock()
         # Never the venue's fundingTimestamp: that is the next settlement, in the future (seen on
@@ -279,7 +299,7 @@ class CcxtSource:
         )
 
     def _open_interest(self, instrument: str, symbol: str, **options: Any) -> Fetched:
-        raw = self._client.fetch_open_interest(symbol, _params(options))
+        raw = self._client.fetch_open_interest(symbol, _params(options, self.venue))
         amount = raw.get("openInterestAmount")
         value = raw.get("openInterestValue")
         if amount is None and value is None:
@@ -302,6 +322,6 @@ class CcxtSource:
                 "value": None if value is None else str(value),
                 # Some venues answer with the last bucket rather than the moment; the age this
                 # carries is what the chain's ttl judges, so the bucket is worth recording.
-                "params": {str(k): str(v) for k, v in _params(options).items()},
+                "params": {str(k): str(v) for k, v in _params(options, self.venue).items()},
             },
         )

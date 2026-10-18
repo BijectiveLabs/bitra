@@ -100,7 +100,8 @@ a venue is a name in the settings, and the parts below work the same for all of 
 | Part | What it does | Where |
 |---|---|---|
 | Data | candles, books, funding and open interest from any venue ccxt supports, chained with fallbacks | `data/sources/` |
-| Market | one shape for every market type, read from ccxt's unified market | `trading/market.py` |
+| Client | one synchronous client for every venue, whichever ccxt namespace it lives in; prediction venues' async clients run on a loop of their own | `data/sources/ccxt_client.py` |
+| Market | one shape for every market type, read from ccxt's unified market, a prediction outcome included | `trading/market.py` |
 | Order | the entry, its exits attached, one per decision, under a client id from the cycle | `trading/dispatch.py` |
 | Execution | a taker entry as a limit IOC inside a slippage band, a maker entry post-only with a timeout | `trading/dispatch.py` |
 | Order state | waits for the fill, cancels what is left, and records what the venue said in its own words | `trading/dispatch.py` |

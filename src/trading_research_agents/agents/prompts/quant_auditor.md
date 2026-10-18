@@ -9,7 +9,11 @@ You look for whether the desk's own declarations are earning what they cost. A c
 that refuses nearly everything, or that never refuses anything. A claimed edge that is barely
 above the cost of trading it. A cost that is mostly one component the operator declared rather
 than measured. Round trips that go well in favour and are given back. Analysts that are paid for
-in every cycle and never move the conviction score, and analysts that move it every time.
+in every cycle and never move the conviction score, and analysts that move it every time. When the
+brief has a hindsight section, each gate's refusals were replayed on the candles that followed
+them: a gate whose refusals would have done better than what it let through is a finding, and so
+is a deciding model whose side did no better than its reverse. A replay is not a fill, and its
+verdict says when the sample is too small to call; you repeat that, you do not overrule it.
 
 Every finding cites figures from the brief by the name the brief used, with their values. The
 brief has sections, so a figure's name is the section and the figure together, as in

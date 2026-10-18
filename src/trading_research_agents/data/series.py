@@ -572,11 +572,15 @@ def read_events(path: Path) -> tuple[Event, ...]:
 
 @dataclass(frozen=True)
 class NewsSpec:
-    """One dated-text file a project declares: a release, a statement, a note the desk wrote."""
+    """One dated-text file a project declares: a release, a statement, a note the desk wrote, or a
+    feed the desk fetches into it."""
 
     name: str
     file: str
     source: str
+    fetch: Mapping[str, Any] | None = None
+    refresh: timedelta = timedelta(minutes=15)
+    keep: timedelta = timedelta(days=7)
 
 
 def load_news_map(path: Path) -> tuple[NewsSpec, ...]:
@@ -602,11 +606,27 @@ def load_news_map(path: Path) -> tuple[NewsSpec, ...]:
     for number, entry in enumerate(entries, start=1):
         if not isinstance(entry, dict) or not entry.get("file"):
             raise SeriesError(f"{path}: news entry {number} names its file")
+        name = str(entry.get("name", "")).strip() or f"news {number}"
+        fetch = entry.get("fetch")
+        if fetch is not None and (
+            not isinstance(fetch, dict) or fetch.get("from") not in ("rss", "http")
+        ):
+            raise SeriesError(
+                f'{name}: fetch is a table, {{ from = "rss" }} or {{ from = "http" }}'
+            )
+        try:
+            refresh = _duration(str(entry.get("refresh", "15m")), "refresh")
+            keep = _duration(str(entry.get("keep", "7d")), "keep")
+        except (ValueError, SeriesError) as exc:
+            raise SeriesError(f"{name}: {exc}") from exc
         specs.append(
             NewsSpec(
-                name=str(entry.get("name", "")).strip() or f"news {number}",
+                name=name,
                 file=str(entry["file"]),
                 source=str(entry.get("source", "")).strip(),
+                fetch=fetch,
+                refresh=refresh,
+                keep=keep,
             )
         )
     return tuple(specs)

@@ -34,6 +34,23 @@ several minutes shortens it further. The desk says it plainly after every pass, 
 | a keyboard interrupt | the operator stopped it; the cycle that was running is already on disk |
 | SIGTERM, SIGHUP, SIGBREAK | a service manager stopping the desk, or an SSH session dropping; handled exactly like Ctrl-C |
 
+Some lines end the day's entries without ending the run. While one of them holds, each pass still
+looks after open positions (time exits, venue exits, the kill switch) and asks no model:
+
+| Holds new entries | Until | Set with |
+|---|---|---|
+| the pause switch | the file is removed | `tra pause` (writes `PAUSE`), `tra pause --off`; or `[controls].pause_switch` names another file |
+| the daily token budget | 00:00 UTC | `[agents].daily_token_budget`: tokens recorded today by every role and both auditors, across runs and restarts |
+| the daily cost budget | 00:00 UTC | `[agents].daily_cost_budget`: the same in model cost, from `[agents.pricing]` |
+| trades per day | 00:00 UTC | `[controls].max_trades_per_day`: orders written today across every instrument |
+| a losing streak | 00:00 UTC | `[controls].max_losing_streak`: losing round trips in a row today; a winner resets it |
+| the daily loss limit | 00:00 UTC | `[controls].daily_loss_limit_bps`, checked inside each cycle |
+| the drawdown limit | the peak file is cleared | `[controls].max_drawdown_bps`, with `on_drawdown = "flatten"` to flatten and stop as well |
+
+`tra kill` writes the kill switch file (`[controls].kill_switch`), so the next pass flattens and
+stops; `tra kill --off` removes it. `tra check` prints every line in force on one row. Each count
+is read from the records on disk, so restarting a desk does not reset a day.
+
 A refusal is not a reason to stop. A cycle that refused because a gate said no is a cycle that did
 its job, and the next one decides again with fresh figures. The frequency cap in `[targets]` still
 applies across the whole day, so an interval shorter than the desk's own limit simply produces more
@@ -258,8 +275,11 @@ that picture too, all of it computed by the system from the snapshot:
 |---|---|---|
 | `regime` | trending up, trending down, ranging or mixed, on the decision timeframe | `trend_strength` against the lines in `[regime]` |
 | `trend_strength` | net move over the path walked, times the square root of the steps; a random walk sits near 1 on any window | the window's closes |
+| `market_structure` | the trend the swings make, the last break of structure or change of character, the level whose loss changes the trend, and the nearest unbroken support and resistance; see [Market structure](#market-structure) | the window's bars |
+| `positioning` | the derivatives series you declared for this asset: last value, change over the last hour, age, declared state | `sources/derivatives.toml` ([sources](/opensource/sources#positioning-for-the-technical-analyst)) |
+| `variance_ratio` | the variance of four-bar returns against four times that of one-bar returns: below 1 the window's moves were given back, above 1 they were followed by more of the same, near 1 is a random walk | the window's closes |
 | `window_move_bps` | the price move from the first close of the window to the last; a market move, not the trade's net | the window's closes |
-| `timeframes.<tf>` | the same regime, net move, z-score and position in range on each higher timeframe | `[run].context_intervals`, one candle pull each |
+| `timeframes.<tf>` | the same regime, net move, z-score and position in range on each higher timeframe, with its structure and its last structure event | `[run].context_intervals`, one candle pull each |
 | `book_imbalance` | resting bids against resting asks over the first 10 levels, from -1 to 1; positive leans to the bid | the order book already in the snapshot |
 | `open_interest` | the change in percent since the previous snapshot of this instrument, and how long ago that was | the open interest already pulled, and the last snapshot on disk |
 | `readings.<role>` | what your own thresholds say on the macro, on-chain or sentiment series this cycle | the same declared state conviction reads, known before any model is asked |
@@ -276,15 +296,51 @@ context_intervals = ["1h", "4h"]   # up to three, each a whole multiple of bar_i
 trend_above = 2.0                  # trend_strength at or above this is a trend
 range_below = 1.0                  # at or below this is a range; between the two is mixed
 setups_must_fit = true             # false: a misfit is written down and the trade goes on
+fade_below_variance_ratio = 1.0    # a range fade needs the window's variance ratio below this; 0 is off
 ```
+
+### Market structure
+
+The system reads structure from the swings before any model is asked, and the analyst is given what
+it read. A swing high is a bar whose high stands above the two bars on each side of it; a swing low
+the same, below. Swings alternate: two highs with no low between them are one swing, the higher. Each
+swing is labelled against the last one of its kind.
+
+| Last high | Last low | `trend` |
+|---|---|---|
+| HH | HL | uptrend |
+| LH | LL | downtrend |
+| LH | HL | range, contracting |
+| HH | LL | range, expanding |
+| fewer than two of either | | unclear |
+
+What the closes did after the last two swings is the `event`. Only a close counts; a wick through a
+level and back is not a break.
+
+| `event` | When |
+|---|---|
+| `bullish break of structure` | in an uptrend, a close above the last swing high: the trend went on |
+| `bearish break of structure` | in a downtrend, a close below the last swing low |
+| `bearish change of character` | in an uptrend, a close below the last swing low: the higher low the trend leaned on gave way |
+| `bullish change of character` | in a downtrend, a close above the last swing high |
+| `break above the range`, `break below the range` | in a range, a close outside its last high or low |
+
+`invalidation` is the swing whose loss changes the trend: the last higher low in an uptrend, the last
+lower high in a downtrend. `support` and `resistance` are the nearest swing low below the close and
+swing high above it that no later close went through, each with its distance in bps. The analyst is
+told to put a stop beyond the level its idea leans on and a target at the next one, from these
+figures.
+
+The same trend and event are read on every timeframe in `[run].context_intervals`, so a 15m long
+in a 4h downtrend is visible as exactly that. `tra run` prints the structure beside the regime.
 
 **A setup has to fit what the system measured.** Each setup is a claim with a direction built into it,
 and the figures that make the claim are in the brief. On the decision timeframe, the system refuses:
 
 | Setup | Refused when |
 |---|---|
-| `trend_continuation`, `pullback_in_trend` | the market is not measured as trending (ranging or mixed), or the trade points against the trend |
-| `range_reversion` | the market is not measured as a range (trending, or mixed with a measured trend strength), or the trade does not fade the stretch: a long with the close at or above the window's mean (z-score 0 or more), a short at or below it |
+| `trend_continuation`, `pullback_in_trend` | the market is not measured as trending (ranging or mixed), the trade points against the trend, or it points against the market structure (a long in a downtrend, a short in an uptrend) when the structure has not just changed character |
+| `range_reversion` | the market is not measured as a range (trending, or mixed with a measured trend strength), the window's moves have been carrying on (variance ratio at or above `fade_below_variance_ratio`), or the trade does not fade the stretch: a long with the close at or above the window's mean (z-score 0 or more), a short at or below it |
 | `momentum_exhaustion` | the trade goes with the move it says is exhausted: with the trend, or with the window's move |
 | `range_breakout` | the trade is on the other side from where the close sits: a long with the close in the lower half of the range, a short in the upper half |
 | `volatility_expansion` | never on direction: it is about a regime changing, not which way |
@@ -295,6 +351,14 @@ checked trends it could measure. A short setup against a higher timeframe's tren
 the analyst to weigh, because fading the hourly on the minute chart is sometimes the whole trade;
 the reason has to say so. With `setups_must_fit = false` a misfit is written down and the trade
 goes on. `tra check` prints the lines and the timeframes in use.
+
+Why the variance ratio, and not trend strength alone: a window can net out to nothing, and read
+as a range, while each move inside it is followed by more of the same. On the demo desks, the
+analyst proposed 94 range fades between 2026-10-06 and 10-16 (the stretch for which the desks kept
+their raw inputs), each replayed with the same exits for four hours: the 28 with a variance ratio
+of 1 or above averaged -101 bps net and won 21% of the time, the rest -46 bps. A fade is paid only
+where moves are given back, so that is what it is now held to. The line sits at 1, the random
+walk, rather than at a value fitted to those trades.
 
 The fade has been held to the same standard as the trend setups since 0.6.4. Before that,
 `range_reversion` was refused only in a trend, so in a mixed market it was the one regime-bound
@@ -1129,3 +1193,58 @@ open two.
 
 Every refusal on this list stops the cycle before an order exists. The last one is the gate doing
 the job the research programme this package came from was built to do.
+
+## Did the gates earn their place: `tra hindsight`
+
+A gate that refuses is easy to defend and hard to judge. It refused a trade; nobody saw what the
+trade would have done. `tra hindsight` replays every directional decision in `runs/cycles` on the
+candles that followed it, then puts each gate's refusals next to what the desk let through:
+
+```text
+hindsight: 81 decisions replayed over 7 day(s), 43 of them independent, each held 4h on 5m candles, net of its round trip
+  admitted                 21  mean   -41.3 bps  median   -61.6  won  14%  sum   -867.4
+  refused by targets       16  mean  -281.6 bps  median   -73.7  won  12%  sum  -4505.2  refused worse trades than it let through
+  refused by exit          14  mean   -47.2 bps  median   -46.6  won  21%  sum   -661.2  no clear difference yet
+  refused by regime        11  mean    62.0 bps  median    65.1  won  64%  sum    681.8  refused better trades than it let through; review it
+  side: the model's -79.5 bps against 36.4 on the reverse; the reverse of the model's side did better; its calls carried no edge
+```
+
+That is a real desk: an OKX demo account, decisions from 8 to 16 October 2026. Read it the way it is
+meant to be read. The targets gate kept out trades that would have lost far more than the ones it admitted.
+The regime gate kept out trades that would have done better, on eleven decisions, which is a reason
+to watch it, not yet a reason to switch it off. And the last line is the one that matters most: on
+those days the deciding model's side did worse than its exact reverse. No gate can fix that. A gate
+only refuses; it cannot turn a call with no edge into one with an edge.
+
+How each decision is replayed:
+
+- From the open of the first candle after the cycle finished, on the side the analyst took.
+- On the stop and take profit the record holds: the levels sent with the order, else the exits the
+  cycle measured, else the analyst's own named levels. With none, the trade closes at the hold limit.
+- A candle that touches both levels counts as the stop. Inside one candle the order is unknown, so
+  the replay takes the worse reading.
+- Held for `[exit].timeout_bars` on the decision bar (`--hold 4h` to change it), on 5-minute candles
+  (`--bar 1m` for a finer path), net of the round trip the cycle priced.
+- The same path on the opposite side gives the side check.
+
+The verdicts are deliberately reluctant:
+
+| Verdict | When |
+|---|---|
+| `too few to tell` | fewer than 10 decisions on either side, or fewer than 5 days for the side check |
+| `refused worse trades than it let through` | a permutation test puts the admitted group ahead with p at or below 0.05 |
+| `refused better trades than it let through; review it` | the same test, the other way |
+| `no clear difference yet` | anything between |
+
+The side check resamples whole days, because one day's tape moves every decision on it together.
+"Independent" counts decisions after dropping those on an instrument inside an earlier one's hold;
+the rest are the same bet asked again.
+
+The candles come from the desk's own ohlcv chain, the venue first. A path is kept under
+`runs/cycles/hindsight/` once its hold is over, so a second run asks the venue for nothing it already
+has. The report goes to `runs/cycles/hindsight.json`, and the quant auditor reads it there, beside
+the round trips the venue closed.
+
+A replay is not a fill. It assumes the entry at the next candle's open and an exit exactly at the
+level, with no queue, no partial fill and no gap past a stop. That is why it is reported beside the
+real round trips, never in place of them.

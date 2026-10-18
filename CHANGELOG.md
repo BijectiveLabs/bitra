@@ -6,6 +6,121 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-18
+
+### Added
+
+- Lines a client draws for a day, each counted from the records on disk so a restart does not reset
+  it, and each holding new entries while open positions keep their exits:
+  `[agents].daily_token_budget` and `[agents].daily_cost_budget` (every role and both auditors,
+  across runs), `[controls].max_trades_per_day` (every instrument), `[controls].max_losing_streak`,
+  and a pause switch (`PAUSE` by default, `[controls].pause_switch`). `tra pause` and `tra kill`
+  set the switches and `--off` lifts them; `tra check` prints every line in force on one row.
+
+- Spot, on the same order path as perpetuals. A desk lists it in `[execution].markets` (the default
+  stays perpetuals only). Read from the market's own facts: long only, since a short on spot needs a
+  borrow; paid in full against the free quote balance, with no leverage set; the position is the
+  coin the account holds, with residue under the venue's minimum counted as nothing; exits attached
+  with the entry; a close cancels the resting exits wherever the venue keeps them (OKX keeps them as
+  algo orders) and sells what is held, rounded down to the venue's step; a fee charged in the coin
+  bought is counted in the quote currency. In the cycle, a short on spot is refused by code before
+  it is priced, and funding and open interest are not asked for. Run end to end on the Bybit and
+  OKX demos on SOL/USDT, and as a full desk cycle in sandbox and venue mode on the Bybit demo.
+- A channel can carry a spot pair's fees beside the perpetual's, as a `[channel.spot]` table, and a
+  spot cycle is priced at them; the base fees stay the perpetual's. `tra check` compares the base
+  fees with the perpetual and the spot fees with the pair, and names the market when one is priced
+  below what the venue charges.
+- Stock perpetuals and tokenized stocks, through the same order path as crypto: a stock perpetual
+  is a linear perpetual and a tokenized stock is a spot pair. What the underlying is comes from the
+  venue's own fields (Bybit `stock` and `xstocks`, OKX `instCategory` 3) or from
+  `[execution].equities`. With `[execution].equity_session = "regular"`, the default, a cycle on an
+  equity waits while the US regular session is closed and refuses a hold past its close; holidays
+  are declared in `[execution].equity_closed`; the on-chain analyst is not asked. Run on the Bybit
+  demo (AAPLX/USDT) and the OKX demo (TSLA/USDT:USDT).
+- Prediction market outcomes, as a third market type a desk lists in `[execution].markets`. ccxt's
+  prediction venues (Kalshi, Polymarket and others) are reached like any exchange: their async
+  clients run behind a synchronous bridge, so one client type serves the whole package. An outcome
+  is decided by a new role, the event analyst, which answers with a probability; code prices the
+  share to resolution (`probability - ask - fee`) against the margin, sizes it so its whole cost
+  fits the risk per trade, rests the take profit at the venue after the fill, sells at the venue's
+  floor to close, and writes a share held to resolution up at its payout. The channel declares the
+  fee as `[channel.prediction]`, a coefficient on `price x (1 - price)` or a flat rate.
+- A taker price is held inside a venue's published price band (OKX), where an order priced past it
+  is refused whole.
+- `venue` as a source in `data.toml`: the venue the desk trades on, from `[run].venue_key`, with
+  the book read from the environment orders go to. The shipped chains use it, so a desk reads one
+  venue by default and changes venue by changing `venue_key`. `params` may be keyed by venue,
+  `{ bybit = { intervalTime = "5min" } }`, so one venue's spelling never reaches another.
+- Data the analysts are handed, from more places, in one `fetch` line each:
+  - the venues' public positioning, free and without a key: `binance-futures`, `bybit` and `okx`
+    presets for long/short account ratios, taker buy and sell volume and open interest history,
+    refreshed every five minutes;
+  - paid vendors by their published references: `coinglass` (liquidations, open interest,
+    long/short, taker volume across venues), `glassnode`, `cryptoquant` and `arkham`, each with
+    its key read from the environment and sent where the vendor asks for it;
+  - `params` for any fetch, and `tra sources add --param FIELD=VALUE`; rows that arrive as arrays
+    are read by position.
+- News and public sentiment: a `[[news]]` entry fetches an RSS or Atom feed or a JSON news API into
+  its file, as plain dated lines kept for `keep` and refreshed every `refresh`; `tra run` and
+  `tra sources pull` refresh them. A feed that declares a document type is refused.
+- `positioning` in the technical brief: the derivatives series declared for the traded asset, with
+  each one's change over the last hour, age and declared state.
+- `[conviction].reader_labels`: how strongly a reading analyst's own label counts where its series
+  declare nothing (headlines, say), provided it cited what it read. 0, the default, keeps labels
+  out.
+- `tra hindsight`: every directional decision a desk recorded, replayed on the candles that followed
+  it with its own stop, take and hold, grouped by the gate that stopped it. Each gate's refusals
+  are set beside what it let through, with a verdict that says when the sample is too small, and
+  the deciding model's side is set beside its reverse, resampled by day. Paths are kept under
+  `runs/cycles/hindsight/`, the report in `runs/cycles/hindsight.json`, and the quant auditor
+  reads it. A ccxt source takes `since_ms` for a window that starts at a given time.
+
+### Changed
+
+- The MCP tools follow one verb-noun pattern: `check_cost_floor`, `show_ledger`, `show_ladder`,
+  `read_run_report`, `search_ledger` and `list_runs` replace `cost_floor_check`, `ledger_show`,
+  `ladder_show`, `run_report`, `ledger_search` and `runs_index`; the other four keep their names.
+- The welcome screen has no frame: TRADING RESEARCH above AGENTS from 124 columns, TRA below that,
+  the ASCII name on a console without block characters. The one-line wordmark is gone.
+- `[agents]` refuses a key it does not know, as `[controls]` already did, so a misspelt budget is
+  an error rather than a budget that is silently not there.
+- Market structure, read by the system on the decision timeframe and every context timeframe:
+  alternating swings labelled HH, HL, LH, LL, the trend they make (uptrend, downtrend, range), the
+  last break of structure or change of character (closes only), the level whose loss changes the
+  trend, and the nearest unbroken support and resistance. The technical brief carries it as
+  `market_structure`, `tra run` prints it beside the regime, and a trend setup that points against
+  the structure is refused unless the structure has just changed character. The analyst's
+  instructions told it to place a stop beyond the swing from "the bars themselves", which it was
+  never given; they now name the figures it has.
+- A range fade is refused where the window's moves have been carrying on: the technical brief
+  carries `variance_ratio` (four-bar against one-bar return variance), and `range_reversion` needs
+  it below `[regime].fade_below_variance_ratio`, 1 by default, 0 to turn it off. On the demo desks
+  the fades it would have refused averaged -101 bps net against -46 for the rest. The analyst's
+  instructions name `range_breakout` or flat for a range whose moves carry on.
+- Every MCP tool says what it is for, when to use it against its siblings, what it returns and
+  that it only reads, and every argument carries a description in the input schema. The server's
+  instructions give the order of work an idea follows through the tools.
+- Glama builds the MCP server from the spec on its admin page, not from a file in the repository;
+  `glama.json` no longer names one, and `glama/Dockerfile` records that spec
+  (`uv sync --locked --no-dev --extra mcp`, `uv run --no-sync trading-research-agents mcp serve`).
+  CI checks that both start and list their tools.
+- The welcome panel spells the name: TRADING RESEARCH AGENTS on one line from 185 columns,
+  TRADING RESEARCH above AGENTS from 129, and TRA below that, each block centred, with the package
+  name, the tagline and the version centred beneath.
+
+### Fixed
+
+- In venue mode, a `data.toml` that priced orders on another venue's book or funding was accepted.
+  It is refused before anything is pulled: the book and the funding an order is priced on are the
+  execution venue's own. Candles may still fall back to another venue deliberately.
+- A close the venue accepted but did not fill was recorded as closed. It is now confirmed against
+  the account: when the account still holds the position the unfilled close is cancelled, the
+  record says it did not fill, the exits at the venue keep standing, and the next pass tries again.
+- The quant auditor never saw a venue desk's results: it read closed round trips only from session
+  runs, while a venue desk records them in `runs/cycles/round_trips.jsonl`, so every scheduled look
+  reported none closed. It now reads both; rows written before the net was kept in bps are stated
+  from their net, entry and size.
+
 ## [0.7.1] - 2026-10-17
 
 ### Added

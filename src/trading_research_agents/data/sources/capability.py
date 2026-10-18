@@ -146,10 +146,12 @@ def capability_of(
     name = venue.strip().lower()
     if client is None:
         try:
-            import ccxt
+            import ccxt  # noqa: F401
         except ImportError as exc:  # pragma: no cover - exercised only without the extra
             raise CapabilityError(f"ccxt is not installed; {install_hint('ccxt')}") from exc
-        factory = getattr(ccxt, name, None)
+        from trading_research_agents.data.sources.ccxt_client import exchange_class
+
+        factory = exchange_class(name)
         if factory is None:
             raise CapabilityError(f"ccxt has no exchange named {name!r}")
         client = factory()

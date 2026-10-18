@@ -886,18 +886,29 @@ def test_a_decision_the_market_has_left_behind_is_refused() -> None:
     assert _maker(kinder, max_drift_bps=Decimal(10))({**LONG, "bid": "99999"})["sent"] is True
 
 
-def test_venue_mode_trades_linear_perpetuals_and_refuses_anything_else() -> None:
+def test_venue_mode_sends_only_the_market_types_built_and_listed() -> None:
     from trading_research_agents.trading.dispatch import market_kind
 
     class SpotExchange(SteppedExchange):
         def market(self, symbol: str) -> dict[str, Any]:
             return {"spot": True, "type": "spot", "limits": {"amount": {"min": self.least}}}
 
-    placed = _stepped_hand(SpotExchange("0.01"))(
-        {**LONG, "instrument": "ETHUSDT", "size": "0.03", "mid": "2700"}
-    )
+    class OptionExchange(SteppedExchange):
+        def market(self, symbol: str) -> dict[str, Any]:
+            return {"option": True, "type": "option", "contract": True, "contractSize": 1}
+
+    order = {**LONG, "instrument": "ETHUSDT", "size": "0.03", "mid": "2700"}
+    # Spot is built, but a desk sends to it only when it lists it.
+    placed = _stepped_hand(SpotExchange("0.01"))(order)
     assert placed["sent"] is False
-    assert "is a spot market; venue mode trades linear perpetual futures today" in placed["refused"]
+    assert (
+        "is a spot market and [execution].markets lists ['linear perpetual']" in placed["refused"]
+    )
+    unbuilt = _stepped_hand(OptionExchange("0.01"))(order)
+    assert (
+        unbuilt["sent"] is False and "is a option market; venue mode trades" in unbuilt["refused"]
+    )
+    assert "other market types are not built yet" in unbuilt["refused"]
     assert market_kind({"swap": True, "linear": True}) == "linear perpetual"
     assert market_kind({"swap": True, "inverse": True}) == "inverse perpetual"
     assert market_kind({"option": True}) == "option"

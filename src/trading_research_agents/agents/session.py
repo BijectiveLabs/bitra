@@ -45,11 +45,11 @@ from trading_research_agents.execution.cost import FundingSchedule
 from trading_research_agents.llm.completer import Completer
 from trading_research_agents.llm.usage import BudgetSpentError, UsageLedger
 from trading_research_agents.surface import (
-    ladder_show,
-    ledger_search,
-    ledger_show,
-    run_report,
-    runs_index,
+    list_runs,
+    read_run_report,
+    search_ledger,
+    show_ladder,
+    show_ledger,
 )
 from trading_research_agents.surface.actions import (
     ActionRefusedError,
@@ -542,11 +542,11 @@ class _Session:
         # session and the ladder's own directory, and never to a hidden file inside any of them.
         tools = confine_all(
             {
-                "run_report": run_report,
-                "ledger_show": ledger_show,
-                "ledger_search": ledger_search,
-                "runs_index": runs_index,
-                "ladder_show": ladder_show,
+                "read_run_report": read_run_report,
+                "show_ledger": show_ledger,
+                "search_ledger": search_ledger,
+                "list_runs": list_runs,
+                "show_ladder": show_ladder,
             },
             roots_of((Path.cwd(), self.out, self.cfg.ladder_path.parent)),
         )

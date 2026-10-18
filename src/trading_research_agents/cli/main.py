@@ -589,6 +589,37 @@ def build_parser() -> argparse.ArgumentParser:
     audit_cmd.add_argument("--env-file", type=Path, default=None)
     audit_cmd.add_argument("--json", action="store_true")
 
+    for name, said in (
+        ("pause", "hold every new entry; open positions keep their exits (--off lifts it)"),
+        ("kill", "flatten and stop a running desk at its next pass (--off disarms)"),
+    ):
+        switch_cmd = top.add_parser(name, help=said)
+        switch_cmd.set_defaults(command=name)
+        switch_cmd.add_argument("--off", action="store_true", help="lift it")
+        switch_cmd.add_argument("--reason", default="", help="written into the file, and shown")
+        switch_cmd.add_argument("--config", type=Path, default=Path("strategy.toml"))
+        switch_cmd.add_argument("--json", action="store_true")
+
+    hindsight_cmd = top.add_parser(
+        "hindsight",
+        help="what the trades each gate refused would have done, beside the ones it let through",
+    )
+    hindsight_cmd.set_defaults(command="hindsight")
+    hindsight_cmd.add_argument("--config", type=Path, default=Path("strategy.toml"))
+    hindsight_cmd.add_argument("--data-config", type=Path, default=Path("data.toml"))
+    hindsight_cmd.add_argument("--runs", type=Path, default=Path("runs") / "cycles")
+    hindsight_cmd.add_argument(
+        "--hold",
+        type=parse_duration_s,
+        default=None,
+        help="how long each trade is held (default: [exit].timeout_bars on the decision bar)",
+    )
+    hindsight_cmd.add_argument(
+        "--bar", type=parse_duration_s, default=300.0, help="the replay's candle (default: 5m)"
+    )
+    hindsight_cmd.add_argument("--days", type=int, default=None, help="only the last N days")
+    hindsight_cmd.add_argument("--json", action="store_true")
+
     universe_cmd = top.add_parser(
         "universe", help="what discovery finds on the venue now, and what each filter took out"
     )
@@ -634,7 +665,11 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=(
             "example: tra sources add macro us10y --from fred --id DGS10 --high bearish; "
             "tra sources add onchain eth_net_flow --from coinmetrics --id FlowInExNtv "
-            "--minus FlowOutExNtv --fetch-asset eth --asset ETH --high bearish --band 10"
+            "--minus FlowOutExNtv --fetch-asset eth --asset ETH --high bearish --band 10; "
+            "tra sources add derivatives btc_liquidations --from coinglass "
+            "--id futures/liquidation/aggregated-history --param symbol=BTC --param interval=1h "
+            "--value aggregated_short_liquidation_usd --minus aggregated_long_liquidation_usd "
+            "--asset BTC --high bullish"
         ),
     )
     add.add_argument("kind", choices=("macro", "sentiment", "onchain", "derivatives"))
@@ -643,6 +678,13 @@ def build_parser() -> argparse.ArgumentParser:
     add.add_argument("--id", default=None, help="the source's own name for the series")
     add.add_argument("--minus", default=None, help="a second series subtracted from the first")
     add.add_argument("--fetch-asset", default=None, help="the asset the source is asked about")
+    add.add_argument(
+        "--param",
+        action="append",
+        default=[],
+        metavar="FIELD=VALUE",
+        help="a query field the source asks for, such as symbol=BTCUSDT; repeat for more",
+    )
     for flag in (
         "--url",
         "--rows",
@@ -1762,6 +1804,194 @@ def run_audit_command(args: argparse.Namespace) -> int:
     return CLEARED
 
 
+FOUR_HOURS_S = 4 * 3600
+
+
+def held_back_by(cfg: Any, out: Path, now: datetime) -> str:
+    """Why this pass takes no new entry and asks no model, or empty. Each is the client's own line,
+    counted per UTC day from the records on disk, so a restart cannot reset it."""
+    from trading_research_agents.execution.targets import intents_today
+    from trading_research_agents.llm.usage import spent_since
+
+    if cfg.pause_switch is not None and cfg.pause_switch.exists():
+        why = cfg.pause_switch.read_text(encoding="utf-8", errors="replace").strip()
+        return (
+            f"paused by {cfg.pause_switch}"
+            + (f" ({why[:120]})" if why else "")
+            + ("; `tra pause --off` resumes")
+        )
+    midnight = datetime(now.year, now.month, now.day, tzinfo=UTC)
+    a = cfg.agents
+    if a is not None and (a.daily_token_budget or a.daily_cost_budget):
+        ledgers = (out / "usage.jsonl", out.parent / "audits" / "usage.jsonl")
+        tokens, cost = spent_since(ledgers, midnight.timestamp())
+        if a.daily_token_budget and tokens >= a.daily_token_budget:
+            return f"daily token budget spent: {tokens} of {a.daily_token_budget} since 00:00 UTC"
+        if a.daily_cost_budget and cost >= a.daily_cost_budget:
+            return f"daily cost budget spent: {cost:.4f} of {a.daily_cost_budget} since 00:00 UTC"
+    cap = cfg.limits.max_trades_per_day
+    if cap is not None:
+        sent = intents_today(out, at=now, instrument=None)
+        if sent >= cap:
+            return (
+                f"{sent} trade(s) today across every instrument; [controls].max_trades_per_day "
+                f"is {cap}"
+            )
+    streak_cap = cfg.limits.max_losing_streak
+    if streak_cap is not None:
+        streak = losing_streak_today(out / "round_trips.jsonl", midnight)
+        if streak >= streak_cap:
+            return (
+                f"{streak} losing round trips in a row today; [controls].max_losing_streak is "
+                f"{streak_cap}"
+            )
+    return ""
+
+
+def losing_streak_today(path: Path, midnight: datetime) -> int:
+    """Losing round trips in a row, newest first, closed since `midnight`. A trip with no result is
+    passed over; a winner ends the count."""
+    from trading_research_agents.records import read_lines
+
+    streak = 0
+    for trip in reversed(read_lines(path) if path.is_file() else []):
+        try:
+            closed = datetime.fromisoformat(str(trip.get("at")))
+        except ValueError:
+            continue
+        if closed < midnight:
+            break
+        if trip.get("net") is None:
+            continue
+        if Decimal(str(trip["net"])) >= 0:
+            break
+        streak += 1
+    return streak
+
+
+def pause_command(args: argparse.Namespace) -> int:
+    """Hold every new entry, or lift the hold. Open positions keep their exits either way."""
+    cfg = load_strategy_config(args.config)
+    switch = cfg.pause_switch
+    if switch is None:
+        raise ConfigError("[controls].pause_switch names no file")
+    switch = switch if switch.is_absolute() else args.config.resolve().parent / switch
+    return _switch(args, switch, "pause", "no new entry is taken; open positions keep their exits")
+
+
+def kill_command(args: argparse.Namespace) -> int:
+    """Arm the kill switch: a running desk flattens and stops at its next pass. `--off` disarms."""
+    cfg = load_strategy_config(args.config)
+    if cfg.kill_switch is None:
+        raise ConfigError('declare [controls].kill_switch = "KILL" in strategy.toml first')
+    switch = cfg.kill_switch
+    switch = switch if switch.is_absolute() else args.config.resolve().parent / switch
+    return _switch(
+        args,
+        switch,
+        "kill switch",
+        "a running desk cancels its resting exits, closes what is held and stops at its next pass; "
+        "a desk started while it is armed does the same at once",
+    )
+
+
+def _switch(args: argparse.Namespace, switch: Path, name: str, effect: str) -> int:
+    if args.off:
+        if switch.exists():
+            switch.unlink()
+            said = f"{name}: lifted ({switch} removed)"
+        else:
+            said = f"{name}: was not set ({switch} does not exist)"
+        emit({"switch": str(switch), "set": False}, args.json, [said])
+        return CLEARED
+    stamp = datetime.now(UTC).isoformat(timespec="seconds")
+    switch.write_text(f"{args.reason or 'set by hand'} at {stamp}\n", encoding="utf-8")
+    emit(
+        {"switch": str(switch), "set": True, "reason": args.reason},
+        args.json,
+        [f"{name}: set ({switch}); {effect}", f"lift it with `tra {args.command} --off`"],
+    )
+    return CLEARED
+
+
+def hindsight_command(args: argparse.Namespace) -> int:
+    """Replay every directional decision on the candles that followed it, grouped by its gate."""
+    from trading_research_agents.data.sources import SourceError
+    from trading_research_agents.execution.hindsight import outcomes, read_decisions, report
+
+    cfg = load_strategy_config(args.config)
+    bar_s = int(args.bar)
+    timeout = cfg.exit_rule.timeout_bars
+    hold_s = (
+        int(args.hold)
+        if args.hold
+        else (timeout * cfg.run.bar_interval_s if timeout else FOUR_HOURS_S)
+    )
+    if bar_s <= 0 or bar_s > hold_s:
+        raise ConfigError(f"--bar is positive and no longer than the hold ({hold_s}s)")
+    data = _desk_data(args.data_config, cfg)
+    sources = data.chain("ohlcv").sources
+    declared = data.for_kind("ohlcv").options
+    params = {"params": declared["params"]} if "params" in declared else {}
+
+    def fetch(instrument: str, since_ms: int, limit: int) -> list[Any]:
+        for source in sources:
+            try:
+                got = source.fetch(
+                    "ohlcv", instrument, interval_s=bar_s, limit=limit, since_ms=since_ms, **params
+                )
+            except SourceError:
+                continue
+            bars = [c for c in got.value if c.start_ns >= since_ms * 1_000_000]
+            if bars:
+                return bars
+        return []
+
+    since = None if args.days is None else datetime.now(UTC) - timedelta(days=args.days)
+    decisions = read_decisions(args.runs, since=since)
+    found, skipped = outcomes(
+        decisions, fetch, hold_s=hold_s, bar_s=bar_s, cache=args.runs / "hindsight"
+    )
+    payload = report(found, hold_s=hold_s, bar_s=bar_s, skipped=skipped)
+    write_json(args.runs / "hindsight.json", payload)
+    emit(payload, args.json, _hindsight_lines(payload))
+    return CLEARED
+
+
+def _hindsight_lines(payload: dict[str, Any]) -> list[str]:
+    from trading_research_agents.agents.briefs import interval_name
+
+    def row(name: str, s: dict[str, Any]) -> str:
+        if not s["decisions"]:
+            return f"  {name:<22} none"
+        return (
+            f"  {name:<22} {s['decisions']:>4}  mean {s['mean_net_bps']:>7} bps  median "
+            f"{s['median_net_bps']:>7}  won {float(s['won']):>4.0%}  sum {s['sum_net_bps']:>8}"
+        )
+
+    side = payload["side"]
+    held, bar = interval_name(payload["hold_s"]), interval_name(payload["bar_s"])
+    lines = [
+        f"hindsight: {payload['replayed']} decisions replayed over {payload['days']} day(s), "
+        f"{payload['independent']} of them independent, each held {held} on {bar} candles, "
+        "net of its round trip",
+        row("admitted", payload["admitted"]),
+    ]
+    for gate in payload["gates"]:
+        lines.append(row(f"refused by {gate['gate']}", gate) + f"  {gate['verdict']}")
+    refused = payload["all_refused"]
+    lines.append(row("all refused", refused) + f"  {refused['verdict']}")
+    lines.append(
+        f"  side: the model's {side['model_side']['mean_net_bps']} bps against "
+        f"{side['opposite_side']['mean_net_bps']} on the reverse; {side['verdict']}"
+    )
+    left = {k: v for k, v in payload["skipped"].items() if v}
+    if left:
+        lines.append("  not replayed: " + ", ".join(f"{v} {k}" for k, v in left.items()))
+    lines.append(f"  written to hindsight.json; {payload['basis']}")
+    return lines
+
+
 def watch_desk(args: argparse.Namespace) -> int:
     """What a desk is doing, read from its own records. Nothing here can reach it.
 
@@ -1911,6 +2141,30 @@ def _has_live_plugin(name: str) -> bool:
     except UnknownLiveVenueError:
         return False
     return True
+
+
+def _desk_data(path: Path, cfg: Any, mode: str | None = None) -> Any:
+    """data.toml as this desk reads it: `venue` is the venue it trades on.
+
+    In venue mode the book and the funding an order is priced on must be that venue's own, so a
+    chain that reads them from another venue is refused here rather than noticed in a fill.
+    """
+    from trading_research_agents.data.sources import DataConfigError, load_data_config
+
+    mode = mode or cfg.execution.mode
+    venue = cfg.execution.venue or cfg.run.venue_key.partition("/")[0]
+    environment = (
+        _declared_environment(cfg) if cfg.execution.environment or mode == "venue" else "mainnet"
+    )
+    declared = load_data_config(path).on_venue(venue, environment)
+    elsewhere = declared.off_venue(venue)
+    if mode == "venue" and elsewhere:
+        raise DataConfigError(
+            f"orders go to {venue}, but data.toml prices them on {'; '.join(elsewhere)}. The book "
+            f"and the funding an order is priced on are the venue's own: write `venue` (or "
+            f'"ccxt:{venue}") in those chains'
+        )
+    return declared
 
 
 def _declared_environment(cfg: Any) -> str:
@@ -2088,6 +2342,10 @@ def sources_pull(args: argparse.Namespace) -> int:
         )
         for r in rows
     ]
+    shelf = declared_in(args.config.resolve().parent)
+    for name, path in sorted(shelf.classes.items()):
+        if name in TEXT_CLASSES:
+            lines.extend(_refresh_news(path, datetime.now(UTC), every=True))
     emit({"pulled": rows}, args.json, lines or ["no series declared under sources/"])
     return 1 if any("error" in r for r in rows) else 0
 
@@ -2115,6 +2373,11 @@ def sources_add(args: argparse.Namespace) -> int:
     ):
         if value is not None:
             fetch[key] = value
+    if args.param:
+        pairs = [item.partition("=") for item in args.param]
+        if any(not field or not sep for field, sep, _ in pairs):
+            raise ConfigError("--param is FIELD=VALUE, such as symbol=BTCUSDT")
+        fetch["params"] = {field.strip(): value.strip() for field, _, value in pairs}
     try:
         added = add_series(
             args.config.resolve().parent,
@@ -2263,7 +2526,12 @@ def _account_fees(
 
 
 def _read_fees(
-    venue: str, keys: list[str], env: Mapping[str, str], environment: str, instrument: str
+    venue: str,
+    keys: list[str],
+    env: Mapping[str, str],
+    environment: str,
+    instrument: str,
+    symbol: str | None = None,
 ) -> tuple[tuple[Decimal, Decimal] | None, str]:
     """Maker and taker in bps: the account's own, else the venue's standard tier, else nothing.
 
@@ -2277,11 +2545,15 @@ def _read_fees(
     from trading_research_agents.trading.dispatch import DispatchError, account_fees, hand_for
 
     try:
-        import ccxt
+        from trading_research_agents.data.sources.ccxt_client import build
 
-        public = getattr(ccxt, venue)({"enableRateLimit": True})
+        public = build(venue, {"enableRateLimit": True})
+        if public is None:
+            raise AttributeError(f"ccxt has no exchange named {venue!r}")
         public.load_markets()
-        symbol = resolve(instrument, public.markets_by_id, public.markets.values())
+        # The symbol orders go out under, when the caller knows it: a spot pair and the perpetual
+        # on the same coin are charged different fees.
+        symbol = symbol or resolve(instrument, public.markets_by_id, public.markets.values())
     except (ResolveError, ImportError, AttributeError) as exc:
         return None, str(exc)
     except Exception as exc:
@@ -2334,6 +2606,9 @@ def _fill_account_fees(
     standard tier is replaced by the account's own figure as soon as the account reports one. A
     fee the operator wrote is never replaced; when it is below what the account pays, that is
     reported, because the cost gate would then price trades cheaper than they are.
+
+    A channel's base fees are checked against the perpetual, and its `[channel.spot]` fees against
+    the spot pair; a desk that trades spot alone is checked against the spot pair throughout.
     """
     from trading_research_agents.trading.dispatch import credentials_for
 
@@ -2341,14 +2616,15 @@ def _fill_account_fees(
         return [], []
     venue = cfg.execution.venue or cfg.run.venue_key.partition("/")[0]
     lines = envelope.read_text(encoding="utf-8").splitlines()
-    blanks: list[tuple[int, str]] = []
-    ours: list[tuple[int, str]] = []
-    written: list[tuple[str, str, Decimal]] = []
-    current_venue, current_name = "", ""
+    # (line number, market, channel name, role, value, comment), for this venue's fee lines.
+    found_lines: list[tuple[int, str, str, str, str, str]] = []
+    current_venue, current_name, current_market = "", "", ""
     for number, line in enumerate(lines):
         stripped = line.strip()
         if stripped == "[[channel]]":
-            current_venue, current_name = "", ""
+            current_venue, current_name, current_market = "", "", ""
+        elif stripped.startswith("[channel.") and stripped.endswith("]"):
+            current_market = stripped[len("[channel.") : -1].strip()
         elif stripped.startswith("venue") and "=" in stripped:
             current_venue = stripped.partition("=")[2].split("#")[0].strip().strip('"')
         elif stripped.startswith("name") and "=" in stripped:
@@ -2359,60 +2635,110 @@ def _fill_account_fees(
         side, value, comment = found.group(1), found.group(2), found.group(3) or ""
         roles = current_name.split("-")
         role = roles[0] if side == "entry" else roles[-1]
-        if role not in ("maker", "taker"):
-            continue
-        if not value:
-            blanks.append((number, role))
-        elif STANDARD_MARK in comment:
-            ours.append((number, role))
-        else:
-            with contextlib.suppress(ArithmeticError, ValueError):
-                written.append((current_name, role, Decimal(value)))
-    if not blanks and not ours and not written:
+        if role in ("maker", "taker"):
+            found_lines.append((number, current_market, current_name, role, value, comment))
+    if not found_lines:
         return [], []
     keys = list(credentials_for(venue).values())
-    if not blanks and not ours and any(not env.get(k) for k in keys):
+    filling = any(not v or STANDARD_MARK in c for _, _, _, _, v, c in found_lines)
+    if not filling and any(not env.get(k) for k in keys):
         # Nothing to fill, and no account to check a written fee against: no call is worth making.
         return [], []
-    fees, said = _read_fees(venue, keys, env, _declared_environment(cfg), cfg.run.instrument)
+    markets = tuple(getattr(cfg.execution, "markets", ("linear perpetual",)))
+    spot_symbol = _spot_reference(cfg, envelope.parent) if "spot" in markets else None
     good: list[str] = []
     bad: list[str] = []
-    if fees is None:
-        if blanks:
-            bad.append(f"fees: not read for {venue} ({said}); the blank lines stay")
-        return good, bad
-    from_account = said.startswith("read from your")
-    if not from_account and all(env.get(k) for k in keys):
-        # A refused key is why orders would fail too; an account that does not report fees is not.
-        refused = any(word in said for word in ("PermissionDenied", "AuthenticationError"))
-        (bad if refused else good).append(f"fees: {said}")
-    by_role = {"maker": fees[0], "taker": fees[1]}
-    to_fill = blanks + (ours if from_account else [])
-    if to_fill:
+    changed = False
+    with_spot = {name for _, m, name, _, _, _ in found_lines if m == "spot"}
+    for market in sorted({m for _, m, _, _, _, _ in found_lines}):
+        group = [row for row in found_lines if row[1] == market]
+        priced_as_spot = market == "spot" or "linear perpetual" not in markets
+        if market == "" and priced_as_spot:
+            # A spot-only desk prices with a channel's spot table when it has one; its base fees
+            # are then never used, so they are not held to the spot pair.
+            group = [row for row in group if row[2] not in with_spot]
+            if not group:
+                continue
+        if priced_as_spot and spot_symbol is None:
+            continue
+        fees, said = _read_fees(
+            venue,
+            keys,
+            env,
+            _declared_environment(cfg),
+            cfg.run.instrument,
+            spot_symbol if priced_as_spot else None,
+        )
+        label = " spot" if market == "spot" else ""
+        if fees is None:
+            if any(not v for _, _, _, _, v, _ in group):
+                bad.append(f"fees{label}: not read for {venue} ({said}); the blank lines stay")
+            continue
+        from_account = said.startswith("read from your")
+        if not from_account and all(env.get(k) for k in keys):
+            # A refused key is why orders would fail too; an account without fees is not.
+            refused = any(word in said for word in ("PermissionDenied", "AuthenticationError"))
+            (bad if refused else good).append(f"fees{label}: {said}")
+        by_role = {"maker": fees[0], "taker": fees[1]}
         stamp = f"{when:%Y-%m-%d}"
         origin = (
             f"read from your {venue} account on {stamp}"
             if from_account
             else f"{venue} {STANDARD_MARK}, {stamp}; replaced once your account reports its own"
         )
-        for number, role in to_fill:
-            side = lines[number].split("=")[0].rstrip()
-            lines[number] = f"{side} = {_bps(by_role[role])}   # your {role} fee, {origin}"
-        envelope.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        good.append(
-            f"fees: maker {_bps(fees[0])} bps, taker {_bps(fees[1])} bps, {said}; "
-            f"written into {envelope.name}"
-        )
-    for name, role, declared in written:
-        if from_account and declared < by_role[role]:
+        filled = False
+        flagged = False
+        for number, _, name, role, value, comment in group:
+            if not value or (STANDARD_MARK in comment and from_account):
+                side = lines[number].split("=")[0].rstrip()
+                lines[number] = f"{side} = {_bps(by_role[role])}   # your {role} fee, {origin}"
+                filled = changed = True
+                continue
+            if STANDARD_MARK in comment:
+                continue
+            try:
+                declared = Decimal(value)
+            except (ArithmeticError, ValueError):
+                continue
+            # Only the account's own figure is a fact to hold a written fee to: a venue's market
+            # list can lag its fee schedule (one listed 6 bps for a perpetual it charges 5.5 on).
+            if not from_account or declared >= by_role[role]:
+                continue
+            flagged = True
             bad.append(
-                f"fees: {envelope.name} prices {venue}/{name} {role} at {_bps(declared)} bps "
-                f"and your account pays {_bps(by_role[role])}; the cost gate would price trades "
-                "too cheap"
+                f"fees: {envelope.name} prices {venue}/{name}{label} {role} at "
+                f"{_bps(declared)} bps and your account pays {_bps(by_role[role])}; the cost "
+                "gate would price trades too cheap"
             )
-    if written and not bad and from_account:
-        good.append(f"fees: {envelope.name} matches or exceeds what your {venue} account pays")
+        if filled:
+            good.append(
+                f"fees{label}: maker {_bps(fees[0])} bps, taker {_bps(fees[1])} bps, {said}; "
+                f"written into {envelope.name}"
+            )
+        written = any(v and STANDARD_MARK not in c for _, _, _, _, v, c in group)
+        if written and not flagged and from_account:
+            good.append(
+                f"fees{label}: {envelope.name} matches or exceeds what your {venue} account pays"
+            )
+    if changed:
+        envelope.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return good, bad
+
+
+def _spot_reference(cfg: Any, project: Path) -> str | None:
+    """A spot pair the desk declares, to read the venue's spot fees for: the run's own, else any."""
+    with contextlib.suppress(Exception):
+        own = _symbol_for(cfg, project, cfg.run.instrument)
+        if "/" in own and ":" not in own:
+            return own
+    declared = project / "data.toml"
+    if declared.is_file():
+        with contextlib.suppress(Exception):
+            raw = tomllib.loads(declared.read_text(encoding="utf-8"))
+            for symbol in (raw.get("data", {}).get("symbols") or {}).values():
+                if "/" in str(symbol) and ":" not in str(symbol):
+                    return str(symbol)
+    return None
 
 
 def _bps(value: Decimal) -> str:
@@ -2620,13 +2946,6 @@ def _for_venue(name: str, text: str, able: Any, keys: list[str], starter: str) -
     venue = able.venue
     if name == "data.toml":
         text = re.sub(r'"ccxt:[a-z0-9_]+"(?:, "ccxt:[a-z0-9_]+")*', f'"ccxt:{venue}"', text)
-        practice = "demo" if able.demo else "testnet" if able.testnet else ""
-        if practice and able.level != "data":
-            # The book is priced where orders meet it: a practice account's book is its own.
-            text = text.replace(
-                f'[data.orderbook]{chr(10)}chain = ["ccxt:{venue}"]',
-                f'[data.orderbook]{chr(10)}chain = ["ccxt:{venue}@{practice}"]',
-            )
         start = text.find("# Measured on ")
         if start != -1:
             text = text[:start].rstrip("\n") + "\n"
@@ -2985,7 +3304,6 @@ class Schedule:
 def run_cycle_command(args: argparse.Namespace) -> int:
     """One cycle, end to end, from the files in the project."""
     from trading_research_agents.agents.cycle import CycleConfig
-    from trading_research_agents.data.sources import load_data_config
     from trading_research_agents.execution.targets import reward_risk
     from trading_research_agents.llm.usage import (
         BudgetLimits,
@@ -3006,7 +3324,7 @@ def run_cycle_command(args: argparse.Namespace) -> int:
     magnitude = a.magnitude_bps
     if magnitude is None:
         raise ConfigError("the claimed edge: [agents].magnitude_bps in strategy.toml")
-    data_cfg = load_data_config(args.data_config)
+    data_cfg = _desk_data(args.data_config, cfg, args.mode or cfg.execution.mode)
     chains = {declared.kind: data_cfg.chain(declared.kind) for declared in data_cfg.kinds}
     instrument = args.instrument or cfg.run.instrument
     out = args.out or Path("runs") / "cycles"
@@ -3066,6 +3384,7 @@ def run_cycle_command(args: argparse.Namespace) -> int:
             )
         return metered[role]
 
+    facts = _market_facts(cfg, beside, instrument, hand)
     cycle_cfg = CycleConfig(
         instrument=instrument,
         envelope=load_envelope(args.envelope),
@@ -3087,6 +3406,11 @@ def run_cycle_command(args: argparse.Namespace) -> int:
         min_confidence=a.min_confidence,
         mode=mode,
         place=hand,
+        spot=facts[0],
+        asset_class=facts[1],
+        market=facts[2],
+        equity_session=cfg.execution.equity_session,
+        equity_closed=tuple(date.fromisoformat(d) for d in cfg.execution.equity_closed),
         matrix=cfg.confluence,
         conviction=cfg.conviction,
         max_position=cfg.limits.max_position,
@@ -3174,9 +3498,19 @@ def run_cycle_command(args: argparse.Namespace) -> int:
                 if refreshed and not args.json:
                     sys.stdout.write("\n".join(refreshed) + "\n")
                     sys.stdout.flush()
-                chosen, screened = _sweep(
-                    cfg, cycle_cfg, args, chains=chains, out=out, ask=completer_for
-                )
+                held_back = held_back_by(cfg, out, datetime.now(UTC))
+                chosen: tuple[str, ...] = ()
+                screened: Any = None
+                if held_back:
+                    emit(
+                        {"held_back": held_back},
+                        args.json,
+                        [f"desk: {held_back}; open positions keep their exits, nothing is asked"],
+                    )
+                else:
+                    chosen, screened = _sweep(
+                        cfg, cycle_cfg, args, chains=chains, out=out, ask=completer_for
+                    )
                 if screened is not None:
                     found, said = _screen_report(screened)
                     emit(found, args.json, said, partial(_screen_view, found))
@@ -3202,10 +3536,14 @@ def run_cycle_command(args: argparse.Namespace) -> int:
                         else None
                     )
                     mid_cycle = True
+                    chosen_facts = _market_facts(cfg, beside, instrument, sends)
                     result = _one_cycle(
                         replace(
                             cycle_cfg,
                             instrument=instrument,
+                            spot=chosen_facts[0],
+                            asset_class=chosen_facts[1],
+                            market=chosen_facts[2],
                             size_step=_step_for(cfg, instrument),
                             # The risk manager's cut, if one is in force; the client's caps apply
                             # after it as always.
@@ -3547,9 +3885,11 @@ def _discovered_universe(cfg: Any) -> tuple[Any, dict[str, Any] | None, list[str
     try:
         client = _DISCOVERY_CLIENTS.get(venue)
         if client is None:
-            import ccxt
+            from trading_research_agents.data.sources.ccxt_client import build
 
-            client = getattr(ccxt, venue)({"enableRateLimit": True})
+            client = build(venue, {"enableRateLimit": True})
+            if client is None:
+                raise AttributeError(f"ccxt has no exchange named {venue!r}")
             _DISCOVERY_CLIENTS[venue] = client
         found = discover(client, venue, rules)
     except (DiscoverError, ImportError, AttributeError) as exc:
@@ -4142,10 +4482,10 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
         bad.extend(missing)
         data_config = args.config.resolve().parent / "data.toml"
         if data_config.is_file():
-            from trading_research_agents.data.sources import DataConfigError, load_data_config
+            from trading_research_agents.data.sources import DataConfigError
 
             try:
-                declared_data = load_data_config(data_config)
+                declared_data = _desk_data(data_config, cfg)
             except DataConfigError as exc:
                 bad.append(f"data.toml: {exc}")
             else:
@@ -4290,6 +4630,38 @@ def _venue_hand(
     )
 
 
+def _market_facts(
+    cfg: Any, project: Path, instrument: str, hand: Any = None
+) -> tuple[bool, str, Any]:
+    """Whether the instrument is spot on the venue orders go to, and what its underlying is.
+
+    In venue mode the hand that will send says so. Elsewhere the venue's market list is asked,
+    keyless, and only by a desk that could trade something other than crypto perpetuals; a list
+    that cannot be read leaves the cycle as it always was, since nothing is sent outside venue
+    mode. An instrument named in [execution].equities is an equity whatever the venue says.
+    """
+    from trading_research_agents.data.sources.ccxt_client import market_of
+    from trading_research_agents.trading.market import Market
+
+    markets = tuple(cfg.execution.markets)
+    declared = instrument.upper() in tuple(cfg.execution.equities)
+    market = None
+    if hand is not None:
+        market = hand.market()
+    elif "spot" in markets or "prediction" in markets or not cfg.universe.crypto_only:
+        try:
+            client = _execution_client(cfg)
+            symbol = _symbol_for(cfg, project, instrument)
+            venue = cfg.execution.venue or cfg.run.venue_key.partition("/")[0]
+            market = Market.from_ccxt(venue, symbol, market_of(client, symbol))
+        except Exception:
+            market = None
+    spot = "spot" in markets and market is not None and market.held_as_balance
+    asset = "equity" if declared else (market.asset_class if market is not None else "crypto")
+    outcome = market if market is not None and market.outcome and "prediction" in markets else None
+    return spot, asset, outcome
+
+
 def _symbol_for(cfg: Any, project: Path, instrument: str = "") -> str:
     """The venue's own name for one instrument, as data.toml already maps it."""
     named = instrument or cfg.run.instrument
@@ -4317,13 +4689,15 @@ def _execution_client(cfg: Any) -> Any:
     size or lot: MET is 1 coin a contract live and 10 on the demo. Whatever an order is sized,
     stepped or resolved by has to come from the list the order will be checked against.
     """
-    import ccxt
+    from trading_research_agents.data.sources.ccxt_client import build
 
     venue = cfg.execution.venue or cfg.run.venue_key.partition("/")[0]
     environment = _declared_environment(cfg)
     key = (venue, environment)
     if key not in _EXECUTION_CLIENTS:
-        client = getattr(ccxt, venue)({"enableRateLimit": True})
+        client = build(venue, {"enableRateLimit": True})
+        if client is None:
+            raise AttributeError(f"ccxt has no exchange named {venue!r}")
         if environment == "demo":
             client.enable_demo_trading(True)
         elif environment == "testnet":
@@ -4599,11 +4973,32 @@ def _gate_lines(
     good.extend(_universe_notes(cfg, bad))
     good.extend(_size_notes(cfg))
     good.extend(_desk_notes(cfg, bad))
+    good.append(_limit_line(cfg))
     good.append(
         "keys: this check reads which are set, not whether they work; `tra keys --probe` asks each "
         "provider and the venue itself, sends no prompt and places no order"
     )
     return good, bad
+
+
+def _limit_line(cfg: Any) -> str:
+    """Every daily line and switch the desk declared, in one sentence."""
+    said = [f"daily loss {cfg.limits.daily_loss_limit_bps} bps"]
+    if cfg.limits.max_drawdown_bps is not None:
+        said.append(f"drawdown {cfg.limits.max_drawdown_bps} bps")
+    if cfg.limits.max_trades_per_day is not None:
+        said.append(f"{cfg.limits.max_trades_per_day} trades a day")
+    if cfg.limits.max_losing_streak is not None:
+        said.append(f"{cfg.limits.max_losing_streak} losers in a row")
+    a = cfg.agents
+    if a is not None and a.daily_token_budget is not None:
+        said.append(f"{a.daily_token_budget} tokens a day")
+    if a is not None and a.daily_cost_budget is not None:
+        said.append(f"{a.daily_cost_budget} a day in model cost")
+    switches = [f"`tra pause` ({cfg.pause_switch})"] if cfg.pause_switch is not None else []
+    if cfg.kill_switch is not None:
+        switches.append(f"`tra kill` ({cfg.kill_switch})")
+    return "limits: " + ", ".join(said) + "; switches: " + (", ".join(switches) or "none")
 
 
 def _refresh_sources(declarations: Iterable[Path]) -> list[str]:
@@ -4617,6 +5012,7 @@ def _refresh_sources(declarations: Iterable[Path]) -> list[str]:
         try:
             specs = load_series_map(path)
         except SeriesError:
+            said.extend(_refresh_news(path, now))
             continue
         base = path.resolve().parent
         for spec in specs:
@@ -4631,6 +5027,30 @@ def _refresh_sources(declarations: Iterable[Path]) -> list[str]:
                 )
             else:
                 said.append(f"sources: {got.series} refreshed, {got.added} new, last {got.last}")
+    return said
+
+
+def _refresh_news(path: Path, now: datetime, *, every: bool = False) -> list[str]:
+    """Fetch each feed a news declaration names, when it is due or `every` says so."""
+    from trading_research_agents.data.news import news_due, pull_news
+    from trading_research_agents.data.pull import PullError
+    from trading_research_agents.data.series import SeriesError, load_news_map
+
+    try:
+        specs = load_news_map(path)
+    except SeriesError:
+        return []
+    said: list[str] = []
+    base = path.resolve().parent
+    for spec in specs:
+        if spec.fetch is None or not (every or news_due(spec, base, now)):
+            continue
+        try:
+            got = pull_news(spec, base, now=now)
+        except PullError as exc:
+            said.append(f"news: {exc}; the file on disk is read as it is")
+        else:
+            said.append(f"news: {got.series} refreshed, {got.added} new, {got.rows} kept")
     return said
 
 
@@ -5228,12 +5648,17 @@ def data_pull(args: argparse.Namespace) -> int:
     from trading_research_agents.store import cycle_id, take_snapshot
 
     _load_env(args)
-    cfg = load_data_config(args.data_config)
+    desk = load_strategy_config(args.config) if args.config.is_file() else None
+    cfg = (
+        _desk_data(args.data_config, desk)
+        if desk is not None
+        else load_data_config(args.data_config).on_venue("")
+    )
     instrument = args.instrument
     if instrument is None:
-        if not args.config.is_file():
+        if desk is None:
             raise ValueError("name an instrument, or run inside a project with strategy.toml")
-        instrument = load_strategy_config(args.config).run.instrument
+        instrument = desk.run.instrument
     kinds = list(args.kind) if args.kind else [k.kind for k in cfg.kinds]
     chains = {kind: cfg.chain(kind) for kind in kinds}
     options = {k.kind: dict(k.options) for k in cfg.kinds}
@@ -5662,6 +6087,9 @@ HANDLERS = {
     ("sources", "add"): sources_add,
     ("models", "models"): show_models,
     ("audit", "audit"): run_audit_command,
+    ("hindsight", "hindsight"): hindsight_command,
+    ("pause", "pause"): pause_command,
+    ("kill", "kill"): kill_command,
     ("keys", "keys"): show_keys,
     ("watch", "watch"): watch_desk,
     ("run", "run"): run_cycle_command,

@@ -34,6 +34,41 @@ NON_CRYPTO: dict[str, tuple[str, frozenset[str]]] = {
 }
 
 
+# What a market's underlying is, from the same fields: read from the venues' market lists on
+# 2026-10-17. Bybit marks stock perpetuals `stock` and its tokenized-stock spot pairs `xstocks`;
+# OKX's instCategory is a contract field and says nothing about a spot pair.
+ASSET_CLASSES: dict[str, tuple[str, Mapping[str, str], bool]] = {
+    "bybit": (
+        "symbolType",
+        {
+            "stock": "equity",
+            "etf": "equity",
+            "xstocks": "equity",
+            "commodity": "commodity",
+            "forex": "forex",
+        },
+        False,
+    ),
+    "okx": ("instCategory", {"3": "equity", "4": "commodity", "5": "forex", "6": "bond"}, True),
+}
+
+
+def asset_class_of(venue: str, market: Mapping[str, Any]) -> str:
+    """What the market's underlying is, as the venue says: equity, commodity, forex, bond, crypto.
+
+    A venue that does not say is taken to list crypto, which is what this package was built on;
+    an operator names the exceptions in [execution].equities.
+    """
+    entry = ASSET_CLASSES.get(venue.strip().lower())
+    if entry is None:
+        return "crypto"
+    field, classes, contracts_only = entry
+    if contracts_only and not market.get("contract"):
+        return "crypto"
+    value = str((market.get("info") or {}).get(field) or "").strip().lower()
+    return classes.get(value, "crypto")
+
+
 class DiscoverError(RuntimeError):
     """The venue's market list or tickers could not be read."""
 

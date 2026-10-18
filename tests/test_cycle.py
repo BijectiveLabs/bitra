@@ -1302,3 +1302,37 @@ def test_the_desk_analyst_is_told_the_regime_picks_the_setup(
     # The desk's prompt, not the research core's sealed pre-registration.
     assert told == prompt("technical_analyst_live")
     assert "it is not the only setup you may name" in told and "pre-registration" not in told
+
+
+def test_a_short_on_a_spot_market_is_refused_before_it_is_priced(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    cfg, _, _ = cycle_config(tmp_path, envelope, [analyst_answer("short")], spot=True)
+    result = run_cycle(cfg)
+    assert result.intent is None and result.verdict is None
+    assert any("is a spot market; a short would sell coins" in r for r in result.refusals)
+    assert not (Path(str(result.path)) / "briefs" / "cost.json").exists()
+    # The same market, a long: everything else applies as on a perpetual.
+    long_cfg, _, _ = cycle_config(tmp_path, envelope, [analyst_answer("long")], spot=True)
+    spot_long = run_cycle(long_cfg)
+    assert spot_long.intent is not None
+    # Funding belongs to contracts: on spot it is not asked for, and so not refused either.
+    assert "funding" not in spot_long.snapshot.values
+    assert not any(r.startswith("data funding") for r in spot_long.refusals)
+
+
+def test_a_spot_cycle_is_priced_at_the_channels_spot_fees(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    from dataclasses import replace
+
+    channel = envelope.cheapest(None)
+    spot_priced = replace(channel, market_fees=(("spot", Decimal(10), Decimal(10)),))
+    priced = Envelope(
+        channels=tuple(spot_priced if c is channel else c for c in envelope.channels),
+        order_latency_ms=envelope.order_latency_ms,
+    )
+    cfg, _, _ = cycle_config(tmp_path, priced, [analyst_answer("long")], spot=True)
+    result = run_cycle(cfg)
+    fee = next(c for c in result.briefs["cost"]["components"] if c["name"] == "fee_round_trip")
+    assert Decimal(fee["bps"]) == Decimal(20) and fee["source"].endswith("its spot fees")

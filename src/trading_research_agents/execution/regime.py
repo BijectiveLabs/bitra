@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
+from trading_research_agents.execution.structure import against, fading_a_break
+
 REGIMES = ("trending up", "trending down", "ranging", "mixed")
 TREND_SETUPS = ("trend_continuation", "pullback_in_trend")
 RANGE_SETUPS = ("range_reversion",)
-REGIME_KEYS = ("trend_above", "range_below", "setups_must_fit")
+REGIME_KEYS = ("trend_above", "range_below", "setups_must_fit", "fade_below_variance_ratio")
 
 
 class RegimeError(ValueError):
@@ -25,16 +28,23 @@ class RegimeRule:
     trend_above: Decimal = Decimal("2.0")
     range_below: Decimal = Decimal("1.0")
     setups_must_fit: bool = True
+    # A window can net out to nothing and still have every move followed by more of the same. A
+    # fade is paid only where moves were given back, so it needs the variance ratio below this.
+    # Zero turns the check off.
+    fade_below_variance_ratio: Decimal = Decimal("1.0")
 
     def __post_init__(self) -> None:
         if not Decimal(0) < self.range_below < self.trend_above:
             raise RegimeError("[regime] needs 0 < range_below < trend_above")
+        if self.fade_below_variance_ratio < 0:
+            raise RegimeError("[regime].fade_below_variance_ratio is zero (off) or above")
 
     def record(self) -> dict[str, Any]:
         return {
             "trend_above": str(self.trend_above),
             "range_below": str(self.range_below),
             "setups_must_fit": self.setups_must_fit,
+            "fade_below_variance_ratio": str(self.fade_below_variance_ratio),
         }
 
 
@@ -57,6 +67,9 @@ def misfit(
     window_move_bps: float | None = None,
     position_in_range: float | None = None,
     trend_strength: float | None = None,
+    variance_ratio: float | None = None,
+    fade_below: float = 0.0,
+    structure: Mapping[str, Any] | None = None,
 ) -> str:
     """Why this setup does not fit what code measured, or empty when it does.
 
@@ -65,6 +78,14 @@ def misfit(
     named shape on a trade that came from somewhere else, so it is refused by name. A figure
     that was not measured does not refuse anything.
     """
+    if setup in TREND_SETUPS:
+        crossed = against(target, structure)
+        if crossed:
+            return f"{setup} {target} while {crossed}; a trend setup trades with the structure"
+    if setup in RANGE_SETUPS:
+        broke = fading_a_break(target, structure)
+        if broke:
+            return f"{setup} {target} into {broke}; a fade does not stand in front of a fresh break"
     if setup in TREND_SETUPS and regime not in ("trending up", "trending down"):
         return f"{setup} in a market measured as {regime}; a trend setup needs a measured trend"
     if regime in ("trending up", "trending down"):
@@ -82,6 +103,16 @@ def misfit(
         return (
             f"{setup} in a market measured as mixed (trend strength {trend_strength:.2f}); a fade "
             "needs a measured range"
+        )
+    if (
+        setup in RANGE_SETUPS
+        and fade_below > 0
+        and variance_ratio is not None
+        and variance_ratio >= fade_below
+    ):
+        return (
+            f"{setup} with a variance ratio of {variance_ratio:.2f} on the window: its moves "
+            f"have carried on rather than turned back, and a fade needs it below {fade_below:g}"
         )
     # A range fade sells what is stretched up and buys what is stretched down.
     if setup in RANGE_SETUPS and zscore is not None and not _points(target, -zscore):

@@ -26,6 +26,8 @@ from trading_research_agents.data.series import (
     load_series_map,
     read_series,
 )
+from trading_research_agents.data.sources.positioning import REFRESH as VENUE_REFRESH
+from trading_research_agents.data.sources.positioning import TIMING as VENUE_TIMING
 
 CLASSES = ("macro", "sentiment", "onchain", "derivatives")
 SIDES = ("bullish", "bearish")
@@ -37,8 +39,13 @@ TIMING: dict[str, tuple[str, str]] = {
     "coinmetrics": ("28h", "3d"),
     "alternative.me": ("0s", "2d"),
     "blockchain.info": ("1d", "3d"),
+    **VENUE_TIMING,
+    "coinglass": ("0s", "2h"),
+    "glassnode": ("1h", "2d"),
+    "cryptoquant": ("1h", "2d"),
     "http": ("0s", "4d"),
 }
+REFRESH: dict[str, str] = {**VENUE_REFRESH, "coinglass": "15m"}
 UNITS = {"d": 86_400, "h": 3_600, "m": 60, "s": 1}
 
 
@@ -126,7 +133,7 @@ def add_series(
         if high == "bullish"
         else f"bearish_above = {up}, bullish_below = {down}"
     )
-    block = _block(spec, origin, fetch, lag, age, sides, band, days, now)
+    block = _block(spec, origin, fetch, lag, age, sides, band, len(values), now)
     text = shelf.read_text(encoding="utf-8") if shelf.is_file() else ""
     shelf.write_text(text.rstrip("\n") + ("\n\n" if text.strip() else "") + block, encoding="utf-8")
     try:
@@ -155,7 +162,7 @@ def _block(
     age: str,
     sides: str,
     band: int,
-    days: int,
+    count: int,
     now: datetime,
 ) -> str:
     fields = ", ".join(f"{k} = {_toml(v)}" for k, v in fetch.items())
@@ -173,11 +180,13 @@ def _block(
         + ("" if origin in TIMING and origin != "http" else "   # yours to set"),
         f"fetch = {{ {fields} }}",
     ]
+    if origin in REFRESH:
+        lines.append(f'refresh = "{REFRESH[origin]}"')
     if spec.asset:
         lines.append(f'asset = "{spec.asset}"')
     lines.append(
         f"threshold = {{ {sides} }}   # the {band}th and {100 - band}th percentiles of the "
-        f"{days} days to {now:%Y-%m-%d}; yours to move"
+        f"{count} values to {now:%Y-%m-%d}; yours to move"
     )
     return "\n".join(lines) + "\n"
 
@@ -192,6 +201,8 @@ def _source(origin: str, fetch: Mapping[str, Any]) -> str:
 
 
 def _toml(value: Any) -> str:
+    if isinstance(value, Mapping):
+        return "{ " + ", ".join(f"{k} = {_toml(v)}" for k, v in value.items()) + " }"
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, int | float | Decimal):

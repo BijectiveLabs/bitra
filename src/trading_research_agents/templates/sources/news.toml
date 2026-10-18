@@ -6,9 +6,10 @@
 #   when,what[,source]
 #   2026-09-26T12:30:00+00:00,policy statement, no change,central bank
 #
-# `when` carries a timezone or is a bare date. Text is never fetched: this is your file, and an
-# agent reads it only as text with a date on it. Headlines from a news API or a forum need your
-# own small exporter, under that service's terms; numbers go in sentiment.toml, which can fetch.
+# `when` carries a timezone or is a bare date. A file can also be fetched into: an RSS or Atom
+# feed, or a JSON news API (fetch = { from = "http", url, rows, ts, text, source, key_env, ... }).
+# Headlines are merged into the file as plain lines, kept for `keep` (7d) and refreshed every
+# `refresh` (15m) by `tra run`. Fetch only what the service's terms allow.
 
 # Nothing is switched on yet. Uncomment an entry and put the file where it points; the macro and
 # sentiment analysts both read this class.
@@ -22,3 +23,19 @@
 # name = "desk_notes"
 # file = "news/desk_notes.csv"
 # source = "the desk"
+
+# [[news]]
+# name = "coindesk"
+# file = "news/coindesk.csv"
+# fetch = { from = "rss", url = "https://www.coindesk.com/arc/outboundfeeds/rss/" }
+
+# [[news]]
+# name = "cointelegraph"
+# file = "news/cointelegraph.csv"
+# fetch = { from = "rss", url = "https://cointelegraph.com/rss" }
+
+# [[news]]
+# name = "reddit_cryptocurrency"
+# file = "news/reddit_cryptocurrency.csv"
+# source = "r/CryptoCurrency"
+# fetch = { from = "rss", url = "https://www.reddit.com/r/CryptoCurrency/top/.rss", params = { t = "day" } }
