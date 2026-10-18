@@ -34,6 +34,23 @@ several minutes shortens it further. The desk says it plainly after every pass, 
 | a keyboard interrupt | the operator stopped it; the cycle that was running is already on disk |
 | SIGTERM, SIGHUP, SIGBREAK | a service manager stopping the desk, or an SSH session dropping; handled exactly like Ctrl-C |
 
+Some lines end the day's entries without ending the run. While one of them holds, each pass still
+looks after open positions (time exits, venue exits, the kill switch) and asks no model:
+
+| Holds new entries | Until | Set with |
+|---|---|---|
+| the pause switch | the file is removed | `tra pause` (writes `PAUSE`), `tra pause --off`; or `[controls].pause_switch` names another file |
+| the daily token budget | 00:00 UTC | `[agents].daily_token_budget`: tokens recorded today by every role and both auditors, across runs and restarts |
+| the daily cost budget | 00:00 UTC | `[agents].daily_cost_budget`: the same in model cost, from `[agents.pricing]` |
+| trades per day | 00:00 UTC | `[controls].max_trades_per_day`: orders written today across every instrument |
+| a losing streak | 00:00 UTC | `[controls].max_losing_streak`: losing round trips in a row today; a winner resets it |
+| the daily loss limit | 00:00 UTC | `[controls].daily_loss_limit_bps`, checked inside each cycle |
+| the drawdown limit | the peak file is cleared | `[controls].max_drawdown_bps`, with `on_drawdown = "flatten"` to flatten and stop as well |
+
+`tra kill` writes the kill switch file (`[controls].kill_switch`), so the next pass flattens and
+stops; `tra kill --off` removes it. `tra check` prints every line in force on one row. Each count
+is read from the records on disk, so restarting a desk does not reset a day.
+
 A refusal is not a reason to stop. A cycle that refused because a gate said no is a cycle that did
 its job, and the next one decides again with fresh figures. The frequency cap in `[targets]` still
 applies across the whole day, so an interval shorter than the desk's own limit simply produces more

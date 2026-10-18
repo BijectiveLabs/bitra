@@ -41,8 +41,16 @@ class Limits:
     # morning; this one does not, so a week of daily losses cannot pass unnoticed.
     max_drawdown_bps: Decimal | None = None
     on_drawdown: str = "stop"
+    # Desk-wide, per UTC day: orders sent across every instrument, and losing round trips in a row.
+    # Past either one no new entry is taken until the next day; open positions keep their exits.
+    max_trades_per_day: int | None = None
+    max_losing_streak: int | None = None
 
     def __post_init__(self) -> None:
+        for label in ("max_trades_per_day", "max_losing_streak"):
+            count = getattr(self, label)
+            if count is not None and (isinstance(count, bool) or count <= 0):
+                raise ControlError(f"{label} is a positive whole number when it is declared")
         for label, value in (
             ("max_risk_per_trade_bps", self.max_risk_per_trade_bps),
             ("max_position", self.max_position),

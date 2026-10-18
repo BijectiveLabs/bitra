@@ -31,18 +31,17 @@ def test_the_wordmark_spells_the_name_where_it_fits_and_shortens_where_it_does_n
     def widths(blocks: list[str]) -> list[int]:
         return [max(len(line) for line in block.splitlines()) for block in blocks]
 
-    one_line = tui.wordmark(200)
-    assert widths(one_line) == [179] and "█" in one_line[0]
-    # Too narrow for the name on one line: TRADING RESEARCH above AGENTS.
-    stacked = tui.wordmark(140)
-    assert widths(stacked) == [123, 52]
+    # TRADING RESEARCH above AGENTS wherever 124 columns are free; no frame takes any of them.
+    stacked = tui.wordmark(124)
+    assert widths(stacked) == [123, 52] and "█" in stacked[0]
     assert all(len(block.splitlines()) == 6 for block in stacked)
-    # Narrower still: the short name.
-    assert widths(tui.wordmark(100)) == [25]
-    assert tui.wordmark(28) == [tui.BANNER] and tui.BANNER.isascii()
+    assert tui.wordmark(200) == stacked
+    # Narrower: the short name.
+    assert widths(tui.wordmark(123)) == [25]
+    assert tui.wordmark(25) == [tui.BANNER] and tui.BANNER.isascii()
     # A console code page without block characters gets the ASCII one at any width.
     assert tui.wordmark(200, "cp1252") == [tui.BANNER]
-    assert tui.wordmark(200, "cp437") == one_line
+    assert tui.wordmark(200, "cp437") == stacked
 
 
 def test_the_stacked_wordmark_is_centred_line_by_line(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -51,14 +50,15 @@ def test_the_stacked_wordmark_is_centred_line_by_line(monkeypatch: pytest.Monkey
     tui.home("1.0.0", [], [], "tra init my-desk")
     drawn = wide.export_text().splitlines()
     top = next(line for line in drawn if "████████╗██████╗" in line)
-    agents = next(line for line in drawn if line.strip("│ ").startswith("█████╗  ██████╗"))
+    agents = next(line for line in drawn if line.strip().startswith("█████╗  ██████╗"))
 
     def centre(line: str) -> float:
-        inner = line.strip().strip("│")
-        left = len(inner) - len(inner.lstrip())
-        return left + len(inner.strip()) / 2
+        left = len(line) - len(line.lstrip())
+        return left + len(line.strip()) / 2
 
     assert abs(centre(top) - centre(agents)) <= 1
+    # No frame: no box-drawing border on the welcome screen.
+    assert not any(line.lstrip().startswith(("╭", "│", "╰")) for line in drawn)
 
 
 def test_the_console_is_off_for_scripts_and_json(monkeypatch: pytest.MonkeyPatch) -> None:

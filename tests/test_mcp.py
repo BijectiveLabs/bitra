@@ -45,14 +45,14 @@ def test_the_server_lists_exactly_the_read_tools() -> None:
     listed, annotations = run(names())
     assert listed == [
         "audit_dataset",
+        "check_cost_floor",
         "check_registration",
-        "cost_floor_check",
-        "ladder_show",
-        "ledger_search",
-        "ledger_show",
+        "list_runs",
         "observe_events",
-        "run_report",
-        "runs_index",
+        "read_run_report",
+        "search_ledger",
+        "show_ladder",
+        "show_ledger",
         "validate_trades",
     ]
     for name, note in annotations.items():
@@ -76,13 +76,13 @@ def test_every_tool_and_every_argument_is_described_for_the_model() -> None:
         assert set(properties) == set(PARAMETERS[tool.name]), tool.name
         for argument, schema in properties.items():
             assert schema.get("description") == PARAMETERS[tool.name][argument], argument
-    assert run(call("ledger_search", {"ledger_path": "missing.jsonl", "query": "x"})).is_error
+    assert run(call("search_ledger", {"ledger_path": "missing.jsonl", "query": "x"})).is_error
 
 
 def test_cost_floor_returns_structured_content() -> None:
     result = run(
         call(
-            "cost_floor_check",
+            "check_cost_floor",
             {"envelope_path": str(EXAMPLES / "envelope.toml"), "magnitude_bps": "3.0"},
         )
     )
@@ -92,7 +92,7 @@ def test_cost_floor_returns_structured_content() -> None:
     assert body["round_trip_bps"] == "3.0" and body["stopped"] is False
     stopped = run(
         call(
-            "cost_floor_check",
+            "check_cost_floor",
             {"envelope_path": str(EXAMPLES / "envelope.toml"), "magnitude_bps": "1.0"},
         )
     )
@@ -100,12 +100,12 @@ def test_cost_floor_returns_structured_content() -> None:
 
 
 def test_a_gate_refusal_is_a_message_the_model_reads(tmp_path: Path) -> None:
-    result = run(call("cost_floor_check", {"envelope_path": "nope.toml", "magnitude_bps": "3"}))
+    result = run(call("check_cost_floor", {"envelope_path": "nope.toml", "magnitude_bps": "3"}))
     assert result.is_error is True
     assert "does not exist" in result.content[0].text
     bad = run(
         call(
-            "cost_floor_check",
+            "check_cost_floor",
             {"envelope_path": str(EXAMPLES / "envelope.toml"), "magnitude_bps": "many"},
         )
     )
@@ -146,14 +146,14 @@ def test_audit_ladder_and_run_report_read_the_files(tmp_path: Path) -> None:
 
     ladder = Ladder(tmp_path / "ladder.json")
     ladder.promote(evidence="layer 5 OPEN", signed_by="op")
-    shown = run(call("ladder_show", {"ladder_path": str(tmp_path / "ladder.json")}))
+    shown = run(call("show_ladder", {"ladder_path": str(tmp_path / "ladder.json")}))
     assert shown.structured_content["tier"] == "PAPER"
 
     run_dir = tmp_path / "run"
     run_dir.mkdir()
     (run_dir / "run.json").write_text(json.dumps({"label": "replay", "fills": 2}), "utf-8")
     (run_dir / "trades.jsonl").write_text('{"a":1}\n{"a":2}\n', "utf-8")
-    report = run(call("run_report", {"run_dir": str(run_dir)}))
+    report = run(call("read_run_report", {"run_dir": str(run_dir)}))
     assert report.structured_content["closed_round_trips"] == 2
     assert report.structured_content["label"] == "replay"
 
@@ -161,12 +161,12 @@ def test_audit_ladder_and_run_report_read_the_files(tmp_path: Path) -> None:
 def test_a_host_cannot_read_outside_its_roots_or_into_a_hidden_file(tmp_path: Path) -> None:
     secret = tmp_path / ".env"
     secret.write_text("GROQ_API_KEY=not-for-a-model\n", encoding="utf-8")
-    hidden = run(call("ledger_show", {"ledger_path": str(secret)}, roots=(tmp_path,)))
+    hidden = run(call("show_ledger", {"ledger_path": str(secret)}, roots=(tmp_path,)))
     assert hidden.is_error and "hidden" in json.dumps(hidden.model_dump(), default=str)
     assert "not-for-a-model" not in json.dumps(hidden.model_dump(), default=str)
 
     elsewhere = run(
-        call("ladder_show", {"ladder_path": str(EXAMPLES / "x.json")}, roots=(tmp_path,))
+        call("show_ladder", {"ladder_path": str(EXAMPLES / "x.json")}, roots=(tmp_path,))
     )
     assert elsewhere.is_error and "outside" in json.dumps(elsewhere.model_dump(), default=str)
 

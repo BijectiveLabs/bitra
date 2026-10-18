@@ -32,6 +32,8 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | `tra run --now` | ask the roster even if the trigger would have held a quiet market |
 | `tra watch --every 5s` | a read-only view of a running desk |
 | `tra audit` | both auditors over the records; nothing is applied |
+| `tra pause`, `tra pause --off` | hold every new entry while open positions keep their exits; lift the hold |
+| `tra kill`, `tra kill --off` | flatten and stop a running desk at its next pass; disarm |
 | `tra hindsight` | what the trades each gate refused would have done, beside the ones it let through |
 | `tra backtest`, `tra paper`, `tra live` | replay, shadow, canary |
 

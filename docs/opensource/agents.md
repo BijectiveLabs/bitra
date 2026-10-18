@@ -92,7 +92,7 @@ agent that survived a session can be taken up the ladder like any scripted strat
 ### The auditor reads before it answers
 
 The auditor is not handed one brief; it works a bounded tool loop over the read surface:
-`run_report`, `ledger_show`, `ledger_search`, `runs_index`, `ladder_show`. Each step is one
+`read_run_report`, `show_ledger`, `search_ledger`, `list_runs`, `show_ladder`. Each step is one
 model call that either names a tool with its arguments or carries the final answer. The loop
 is closed at its edges: a tool outside the catalog is refused by name, arguments are checked
 against the function before it runs, an observation is cut at 6000 characters, the budget
@@ -129,7 +129,7 @@ size, or declared by the operator and labelled as such.
 | `onchain_analyst` | `onchain_brief` | the same engine, plus the net over a window and the last value as a z-score of its own history |
 | `risk_manager` | `risk_brief` | per run: latency from intent to fill (median, max, n, ratio to the declared), net per round trip overall and over the last window against the claimed magnitude, maximum drawdown, the favourable and adverse excursions of the closed round trips with what the winners gave back, which control refused and how often |
 | `executor` | `size_for`, `rate_budget`, `export_signals` | a size that never exceeds a cap, rounded down to the venue's step; what the minute still allows; the run's admitted intents as `signals.jsonl` or CSV for execution elsewhere (`tra signals export RUN`) |
-| `auditor` | `audit_brief`, then a tool loop over `run_report`, `ledger_show`, `ledger_search`, `runs_index`, `ladder_show` | usage per role with tokens per closed round trip, each promotion with whether its evidence names a gate, and a run against its replay trade by trade; then whatever it chooses to read, up to six calls |
+| `auditor` | `audit_brief`, then a tool loop over `read_run_report`, `show_ledger`, `search_ledger`, `list_runs`, `show_ladder` | usage per role with tokens per closed round trip, each promotion with whether its evidence names a gate, and a run against its replay trade by trade; then whatever it chooses to read, up to six calls |
 
 ### Reading, not calculating
 
@@ -143,7 +143,7 @@ audited. Every figure a role saw is in its brief on disk, and `tra runs verify` 
 the raw inputs.
 
 The one role that calls tools is the research session's auditor, which may read up to six records
-(`run_report`, `ledger_search` and the rest) before it answers. The MCP server exposes the same
+(`read_run_report`, `search_ledger` and the rest) before it answers. The MCP server exposes the same
 read-only tools to any host.
 
 What a role's answer does differs:

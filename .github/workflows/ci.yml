@@ -122,7 +122,7 @@ jobs:
           { cat requests.jsonl; sleep 8; } | timeout 60 docker run -i --rm tra-mcp > answers.jsonl || true
           cat answers.jsonl
           grep -q '"serverInfo"' answers.jsonl
-          grep -q '"cost_floor_check"' answers.jsonl
+          grep -q '"check_cost_floor"' answers.jsonl
           docker run --rm -v "$PWD:/src" -w /src ghcr.io/astral-sh/uv:python3.12-bookworm-slim uv sync -q --locked --no-dev --extra mcp
           { cat requests.jsonl; sleep 8; } | timeout 60 docker run -i --rm -v "$PWD:/src" -w /src ghcr.io/astral-sh/uv:python3.12-bookworm-slim uv run --no-sync trading-research-agents mcp serve > spec.jsonl || true
-          grep -q '"cost_floor_check"' spec.jsonl
+          grep -q '"check_cost_floor"' spec.jsonl

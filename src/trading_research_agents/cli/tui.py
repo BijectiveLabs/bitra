@@ -44,13 +44,14 @@ TAGLINE = (
 _console: Console | None = None
 
 
-# Widest first: the full name on one line, then on two, then the short name a narrow terminal fits.
+# Widest first: the name on two lines, then the short name a narrow terminal fits. No frame is drawn
+# around it, so the letters have the whole width and nothing beside them to misalign.
 WORDMARKS = (
-    ("name.txt",),
     ("trading-research.txt", "agents.txt"),
     ("tra.txt",),
 )
-PANEL_EDGE = 6
+# A terminal that wraps at its last column turns a line exactly as wide as itself into two.
+MARGIN = 1
 
 
 def _block(name: str, encoding: str) -> str | None:
@@ -79,7 +80,7 @@ def wordmark(width: int, encoding: str = "utf-8") -> list[str]:
         if len(drawn) != len(names):
             continue
         widest = max(len(line) for block in drawn for line in block.splitlines())
-        if widest + PANEL_EDGE <= width:
+        if widest + MARGIN <= width:
             return drawn
     return [BANNER]
 
@@ -177,12 +178,15 @@ def home(version: str, good: Sequence[str], bad: Sequence[str], next_command: st
         wide = max(len(line) for line in lines)
         rows.append(Align.center(Text("\n".join(line.ljust(wide) for line in lines), "bold cyan")))
     head = Group(
+        Text(""),
         *rows,
+        Text(""),
         Text(NAME, style="bold", justify="center"),
         Text(TAGLINE, style="dim", justify="center"),
         Text(f"tra {version}  by Bijective", style="dim", justify="center"),
+        Text(""),
     )
-    c.print(Panel(head, box=box.ROUNDED, padding=(0, 2)))
+    c.print(head)
     c.print(check_table(good, bad))
     c.print(Text("next: ", style="dim") + Text(next_command, style="bold"))
 

@@ -6,7 +6,16 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-18
+
 ### Added
+
+- Lines a client draws for a day, each counted from the records on disk so a restart does not reset
+  it, and each holding new entries while open positions keep their exits:
+  `[agents].daily_token_budget` and `[agents].daily_cost_budget` (every role and both auditors,
+  across runs), `[controls].max_trades_per_day` (every instrument), `[controls].max_losing_streak`,
+  and a pause switch (`PAUSE` by default, `[controls].pause_switch`). `tra pause` and `tra kill`
+  set the switches and `--off` lifts them; `tra check` prints every line in force on one row.
 
 - Spot, on the same order path as perpetuals. A desk lists it in `[execution].markets` (the default
   stays perpetuals only). Read from the market's own facts: long only, since a short on spot needs a
@@ -68,6 +77,13 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- The MCP tools follow one verb-noun pattern: `check_cost_floor`, `show_ledger`, `show_ladder`,
+  `read_run_report`, `search_ledger` and `list_runs` replace `cost_floor_check`, `ledger_show`,
+  `ladder_show`, `run_report`, `ledger_search` and `runs_index`; the other four keep their names.
+- The welcome screen has no frame: TRADING RESEARCH above AGENTS from 124 columns, TRA below that,
+  the ASCII name on a console without block characters. The one-line wordmark is gone.
+- `[agents]` refuses a key it does not know, as `[controls]` already did, so a misspelt budget is
+  an error rather than a budget that is silently not there.
 - Market structure, read by the system on the decision timeframe and every context timeframe:
   alternating swings labelled HH, HL, LH, LL, the trend they make (uptrend, downtrend, range), the
   last break of structure or change of character (closes only), the level whose loss changes the

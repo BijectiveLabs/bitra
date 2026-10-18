@@ -19,7 +19,7 @@ from __future__ import annotations
 import threading
 import time
 from collections import deque
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
@@ -103,6 +103,24 @@ class UsageRecord:
             "cost": None if self.cost is None else str(self.cost),
             "outcome": self.outcome,
         }
+
+
+def spent_since(paths: Sequence[Path], since: float) -> tuple[int, Decimal]:
+    """Tokens and declared cost recorded in these ledgers at or after `since`, across every run."""
+    tokens, cost = 0, Decimal(0)
+    for path in paths:
+        if not path.is_file():
+            continue
+        for row in read_lines(path):
+            try:
+                if float(row.get("at", 0)) < since:
+                    continue
+                tokens += int(row.get("input_tokens") or 0) + int(row.get("output_tokens") or 0)
+                if row.get("cost") not in (None, ""):
+                    cost += Decimal(str(row["cost"]))
+            except (TypeError, ValueError, ArithmeticError):
+                continue
+    return tokens, cost
 
 
 class UsageLedger:

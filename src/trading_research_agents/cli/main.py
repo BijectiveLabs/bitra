@@ -589,6 +589,17 @@ def build_parser() -> argparse.ArgumentParser:
     audit_cmd.add_argument("--env-file", type=Path, default=None)
     audit_cmd.add_argument("--json", action="store_true")
 
+    for name, said in (
+        ("pause", "hold every new entry; open positions keep their exits (--off lifts it)"),
+        ("kill", "flatten and stop a running desk at its next pass (--off disarms)"),
+    ):
+        switch_cmd = top.add_parser(name, help=said)
+        switch_cmd.set_defaults(command=name)
+        switch_cmd.add_argument("--off", action="store_true", help="lift it")
+        switch_cmd.add_argument("--reason", default="", help="written into the file, and shown")
+        switch_cmd.add_argument("--config", type=Path, default=Path("strategy.toml"))
+        switch_cmd.add_argument("--json", action="store_true")
+
     hindsight_cmd = top.add_parser(
         "hindsight",
         help="what the trades each gate refused would have done, beside the ones it let through",
@@ -1794,6 +1805,113 @@ def run_audit_command(args: argparse.Namespace) -> int:
 
 
 FOUR_HOURS_S = 4 * 3600
+
+
+def held_back_by(cfg: Any, out: Path, now: datetime) -> str:
+    """Why this pass takes no new entry and asks no model, or empty. Each is the client's own line,
+    counted per UTC day from the records on disk, so a restart cannot reset it."""
+    from trading_research_agents.execution.targets import intents_today
+    from trading_research_agents.llm.usage import spent_since
+
+    if cfg.pause_switch is not None and cfg.pause_switch.exists():
+        why = cfg.pause_switch.read_text(encoding="utf-8", errors="replace").strip()
+        return (
+            f"paused by {cfg.pause_switch}"
+            + (f" ({why[:120]})" if why else "")
+            + ("; `tra pause --off` resumes")
+        )
+    midnight = datetime(now.year, now.month, now.day, tzinfo=UTC)
+    a = cfg.agents
+    if a is not None and (a.daily_token_budget or a.daily_cost_budget):
+        ledgers = (out / "usage.jsonl", out.parent / "audits" / "usage.jsonl")
+        tokens, cost = spent_since(ledgers, midnight.timestamp())
+        if a.daily_token_budget and tokens >= a.daily_token_budget:
+            return f"daily token budget spent: {tokens} of {a.daily_token_budget} since 00:00 UTC"
+        if a.daily_cost_budget and cost >= a.daily_cost_budget:
+            return f"daily cost budget spent: {cost:.4f} of {a.daily_cost_budget} since 00:00 UTC"
+    cap = cfg.limits.max_trades_per_day
+    if cap is not None:
+        sent = intents_today(out, at=now, instrument=None)
+        if sent >= cap:
+            return (
+                f"{sent} trade(s) today across every instrument; [controls].max_trades_per_day "
+                f"is {cap}"
+            )
+    streak_cap = cfg.limits.max_losing_streak
+    if streak_cap is not None:
+        streak = losing_streak_today(out / "round_trips.jsonl", midnight)
+        if streak >= streak_cap:
+            return (
+                f"{streak} losing round trips in a row today; [controls].max_losing_streak is "
+                f"{streak_cap}"
+            )
+    return ""
+
+
+def losing_streak_today(path: Path, midnight: datetime) -> int:
+    """Losing round trips in a row, newest first, closed since `midnight`. A trip with no result is
+    passed over; a winner ends the count."""
+    from trading_research_agents.records import read_lines
+
+    streak = 0
+    for trip in reversed(read_lines(path) if path.is_file() else []):
+        try:
+            closed = datetime.fromisoformat(str(trip.get("at")))
+        except ValueError:
+            continue
+        if closed < midnight:
+            break
+        if trip.get("net") is None:
+            continue
+        if Decimal(str(trip["net"])) >= 0:
+            break
+        streak += 1
+    return streak
+
+
+def pause_command(args: argparse.Namespace) -> int:
+    """Hold every new entry, or lift the hold. Open positions keep their exits either way."""
+    cfg = load_strategy_config(args.config)
+    switch = cfg.pause_switch
+    if switch is None:
+        raise ConfigError("[controls].pause_switch names no file")
+    switch = switch if switch.is_absolute() else args.config.resolve().parent / switch
+    return _switch(args, switch, "pause", "no new entry is taken; open positions keep their exits")
+
+
+def kill_command(args: argparse.Namespace) -> int:
+    """Arm the kill switch: a running desk flattens and stops at its next pass. `--off` disarms."""
+    cfg = load_strategy_config(args.config)
+    if cfg.kill_switch is None:
+        raise ConfigError('declare [controls].kill_switch = "KILL" in strategy.toml first')
+    switch = cfg.kill_switch
+    switch = switch if switch.is_absolute() else args.config.resolve().parent / switch
+    return _switch(
+        args,
+        switch,
+        "kill switch",
+        "a running desk cancels its resting exits, closes what is held and stops at its next pass; "
+        "a desk started while it is armed does the same at once",
+    )
+
+
+def _switch(args: argparse.Namespace, switch: Path, name: str, effect: str) -> int:
+    if args.off:
+        if switch.exists():
+            switch.unlink()
+            said = f"{name}: lifted ({switch} removed)"
+        else:
+            said = f"{name}: was not set ({switch} does not exist)"
+        emit({"switch": str(switch), "set": False}, args.json, [said])
+        return CLEARED
+    stamp = datetime.now(UTC).isoformat(timespec="seconds")
+    switch.write_text(f"{args.reason or 'set by hand'} at {stamp}\n", encoding="utf-8")
+    emit(
+        {"switch": str(switch), "set": True, "reason": args.reason},
+        args.json,
+        [f"{name}: set ({switch}); {effect}", f"lift it with `tra {args.command} --off`"],
+    )
+    return CLEARED
 
 
 def hindsight_command(args: argparse.Namespace) -> int:
@@ -3380,9 +3498,19 @@ def run_cycle_command(args: argparse.Namespace) -> int:
                 if refreshed and not args.json:
                     sys.stdout.write("\n".join(refreshed) + "\n")
                     sys.stdout.flush()
-                chosen, screened = _sweep(
-                    cfg, cycle_cfg, args, chains=chains, out=out, ask=completer_for
-                )
+                held_back = held_back_by(cfg, out, datetime.now(UTC))
+                chosen: tuple[str, ...] = ()
+                screened: Any = None
+                if held_back:
+                    emit(
+                        {"held_back": held_back},
+                        args.json,
+                        [f"desk: {held_back}; open positions keep their exits, nothing is asked"],
+                    )
+                else:
+                    chosen, screened = _sweep(
+                        cfg, cycle_cfg, args, chains=chains, out=out, ask=completer_for
+                    )
                 if screened is not None:
                     found, said = _screen_report(screened)
                     emit(found, args.json, said, partial(_screen_view, found))
@@ -4845,11 +4973,32 @@ def _gate_lines(
     good.extend(_universe_notes(cfg, bad))
     good.extend(_size_notes(cfg))
     good.extend(_desk_notes(cfg, bad))
+    good.append(_limit_line(cfg))
     good.append(
         "keys: this check reads which are set, not whether they work; `tra keys --probe` asks each "
         "provider and the venue itself, sends no prompt and places no order"
     )
     return good, bad
+
+
+def _limit_line(cfg: Any) -> str:
+    """Every daily line and switch the desk declared, in one sentence."""
+    said = [f"daily loss {cfg.limits.daily_loss_limit_bps} bps"]
+    if cfg.limits.max_drawdown_bps is not None:
+        said.append(f"drawdown {cfg.limits.max_drawdown_bps} bps")
+    if cfg.limits.max_trades_per_day is not None:
+        said.append(f"{cfg.limits.max_trades_per_day} trades a day")
+    if cfg.limits.max_losing_streak is not None:
+        said.append(f"{cfg.limits.max_losing_streak} losers in a row")
+    a = cfg.agents
+    if a is not None and a.daily_token_budget is not None:
+        said.append(f"{a.daily_token_budget} tokens a day")
+    if a is not None and a.daily_cost_budget is not None:
+        said.append(f"{a.daily_cost_budget} a day in model cost")
+    switches = [f"`tra pause` ({cfg.pause_switch})"] if cfg.pause_switch is not None else []
+    if cfg.kill_switch is not None:
+        switches.append(f"`tra kill` ({cfg.kill_switch})")
+    return "limits: " + ", ".join(said) + "; switches: " + (", ".join(switches) or "none")
 
 
 def _refresh_sources(declarations: Iterable[Path]) -> list[str]:
@@ -5939,6 +6088,8 @@ HANDLERS = {
     ("models", "models"): show_models,
     ("audit", "audit"): run_audit_command,
     ("hindsight", "hindsight"): hindsight_command,
+    ("pause", "pause"): pause_command,
+    ("kill", "kill"): kill_command,
     ("keys", "keys"): show_keys,
     ("watch", "watch"): watch_desk,
     ("run", "run"): run_cycle_command,

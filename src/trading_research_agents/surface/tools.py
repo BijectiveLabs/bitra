@@ -54,7 +54,7 @@ def _decimal(text: str, label: str) -> Decimal:
     return value
 
 
-def cost_floor_check(envelope_path: str, magnitude_bps: str, venue: str = "") -> dict[str, Any]:
+def check_cost_floor(envelope_path: str, magnitude_bps: str, venue: str = "") -> dict[str, Any]:
     """Check whether a claimed edge can pay for trading it, before any data is touched.
 
     Reads the fee channels declared in envelope.toml, takes the cheapest round trip (on `venue`
@@ -115,7 +115,7 @@ def observe_events(dataset_path: str, observation_path: str) -> dict[str, Any]:
 
     Marks every occurrence of the declared event in a Parquet trade dataset, measures the
     response over the declared horizon and counts it per subperiod, so an event that happened in
-    one week only is seen as such. Use it after `cost_floor_check` and before writing a
+    one week only is seen as such. Use it after `check_cost_floor` and before writing a
     pre-registration. Read-only. Returns the declaration and the report: events found, their
     spread across subperiods and whether the declared recurrence holds.
     """
@@ -210,12 +210,12 @@ def validate_trades(
     return dict(validation_record(result))
 
 
-def ledger_show(ledger_path: str = "ledger.jsonl") -> dict[str, Any]:
+def show_ledger(ledger_path: str = "ledger.jsonl") -> dict[str, Any]:
     """List the kill ledger: every verdict that stands, and the count per verdict.
 
     The ledger is the research memory: what was falsified, closed, not proven or validated, on
     which axis, and at which fee it would reverse. A retracted row is left out. Use it for the
-    whole picture; `ledger_search` finds the rows about one idea. Read-only.
+    whole picture; `search_ledger` finds the rows about one idea. Read-only.
     """
     ledger = Ledger(_path(ledger_path, kind="ledger"))
     rows = ledger.effective()
@@ -225,7 +225,7 @@ def ledger_show(ledger_path: str = "ledger.jsonl") -> dict[str, Any]:
     }
 
 
-def ladder_show(ladder_path: str = "ladder.json") -> dict[str, Any]:
+def show_ladder(ladder_path: str = "ladder.json") -> dict[str, Any]:
     """Show the promotion ladder: the tier a strategy is on and how it got there.
 
     Tiers run research, paper, shadow, canary, production; canary and production send real
@@ -237,12 +237,12 @@ def ladder_show(ladder_path: str = "ladder.json") -> dict[str, Any]:
     return {"tier": ladder.tier.name, "history": list(ladder.history)}
 
 
-def run_report(run_dir: str) -> dict[str, Any]:
+def read_run_report(run_dir: str) -> dict[str, Any]:
     """Read one run's report: what a replay, shadow or canary run did, and how it ended.
 
     Returns run.json as written (label, instrument, strategy, prints, bars, intents, refusals,
     fills, net bps, what stopped it) and the count of closed round trips in its trades.jsonl. Use
-    `runs_index` to find the run directory first. Read-only.
+    `list_runs` to find the run directory first. Read-only.
     """
     directory = Path(run_dir).expanduser()
     summary = _path(str(directory / "run.json"), kind="run report")
@@ -256,7 +256,7 @@ def run_report(run_dir: str) -> dict[str, Any]:
     return dict(report)
 
 
-def ledger_search(ledger_path: str, query: str, limit: int = 10) -> dict[str, Any]:
+def search_ledger(ledger_path: str, query: str, limit: int = 10) -> dict[str, Any]:
     """Search the kill ledger for verdicts that mention the words in `query`.
 
     Matches the subject, note, evidence and axis of every row that stands, and ranks rows by how
@@ -279,12 +279,12 @@ def ledger_search(ledger_path: str, query: str, limit: int = 10) -> dict[str, An
     return {"query": query, "matched": len(hits), "rows": [r for _, r in hits[: max(limit, 1)]]}
 
 
-def runs_index(runs_dir: str, instrument: str = "") -> dict[str, Any]:
+def list_runs(runs_dir: str, instrument: str = "") -> dict[str, Any]:
     """List past runs under a directory, newest first, with the summary of each.
 
     Finds every run.json below `runs_dir` and returns its directory, label, instrument, strategy,
     round trips, net bps, what stopped it and when it finished; at most 50, with the total.
-    Filter by `instrument` to compare runs on one market. Use `run_report` for one run in full.
+    Filter by `instrument` to compare runs on one market. Use `read_run_report` for one run in full.
     Read-only.
     """
     root = Path(runs_dir).expanduser()
@@ -315,7 +315,7 @@ def runs_index(runs_dir: str, instrument: str = "") -> dict[str, Any]:
 
 # What each argument means, for the schema a host shows the model.
 PARAMETERS: dict[str, dict[str, str]] = {
-    "cost_floor_check": {
+    "check_cost_floor": {
         "envelope_path": "path to envelope.toml, the declared fee channels",
         "magnitude_bps": "the claimed edge per round trip, in basis points, as a decimal string",
         "venue": "only this venue's channels; empty for the cheapest across all",
@@ -344,15 +344,15 @@ PARAMETERS: dict[str, dict[str, str]] = {
         "seed": "random seed; the same seed gives the same verdict",
         "null_mode": '"sign" (flip each trade\'s sign) or "cross_sectional"',
     },
-    "ledger_show": {"ledger_path": "path to the kill ledger, ledger.jsonl"},
-    "ladder_show": {"ladder_path": "path to the promotion ladder, ladder.json"},
-    "run_report": {"run_dir": "a run's directory, the one holding run.json"},
-    "ledger_search": {
+    "show_ledger": {"ledger_path": "path to the kill ledger, ledger.jsonl"},
+    "show_ladder": {"ladder_path": "path to the promotion ladder, ladder.json"},
+    "read_run_report": {"run_dir": "a run's directory, the one holding run.json"},
+    "search_ledger": {
         "ledger_path": "path to the kill ledger, ledger.jsonl",
         "query": "words to look for; a row matches when it contains any of them",
         "limit": "most rows to return",
     },
-    "runs_index": {
+    "list_runs": {
         "runs_dir": "directory to search for run.json files, e.g. runs",
         "instrument": "only runs on this instrument; empty for all",
     },
@@ -360,14 +360,14 @@ PARAMETERS: dict[str, dict[str, str]] = {
 
 # Name, title, function. The order is the order a host lists them in.
 READ_TOOLS: tuple[tuple[str, str, Callable[..., dict[str, Any]]], ...] = (
-    ("cost_floor_check", "Cost floor (layer 0)", cost_floor_check),
+    ("check_cost_floor", "Cost floor (layer 0)", check_cost_floor),
     ("observe_events", "Market observation (layer 1)", observe_events),
     ("check_registration", "Check a pre-registration (layer 3)", check_registration),
     ("audit_dataset", "Audit a dataset (data gate)", audit_dataset),
     ("validate_trades", "Validate trades (layer 5)", validate_trades),
-    ("ledger_show", "Show the kill ledger", ledger_show),
-    ("ladder_show", "Show the promotion ladder", ladder_show),
-    ("run_report", "Read a run report", run_report),
-    ("ledger_search", "Search the kill ledger", ledger_search),
-    ("runs_index", "List past runs", runs_index),
+    ("show_ledger", "Show the kill ledger", show_ledger),
+    ("show_ladder", "Show the promotion ladder", show_ladder),
+    ("read_run_report", "Read a run report", read_run_report),
+    ("search_ledger", "Search the kill ledger", search_ledger),
+    ("list_runs", "List past runs", list_runs),
 )

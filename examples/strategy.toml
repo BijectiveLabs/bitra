@@ -42,7 +42,10 @@ max_orders_per_minute = 6
 daily_loss_limit_bps = 300
 max_drawdown_bps = 1000            # from the highest equity, across days; no new entry past it
 # on_drawdown = "flatten"         # also flatten and stop, through the kill switch below
-kill_switch = "KILL"               # touch this file to flatten and stop
+kill_switch = "KILL"               # `tra kill` sets it: flatten and stop; `tra kill --off` clears it
+# pause_switch = "PAUSE"           # `tra pause`: no new entry, exits still looked after (the default)
+# max_trades_per_day = 6           # orders across every instrument per UTC day
+# max_losing_streak = 3            # losing round trips in a row that end the day's entries
 
 # ---- live tier (T3 canary). Keys never live here: BYBIT_API_KEY / BYBIT_API_SECRET come from
 # the environment or `--env-file`. Uncomment both tables to run `tra live`.
@@ -83,6 +86,8 @@ kill_switch = "KILL"               # touch this file to flatten and stop
 # records and propose where to spend less. If you want a hard ceiling anyway, declare one - and know
 # that it stops the desk rather than slowing it down:
 # token_budget = 200000           # tokens for the whole process, every role; unset means no ceiling
+# daily_token_budget = 500000     # per UTC day across runs, every role and both auditors
+# daily_cost_budget = 5.0         # the same in model cost, from [agents.pricing]
 # max_calls_per_hour = 60         # unset means no ceiling
 # min_interval_s = 0              # seconds one role waits between its own calls
 # max_output_tokens = 4096        # unset means the model's own maximum, which is what you want

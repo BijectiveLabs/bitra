@@ -28,8 +28,8 @@ INSTRUCTIONS = (
     "ladder and a run report. They measure; they never trade, promote or record. Every number "
     "in basis points is a Decimal string; every time is UTC. Paths resolve under the directory "
     "the server was started in, and hidden files are never read. The order of work an idea "
-    "follows: ledger_search (did it already die?), cost_floor_check, audit_dataset, "
-    "observe_events, check_registration, validate_trades; run_report and runs_index read what "
+    "follows: search_ledger (did it already die?), check_cost_floor, audit_dataset, "
+    "observe_events, check_registration, validate_trades; read_run_report and list_runs read what "
     "a run did."
 )
 
