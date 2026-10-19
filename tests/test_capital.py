@@ -554,3 +554,19 @@ def test_every_credential_a_venue_signs_with_is_asked_for_by_name() -> None:
         "secret": "SOMEDEX_API_SECRET",
         "accountId": "SOMEDEX_ACCOUNT_ID",
     }
+
+
+def test_a_margin_mode_the_venue_would_not_change_refuses_and_says_why() -> None:
+    class CrossOnly(Venue):
+        """A key without position permissions: the mode stays cross, as a Bitget demo key did."""
+
+        def set_margin_mode(self, mode: str, symbol: str) -> None:
+            raise RuntimeError("Incorrect permissions, need future pos write permissions")
+
+        def fetch_leverage(self, symbol: str) -> dict[str, Any]:
+            return {"longLeverage": float(self.leverage), "marginMode": "cross"}
+
+    placed = hand(CrossOnly(leverage="3"))(LONG)
+    assert placed["sent"] is False
+    assert "in cross margin at the venue" in placed["refused"]
+    assert "need future pos write permissions" in placed["refused"]

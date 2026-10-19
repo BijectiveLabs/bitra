@@ -923,48 +923,69 @@ class VenueHand:
         """
         if self.leverage is None or self.leverage_set:
             return ""
+        # What the venue answered when a setting was refused. Some venues refuse a value they
+        # already hold, so this is only said when the read-back shows the setting did not take.
+        said: list[str] = []
         set_mode = getattr(self.client, "set_margin_mode", None)
         if set_mode is not None:
-            with suppress(Exception):
+            try:
                 set_mode(self.margin_mode, self.symbol)
+            except Exception as exc:
+                said.append(f"margin mode: {self._answer(exc)}")
         set_leverage = getattr(self.client, "set_leverage", None)
         if set_leverage is None:
             return f"{self.venue} cannot set leverage through ccxt; set it at the venue and say so"
         answered = False
-        with suppress(Exception):
+        try:
             set_leverage(float(self.leverage), self.symbol)
             answered = True
-        now = self._leverage_now()
+        except Exception as exc:
+            said.append(f"leverage: {self._answer(exc)}")
+        now, mode = self._leverage_now()
         has = getattr(self.client, "has", {}) or {}
         if now is None and answered and not has.get("fetchLeverage"):
             # Nothing to read it back with, so the venue's acceptance is the confirmation. A
             # reply that is an error still refuses below, and the record says which it was.
             self.leverage_set = self.leverage_by_reply = True
             return ""
+        why = f" (the venue said {'; '.join(said)})" if said else ""
         if now is None:
-            return f"{self.venue} would not confirm the leverage on {self.symbol}; nothing was sent"
+            return (
+                f"{self.venue} would not confirm the leverage on {self.symbol}{why}; "
+                "nothing was sent"
+            )
         if now != self.leverage:
             return (
                 f"{self.symbol} is at {now}x at the venue and [execution].leverage is "
-                f"{self.leverage}x; it could not be changed, so nothing was sent"
+                f"{self.leverage}x; it could not be changed{why}, so nothing was sent"
+            )
+        if mode and mode != self.margin_mode:
+            return (
+                f"{self.symbol} is in {mode} margin at the venue and [execution].margin_mode is "
+                f"{self.margin_mode}; it could not be changed{why}, so nothing was sent"
             )
         self.leverage_set = True
         return ""
 
-    def _leverage_now(self) -> Decimal | None:
+    def _answer(self, exc: Exception) -> str:
+        return self.redact(f"{exc.__class__.__name__}: {exc}")[:160]
+
+    def _leverage_now(self) -> tuple[Decimal | None, str]:
+        """The leverage and the margin mode the venue reports for the symbol, as far as it says."""
         fetch = getattr(self.client, "fetch_leverage", None)
         if fetch is None:
-            return None
+            return None, ""
         try:
             found = fetch(self.symbol) or {}
+            mode = str(found.get("marginMode") or "").lower()
             value = found.get("longLeverage") or found.get("leverage")
             if value is None:
-                return None
+                return None, mode
             read = Decimal(str(value))
             # Venues answer 10.0 for 10; the record and the refusal should say 10.
-            return read.to_integral_value() if read == read.to_integral_value() else read
+            return (read.to_integral_value() if read == read.to_integral_value() else read), mode
         except Exception:
-            return None
+            return None, ""
 
     def _capital(
         self, notional: Decimal, side: str, mid: Decimal, intent: Mapping[str, Any]
