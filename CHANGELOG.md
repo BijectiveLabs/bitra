@@ -15,6 +15,14 @@ All notable changes to this project are recorded here. The format follows
   too. Refused on spot and on a venue whose resting exits are not read yet. `tra venues --setup`
   suggests it where it applies. Built against ccxt 4.5.85 and tested offline; its run on the
   Binance demo API comes next.
+- A venue's leverage is confirmed by its own reply where ccxt cannot read it back (Hyperliquid),
+  and the record says so; a reply that is an error still refuses. Before, every derivative order
+  there was refused for want of a read-back.
+- An order's status is found in the venue's open and closed lists where ccxt has no single-order
+  read (BloFin, Lighter).
+- `tra venues` names what the order path needs beyond sending: order status, balance, leverage and
+  fills. Gate joins the venues whose exits placed after the fill are read (price orders), and
+  venues that sign for an account id (WOOFi Pro, ModeTrade) are asked for `<VENUE>_ACCOUNT_ID`.
 - `[execution].ccxt_options`: a table set on ccxt's client for the execution venue, over the
   package's own defaults. Credentials are refused in it.
 

@@ -30,25 +30,36 @@ A cycle reaches a venue through ccxt, so "which venues are supported" has two ho
 we have run end to end, and what ccxt says a venue can do. The second is read from the library by
 `tra venues`, with no network and no key.
 
-| Venue | What a cycle can do there | Practice environment | Keys in `.env` | Run end to end by us |
-|---|---|---|---|---|
-| Bybit | everything: orders with the stop and take profit attached | demo, testnet | `BYBIT_API_KEY`, `BYBIT_API_SECRET` | yes, on the demo API: real orders, exits attached, a resting order cancelled |
-| OKX | everything | testnet | `OKX_API_KEY`, `OKX_API_SECRET`, `OKX_API_PASSPHRASE` | yes, on the demo API: real orders, exits attached, closed by the venue's own exits |
-| Bitget | everything | demo | `BITGET_API_KEY`, `BITGET_API_SECRET`, `BITGET_API_PASSPHRASE` | ready for its run; [report wanted](https://github.com/BijectiveLabs/trading-research-agents/issues/5) |
-| BingX | everything | testnet | `BINGX_API_KEY`, `BINGX_API_SECRET` | ready for its run; [report wanted](https://github.com/BijectiveLabs/trading-research-agents/issues/6) |
-| KuCoin Futures | everything | none | `KUCOINFUTURES_API_KEY`, `KUCOINFUTURES_API_SECRET`, `KUCOINFUTURES_API_PASSPHRASE` | integrated; it has no practice environment to run on |
-| Hyperliquid | everything | testnet | `HYPERLIQUID_WALLET_ADDRESS`, `HYPERLIQUID_PRIVATE_KEY` | ready for its run; [report wanted](https://github.com/BijectiveLabs/trading-research-agents/issues/7) |
-| Binance | orders, with the stop and take profit placed right after the fill (`exits = "separate"`) | demo, testnet | `BINANCE_API_KEY`, `BINANCE_API_SECRET` | ready for its run; it is the data fallback in the default project |
-| Deribit, HTX, Gate, MEXC | orders with `exits = "none"` | varies, see `tra venues` | `<VENUE>_API_KEY`, `<VENUE>_API_SECRET` | ready for its run |
-| Kraken, Kraken Futures, Phemex | data for now: ccxt does not report their positions, and the venue hand will not send without one | | | |
+| Venue | Type | What a cycle can do there | Practice environment | Keys in `.env` | Run end to end by us |
+|---|---|---|---|---|---|
+| Bybit | exchange | everything: orders with the stop and take profit attached | demo, testnet | `BYBIT_API_KEY`, `BYBIT_API_SECRET` | yes, on the demo API: real orders, exits attached, a resting order cancelled |
+| OKX | exchange | everything | testnet | `OKX_API_KEY`, `OKX_API_SECRET`, `OKX_API_PASSPHRASE` | yes, on the demo API: real orders, exits attached, closed by the venue's own exits |
+| Bitget | exchange | everything | demo | `BITGET_API_KEY`, `BITGET_API_SECRET`, `BITGET_API_PASSPHRASE` | ready for its run; [report wanted](https://github.com/BijectiveLabs/trading-research-agents/issues/5) |
+| BingX | exchange | everything | testnet | `BINGX_API_KEY`, `BINGX_API_SECRET` | ready for its run; [report wanted](https://github.com/BijectiveLabs/trading-research-agents/issues/6) |
+| Binance | exchange | orders, with the stop and take profit placed right after the fill (`exits = "separate"`) | demo, testnet | `BINANCE_API_KEY`, `BINANCE_API_SECRET` | ready for its run; it is the data fallback in the default project |
+| Gate | exchange | orders, exits placed right after the fill (`exits = "separate"`) | testnet | `GATE_API_KEY`, `GATE_API_SECRET` | ready for its run |
+| WEEX, BloFin, WOO X | exchange | everything | testnet | `<VENUE>_API_KEY`, `<VENUE>_API_SECRET` (and `_API_PASSPHRASE` for WEEX and BloFin) | ready for its run |
+| Hyperliquid | decentralised | everything; leverage is confirmed by the venue's reply, since ccxt cannot read it back | testnet | `HYPERLIQUID_WALLET_ADDRESS`, `HYPERLIQUID_PRIVATE_KEY` | ready for its run; [report wanted](https://github.com/BijectiveLabs/trading-research-agents/issues/7) |
+| Pacifica | decentralised | everything | testnet | `PACIFICA_PRIVATE_KEY` | ready for its run |
+| WOOFi Pro, ModeTrade | decentralised (Orderly Network) | everything | testnet | `<VENUE>_API_KEY`, `<VENUE>_API_SECRET`, `<VENUE>_ACCOUNT_ID` | ready for its run |
+| KuCoin Futures, Deepcoin | exchange | everything | none | `<VENUE>_API_KEY`, `<VENUE>_API_SECRET`, `<VENUE>_API_PASSPHRASE` | integrated; no practice environment to run on |
+| dYdX, Paradex, Extended, Lighter | decentralised | orders, but no stop or take profit at the venue through ccxt (`exits = "none"`); dYdX also cannot set leverage or report fills | testnet | see `tra venues` | not for a desk that needs its exits at the venue |
+| Deribit, Crypto.com, Coinbase International | exchange | orders, but leverage cannot be set through ccxt, so a derivative desk refuses, and no exits at the venue | testnet | see `tra venues` | not for a derivative desk |
+| HTX, MEXC, CoinEx and others | exchange | orders with `exits = "none"` | none | see `tra venues` | not run |
+| Kraken, Kraken Futures, Phemex; Aster, Apex, GRVT, Derive | exchange; decentralised | data for now: ccxt does not report their positions, and the venue hand will not send without one | | | |
 
 No venue is blocked here. The table says two separate things: what ccxt reports a venue can do,
 and what we have run ourselves. A venue ccxt says takes orders can be used; the only one the desk
 declines is a venue it cannot read the account of, because sending into a position nobody can see
 is the one mistake that cannot be undone. Everything else is a limit we state, not a gate we add.
 
-"Everything" means ccxt reports the five things the venue hand needs: send an order, attach the
-stop and take profit to it, read the position, read the open orders, and cancel. "Run end to end"
+"Everything" means ccxt reports what the venue hand needs: send an order, attach the stop and
+take profit to it, read the position and the open orders, cancel, read what became of an order,
+read the balance, set the leverage and read the fills. `tra venues` names any of these a venue
+lacks. The table above was read from ccxt 4.5.85 on 2026-10-19, and each practice environment was
+asked for its markets and an order book with no key: all answered except WOO X's staging API,
+which did not respond that day, and the Orderly Network venues, which ask for a key even to list
+markets. "Run end to end"
 is the stronger claim, a full run with real orders on the venue's demo or testnet API, and Bybit and
 OKX are the two that have had it so far, both on their demo APIs. Every other venue that takes
 orders is integrated the same way and ready for that run at any time: start it on its practice

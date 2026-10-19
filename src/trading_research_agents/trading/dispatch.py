@@ -79,6 +79,8 @@ CREDENTIAL_ENV = {
     "uid": "API_UID",
     "walletAddress": "WALLET_ADDRESS",
     "privateKey": "PRIVATE_KEY",
+    # Some venues sign for an account id beside the key and secret.
+    "accountId": "ACCOUNT_ID",
 }
 PLAIN_PAIR = ("apiKey", "secret")
 
@@ -174,6 +176,8 @@ class VenueHand:
     skew_checked: bool = False
     account_checked: bool = False
     leverage_set: bool = False
+    # Set when the venue applied the leverage but ccxt has no way to read it back.
+    leverage_by_reply: bool = False
     sent_count: int = 0
 
     def __post_init__(self) -> None:
@@ -501,6 +505,7 @@ class VenueHand:
             "send_ms": send_ms,
             "rested_at": "the book at send time" if fresh else "the snapshot's touch",
             "capital": carried,
+            **({"leverage_confirmed": "by the venue's reply"} if self.leverage_by_reply else {}),
             "order_id": str(order.get("id", "")),
             # A venue that reports no status reports none: "None" is not a status.
             "status": None if order.get("status") is None else str(order["status"]),
@@ -925,9 +930,17 @@ class VenueHand:
         set_leverage = getattr(self.client, "set_leverage", None)
         if set_leverage is None:
             return f"{self.venue} cannot set leverage through ccxt; set it at the venue and say so"
+        answered = False
         with suppress(Exception):
             set_leverage(float(self.leverage), self.symbol)
+            answered = True
         now = self._leverage_now()
+        has = getattr(self.client, "has", {}) or {}
+        if now is None and answered and not has.get("fetchLeverage"):
+            # Nothing to read it back with, so the venue's acceptance is the confirmation. A
+            # reply that is an error still refuses below, and the record says which it was.
+            self.leverage_set = self.leverage_by_reply = True
+            return ""
         if now is None:
             return f"{self.venue} would not confirm the leverage on {self.symbol}; nothing was sent"
         if now != self.leverage:
@@ -1387,6 +1400,18 @@ class VenueHand:
                 found = fetch(order_id, self.symbol)
             if found:
                 return self.in_base(found, self.contract_size())
+        # No single-order read answered: look for it in the open list, then the closed one.
+        for listed, way in (
+            ("fetchOpenOrders", "fetch_open_orders"),
+            ("fetchClosedOrders", "fetch_closed_orders"),
+        ):
+            fetch = getattr(self.client, way, None)
+            if fetch is None or not has.get(listed):
+                continue
+            with suppress(Exception):
+                for order in fetch(self.symbol) or []:
+                    if str(order.get("id", "")) == order_id:
+                        return self.in_base(order, self.contract_size())
         return None
 
     def _cancel(self, order_id: str, params: Mapping[str, Any] | None = None) -> str:

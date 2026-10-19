@@ -130,3 +130,13 @@ def test_a_venue_that_takes_exits_as_their_own_orders_is_told_to_place_them_sepa
     assert 'exits = "separate"' in able.verdict()
     bare = capability_of("acme", client=Exchange({**separate, "createTakeProfitOrder": False}))
     assert not bare.can_place_exits and 'exits = "none"' in bare.verdict()
+
+
+def test_what_the_hand_needs_past_sending_is_named_when_missing() -> None:
+    needs = {**PERPETUAL, "fetchBalance": True, "setLeverage": True, "fetchMyTrades": True}
+    whole = capability_of("acme", client=Exchange({**needs, "fetchOrder": True}))
+    assert whole.gaps == () and whole.verdict().startswith("venue mode ready")
+    # The order lists stand in for a single-order read; fills do not stand in for anything.
+    lists = {**needs, "fetchClosedOrders": True, "fetchMyTrades": False}
+    partial = capability_of("acme", client=Exchange(lists))
+    assert partial.execution["order_status"] and "fills cannot be read" in partial.verdict()

@@ -507,3 +507,51 @@ def test_the_mandate_takes_separate_exits() -> None:
     assert Mandate(exits="separate").exits == "separate"
     with pytest.raises(MandateError, match="separate"):
         Mandate(exits="later")
+
+
+class NoLeverageRead(Venue):
+    """Applies leverage but has no way through ccxt to report it back, as Hyperliquid does."""
+
+    fetch_leverage = None  # type: ignore[assignment]  # the read is absent, not failing
+
+
+def test_leverage_the_venue_cannot_report_is_confirmed_by_its_reply() -> None:
+    venue = NoLeverageRead(leverage="10")
+    placed = hand(venue)(LONG)
+    assert placed["sent"] is True and venue.leverage == Decimal(3)
+    assert placed["leverage_confirmed"] == "by the venue's reply"
+    # A reply that is an error confirms nothing, and with nothing to read the order is refused.
+    stuck = NoLeverageRead(leverage="10", settable=False)
+    refused = hand(stuck)(LONG)
+    assert refused["sent"] is False and "would not confirm the leverage" in refused["refused"]
+
+
+def test_order_status_is_found_in_the_lists_when_no_single_read_exists() -> None:
+    class ListsOnly(Venue):
+        def __init__(self) -> None:
+            super().__init__()
+            self.has = {"fetchOpenOrders": True, "fetchClosedOrders": True}
+
+        fetch_order = None
+
+        def fetch_closed_orders(self, symbol: str) -> list[dict[str, Any]]:
+            return [{"id": "other", "status": "closed"}, {"id": "mine", "status": "closed"}]
+
+    found = hand(ListsOnly()).order_status("mine")
+    assert found is not None and found["status"] == "closed"
+    assert hand(ListsOnly()).order_status("gone") is None
+
+
+def test_every_credential_a_venue_signs_with_is_asked_for_by_name() -> None:
+    from trading_research_agents.trading.dispatch import credentials_for
+
+    class Orderly:
+        requiredCredentials = {"apiKey": True, "secret": True, "accountId": True}  # noqa: N815
+
+    asked = credentials_for("somedex", Orderly())
+    assert asked == {
+        "apiKey": "SOMEDEX_API_KEY",
+        "secret": "SOMEDEX_API_SECRET",
+        "accountId": "SOMEDEX_ACCOUNT_ID",
+    }
+

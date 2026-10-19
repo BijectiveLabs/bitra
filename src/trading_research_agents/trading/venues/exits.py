@@ -6,7 +6,8 @@ for them by kind, and on a spot pair they hold the coins they would sell: a clos
 take them off first is refused for want of a balance. Binance's futures stop and take profit,
 placed after the fill, are algo orders too: ccxt sends, lists and cancels them on the algo
 endpoints only when told `trigger`. Each entry here is the list of reads that finds them, read
-from ccxt 4.5.85; OKX's were checked on its demo API on 2026-10-17, Binance's await their run.
+from ccxt 4.5.85; OKX's were checked on its demo API on 2026-10-17. Binance's and Gate's (Gate
+keeps them as price orders) await their runs.
 """
 
 from __future__ import annotations
@@ -24,6 +25,8 @@ RESTING_EXITS: dict[str, tuple[Mapping[str, Any], ...]] = {
     "binance": _TRIGGER,
     "binanceusdm": _TRIGGER,
     "binancecoinm": _TRIGGER,
+    "gate": _TRIGGER,
+    "gateeu": _TRIGGER,
 }
 CANCEL_PARAMS: dict[str, Mapping[str, Any]] = {
     "okx": {"trigger": True},
@@ -32,6 +35,8 @@ CANCEL_PARAMS: dict[str, Mapping[str, Any]] = {
     "binance": {"trigger": True},
     "binanceusdm": {"trigger": True},
     "binancecoinm": {"trigger": True},
+    "gate": {"trigger": True},
+    "gateeu": {"trigger": True},
 }
 
 

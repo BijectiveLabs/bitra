@@ -36,6 +36,18 @@ EXECUTION_METHODS = {
     "cancel": ("cancelOrder", "cancelling a resting maker order that did not fill"),
     "stop_order": ("createStopLossOrder", "a stop placed on its own right after the fill"),
     "take_order": ("createTakeProfitOrder", "a take profit placed on its own after the fill"),
+    "order_status": ("fetchOrder", "reading what became of an order"),
+    "balance": ("fetchBalance", "reading the margin an order needs"),
+    "leverage": ("setLeverage", "applying the leverage a derivative desk declares"),
+    "fills": ("fetchMyTrades", "writing up a round trip from its fills"),
+}
+# Reads that answer for the single-order one: by state, or by searching the order lists.
+STATUS_INSTEAD = (("fetchOpenOrder", "fetchClosedOrder"), ("fetchOpenOrders", "fetchClosedOrders"))
+GAPS = {
+    "order_status": "what became of an order cannot be read",
+    "balance": "the balance cannot be read",
+    "leverage": "leverage cannot be set, so a derivative desk refuses",
+    "fills": "fills cannot be read, so round trips are not written up",
 }
 
 
@@ -78,6 +90,11 @@ class Capability:
         return bool(self.execution.get("stop_order")) and bool(self.execution.get("take_order"))
 
     @property
+    def gaps(self) -> tuple[str, ...]:
+        """What the hand needs past sending that this venue cannot give, in an operator's words."""
+        return tuple(words for key, words in GAPS.items() if not self.execution.get(key))
+
+    @property
     def guards(self) -> bool:
         """Whether the two reads that stop a second position are both available."""
         return bool(self.execution.get("position")) and bool(self.execution.get("open_orders"))
@@ -90,6 +107,12 @@ class Capability:
         return "full" if self.can_attach_exits else "exits-none"
 
     def verdict(self) -> str:
+        said = self._verdict()
+        if self.can_send and self.guards and self.gaps:
+            said += "; but " + "; ".join(self.gaps)
+        return said
+
+    def _verdict(self) -> str:
         if not self.can_send:
             return "data only; this venue does not take orders through ccxt"
         if not self.guards:
@@ -170,6 +193,9 @@ def capability_of(
     has = dict(getattr(client, "has", {}) or {})
     data = {kind: bool(has.get(method)) for kind, method in DATA_METHODS.items()}
     execution = {key: bool(has.get(method)) for key, (method, _) in EXECUTION_METHODS.items()}
+    execution["order_status"] = execution["order_status"] or any(
+        has.get(first) and has.get(second) for first, second in STATUS_INSTEAD
+    )
     wanted = tuple(kinds or ())
     missing = tuple(kind for kind in wanted if kind in data and not data[kind])
     return Capability(

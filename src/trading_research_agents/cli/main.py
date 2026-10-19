@@ -2493,7 +2493,16 @@ def show_venues(args: argparse.Namespace) -> int:
             "  execution   "
             + ", ".join(
                 f"{what}: {'yes' if able.execution.get(what) else 'no'}"
-                for what in ("create_order", "attached_exits", "position", "open_orders", "cancel")
+                for what in (
+                    "create_order",
+                    "attached_exits",
+                    "position",
+                    "open_orders",
+                    "cancel",
+                    "order_status",
+                    "leverage",
+                    "fills",
+                )
             )
         )
         lines.append(f"  practice    {able.practice}")
