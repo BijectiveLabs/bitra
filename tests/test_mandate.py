@@ -968,6 +968,39 @@ def test_an_okx_account_in_spot_mode_is_refused_before_anything_is_sent() -> Non
     )(LONG)["sent"]
 
 
+def test_a_bitget_unified_account_key_is_refused_before_anything_is_sent() -> None:
+    class Unified(FakeExchange):
+        grants = ["uamw", "uatw"]
+
+        def privateSpotGetV2SpotAccountInfo(self) -> dict[str, Any]:  # noqa: N802 - ccxt's own name
+            return {"data": {"authorities": self.grants}}
+
+    venue = Unified()
+    hand = VenueHand(
+        venue="bitget",
+        symbol="BTC/USDT:USDT",
+        max_notional=Decimal(2000),
+        keys=("K", "S"),
+        client=venue,
+    )
+    assert "unified trading account" in hand.ready()
+    placed = hand(LONG)
+    assert placed["sent"] is False and "unified trading account" in placed["refused"]
+    assert venue.orders == []
+
+    class Classic(Unified):
+        # Any grant outside the unified set means the key was not made for that account alone.
+        grants = ["uamw", "futures"]
+
+    assert VenueHand(
+        venue="bitget",
+        symbol="BTC/USDT:USDT",
+        max_notional=Decimal(2000),
+        keys=("K", "S"),
+        client=Classic(),
+    )(LONG)["sent"]
+
+
 def test_a_decision_older_than_its_bound_is_not_sent_and_a_fresh_one_is_measured() -> None:
     venue = FakeExchange()
     hand = VenueHand(

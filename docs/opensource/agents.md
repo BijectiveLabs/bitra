@@ -170,6 +170,7 @@ the market alone, and code applies your settings afterwards.
 |---|---|---|
 | `technical_analyst` | the market figures, the structure, the regime, the higher timeframes, the readings of the other series, your mechanism as a preference | the cost of the round trip, every `[targets]`, `[exit]`, `[run]` sizing and `[controls]` setting |
 | validators | the analyst's proposal as given, the figures it was built from, the declared states | the same, and the claimed edge |
+| `event_analyst` (prediction markets) | the question, the outcome's bid, ask and mid, its recent prices, your dated notes and calendar | the fee, the margin an estimate has to clear and the size |
 | code | everything you declared | nothing it has to guess |
 
 What code changes is written beside what was proposed: each cycle's `exits.measured` record keeps

@@ -47,7 +47,10 @@ All notable changes to this project are recorded here. The format follows
 - The margin mode is read back with the leverage: a symbol the venue reports in cross margin while
   `[execution].margin_mode` is isolated refuses the order, as a wrong leverage already did. Both
   refusals now quote what the venue answered when it would not change the setting (on the Bitget
-  demo API: a key without futures position permission).
+  demo API: a key that could not reach its futures settings).
+- A Bitget key made for a unified trading account is refused by `tra check` and before any
+  order: ccxt sets the margin mode and reads the leverage through Bitget's futures API, which
+  that key cannot reach, so every order would have been refused one by one.
 - In venue mode, a book or funding source from a plugin is now held to the execution venue too. It
   is asked which venue it serves, and one that does not say is refused, where before only `ccxt:`
   sources were checked.

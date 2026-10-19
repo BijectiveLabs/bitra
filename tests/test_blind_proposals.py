@@ -46,6 +46,7 @@ RULE_WORDING = (
     "floor and ceiling",
     "share of winners",
     "is refused by code",
+    "than the ask by more than",
 )
 
 
@@ -55,7 +56,9 @@ def test_a_proposing_role_is_never_handed_the_desks_rules(role: str) -> None:
     assert [key for key in POLICY if scope.keeps(key)] == []
 
 
-@pytest.mark.parametrize("name", ["technical_analyst_live", "technical_analyst", "validator"])
+@pytest.mark.parametrize(
+    "name", ["technical_analyst_live", "technical_analyst", "validator", "event_analyst"]
+)
 def test_the_prompts_do_not_describe_what_code_will_accept(name: str) -> None:
     text = (PROMPTS / f"{name}.md").read_text(encoding="utf-8").lower()
     assert [phrase for phrase in RULE_WORDING if phrase in text] == []
