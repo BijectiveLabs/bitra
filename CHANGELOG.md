@@ -28,6 +28,14 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- The analyst and the validators propose without the desk's rules. The technical analyst's prompt no
+  longer describes what code accepts (the cost multiple, the reward-to-risk default, the stop bounds,
+  the risk per trade, what the regime gate refuses); validators no longer receive the round trip or
+  the claimed edge, and the claimed edge could be an operator's declared magnitude. A test keeps
+  those settings out of both roles' briefs and prompts.
+- The analyst's own target is recorded beside the one applied (`proposed_take_bps`, as
+  `proposed_stop_bps` already was), and `tra hindsight` replays both sets of levels on the same path
+  (`levels` in the report): what the operator's bounds did to the analyst's reading, measured.
 - ccxt's Hyperliquid builder fee (1 bp on every order, on top of the venue's fee and outside the
   round trip the gates price) is off by default on every client that signs with the operator's
   keys. `ccxt_options = { builderFee = true }` turns it back on.

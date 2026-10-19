@@ -1985,6 +1985,12 @@ def _hindsight_lines(payload: dict[str, Any]) -> list[str]:
         f"  side: the model's {side['model_side']['mean_net_bps']} bps against "
         f"{side['opposite_side']['mean_net_bps']} on the reverse; {side['verdict']}"
     )
+    levels = payload.get("levels") or {}
+    if levels.get("applied", {}).get("decisions"):
+        lines.append(
+            f"  levels: code's {levels['applied']['mean_net_bps']} bps against the analyst's own "
+            f"{levels['analyst_own']['mean_net_bps']}; {levels['verdict']}"
+        )
     left = {k: v for k, v in payload["skipped"].items() if v}
     if left:
         lines.append("  not replayed: " + ", ".join(f"{v} {k}" for k, v in left.items()))

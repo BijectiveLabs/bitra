@@ -141,7 +141,6 @@ def test_the_brief_carries_the_proposal_and_the_declarations_and_nothing_else() 
         proposal={"target": "long", "confidence": 0.71},
         figures=figures_of(BRIEF),
         declared_states={"macro_analyst": {"declared": "bullish"}},
-        cost_bps="13.01",
     )
 
     assert set(brief) == {
@@ -150,9 +149,9 @@ def test_the_brief_carries_the_proposal_and_the_declarations_and_nothing_else() 
         "proposal",
         "figures",
         "declared_states",
-        "cost_bps",
     }
-    assert brief["stance"] == "neutral" and brief["cost_bps"] == "13.01"
+    # The cost and the desk's rules are code's question, so they are not in a validator's brief.
+    assert brief["stance"] == "neutral" and "cost_bps" not in brief
 
 
 SERIES_BRIEF = {

@@ -94,6 +94,7 @@ class VolatilityExit:
         stop, clamped = self._held(measured)
         take = stop * self.reward_to_risk
         source, proposed, notes, named_target = "measured", None, [], False
+        proposed_take: Decimal | None = None
         if self.analyst_levels:
             named = _distance(mid, side, stop_price, against=True)
             if named is None:
@@ -115,6 +116,7 @@ class VolatilityExit:
                 target = _distance(mid, side, target_price, against=False)
                 take = self._target(stop, target, notes)
                 named_target = target is not None
+                proposed_take = target
         return Placement(
             stop_frac=stop,
             take_frac=take,
@@ -126,6 +128,7 @@ class VolatilityExit:
             mode=self.mode,
             source=source,
             proposed_frac=proposed,
+            proposed_take_frac=proposed_take,
             notes=tuple(notes),
             target_named=named_target,
         )
@@ -181,6 +184,7 @@ class Placement:
     mode: str = "volatility"
     source: str = "measured"
     proposed_frac: Decimal | None = None
+    proposed_take_frac: Decimal | None = None
     notes: tuple[str, ...] = field(default_factory=tuple)
     # The take profit is the analyst's own target (possibly brought in), not a multiple of the stop.
     target_named: bool = False
@@ -200,6 +204,8 @@ class Placement:
         }
         if self.proposed_frac is not None:
             out["proposed_stop_bps"] = str((self.proposed_frac * BPS).quantize(cents))
+        if self.proposed_take_frac is not None:
+            out["proposed_take_bps"] = str((self.proposed_take_frac * BPS).quantize(cents))
         out["target_named"] = self.target_named
         if self.notes:
             out["notes"] = list(self.notes)

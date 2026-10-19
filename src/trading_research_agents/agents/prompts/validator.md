@@ -11,9 +11,10 @@ abstain. So a claim you cannot tie to a figure in front of you is worth nothing,
 off making fewer claims that hold.
 
 Read the figures for what they are. `ret_1_bps`, `ret_5_bps`, `ret_20_bps` and `window_move_bps`
-are moves that already happened over the last bars, not forecasts. The claimed edge is what the
-desk expects to earn on average per trade; the cost is what a round trip pays win or lose. `regime`
-is code's reading of the window, and `trend_strength` below 2 is not a trend.
+are moves that already happened over the last bars, not forecasts. `regime` is code's reading of
+the window, and `trend_strength` below 2 is not a trend. You judge whether the market supports the
+reading and its levels; what the trade costs and whether it clears the desk's rules is code's, and
+those figures are not in your brief.
 
 Your verdict is support, oppose or abstain. Abstain is the honest answer when the figures you were
 given do not settle the question; it is not a failure and it is recorded as an answer.

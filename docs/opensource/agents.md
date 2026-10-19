@@ -23,7 +23,7 @@ the system's own rules, tested and failing closed, and a role acts through them,
 | `macro_analyst` | series the operator mapped in (events, cross-venue funding, sentiment) | nothing | every cycle in `tra run`; once per session in a session, when series are given |
 | `onchain_analyst` | on-chain series the operator mapped in | nothing | every cycle in `tra run`; once per session in a session, when series are given |
 | `sentiment_analyst` | dated scores and dated notes the operator curates, through the same series engine | `negative`, `neutral`, `positive`, or `not declared` when nothing was mapped in | reads only; nothing is scraped |
-| `validator` | `figures_of`, `checked` over the brief the deciding analyst was given | one stance (pro, contra, neutral): the proposal, the figures it was built from, the declared states, and what the round trip costs; every claim it makes has to cite one of those figures with its value, and the system discards the ones that do not | once per cycle, when `[agents].validators` is set |
+| `validator` | `figures_of`, `checked` over the brief the deciding analyst was given | one stance (pro, contra, neutral): the proposal as the analyst gave it (side, setup, levels, confidence), the figures it was built from and the declared states, never the cost, the claimed edge or the desk's rules; every claim it makes has to cite one of those figures with its value, and the system discards the ones that do not | once per cycle, when `[agents].validators` is set |
 | `risk_manager` | in `tra run`: the client's limits, what is in force, the alarms, the round trips by instrument; in a session: the limits, the canary caps, the ladder, latency, net against the registration | in `tra run`: `reduce` (size multiple below 1), `pause` (instruments), `halt` (the kill switch), each for `hold_hours`; in a session: `tighten_limits`, `demote`, `arm_kill_switch` | in `tra run`, between cycles whenever the quant auditor is asked; in a session, after the runs |
 | `executor` | the venue, the rate limits, the allocation across instruments | an allocation, fractions summing to at most one | after the risk decision |
 | `auditor` | the ledger, every run, `usage.jsonl`, the ladder | `audit.json` | last |
@@ -155,6 +155,38 @@ What a role's answer does differs:
 | validators | one vote each in conviction, after their claims are checked |
 | `market_screener` | which instruments, from code's own order, get a cycle; it may drop, never add |
 | `risk_manager` | between cycles: size cuts, pauses, a halt; never a loosening |
+
+### Proposals made without the desk's rules
+
+The analyst that proposes a trade and the validators that argue about it are never told what a
+trade has to clear. They do not see the round trip, the edge multiple, the reward-to-risk floor, the
+stop bounds, the risk per trade, the size, the equity or the leverage, and their prompts do not
+describe those rules. A role that knows the bar can aim at it: a target stretched until the trade
+passes the cost gate, a confidence raised until it reaches a size. Kept out, the analyst names the
+side, the setup, the confidence and two levels (where the reading is wrong, where it is done) from
+the market alone, and code applies your settings afterwards.
+
+| Who | Knows | Does not know |
+|---|---|---|
+| `technical_analyst` | the market figures, the structure, the regime, the higher timeframes, the readings of the other series, your mechanism as a preference | the cost of the round trip, every `[targets]`, `[exit]`, `[run]` sizing and `[controls]` setting |
+| validators | the analyst's proposal as given, the figures it was built from, the declared states | the same, and the claimed edge |
+| code | everything you declared | nothing it has to guess |
+
+What code changes is written beside what was proposed: each cycle's `exits.measured` record keeps
+`proposed_stop_bps` and `proposed_take_bps` (the analyst's own levels) next to `stop_bps` and
+`take_bps` (the ones applied) and the note that moved them. `tra hindsight` replays both on the same
+path and says which did better, in a line like this one:
+
+```
+  levels: code's -12.4 bps against the analyst's own -31.0; no clear difference yet
+```
+
+So a result can be traced to one of three things: the data the desk was given, how good the model
+is at reading it, and the settings you chose. A test keeps the rules out of these roles' briefs and
+their prompts.
+
+The spread and the funding rate stay in the technical analyst's brief. They are the market's own
+figures, on every trading screen, not settings of yours.
 
 ### Risk: one role after the runs, one step inside each decision
 

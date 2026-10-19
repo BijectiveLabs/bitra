@@ -924,7 +924,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
             announce(cfg.watch, early.partition(":")[0], REFUSED, early.partition(": ")[2])
             _finish(cfg, where, result)
             return result
-        _run_validators(cfg, where, result, asked=asked, analyst=analyst, costs=costs, edge=edge)
+        _run_validators(cfg, where, result, asked=asked, analyst=analyst)
         silent = [
             name
             for name in (f"validator_{stance}" for stance in cfg.validators)
@@ -1639,18 +1639,23 @@ def _run_validators(
     *,
     asked: Mapping[str, Any],
     analyst: Any,
-    costs: Any,
-    edge: Decimal,
 ) -> None:
-    """Ask each declared stance about the proposal, then keep only the claims that cite a figure."""
+    """Ask each declared stance about the proposal, then keep only the claims that cite a figure.
+
+    The proposal is the analyst's reading as given. The round trip, the claimed edge and the
+    desk's rules are left out: whether a trade clears them is code's question, and a vote that
+    could see them would be a second, softer cost gate.
+    """
     figures = figures_of(asked)
     proposal = {
         "target": analyst.target,
+        "setup": analyst.setup,
         "confidence": analyst.confidence,
         "horizon_bars": analyst.horizon_bars,
+        "stop_price": None if analyst.stop_price is None else str(analyst.stop_price),
+        "target_price": None if analyst.target_price is None else str(analyst.target_price),
         "reason": analyst.reason,
         "mechanism": cfg.mechanism,
-        "edge_bps": str(edge),
     }
     states = {
         role: said.get("declared_state", {})
@@ -1669,13 +1674,12 @@ def _run_validators(
                 proposal=proposal,
                 figures=figures,
                 declared_states=states,
-                cost_bps=str(costs.cost.round_trip_bps),
             ),
             result,
         )
         write_json(where.brief(name), brief)
-        # What this validator may cite is what this validator was given - the proposal's own
-        # figures and the cost included - rather than a narrower set it never saw.
+        # What this validator may cite is what this validator was given, the proposal's own
+        # figures, rather than a narrower set it never saw.
         seen[name] = figures_of(brief)
         tasks.append(
             Task(
