@@ -554,4 +554,3 @@ def test_every_credential_a_venue_signs_with_is_asked_for_by_name() -> None:
         "secret": "SOMEDEX_API_SECRET",
         "accountId": "SOMEDEX_ACCOUNT_ID",
     }
-
