@@ -316,8 +316,6 @@ def test_a_setup_trades_the_direction_its_own_figures_point(
 
 
 def test_a_fade_needs_a_measured_range_as_a_trend_setup_needs_a_trend() -> None:
-    # Seen across 30 decisions to 2026-10-13: range_reversion in a mixed market was right 27% of
-    # the time against 60% in a measured range.
     why = misfit("range_reversion", "short", "mixed", zscore=1.4, trend_strength=1.6)
     assert "needs a measured range" in why
     assert not misfit("range_reversion", "short", "ranging", zscore=1.4, trend_strength=0.6)
@@ -343,8 +341,6 @@ def test_the_variance_ratio_tells_moves_given_back_from_moves_carried_on() -> No
 
 
 def test_a_fade_where_moves_have_been_carrying_on_is_refused() -> None:
-    # Seen across 94 range fades proposed from 2026-10-06 to 10-16: at a variance ratio of 1 or
-    # above they averaged -101 bps net, 21% won; below it, -46 bps.
     why = misfit(
         "range_reversion", "short", "ranging", zscore=1.4, variance_ratio=1.12, fade_below=1.0
     )

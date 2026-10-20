@@ -16,12 +16,13 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | `tra` | opens the console |
 | `tra init my-desk --profile autonomous` | a project wired for the agents, every file commented |
 | `tra check` | every setting read against the others, with what to fix |
-| `tra keys --probe` | proves every key works; no key is printed, no prompt or order sent |
+| `tra keys --probe` | proves every key works, the exchange's included once its keys are set; no key is printed, no prompt or order sent |
+| `tra keys --prepare` | the same, and on a demo or testnet API sets the account to one-way mode when it is hedged and nothing is open |
 | `tra models groq` | the models your key can use on a provider, read from the vendor; no prompt sent |
 | `tra init my-desk --profile autonomous --venue okx` | a desk wired for one exchange: data, orders, demo or testnet API, keys |
 | `tra venues` | every venue the docs describe, and what each can do |
 | `tra venues okx --setup` | what a venue can do, and the blocks to paste to trade on it |
-| `tra mandate` | the text venue mode requires; `--sign "Your Name"` keeps it as `MANDATE.md` and signs `[execution]` in one step |
+| `tra mandate` | the text venue mode requires; `--sign "Your Name"` keeps it as `MANDATE.md` and signs `[execution]` in one step, and `--venue-mode` also turns orders on |
 
 ## Running
 

@@ -7,10 +7,9 @@ a gap through the stop fills at the worse open, a bar touching both take-profit 
 stop, a take-profit fills exactly at its limit and never better. If a hypothesis survives these,
 it survives because the edge is real, not because the simulator was generous.
 
-The research this descends from measured what the conservatism costs when it is wrong: at a
-one-sigma stop, 38.3 percent of trades were stopped, 82.1 percent of those would have lost
-anyway, a correct stop saved 149 bps and a wrong one cost 862 on average. That asymmetry is a
-property of the market, not of the instrument, whose only job is to keep the decision causal.
+The research this descends from found that most stopped trades would have lost anyway, and that
+a wrong stop cost far more than a right one saved. That asymmetry is a property of the market, not
+of the instrument, whose only job is to keep the decision causal.
 """
 
 from __future__ import annotations

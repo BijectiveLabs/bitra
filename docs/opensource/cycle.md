@@ -344,24 +344,20 @@ and the figures that make the claim are in the brief. On the decision timeframe,
 | `volatility_expansion` | never on direction: it is about a regime changing, not which way |
 
 The rule came from a live cycle on 2026-10-08: a `pullback_in_trend` short in a market measured as
-mixed and rising 53 bps over the window, which the earlier rule let through because it only
-checked trends it could measure. A short setup against a higher timeframe's trend is still left to
+mixed and rising over the window, which the earlier rule let through because it only checked
+trends it could measure. A short setup against a higher timeframe's trend is still left to
 the analyst to weigh, because fading the hourly on the minute chart is sometimes the whole trade;
 the reason has to say so. With `setups_must_fit = false` a misfit is written down and the trade
 goes on. `tra check` prints the lines and the timeframes in use.
 
 Why the variance ratio, and not trend strength alone: a window can net out to nothing, and read
-as a range, while each move inside it is followed by more of the same. On the demo desks, the
-analyst proposed 94 range fades between 2026-10-06 and 10-16 (the stretch for which the desks kept
-their raw inputs), each replayed with the same exits for four hours: the 28 with a variance ratio
-of 1 or above averaged -101 bps net and won 21% of the time, the rest -46 bps. A fade is paid only
-where moves are given back, so that is what it is now held to. The line sits at 1, the random
-walk, rather than at a value fitted to those trades.
+as a range, while each move inside it is followed by more of the same. A fade is paid only where
+moves are given back, so that is what it is held to. The line sits at 1, the random walk, rather
+than at a value fitted to any desk's trades.
 
 The fade has been held to the same standard as the trend setups since 0.6.4. Before that,
 `range_reversion` was refused only in a trend, so in a mixed market it was the one regime-bound
-setup still allowed. Across the demo desks' record to 2026-10-13, fades in a mixed market were
-right 27% of the time (n = 30), against 60% in a measured range (n = 37).
+setup still allowed.
 
 **The analyst picks the setup; the mechanism does not.** In `tra run` the technical analyst reads
 the regime and the higher timeframes first and names the setup the market supports. A mixed market
@@ -1089,10 +1085,11 @@ Venue mode does not start until all of this is true, and `tra check` names whate
    `tra mandate` - it says that the losses are yours - then `tra mandate --sign "Your Name"` does
    both: it writes `MANDATE.md` when the project has none (one you wrote yourself is never
    overwritten) and sets the two lines, with today's date or `--on YYYY-MM-DD`. Venue mode stays off
-   until you set `[execution].mode = "venue"`.
+   until you set `[execution].mode = "venue"`, or sign with `--venue-mode`, which does it too.
 2. The signature is yours alone: no role, model or tool on the MCP surface can sign.
 3. `[execution].max_notional` caps one order, and `[execution].leverage` is chosen. Neither has
-   a default: both are what a defect would cost you.
+   a default in the code: both are what a defect would cost you. `tra init --venue` writes 200 and
+   3x as a start, on lines you can see and change.
 4. On mainnet, the ladder stands at `CANARY`, promoted with evidence and a signature. A demo or
    testnet API holds no capital, so it is where that evidence is earned and does not wait on
    the ladder.
@@ -1226,20 +1223,20 @@ trade would have done. `tra hindsight` replays every directional decision in `ru
 candles that followed it, then puts each gate's refusals next to what the desk let through:
 
 ```text
-hindsight: 81 decisions replayed over 7 day(s), 43 of them independent, each held 4h on 5m candles, net of its round trip
-  admitted                 21  mean   -41.3 bps  median   -61.6  won  14%  sum   -867.4
-  refused by targets       16  mean  -281.6 bps  median   -73.7  won  12%  sum  -4505.2  refused worse trades than it let through
-  refused by exit          14  mean   -47.2 bps  median   -46.6  won  21%  sum   -661.2  no clear difference yet
-  refused by regime        11  mean    62.0 bps  median    65.1  won  64%  sum    681.8  refused better trades than it let through; review it
-  side: the model's -79.5 bps against 36.4 on the reverse; the reverse of the model's side did better; its calls carried no edge
+hindsight: <n> decisions replayed over <d> day(s), <k> of them independent, each held 4h on 5m candles, net of its round trip
+  admitted             <n>  mean <bps>  median <bps>  won <%>  sum <bps>
+  refused by targets   <n>  mean <bps>  median <bps>  won <%>  sum <bps>  <what the refusals would have done>
+  refused by regime    <n>  mean <bps>  median <bps>  won <%>  sum <bps>  <what the refusals would have done>
+  side: the model's <bps> against <bps> on the reverse; <which side did better>
 ```
 
-That is a real desk on OKX's demo API, with decisions from 8 to 16 October 2026. Read it the way it is
-meant to be read. The targets gate kept out trades that would have lost far more than the ones it admitted.
-The regime gate kept out trades that would have done better, on eleven decisions, which is a reason
-to watch it, not yet a reason to switch it off. And the last line is the one that matters most: on
-those days the deciding model's side did worse than its exact reverse. No gate can fix that. A gate
-only refuses; it cannot turn a call with no edge into one with an edge.
+Each row is one gate: how many decisions it refused, and what those decisions would have done net
+of their round trip, beside the ones the desk let through. The verdict at the end of a row says
+whether the gate kept out worse trades or better ones; with few decisions it says there is no clear
+difference yet, and that is the honest answer until the sample grows. The last line asks whether the
+deciding model's side did better than its exact reverse. No gate can fix a side with no edge: a gate
+only refuses; it cannot turn a call with no edge into one with an edge. Read these numbers only once
+there are enough independent decisions behind them to audit.
 
 How each decision is replayed:
 

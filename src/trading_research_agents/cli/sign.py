@@ -18,6 +18,7 @@ from trading_research_agents.execution.mandate import DISCLAIMER, MANDATE_FILE, 
 HEADER = re.compile(r"^\s*\[execution\]\s*(#.*)?$")
 TABLE = re.compile(r"^\s*\[")
 SIGNED_KEY = re.compile(r"^\s*acknowledged_(by|on)\s*=")
+MODE_KEY = re.compile(r"^\s*mode\s*=")
 
 
 class SignError(ValueError):
@@ -31,8 +32,13 @@ class Signed:
     wrote_mandate: bool
 
 
-def sign(config: Path, name: str, on: date) -> Signed:
-    """Write MANDATE.md when it is not there, and the signature into [execution]."""
+def sign(config: Path, name: str, on: date, *, venue_mode: bool = False) -> Signed:
+    """Write MANDATE.md when it is not there, and the signature into [execution].
+
+    `venue_mode` also sets `mode = "venue"`, for an operator who signs and turns orders on in the
+    same breath. Every other door stays where it was: the keys, the leverage, the cap, and on
+    mainnet the ladder.
+    """
     who = name.strip()
     if not who or "\n" in who or "\r" in who:
         raise SignError("--sign takes the name of the person taking this on, on one line")
@@ -59,7 +65,7 @@ def sign(config: Path, name: str, on: date) -> Signed:
         wrote = True
 
     before = config.read_text(encoding="utf-8")
-    config.write_text(_signed(before, who, on.isoformat()), encoding="utf-8")
+    config.write_text(_signed(before, who, on.isoformat(), venue_mode), encoding="utf-8")
     try:
         from trading_research_agents.trading.config import load_strategy_config
 
@@ -73,10 +79,11 @@ def sign(config: Path, name: str, on: date) -> Signed:
     return Signed(mandate=mandate, config=config, wrote_mandate=wrote)
 
 
-def _signed(text: str, who: str, on: str) -> str:
+def _signed(text: str, who: str, on: str, venue_mode: bool = False) -> str:
     """The config with acknowledged_by and acknowledged_on set in its [execution] table."""
     lines = text.splitlines()
     lines_out = [
+        *(['mode = "venue"'] if venue_mode else []),
         f"acknowledged_by = {json.dumps(who, ensure_ascii=False)}",
         f'acknowledged_on = "{on}"',
     ]
@@ -89,6 +96,10 @@ def _signed(text: str, who: str, on: str) -> str:
         (i for i in range(start + 1, len(lines)) if TABLE.match(lines[i])),
         len(lines),
     )
-    kept = [line for line in lines[start + 1 : end] if not SIGNED_KEY.match(line)]
+    kept = [
+        line
+        for line in lines[start + 1 : end]
+        if not SIGNED_KEY.match(line) and not (venue_mode and MODE_KEY.match(line))
+    ]
     out = lines[: start + 1] + lines_out + kept + lines[end:]
     return "\n".join(out) + "\n"

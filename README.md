@@ -142,14 +142,22 @@ tra run
 tra run --every 15m
 ```
 
-**6. When you want real orders.** Start on the exchange's demo or testnet API:
-- put its keys in `.env`;
-- read the mandate with `tra mandate`, then sign it with `tra mandate --sign "Your Name"`;
-- in `[execution]` of `strategy.toml`, set `mode = "venue"`, a `leverage` and `max_notional` (the
-  most one order may be worth).
+**6. When you want real orders.** Start on the exchange's demo or testnet API. Make the desk for
+that exchange from the start, and the rest is three commands:
 
-`tra check` lists whatever is still missing. [Toward real orders](#toward-real-orders) has the
-whole path.
+```bash
+tra init my-desk --profile autonomous --agent groq --venue bitget
+cd my-desk                       # put the exchange's keys in .env beside your model key
+tra keys --probe --prepare       # reads the account; on a demo or testnet sets one-way mode
+tra mandate --sign "Your Name" --venue-mode
+tra check
+```
+
+`--venue` writes what that exchange needs into `[execution]`: its demo or testnet API, 3x isolated
+leverage, at most 200 per order, and how its stop and take profit are placed. Change any of it.
+How to make the key on each exchange is in
+[Exchange accounts and keys](https://docs.bijectivelabs.dev/opensource/exchange-keys), and
+[Toward real orders](#toward-real-orders) has the whole path.
 
 **What a new desk does before you change anything**
 
@@ -415,15 +423,15 @@ been run by us; treat it as yours to verify, small, first.
 If you bring a scripted strategy of your own instead of the agents, it has a research path of its
 own before any of this: `tra data get BTCUSDT 2025-01-01` and `tra backtest` replay a day of the
 exchange's archive net of every cost, `tra paper --minutes 30` runs it on the live feed with
-nothing sent, and `tra live` is a small canary session behind hard caps. The replay of that day
-printed `net -294.19 bps` for the example core, and it is shown as it came out: a backtest that
-only shows good news is one nobody should believe. [The live tier](https://docs.bijectivelabs.dev/opensource/live)
-has the details.
+nothing sent, and `tra live` is a small canary session behind hard caps. The example core is there
+to show the path, not to make money, and the replay prints its net as it comes out, loss or gain.
+[The live tier](https://docs.bijectivelabs.dev/opensource/live) has the details.
 
 Venue mode is the only mode that can lose money, so it has a door in front of it. Read the
 mandate with `tra mandate`; when you accept it, `tra mandate --sign "Your Name"` keeps it in the
 project as `MANDATE.md` and signs `[execution]` with your name and today's date, in one step.
-Signing does not switch anything on. `tra check` names whatever else is missing.
+Signing alone does not switch anything on; `--venue-mode` signs and turns orders on together.
+`tra check` names whatever else is missing.
 
 ### Your money, your orders, your positions
 

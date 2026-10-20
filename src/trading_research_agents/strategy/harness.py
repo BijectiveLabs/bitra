@@ -5,10 +5,10 @@ decision, refitted at every bar from a trailing window, frozen at entry for the 
 position, and never accepted precomputed. The mechanism is the point; what is fitted and what
 signal is derived from it belong to the core the caller supplies.
 
-A cointegration backtest once reported +180 bps at an 80 percent win rate with the hedge ratio
-fitted on the whole panel and traded on the same panel. Refitted at each bar from data strictly
-before it, the same strategy returned -55 to -68 bps, and live it returned -25.5. The defect
-was one missing subscript, and this harness exists so that subscript cannot go missing.
+A cointegration backtest once looked strong with the hedge ratio fitted on the whole panel and
+traded on the same panel. Refitted at each bar from data strictly before it, the same strategy
+lost money, and it lost live too. The defect was one missing subscript, and this harness exists
+so that subscript cannot go missing.
 """
 
 from __future__ import annotations

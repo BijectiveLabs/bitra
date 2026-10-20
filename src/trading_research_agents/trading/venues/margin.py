@@ -31,6 +31,8 @@ class AccountSettings(Protocol):
 
     def hedged(self) -> bool | None: ...
 
+    def set_one_way(self) -> None: ...
+
 
 class BitgetUnified:
     """Bitget's unified trading account, through the v3 settings ccxt exposes but does not read."""
@@ -71,6 +73,9 @@ class BitgetUnified:
     def hedged(self) -> bool | None:
         hold = str(self._settings().get("holdMode") or "")
         return {"hedge_mode": True, "one_way_mode": False}.get(hold)
+
+    def set_one_way(self) -> None:
+        self.client.privateUtaPostV3AccountSetHoldMode({"holdMode": "one_way_mode"})
 
 
 def _bitget(client: Any) -> AccountSettings | None:

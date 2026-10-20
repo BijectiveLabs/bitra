@@ -13,15 +13,22 @@ same steps for live trading.
 
 1. Open the exchange's practice environment (demo or testnet) and make a key there.
 2. Give the key trading permissions only. Never withdrawals, never transfers.
-3. Put it in the `.env` beside `strategy.toml`, under the names in the table below.
-4. Set `[execution].environment` to that venue's practice environment.
-5. Run `tra keys --probe`. It reads the account through the same path an order takes and names
-   anything to fix. Nothing is sent.
+3. Make the desk for that exchange, `tra init my-desk --profile autonomous --agent groq --venue
+   bitget`, and put the key in its `.env` under the names in the table below. `--venue` sets the
+   practice environment, leverage, the cap per order and how exits are placed for you.
+4. Run `tra keys --probe --prepare`. It reads the account through the same path an order takes,
+   sets one-way position mode on a demo or testnet account that is still hedged, and names
+   anything else to fix. Nothing is sent.
+5. `tra mandate --sign "Your Name" --venue-mode`, then `tra check`.
 
 ```toml
-[execution]
+[execution]                # what --venue writes for Bitget; every line is yours to change
+mode = "venue"             # after tra mandate --sign ... --venue-mode
 venue = "bitget"
 environment = "demo"       # demo, testnet or mainnet, as the table says for your venue
+leverage = 3
+margin_mode = "isolated"
+max_notional = 200
 ```
 
 ## Venue by venue

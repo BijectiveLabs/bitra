@@ -207,7 +207,7 @@ What code changes is written beside what was proposed: each cycle's `exits.measu
 path and says which did better, in a line like this one:
 
 ```
-  levels: code's -12.4 bps against the analyst's own -31.0; no clear difference yet
+  levels: code's <net> bps against the analyst's own <net>; <which did better, or no clear difference yet>
 ```
 
 So a result can be traced to one of three things: the data the desk was given, how good the model

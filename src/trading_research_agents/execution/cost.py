@@ -3,10 +3,10 @@
     c_rt = 2 * fee + spread_cost + slippage + funding_accrual
 
 For most of the research programme this package descends from, the measurement path contained
-none of these terms: returns were computed mid to mid, and the corrected expectation moved from
-marginally positive to -5.6 bps. Four terms living in four places is how an absent term stays
-invisible. Here the identity has one function, every term is an explicit argument, and the
-terms come back separately so a reader can see which one is doing the work.
+none of these terms: returns were computed mid to mid, and the expectation changed sign once the
+costs were counted. Four terms living in four places is how an absent term stays invisible. Here
+the identity has one function, every term is an explicit argument, and the terms come back
+separately so a reader can see which one is doing the work.
 
 Envelope parameters are arguments, never constants (R-27). A fee buried as a literal makes a
 verdict unfalsifiable by anyone with a different schedule.

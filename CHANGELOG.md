@@ -6,6 +6,33 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `tra init --venue` writes a complete `[execution]` block for that exchange: its demo or testnet
+  API, 3x isolated leverage, at most 200 per order, and `exits = "separate"` where the venue takes no
+  stop with the entry. An agent desk made with `--venue` sizes orders in quote currency
+  (`size_quote = 100`), which means the same on every instrument. The next steps it prints include
+  what to set once at that exchange.
+- `tra mandate --sign "Your Name" --venue-mode` signs and turns venue mode on in one step.
+- `tra keys --prepare`: the probe, and on a demo or testnet API an account in long/short mode with
+  nothing open is set to one-way. Never on mainnet.
+- `tra keys --probe` reads the execution venue's account as soon as its keys are set, before venue
+  mode is on, and fills blank fee lines first, so it works on a desk straight from `tra init`.
+
+### Fixed
+
+- With keys set, fees are read through the client orders go through, and the standard tier comes
+  from the market list of the environment orders go to; a venue's slow public list no longer stops
+  the read (Gate's timed out while its testnet answered). A key that cannot read fees but can trade
+  (Gate keeps fees behind wallet read) is no longer reported as something to fix.
+
+### Changed
+
+- Trade results are out of the source and the docs: the figures from our demo desks and from the
+  research this package descends from (net per trade in bps, win rates) are replaced by what they
+  showed in words, and report examples show their format, not a desk's numbers. Results will be
+  published when there is a sample large enough to audit.
+
 ## [0.9.0] - 2026-10-20
 
 ### Added
@@ -202,8 +229,7 @@ All notable changes to this project are recorded here. The format follows
   never given; they now name the figures it has.
 - A range fade is refused where the window's moves have been carrying on: the technical brief
   carries `variance_ratio` (four-bar against one-bar return variance), and `range_reversion` needs
-  it below `[regime].fade_below_variance_ratio`, 1 by default, 0 to turn it off. On the demo desks
-  the fades it would have refused averaged -101 bps net against -46 for the rest. The analyst's
+  it below `[regime].fade_below_variance_ratio`, 1 by default, 0 to turn it off. The analyst's
   instructions name `range_breakout` or flat for a range whose moves carry on.
 - Every MCP tool says what it is for, when to use it against its siblings, what it returns and
   that it only reads, and every argument carries a description in the input schema. The server's
@@ -405,8 +431,7 @@ All notable changes to this project are recorded here. The format follows
   where one mechanism might work.
 - `range_reversion` needs a measured range, as the trend setups need a measured trend: it is now
   refused in a mixed market with a measured trend strength. A regime that could not be measured
-  still refuses nothing. On the demo desks' record, fades in a mixed market were right 27% of the
-  time (n = 30), against 60% in a measured range (n = 37).
+  still refuses nothing.
 - `tra init --agent` writes a mechanism that names no setup: "trade the setup the measured regime
   supports: with a trend, inside a range, or flat".
 

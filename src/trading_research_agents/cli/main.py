@@ -543,6 +543,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="prove each one works: one free authenticated call per provider, the venue's own "
         "preflight. No prompt is sent and no order is placed",
     )
+    keys_cmd.add_argument(
+        "--prepare",
+        action="store_true",
+        help="probe, and on a demo or testnet API set the account's position mode to one-way when "
+        "it is hedged and nothing is open; never on mainnet",
+    )
     keys_cmd.add_argument("--json", action="store_true")
 
     run_cmd.add_argument(
@@ -753,6 +759,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     mandate_cmd.add_argument(
         "--on", type=date.fromisoformat, default=None, help="the signing date (default: today)"
+    )
+    mandate_cmd.add_argument(
+        "--venue-mode",
+        action="store_true",
+        help='with --sign: also set [execution].mode = "venue", so orders go out once `tra check` '
+        "passes",
     )
     mandate_cmd.add_argument("--config", type=Path, default=Path("strategy.toml"))
     mandate_cmd.add_argument("--json", action="store_true")
@@ -2096,15 +2108,23 @@ def show_keys(args: argparse.Namespace) -> int:
                 preflight=_venue_preflight(cfg, env) if args.probe else None,
             )
         )
-    if cfg is not None and cfg.execution.places_orders:
+    prepared: list[str] = []
+    probe = bool(args.probe or getattr(args, "prepare", False))
+    if probe and cfg is not None and _venue_to_read(cfg, env):
+        # A desk fresh from `tra init` has blank fee lines until they are read, and the venue cannot
+        # be probed through a channel with no fee; the fill `tra check` does comes first.
+        filled, _ = _fill_account_fees(args.envelope, cfg, env, datetime.now(UTC))
+        prepared.extend(f"      {line}" for line in filled)
+    if cfg is not None and _venue_to_read(cfg, env):
         # The cycle sends through a different client than a live session does, so a probe that only
         # checked the session's client would be checking a path no order takes.
         out.rows.append(
             venue_row(
                 _DispatchKeys(cfg.execution.venue),
                 env,
-                label=f"venue {cfg.execution.venue} ({_declared_environment(cfg)}), for `tra run`",
-                preflight=_dispatch_ready(args, cfg) if args.probe else None,
+                label=f"venue {cfg.execution.venue} ({_declared_environment(cfg)}), for `tra run`"
+                + ("" if cfg.execution.places_orders else ", read only while in sandbox"),
+                preflight=_dispatch_ready(args, cfg, prepared) if probe else None,
             )
         )
     lines = []
@@ -2114,12 +2134,13 @@ def show_keys(args: argparse.Namespace) -> int:
             f"{name} {fp}" for name, fp in zip(row.present, row.fingerprints, strict=False)
         )
         lines.append(f"{state:<5} {row.what}: {row.verdict}" + (f" [{held}]" if held else ""))
+    lines.extend(prepared)
     lines.append(
         "every key above is shown as a fingerprint of itself, never as its value"
         if out.rows
         else "no credential is declared or set for this project"
     )
-    if not args.probe and out.rows:
+    if not probe and out.rows:
         lines.append("`tra keys --probe` proves each one works: no prompt is sent, no order placed")
     emit(out.record(), args.json, lines, lambda: _ui().keys_table(out.record()))
     return CLEARED if out.ready else REFUSED
@@ -2196,13 +2217,41 @@ def _declared_environment(cfg: Any) -> str:
     return str(cfg.live.environment) if cfg.live is not None else "demo"
 
 
-def _dispatch_ready(args: argparse.Namespace, cfg: Any) -> Callable[[], Any]:
-    """Read the account through the very client an order would go through. Nothing is sent."""
+def _venue_to_read(cfg: Any, env: Mapping[str, str]) -> bool:
+    """Whether `tra keys` checks the execution venue: in venue mode always, in sandbox once its
+    keys are set, so they can be proved before venue mode is turned on."""
+    from trading_research_agents.trading.dispatch import credentials_for
+
+    if cfg.execution.places_orders:
+        return True
+    venue = str(cfg.execution.venue or "").strip()
+    if not venue:
+        return False
+    try:
+        wanted = credentials_for(venue).values()
+    except Exception:
+        return False
+    return bool(wanted) and all(env.get(name) for name in wanted)
+
+
+def _dispatch_ready(
+    args: argparse.Namespace, cfg: Any, prepared: list[str] | None = None
+) -> Callable[[], Any]:
+    """Read the account through the very client an order would go through. Nothing is sent.
+
+    With --prepare, on a demo or testnet API, an account in long/short mode with nothing open on
+    the instrument is switched to one-way first, the one setting every desk needs and every
+    venue's own page hides somewhere different. On mainnet it is never changed for you.
+    """
 
     def run() -> Any:
         # Reading the account sends nothing, so it does not wait for the mandate and the ladder:
         # a key that cannot reach the account is worth knowing before either is signed.
         hand = _venue_hand(args, cfg, args.config.resolve().parent, authorise=False)
+        if getattr(args, "prepare", False) and prepared is not None:
+            said = hand.make_one_way()
+            if said:
+                prepared.append(f"      {cfg.execution.venue}: {said}")
         said = hand.ready()
         if said:
             raise RuntimeError(said)
@@ -2575,40 +2624,52 @@ def _read_fees(
     from trading_research_agents.data.sources.resolve import ResolveError, resolve
     from trading_research_agents.trading.dispatch import DispatchError, account_fees, hand_for
 
-    try:
-        from trading_research_agents.data.sources.ccxt_client import build
-
-        public = build(venue, {"enableRateLimit": True})
-        if public is None:
-            raise AttributeError(f"ccxt has no exchange named {venue!r}")
-        public.load_markets()
-        # The symbol orders go out under, when the caller knows it: a spot pair and the perpetual
-        # on the same coin are charged different fees.
-        symbol = symbol or resolve(instrument, public.markets_by_id, public.markets.values())
-    except (ResolveError, ImportError, AttributeError) as exc:
-        return None, str(exc)
-    except Exception as exc:
-        return None, f"{exc.__class__.__name__}: {exc}"
     missing = [k for k in keys if not env.get(k)]
     why = f"{', '.join(missing)} not set" if missing else ""
+    listed: Any = None
     if not missing:
+        # With keys, everything is read through the client orders go through: the account's fee,
+        # and failing that the market list of the environment orders go to. A venue's full public
+        # list can be the slow part (Gate's timed out on 2026-10-20 while its testnet answered).
         try:
             probe = hand_for(
                 venue=venue,
-                symbol=symbol,
+                symbol=symbol or instrument,
                 max_notional=Decimal(1),
                 env=env,
                 environment=environment,
             )
+            listed = probe.client
+            listed.load_markets()
+            # The symbol orders go out under, when the caller knows it: a spot pair and the
+            # perpetual on the same coin are charged different fees.
+            symbol = symbol or resolve(instrument, listed.markets_by_id, listed.markets.values())
             fees = account_fees(
-                venue, symbol=symbol, env=env, environment=environment, client=probe.client
+                venue, symbol=symbol, env=env, environment=environment, client=listed
             )
             return fees, f"read from your {environment} API for {symbol}"
+        except ResolveError as exc:
+            return None, str(exc)
         except DispatchError as exc:
             why = str(exc)
         except Exception as exc:
             why = f"{exc.__class__.__name__}: {exc}"
-    market = public.markets.get(symbol) or {}
+        if symbol is None or not getattr(listed, "markets", None):
+            listed = None
+    if listed is None:
+        try:
+            from trading_research_agents.data.sources.ccxt_client import build
+
+            listed = build(venue, {"enableRateLimit": True})
+            if listed is None:
+                raise AttributeError(f"ccxt has no exchange named {venue!r}")
+            listed.load_markets()
+            symbol = symbol or resolve(instrument, listed.markets_by_id, listed.markets.values())
+        except (ResolveError, ImportError, AttributeError) as exc:
+            return None, str(exc)
+        except Exception as exc:
+            return None, f"{exc.__class__.__name__}: {exc}"
+    market = listed.markets.get(symbol) or {}
     maker, taker = market.get("maker"), market.get("taker")
     if maker is None or taker is None:
         return None, f"your account did not report them ({why}) and {venue} lists none"
@@ -2707,8 +2768,10 @@ def _fill_account_fees(
             continue
         from_account = said.startswith("read from your")
         if not from_account and all(env.get(k) for k in keys):
-            # A refused key is why orders would fail too; an account without fees is not.
-            refused = any(word in said for word in ("PermissionDenied", "AuthenticationError"))
+            # A key the venue does not accept is why orders would fail too. A key without the one
+            # permission fees are read through is not: Gate keeps them behind wallet read, which a
+            # trading key has no other use for (2026-10-20). `tra keys --probe` proves the rest.
+            refused = "AuthenticationError" in said
             (bad if refused else good).append(f"fees{label}: {said}")
         by_role = {"maker": fees[0], "taker": fees[1]}
         stamp = f"{when:%Y-%m-%d}"
@@ -2876,8 +2939,9 @@ def sign_mandate(args: argparse.Namespace) -> int:
     from trading_research_agents.execution.mandate import DISCLAIMER
 
     on = args.on or date.today()
+    turn_on = bool(getattr(args, "venue_mode", False))
     try:
-        done = sign(args.config, args.sign, on)
+        done = sign(args.config, args.sign, on, venue_mode=turn_on)
     except SignError as exc:
         print(f"tra mandate: {exc}", file=sys.stderr)
         return REFUSED
@@ -2885,7 +2949,10 @@ def sign_mandate(args: argparse.Namespace) -> int:
     lines += [
         f"{done.mandate}: " + ("written" if done.wrote_mandate else "already there, kept"),
         f"{done.config}: [execution] signed by {args.sign.strip()} on {on.isoformat()}",
-        'venue mode is still off; [execution].mode = "venue" turns it on, then `tra check`',
+        'venue mode is on: [execution].mode = "venue"; `tra check` says what else stands in the way'
+        if turn_on
+        else 'venue mode is still off; [execution].mode = "venue" turns it on, or sign again with '
+        "--venue-mode; then `tra check`",
     ]
     emit(
         {
@@ -2893,6 +2960,7 @@ def sign_mandate(args: argparse.Namespace) -> int:
             "wrote_mandate": done.wrote_mandate,
             "signed_by": args.sign.strip(),
             "signed_on": on.isoformat(),
+            "venue_mode": turn_on,
         },
         args.json,
         lines,
@@ -3006,7 +3074,22 @@ def _for_venue(name: str, text: str, able: Any, keys: list[str], starter: str) -
         text = text.replace(f'venue = "{starter}"', f'venue = "{venue}"')
         stanza = (
             f'venue = "{venue}"\nenvironment = "{environment}"      # {_environment_words(able)}\n'
+            "leverage = 3                     # applied at the venue and read back before the "
+            "first order\n"
+            'margin_mode = "isolated"         # one position never draws on the rest of the '
+            "account\n"
+            "max_notional = 200               # one order, in quote currency\n" + _exits_line(able)
         )
+        text = text.replace("# max_notional = 200\n", "", 1)
+        if "\n[conviction]\n" in text:
+            # A desk the agents run across several instruments sizes in money, not in coins: 0.01
+            # is a fair BTC order and a meaningless ETH one.
+            text = re.sub(
+                r"(?m)^size = [0-9.]+ .*$",
+                "size_quote = 100                   # quote currency per order before conviction",
+                text,
+                count=1,
+            )
         if 'mode = "sandbox"\n' in text:
             text = text.replace('mode = "sandbox"\n', 'mode = "sandbox"\n' + stanza, 1)
         else:
@@ -3049,15 +3132,30 @@ def _for_venue(name: str, text: str, able: Any, keys: list[str], starter: str) -
     return text
 
 
+def _exits_line(able: Any) -> str:
+    """`[execution].exits` for what this venue can do through ccxt; empty where attached works."""
+    from trading_research_agents.trading.venues.exits import exit_reads
+
+    if able.level != "exits-none":
+        return ""
+    if able.can_place_exits and exit_reads(able.venue):
+        return 'exits = "separate"               # placed right after the fill on this venue\n'
+    return 'exits = "none"                   # no stop at this venue; you carry them\n'
+
+
 def _venue_next(able: Any, keys: list[str]) -> str:
     if able.level == "data":
         return (
             f"{able.venue} feeds this desk's data; it cannot take orders through ccxt "
             f"({able.verdict()})"
         )
+    from trading_research_agents.trading.venues.notes import notes_for
+
+    steps = "\n".join(f"  at {able.venue}: {note}" for note in notes_for(able.venue))
     return (
-        f"{able.venue}: put {', '.join(keys)} in .env, then `tra venues {able.venue} --setup` "
-        "reads your fees; orders stay in sandbox until you turn venue mode on"
+        f"{able.venue}: put {', '.join(keys)} in .env, then `tra keys --probe --prepare` reads the "
+        "account and readies it; orders stay in sandbox until "
+        f'`tra mandate --sign "Your Name" --venue-mode`\n{steps}'
     )
 
 
@@ -3234,9 +3332,9 @@ losing_streak = 3                  # losing round trips in a row that wake the q
 
 [execution]
 # sandbox keeps the intent here. signals writes it for your own executor. venue sends it, and does
-# not start until `tra mandate --sign "Your Name"` has signed it, a leverage and max_notional are
-# set and the keys are in .env; on mainnet the ladder must also be at CANARY. `tra check` names
-# whatever is missing.
+# not start until it is signed: `tra mandate --sign "Your Name" --venue-mode` signs and turns it on
+# in one step. It also needs a leverage, max_notional and the keys in .env; on mainnet the ladder
+# must also be at CANARY. `tra check` names whatever is missing.
 mode = "sandbox"
 # acknowledged_by = "your name"
 # acknowledged_on = "YYYY-MM-DD"

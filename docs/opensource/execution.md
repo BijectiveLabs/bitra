@@ -35,8 +35,8 @@ breakdown.round_trip_bps  # the sum, and the four terms beside it
 
 - One function owns the identity, every term is an explicit argument, and the terms come
   back separately. Four terms living in four places is how an absent term stays invisible; a
-  whole programme once measured returns mid to mid and the corrected expectation moved from
-  marginally positive to -5.6 bps.
+  whole programme once measured returns mid to mid, and its expectation changed sign once the
+  costs were counted.
 - Fees come from the envelope's declared channel, never from a literal. A hedged pair charges
   `fee * (1 + beta)` per touch: at a hedge ratio of 1.4 the pair transacts 2.4 legs, not 2.
 - Funding is signed. A long through a positive-funding settlement pays; a short receives. A
@@ -91,9 +91,9 @@ c_eff = p_fill * c_passive + (1 - p_fill) * (c_cross + drift_unfilled)
 ```
 
 The orders that fail to fill are not a random subset. They are the names moving away, which is
-why they did not fill, and their drift compounds while the order rests: measured drift on
-unfilled names rose from +11.7 bps at a sixty-second budget to +102.2 bps at one hour. A cost
-model that treats an unfilled order as costless gets the wait-budget decision backwards.
+why they did not fill, and their drift compounds while the order rests: the longer the budget, the
+further the unfilled names had moved away. A cost model that treats an unfilled order as costless
+gets the wait-budget decision backwards.
 `effective_cost` refuses if the drift on any unfilled order cannot be computed, because dropping
 it would remove exactly the observations that make the number informative.
 
