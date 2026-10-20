@@ -26,6 +26,14 @@ All notable changes to this project are recorded here. The format follows
   the read (Gate's timed out while its testnet answered). A key that cannot read fees but can trade
   (Gate keeps fees behind wallet read) is no longer reported as something to fix.
 
+### Documentation
+
+- Why it is built this way: the documented failures the design answers (language models trading
+  real money, overtrading, wrong numbers in financial answers, instructions hidden in data, agents
+  with authority over funds, automation without pre-trade controls, regulators' expectations), each
+  with its source, and what we found building it.
+- Validators and orchestration described as the judged case everywhere they appear.
+
 ### Changed
 
 - Trade results are out of the source and the docs: the figures from our demo desks and from the

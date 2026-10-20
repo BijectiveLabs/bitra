@@ -43,7 +43,8 @@ const sidebar = [
     items: [
       { text: 'Introduction', link: '/opensource/' },
       { text: 'Quick start', link: '/opensource/quick-start' },
-      { text: 'What you see', link: '/opensource/what-you-see' }
+      { text: 'What you see', link: '/opensource/what-you-see' },
+      { text: 'Why it is built this way', link: '/opensource/why' }
     ]
   },
   {
