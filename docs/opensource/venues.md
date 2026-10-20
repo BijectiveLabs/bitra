@@ -464,6 +464,14 @@ Every order is priced against the venue's book at the moment of sending, and a b
 stamped more than 30 seconds ago is refused, on any venue. On 2026-10-20 Binance's demo API served a
 book 3.2 hours old, about 35 bps from where its own trades printed; `tra keys --probe` names it.
 
+### BingX: the demo uses your account's own key
+
+BingX has no separate key page for its demo. A key made in API Management on your account reaches
+both its live API and its demo, VST (virtual USDT), at `open-api-vst.bingx.com`; which one is used
+depends only on where the request goes. With `environment = "testnet"` the desk sends everything to
+VST, and mainnet stays behind the ladder and the mandate like everywhere else. Because the key can
+reach the live account, make it a trading key only: no withdrawals, no transfers, bound to your IP.
+
 ### Bitget's unified trading account
 
 Bitget's demo offers the unified trading account, and its key page then shows two grants, manage
