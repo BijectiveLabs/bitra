@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-20
+
 ### Added
 
 - `[execution].exits = "separate"` for a venue that takes no stop with the entry, Binance futures
@@ -13,8 +15,7 @@ All notable changes to this project are recorded here. The format follows
   placed for is closed at once; exits left resting by an earlier position are taken off before the
   next entry, and an entry is refused while one will not come off; a close by time takes them off
   too. Refused on spot and on a venue whose resting exits are not read yet. `tra venues --setup`
-  suggests it where it applies. Built against ccxt 4.5.85 and tested offline; its run on the
-  Binance demo API comes next.
+  suggests it where it applies. Run on Binance's demo API and Gate's testnet API on 2026-10-20.
 - A venue's leverage is confirmed by its own reply where ccxt cannot read it back (Hyperliquid),
   and the record says so; a reply that is an error still refuses. Before, every derivative order
   there was refused for want of a read-back.
@@ -35,6 +36,13 @@ All notable changes to this project are recorded here. The format follows
   API (ccxt's `binance` reads the spot wallet otherwise), the position is read from the position
   list, a balance ccxt did not parse is read from Binance's own rows, and a whole leverage is sent as
   an integer. Run on Binance's demo API on 2026-10-20 with exits placed after the fill.
+- Gate and BingX on their practice APIs. Gate: a futures symbol uses the futures account and loads
+  only the markets of its kind, the leverage is read from the position list, and client order ids
+  carry Gate's `t-` prefix within its 28 characters. BingX: a futures symbol uses the swap account,
+  its demo's VST counts as the USDT its contracts settle in, and the leverage is set for both sides
+  of a one-way position. Both run end to end on 2026-10-20.
+- When a venue key is missing and a similar name is set (`GATE_SECRET_KEY` for `GATE_API_SECRET`),
+  `tra check` and `tra keys --probe` name both, never the value.
 - Parquet files of your own: `tra data audit FILE.parquet --mapping mapping.toml` reads trade
   history through the same column map and audit as a CSV, and a `[[series]]` may name a `.parquet`
   file. A zoned timestamp is kept to the nanosecond; one without a zone is refused.
@@ -101,6 +109,10 @@ All notable changes to this project are recorded here. The format follows
 - Working with language models: what a role is given, measured; how an answer that does not fit or
   cites nothing is handled, with the counts from a demo desk; the analyst's last reading.
 - Agents: what goes in and what comes out of every role in a cycle, in one table.
+- Exchange accounts and keys: making a key on each venue, for the practice environment and for live
+  trading, with the settings each one needs and what has been run end to end.
+- For exchanges: how the software reaches a venue, what "run end to end" checks, and how orders
+  identify themselves.
 
 ## [0.8.0] - 2026-10-18
 
