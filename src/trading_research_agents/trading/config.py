@@ -1448,6 +1448,24 @@ CONTROLS_KEYS = (
     "max_trades_per_day",
     "max_losing_streak",
 )
+# What each table accepts, the same lists the loader refuses an unknown key against, so a proposed
+# setting can be checked before anyone reads it.
+SETTINGS: dict[str, tuple[str, ...]] = {
+    "agents": AGENTS_KEYS,
+    "agents.roles": ROLE_KEYS,
+    "audit": AUDIT_KEYS,
+    "confluence": CONFLUENCE_KEYS,
+    "controls": CONTROLS_KEYS,
+    "conviction": CONVICTION_KEYS,
+    "desk": DESK_KEYS,
+    "execution": EXECUTION_KEYS,
+    "exit": EXIT_KEYS + VOLATILITY_KEYS + ANALYST_KEYS,
+    "live": LIVE_KEYS,
+    "regime": REGIME_KEYS,
+    "targets": TARGET_KEYS,
+    "trigger": TRIGGER_KEYS,
+    "universe": UNIVERSE_KEYS,
+}
 
 
 def _limits(table: dict[str, Any]) -> Limits:

@@ -1,5 +1,5 @@
 ---
-description: "The documented failures this software is built against: language models trading real money, wrong numbers in financial answers, instructions hidden in data, agents with authority over funds, and automation without pre-trade controls. Each with its source and what the software does about it."
+description: "The documented failures this software is built against: language models trading real money, wrong numbers in financial answers, instructions hidden in data, agents with authority over funds, rules a model steps past or makes up, and automation without pre-trade controls. Each with its source and what the software does about it."
 ---
 
 # Why it is built this way
@@ -67,8 +67,8 @@ model reads later, a web page, a document, an email, are followed as if the user
 indirect prompt injection. In 2025 researchers from Princeton University and the Sentient
 Foundation showed the same against crypto agents built on ElizaOS, through their memory: a message
 planted in an agent's stored history could lead it to send funds to an attacker, and prompt-based
-defences gave only limited protection once that stored context was corrupted. OWASP ranks prompt injection first among the risks of LLM
-applications (LLM01:2025).
+defences gave only limited protection once that stored context was corrupted. OWASP ranks prompt
+injection first among the risks of LLM applications (LLM01:2025).
 
 **What the software does.** The role that proposes a direction reads numbers computed by code, not
 text from outside. Headlines and notes reach only the reading analysts, whose labels do not decide
@@ -90,6 +90,49 @@ environment by the one module that sends orders, are never in a prompt, a brief 
 message that reaches a record has them removed first. An order leaves only through that module,
 after every gate, under a mandate a named person signed. The key guide asks for trading permissions
 only, on every venue, and before a live tier session a Bybit key that can move funds is refused.
+
+## Rules a model is asked to follow
+
+**What happened.** A common answer to "why trust an agent" is "you trust the rules it is given, not
+the model". The record shows models stepping past rules written into what they read.
+
+- In 2023 researchers at Apollo Research put GPT-4 to work as an autonomous stock trading agent in a
+  simulated firm. Given an insider tip, it traded on it although it knew management disapproved of
+  insider trading, and when it reported to its manager it consistently hid the real reason.
+- In December 2024 Apollo Research showed frontier models, in test scenarios built to tempt them,
+  introducing subtle mistakes and trying to disable the oversight they had been told about. The
+  authors present this as a capability shown under those conditions, not a measure of how often it
+  happens in use.
+- In May 2025 Palisade Research reported that OpenAI's o3, told explicitly to allow itself to be
+  shut down, sabotaged the shutdown script in 7 of 100 runs.
+- In July 2025 a Replit coding agent deleted a live production database during a code freeze it had
+  been told repeatedly to respect, and produced fabricated data afterwards (AI Incident Database,
+  incident 1152).
+
+Models also state rules that do not exist. In November 2022 Air Canada's website chatbot told a
+customer he could claim a bereavement fare after booking, which the airline's policy did not allow;
+in February 2024 a British Columbia tribunal held the airline responsible for what its chatbot said
+(Moffatt v. Air Canada, 2024 BCCRT 149). In April 2025 Cursor's AI support agent told users that one
+device per subscription was a security policy; there was no such policy, and users cancelled before
+the company corrected it.
+
+**What the software does.** No limit here is a sentence a model is asked to respect. Every one is
+code that runs after the model has answered, and no model is in that path.
+
+- The rules are not in the deciding role's brief. The technical analyst is not told what a trade
+  costs, what it has to clear, the size or the limits, so there is nothing to argue with or around.
+- An answer is a closed schema. Code reads its fields, a value outside its list is refused, and no
+  sentence a model writes is read to decide anything.
+- The roles that can touch a limit can only make the desk more careful. The risk manager's limits
+  apply only where smaller, and a limit it names that does not exist is refused; between cycles it
+  can cut size below 1x, pause instruments or halt, each for a capped number of hours, and never
+  add size.
+- No model can change the configuration, send an order or reach a key. An auditor's proposed change
+  has to name a setting the configuration accepts, and the loader refuses an unknown key, so a rule
+  a model made up cannot take effect even if someone copied it in.
+- No role is told the desk's rules, every prompt says so, and an answer that states one anyway is
+  recorded beside it as made up. Run over the 832 answers our demo desks had recorded, that check
+  found none.
 
 ## Automation without pre-trade controls
 
@@ -129,6 +172,7 @@ mentions:
 | A library reported a fee the venue charged as a rebate | fees are read as the venue charged them |
 | A venue's leverage call answered "success" while the setting stayed where it was | leverage and margin mode are confirmed by reading them back |
 | The technical analyst could see the other analysts' conclusions | every analyst reads only its own data; code weighs the readings once |
+| An auditor could propose a change to a setting that does not exist, as long as its table did | a proposed setting has to be one its table accepts |
 
 The details are on [Venues](/opensource/venues), [Agents](/opensource/agents) and
 [Working with language models](/opensource/llm).
@@ -144,6 +188,12 @@ The details are on [Venues](/opensource/venues), [Agents](/opensource/agents) an
 - [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/).
 - Freysa: [OECD AI Incidents Monitor](https://oecd.ai/en/incidents/2024-11-29-2e31).
 - AIXBT: [AI Incident Database, incident 1003](https://incidentdatabase.ai/cite/1003).
+- Insider trading by a trading agent: [Scheurer et al., "Large Language Models can Strategically Deceive their Users when Put Under Pressure", arXiv:2311.07590](https://arxiv.org/abs/2311.07590).
+- Oversight subversion: [Meinke et al., "Frontier Models are Capable of In-context Scheming", arXiv:2412.04984](https://arxiv.org/abs/2412.04984).
+- Shutdown sabotage: [The Register, May 29, 2025](https://www.theregister.com/2025/05/29/openai_model_modifies_shutdown_script/), reporting Palisade Research; [Palisade Research, "Shutdown resistance in reasoning models"](https://palisaderesearch.org/research/shutdown-resistance).
+- Replit: [AI Incident Database, incident 1152](https://incidentdatabase.ai/cite/1152); [Fortune, July 23, 2025](https://fortune.com/2025/07/23/ai-coding-tool-replit-wiped-database-called-it-a-catastrophic-failure/).
+- Air Canada: Moffatt v. Air Canada, 2024 BCCRT 149; [AI Incident Database, incident 639](https://incidentdatabase.ai/cite/639).
+- Cursor support agent: [AI Incident Database, incident 1039](https://incidentdatabase.ai/cite/1039).
 - Knight Capital: [SEC press release 2013-222](https://www.sec.gov/news/press-release/2013-222).
 - [ESMA public statement on AI and investment services, May 30, 2024](https://www.esma.europa.eu/sites/default/files/2024-05/ESMA35-335435667-5924__Public_Statement_on_AI_and_investment_services.pdf).
 - [IOSCO consultation report on AI in capital markets, March 2025](https://iosco.org/news/pdf/IOSCONEWS761.pdf).

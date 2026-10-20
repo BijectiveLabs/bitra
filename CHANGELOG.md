@@ -18,6 +18,9 @@ All notable changes to this project are recorded here. The format follows
   nothing open is set to one-way. Never on mainnet.
 - `tra keys --probe` reads the execution venue's account as soon as its keys are set, before venue
   mode is on, and fills blank fee lines first, so it works on a desk straight from `tra init`.
+- An auditor's proposed change has to name a setting its table accepts; one the software does not
+  have is discarded with the reason. An answer that states a desk rule no role was told is recorded
+  beside it for every role, the technical analyst included, and the prompts say no role states one.
 
 ### Fixed
 
@@ -33,6 +36,8 @@ All notable changes to this project are recorded here. The format follows
   with authority over funds, automation without pre-trade controls, regulators' expectations), each
   with its source, and what we found building it.
 - Validators and orchestration described as the judged case everywhere they appear.
+- Why it is built this way: rules a model is asked to follow, and rules a model makes up, with
+  their sources and how the software keeps every limit in code.
 
 ### Changed
 

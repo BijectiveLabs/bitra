@@ -94,6 +94,16 @@ def test_a_validator_may_name_the_role_whose_proposal_it_reviews() -> None:
     assert crossings("validator", reaching)
 
 
+def test_a_rule_no_role_was_told_is_recorded_for_every_role() -> None:
+    invented = {"reason": "the desk requires a reward to risk of 3 before any entry"}
+    for role in (*READING, "technical_analyst", "validator"):
+        found = crossings(role, invented)
+        assert any("a rule of the desk" in f for f in found), role
+    # Describing the market's own numbers is not stating a rule.
+    plain = {"reason": "the move clears its recent range and the spread stays tight"}
+    assert crossings("technical_analyst", plain) == ()
+
+
 def test_the_vocabulary_is_small_and_says_which_step_it_belongs_to() -> None:
     # A wide list would catch ordinary sentences; the promise here is that it stays deliberate.
     assert set(NOT_YOURS) == {"an order", "a size", "an exit", "another role"}

@@ -54,6 +54,25 @@ NOT_YOURS: dict[str, tuple[str, ...]] = {
     "an exit": ("stop loss", "stop-loss", "take profit", "take-profit", "price target"),
     "another role": ("risk manager", "the executor", "the validator", "the technical analyst"),
 }
+# No role is told the desk's rules, so a rule one states is a rule it made up. Every role, the one
+# that decides included, is held to this: recorded beside the answer, which code never reads.
+INVENTED_RULE: tuple[str, tuple[str, ...]] = (
+    "a rule of the desk",
+    (
+        "the desk requires",
+        "the desk's rule",
+        "the desk rule",
+        "the rule requires",
+        "the rules require",
+        "our policy",
+        "the policy requires",
+        "not allowed by the desk",
+        "the required minimum",
+        "the minimum required",
+        "the desk's minimum",
+        "the desk's threshold",
+    ),
+)
 
 
 class ScopeError(ValueError):
@@ -210,17 +229,19 @@ def dropped(role: str, brief: Mapping[str, Any]) -> tuple[str, ...]:
 def crossings(role: str, said: Mapping[str, Any]) -> tuple[str, ...]:
     """Where an answer's prose reached into a later step. Recorded, never used to silence it."""
     allowed = scope_of(role)
+    found: list[str] = []
     if role == technical_analyst.ROLE:
         # The direction and the horizon are this role's job, and the vocabulary of an entry is the
         # vocabulary it is paid to use. Sizing and exits are still not its own, but it names them
-        # by describing the mechanism, so a prose check here would be noise.
-        return ()
-    found: list[str] = []
-    # A validator's whole job is to review a proposal another role made, so naming that role is not
-    # a crossing for it. An order, a size and an exit still are.
-    forbidden = {
-        k: v for k, v in NOT_YOURS.items() if not (role == VALIDATOR and k == "another role")
-    }
+        # by describing the mechanism, so only an invented rule is looked for here.
+        forbidden: dict[str, tuple[str, ...]] = dict([INVENTED_RULE])
+    else:
+        # A validator's whole job is to review a proposal another role made, so naming that role is
+        # not a crossing for it. An order, a size and an exit still are.
+        forbidden = {
+            k: v for k, v in NOT_YOURS.items() if not (role == VALIDATOR and k == "another role")
+        }
+        forbidden[INVENTED_RULE[0]] = INVENTED_RULE[1]
     for key in allowed.prose:
         text = str(said.get(key, "")).lower()
         if not text:

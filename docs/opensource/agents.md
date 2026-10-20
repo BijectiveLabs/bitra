@@ -252,8 +252,9 @@ of a cycle.
 
 Both answer in the same shape: findings, each tied to figures from the brief with their values, each
 carrying a proposal, and at most one proposed configuration change with the value it has now and the
-value proposed. The system checks every citation against the brief and every proposed key against the
-project's own tables, and discards what fails, keeping the reason. A report with nothing left says
+value proposed. The system checks every citation against the brief, and every proposed key against
+the project's own tables and the settings each table accepts, and discards what fails, keeping the
+reason. An auditor cannot propose a setting the software does not have. A report with nothing left says
 so rather than implying a finding.
 
 **Nothing is applied.** The audit writes `audits/<time>/`: the briefs as they were given, the answers

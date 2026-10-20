@@ -6,9 +6,10 @@ Nothing is applied. An auditor writes a report; a person decides.
 
 Two checks run over every finding before it reaches the report. Each citation has to name a figure
 the brief actually carried, with its value - the same rule the validators are held to. And a
-proposed change has to name a table the project's own configuration has, so an auditor cannot
-propose editing something that does not exist. What fails either check is discarded and the reason
-is kept beside the report, because a discarded finding is itself worth seeing.
+proposed change has to name a table the project's own configuration has, and a setting that table
+accepts, so an auditor cannot propose a rule the software does not have. What fails either check
+is discarded and the reason is kept beside the report, because a discarded finding is itself worth
+seeing.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from typing import Any
 
 from trading_research_agents.agents.cited import cites
 from trading_research_agents.llm.form import _enum, _text, parse_object
+from trading_research_agents.trading.config import SETTINGS
 
 KEY = re.compile(r"^\[(?P<table>[a-z_]+(?:\.[a-z_<>]+)*)\](?:\.(?P<field>[a-z_]+))?$")
 CONFIDENCE = ("low", "medium", "high")
@@ -198,7 +200,13 @@ def _key_problem(key: str, tables: Sequence[str]) -> str:
     match = KEY.match(key.strip())
     if match is None:
         return f"{key!r} is not a configuration key; write it as [table].field"
-    table = match.group("table").split(".", 1)[0]
+    path = match.group("table")
+    table = path.split(".", 1)[0]
     if tables and table not in tables:
         return f"[{table}] is not a table in this project's configuration"
+    field = match.group("field")
+    # [agents.roles.<role>] is one table per role, all accepting the same settings.
+    known = SETTINGS.get("agents.roles" if path.startswith("agents.roles.") else path)
+    if field and known is not None and field not in known:
+        return f"{field!r} is not a setting of [{path}]; there is no such rule to change"
     return ""

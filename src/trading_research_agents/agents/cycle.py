@@ -796,6 +796,8 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
     result.cited = [figure.record() for figure in kept]
     for gone in lost:
         result.refusals.append(f"technical: discarded a citation, {gone}")
+    for finding in crossings(technical_analyst.ROLE, {"reason": analyst.reason}):
+        result.refusals.append(f"technical: {finding}; no rule is read from an answer")
 
     if analyst.target == "flat":
         result.refusals.append("technical: flat, so there is nothing to price")

@@ -490,6 +490,11 @@ phrases no reading analyst has reason to write - "go long", "stop loss", "positi
 answer was never what decides. We cannot stop a model from writing a sentence; we can make the
 sentence carry no authority and leave a mark when it tries to.
 
+The same check looks for a rule a role made up. No role is told the desk's rules, so an answer that
+says "the desk requires" or names a desk minimum is stating one that does not exist. That is
+recorded for every role, the technical analyst included, and changes nothing: the rules that apply
+are the ones in your configuration, run by code after the answer.
+
 ## The confluence matrix
 
 Deterministic, in the configuration, reading the declared state rather than the model's label:
