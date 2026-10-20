@@ -14,7 +14,7 @@ mode is set with the leverage, read back from the matching row, and sent with ev
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol
 
@@ -110,30 +110,61 @@ def _bitget_route(client: Any) -> None:
         options["uta"] = True
 
 
-def _binance_route(client: Any, symbol: str) -> None:
-    """Send a Binance client for a futures symbol to the futures API.
+# The account type a futures symbol's symbol-less calls (the balance first) must go to, linear and
+# inverse, on venues whose ccxt class defaults to spot. Read on the practice APIs on 2026-10-20:
+# Binance's balance went to the spot wallet endpoint, which its demo does not have; Gate's and
+# BingX's came back with the spot wallet, so no USDT (Gate) and no VST (BingX) for the margin check.
+FUTURES_TYPE: dict[str, tuple[str, str]] = {
+    "binance": ("future", "delivery"),
+    "gate": ("swap", "swap"),
+    "bingx": ("swap", "swap"),
+}
 
-    ccxt's `binance` class defaults to spot for every call that names no symbol, the balance first:
-    on the demo API on 2026-10-20 that call went to the spot wallet endpoint, which the demo does
-    not have, and on mainnet it would read the spot wallet instead of the futures one. A symbol
-    that settles in its quote is a USD-M future, one that settles in its base a COIN-M one.
-    """
+
+def _futures_route(client: Any, symbol: str, kinds: tuple[str, str]) -> None:
+    """Send a client for a futures symbol to the futures account; an operator's choice stands."""
     options = getattr(client, "options", None)
     rest = symbol.partition("/")[2]
     quote, _, settle = rest.partition(":")
-    if not isinstance(options, dict) or not settle or options.get("defaultType") != "spot":
+    # ccxt's own default is spot, or nothing at all on some classes (Gate).
+    if (
+        not isinstance(options, dict)
+        or not settle
+        or options.get("defaultType") not in (None, "spot")
+    ):
         return
-    options["defaultType"] = "future" if settle == quote else "delivery"
+    options["defaultType"] = kinds[0] if settle == quote else kinds[1]
 
 
-ROUTES: dict[str, Callable[[Any, str], None]] = {
-    "bitget": lambda client, symbol: _bitget_route(client),
-    "binance": _binance_route,
-}
+# What a venue's leverage call needs beyond ccxt's unified arguments. BingX asks for the side the
+# leverage is for; in one-way mode, the only mode this desk trades, that is BOTH.
+LEVERAGE_PARAMS: dict[str, dict[str, Any]] = {"bingx": {"side": "BOTH"}}
+
+
+def leverage_params(venue: str) -> dict[str, Any]:
+    return dict(LEVERAGE_PARAMS.get(venue.strip().lower(), {}))
+
+
+# The market lists a venue loads, where ccxt's default loads every kind it has. Gate's testnet timed
+# out on its options list and then on its spot list on 2026-10-20; a hand needs only the kind its
+# symbol is, and dated futures and options are not markets venue mode sends to.
+MARKET_TYPES: dict[str, tuple[str, ...]] = {"gate": ("spot", "swap")}
+
+
+def _route(client: Any, symbol: str, venue: str) -> None:
+    if venue == "bitget":
+        _bitget_route(client)
+    elif venue in FUTURES_TYPE:
+        _futures_route(client, symbol, FUTURES_TYPE[venue])
+    options = getattr(client, "options", None)
+    loads = (options.get("fetchMarkets") if isinstance(options, dict) else None) or {}
+    if venue in MARKET_TYPES and isinstance(loads, dict) and "types" in loads:
+        kinds = MARKET_TYPES[venue]
+        if "/" in symbol:
+            kinds = ("swap",) if ":" in symbol else ("spot",)
+        loads["types"] = [t for t in loads["types"] if t in kinds]
 
 
 def route(venue: str, client: Any, symbol: str = "") -> None:
     """Point a signed client at the account its key and its symbol belong to."""
-    send = ROUTES.get(venue.strip().lower())
-    if send is not None:
-        send(client, symbol)
+    _route(client, symbol, venue.strip().lower())

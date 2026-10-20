@@ -4,6 +4,9 @@ Binance futures on the demo API (2026-10-20, ccxt 4.5.85): `GET /fapi/v3/account
 5000 USDT in `assets`, and ccxt's unified balance came back with nothing in it, so every order
 would have been refused for want of a balance. The venue's own rows are read instead, with the
 same meaning ccxt gives them: the wallet as the total, what is available as free.
+
+BingX's demo API (VST) on the same day: the swap balance holds VST only, 100,000 of it, and the
+contracts are still quoted and settled as USDT. VST stands in for USDT there.
 """
 
 from __future__ import annotations
@@ -21,7 +24,16 @@ def _binance(balance: Mapping[str, Any], currency: str) -> dict[str, Any] | None
     return None
 
 
+def _bingx(balance: Mapping[str, Any], currency: str) -> dict[str, Any] | None:
+    """BingX's demo settles USDT contracts in VST, its virtual USDT, and reports only that."""
+    if currency != "USDT":
+        return None
+    row = balance.get("VST")
+    return dict(row) if isinstance(row, Mapping) and row.get("total") is not None else None
+
+
 READS: dict[str, Callable[[Mapping[str, Any], str], dict[str, Any] | None]] = {
+    "bingx": _bingx,
     "binance": _binance,
     "binanceusdm": _binance,
     "binancecoinm": _binance,

@@ -35,9 +35,9 @@ we have run end to end, and what ccxt says a venue can do. The second is read fr
 | Bybit | exchange | everything: orders with the stop and take profit attached | demo, testnet | `BYBIT_API_KEY`, `BYBIT_API_SECRET` | yes, on the demo API: real orders, exits attached, a resting order cancelled |
 | OKX | exchange | everything | testnet | `OKX_API_KEY`, `OKX_API_SECRET`, `OKX_API_PASSPHRASE` | yes, on the demo API: real orders, exits attached, closed by the venue's own exits |
 | Bitget | exchange | everything, on a classic or a unified trading account; a unified account key is recognised and sent through Bitget's unified API ([below](#bitget-s-unified-trading-account)) | demo | `BITGET_API_KEY`, `BITGET_API_SECRET`, `BITGET_API_PASSPHRASE` | yes, on the demo API with a unified account: entries with exits attached, a resting order cancelled, a position closed by the venue's own stop, the kill path |
-| BingX | exchange | everything | testnet | `BINGX_API_KEY`, `BINGX_API_SECRET` | ready for its run; [report wanted](https://github.com/BijectiveLabs/trading-research-agents/issues/6) |
+| BingX | exchange | everything; the demo (VST) is reached with the account's own key ([below](#bingx-the-demo-uses-your-account-s-own-key)) | testnet | `BINGX_API_KEY`, `BINGX_API_SECRET` | yes, on the demo API (VST): entries with exits attached, a refused second entry, a reduce-only close, a cancelled post-only order, a close by the venue's own exit, the kill path |
 | Binance | exchange | orders, with the stop and take profit placed right after the fill (`exits = "separate"`); `binance` trades USD-M futures for a futures symbol | demo, testnet | `BINANCE_API_KEY`, `BINANCE_API_SECRET` | yes, on the demo API: entries, exits placed after the fill, a close that takes them off, a cancelled post-only order, the kill path. On 2026-10-20 the demo's order book was stamped hours old, and orders are refused until it is current |
-| Gate | exchange | orders, exits placed right after the fill (`exits = "separate"`) | testnet | `GATE_API_KEY`, `GATE_API_SECRET` | ready for its run |
+| Gate | exchange | orders, exits placed right after the fill (`exits = "separate"`) | testnet | `GATE_API_KEY`, `GATE_API_SECRET` | yes, on the testnet API: entries with exits placed after the fill, a refused second entry, a close that took them off, a cancelled post-only order, a close by the venue's own exit, the kill path |
 | WEEX, BloFin, WOO X | exchange | everything | testnet | `<VENUE>_API_KEY`, `<VENUE>_API_SECRET` (and `_API_PASSPHRASE` for WEEX and BloFin) | ready for its run |
 | Hyperliquid | decentralised | everything; leverage is confirmed by the venue's reply, since ccxt cannot read it back | testnet | `HYPERLIQUID_WALLET_ADDRESS`, `HYPERLIQUID_PRIVATE_KEY` | ready for its run; [report wanted](https://github.com/BijectiveLabs/trading-research-agents/issues/7) |
 | Pacifica | decentralised | everything | testnet | `PACIFICA_PRIVATE_KEY` | ready for its run |
@@ -113,8 +113,8 @@ is 4 contracts, and 20 million PEPE where a contract is 10 million is 2. A size 
 number of contracts is refused with both figures, a venue that does not report its contract size is
 refused, and what the venue reports back, fills and positions, is read in the base again.
 
-Bybit and OKX have been run end to end with real orders, on their demo APIs. For the other
-venues the contract arithmetic and the name resolution are tested against the shapes ccxt returns;
+Bybit, OKX, Bitget, Binance, BingX and Gate have been run end to end with real orders, on their
+demo or testnet APIs. For the other venues the contract arithmetic and the name resolution are tested against the shapes ccxt returns;
 the run against the venue's own account is the step still open, so start any of them on its
 practice environment first.
 
@@ -471,6 +471,16 @@ both its live API and its demo, VST (virtual USDT), at `open-api-vst.bingx.com`;
 depends only on where the request goes. With `environment = "testnet"` the desk sends everything to
 VST, and mainnet stays behind the ladder and the mandate like everywhere else. Because the key can
 reach the live account, make it a trading key only: no withdrawals, no transfers, bound to your IP.
+
+### Gate
+
+`venue = "gate"` with a futures symbol trades USDT perpetuals: the client is sent to the futures
+account and loads only the markets of the symbol's kind (Gate's testnet timed out on its full
+lists). Gate keeps the leverage on the position, so the desk reads it from the position list, where
+isolated margin shows as a leverage above zero. Client order ids carry Gate's required `t-` prefix
+and fit its 28 characters. When the venue's stop closes a position, the take profit it placed after
+the fill is still resting; it is taken off before the next entry on that instrument and by
+`tra kill`, as on every venue with exits placed after the fill.
 
 ### Bitget's unified trading account
 

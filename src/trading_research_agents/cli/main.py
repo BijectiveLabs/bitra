@@ -4886,7 +4886,7 @@ def _gate_lines(
             else "execution: signals; intents are written for your own executor"
         )
     else:
-        from trading_research_agents.trading.dispatch import credentials_for
+        from trading_research_agents.trading.dispatch import credentials_for, key_hint
 
         keys = tuple(credentials_for(mandate.venue).values())
         stops = blocking(
@@ -4898,6 +4898,9 @@ def _gate_lines(
         )
         if stops:
             bad.extend(f"execution: {stop}" for stop in stops)
+            hint = key_hint([k for k in keys if not env.get(k)], keys, env)
+            if hint:
+                bad.append(f"execution: {hint}")
         else:
             good.append(
                 f"execution: venue {mandate.venue}, signed by {mandate.acknowledged_by} on "

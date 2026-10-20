@@ -47,3 +47,18 @@ def price_band(venue: str, client: Any, symbol: str) -> tuple[Decimal | None, De
     except Exception:
         # Not knowing the band is not a reason to refuse; the venue still refuses at its end.
         return None, None
+
+
+# The longest client order id a venue takes, where it is under the 32 the desk writes, and the
+# prefix it requires. Gate's orders carry it in `text`, which must start with `t-` and which ccxt
+# refuses past 28 characters (both seen on its testnet on 2026-10-20).
+CLIENT_ID_MAX: dict[str, int] = {"gate": 28, "gateeu": 28}
+CLIENT_ID_PREFIX: dict[str, str] = {"gate": "t-", "gateeu": "t-"}
+
+
+def client_id_max(venue: str) -> int:
+    return CLIENT_ID_MAX.get(venue.strip().lower(), 32)
+
+
+def client_id_prefix(venue: str) -> str:
+    return CLIENT_ID_PREFIX.get(venue.strip().lower(), "")

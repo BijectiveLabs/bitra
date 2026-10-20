@@ -88,8 +88,9 @@ has the full table of what an agent can reach, and [The cycle](/opensource/cycle
 
 Today: **linear perpetual futures** (USDT- or USDC-margined swaps) on any venue ccxt reaches, long
 and short, with the leverage and margin mode you declare. Every exchange ccxt supports is already
-integrated through the same order path and gates; Bybit and OKX are the two run end to end so far,
-and any other can have that run on its demo or testnet API at any time ([Venues](/opensource/venues)).
+integrated through the same order path and gates; Bybit, OKX, Bitget, BingX, Binance and Gate have
+been run end to end, and any other can have that run on its demo or testnet API at any time
+([Venues](/opensource/venues), [Exchange accounts and keys](/opensource/exchange-keys)).
 
 That is where the project started, not where it stops. Spot, dated futures, inverse contracts and
 options are on the way, each with its own cost model, exit rules and tests. Until a market type has
@@ -104,8 +105,8 @@ The project is in active development, and these pages describe where it stands t
 - **More market types:** spot, stock perpetuals, tokenized stocks and prediction markets are
   built; inverse and dated futures and options follow, each with its own cost model, exit rules, sizing
   and tests before venue mode accepts it.
-- **More venues run end to end:** each joins Bybit and OKX after a full run on its practice
-  account, ours or yours.
+- **More venues run end to end:** each joins the six already run after a full run on its demo or
+  testnet API, ours or yours.
 - **The rest of the not-built-yet list** in [Boundaries](/opensource/boundaries), one piece at a
   time, without weakening a guarantee.
 

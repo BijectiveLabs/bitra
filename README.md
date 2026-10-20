@@ -317,8 +317,10 @@ it has been tested, the last:
 |---|---|---|---|
 | **Bybit** (the default) | everything: orders with the stop and take profit attached | demo, testnet | **yes**, on the demo API: real orders, exits attached, a resting order cancelled |
 | **OKX** | everything | demo (ccxt's testnet switch) | **yes**, on the demo API: real orders, exits attached, closed by the venue's own exits |
-| Bitget, BingX, WEEX, BloFin, WOO X | everything | demo or testnet | ready for its run; reports wanted for [Bitget](https://github.com/BijectiveLabs/trading-research-agents/issues/5), [BingX](https://github.com/BijectiveLabs/trading-research-agents/issues/6) |
-| Binance, Gate | orders, with the stop and take profit placed right after the fill (`exits = "separate"`) | demo or testnet | ready for its run |
+| **Bitget** | everything, on a classic or a unified trading account | demo | **yes**, on the demo API, unified account |
+| **BingX** | everything | demo (VST, ccxt's testnet switch) | **yes**, on the demo API |
+| **Binance**, **Gate** | orders, with the stop and take profit placed right after the fill (`exits = "separate"`) | demo (Binance), testnet (Gate) | **yes**, on their practice APIs |
+| WEEX, BloFin, WOO X | everything | testnet | ready for its run |
 | Hyperliquid, Pacifica, WOOFi Pro, ModeTrade (decentralised) | everything | testnet | ready for its run; [report wanted for Hyperliquid](https://github.com/BijectiveLabs/trading-research-agents/issues/7) |
 | KuCoin Futures, Deepcoin | everything | none | integrated; no practice environment |
 | dYdX, Paradex, Extended, Lighter (decentralised); Deribit, Crypto.com, Coinbase International | orders, but no exits at the venue through ccxt, and some cannot set leverage | testnet | not for a desk that needs its exits at the venue |
@@ -326,8 +328,9 @@ it has been tested, the last:
 
 "Everything" means ccxt reports the five things a safe order needs: send it, attach the exits, read
 the position, read the open orders, cancel. "Run end to end" is the stronger claim, a full run
-with real orders on the venue's demo or testnet API, and Bybit and OKX are the two that have had it
-so far. Any other venue that takes orders can have that run at any time: start on its practice environment, watch a
+with real orders on the venue's demo or testnet API, and Bybit, OKX, Bitget, BingX, Binance and Gate
+have had it so far. How to make a key on each is in
+[Exchange accounts and keys](https://docs.bijectivelabs.dev/opensource/exchange-keys). Any other venue that takes orders can have that run at any time: start on its practice environment, watch a
 few cycles and read what it sends. Each report moves a venue into the last column.
 
 Adding the venue you trade on is four steps, and one command writes most of it:
@@ -405,7 +408,8 @@ An agent desk goes through three steps, and you can stay at any of them as long 
 | 2. Demo or testnet API | `tra run` with `[execution].mode = "venue"` and `environment = "demo"` or `"testnet"` | real orders on the exchange's demo or testnet API, exits attached, positions looked after | a signed mandate, a leverage, `max_notional`, practice keys |
 | 3. Real capital | the same, with `environment = "mainnet"` | real orders with real money | all of the above, plus the ladder at its canary tier (`tra ladder promote`, with evidence) |
 
-Steps 1 and 2 have been run end to end on Bybit's and OKX's demo APIs. Step 3 has not
+Steps 1 and 2 have been run end to end on the demo or testnet APIs of Bybit, OKX, Bitget, BingX,
+Binance and Gate. Step 3 has not
 been run by us; treat it as yours to verify, small, first.
 
 If you bring a scripted strategy of your own instead of the agents, it has a research path of its
@@ -570,8 +574,8 @@ where it stops.
   built; inverse and dated futures and options follow, each added with its own cost model, exit rules,
   sizing and tests before venue mode accepts it.
 - **More venues run end to end.** Every venue ccxt supports already goes through the same order
-  path and gates. Each one joins Bybit and OKX in the last column of the venues table after a full
-  run on its demo or testnet API, ours or yours.
+  path and gates. Each one joins the six already in the last column of the venues table after a
+  full run on its demo or testnet API, ours or yours.
 - **The rest of the not-built-yet list,** one piece at a time, without weakening a guarantee.
 
 **Use the release.** What PyPI installs is the latest release, and it is the version to run.

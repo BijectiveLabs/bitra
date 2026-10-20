@@ -54,7 +54,9 @@ const sidebar = [
       { text: 'Data sources', link: '/opensource/sources' },
       { text: 'Your own data', link: '/opensource/your-data' },
       { text: 'Capital, orders and positions', link: '/opensource/capital' },
-      { text: 'Venues', link: '/opensource/venues' }
+      { text: 'Venues', link: '/opensource/venues' },
+      { text: 'Exchange accounts and keys', link: '/opensource/exchange-keys' },
+      { text: 'For exchanges', link: '/opensource/for-exchanges' }
     ]
   },
   {

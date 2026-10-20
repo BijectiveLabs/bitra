@@ -32,6 +32,7 @@ from trading_research_agents.trading.dispatch import (
 )
 from trading_research_agents.trading.venue import Fill, Intent, VenueError
 from trading_research_agents.trading.venues.accounts import account_refusal, key_refusal
+from trading_research_agents.trading.venues.limits import client_id_prefix
 from trading_research_agents.trading.venues.margin import route
 from trading_research_agents.trading.venues.registry import LiveVenueSettings
 
@@ -149,7 +150,7 @@ class CcxtLiveVenue:
             raise VenueError("size must be positive")
         self._seq += 1
         # Letters and digits only: the narrowest client id rule among the venues holds for all.
-        client_id = f"tra{self.s.run_id[:8]}{self._seq:06d}"
+        client_id = f"{client_id_prefix(self.hand.venue)}tra{self.s.run_id[:8]}{self._seq:06d}"
         if len(client_id) > CLIENT_ID_MAX:
             raise VenueError(f"the client id would exceed {CLIENT_ID_MAX} characters")
         held = self._signed_size

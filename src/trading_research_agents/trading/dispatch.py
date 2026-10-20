@@ -23,10 +23,11 @@ process dying.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -50,10 +51,15 @@ from trading_research_agents.trading.capital import (
 from trading_research_agents.trading.market import Market, MarketError
 from trading_research_agents.trading.venues.accounts import account_refusal
 from trading_research_agents.trading.venues.exits import exit_cancel_params, exit_reads
-from trading_research_agents.trading.venues.limits import price_band
+from trading_research_agents.trading.venues.limits import (
+    client_id_max,
+    client_id_prefix,
+    price_band,
+)
 from trading_research_agents.trading.venues.margin import (
     AccountSettings,
     account_settings,
+    leverage_params,
     route,
 )
 
@@ -215,9 +221,11 @@ class VenueHand:
         held = {field: self.env.get(name, "") for field, name in wanted.items()}
         missing = [wanted[field] for field, value in held.items() if not value]
         if missing:
+            hint = key_hint(missing, tuple(wanted.values()), self.env)
             raise DispatchError(
                 f"{' and '.join(missing)} not set: not in the shell and not in the .env beside "
                 "strategy.toml, the only two places keys are read from"
+                + (f"; {hint}" if hint else "")
             )
         if exchange_class(self.venue) is None:
             if _namespace_missing():  # pragma: no cover - exercised only without the extra
@@ -469,7 +477,7 @@ class VenueHand:
             if busy:
                 return {"sent": False, "refused": busy}
 
-        order_id = _client_id(intent)
+        order_id = _client_id(intent, client_id_max(self.venue), client_id_prefix(self.venue))
         # The prediction venues take no client id through ccxt; their orders are matched by the id
         # the venue returns, and one decision still sends one order.
         params: dict[str, Any] = {} if market.outcome else {"clientOrderId": order_id}
@@ -667,6 +675,10 @@ class VenueHand:
             "takeProfit": {"triggerPrice": float(high)},
         }
 
+    def close_id(self) -> str:
+        """A close's own client id: the venue's prefix, then the moment it was sent."""
+        return f"{client_id_prefix(self.venue)}tra{int(self.clock() * 1000)}c"
+
     def order_params(self) -> dict[str, Any]:
         """What a derivatives order on this account carries beyond ccxt's own fields."""
         found = account_settings(self.venue, self.client)
@@ -840,7 +852,7 @@ class VenueHand:
                 **self.params,
                 key: float(Decimal(str(level))),
                 "reduceOnly": True,
-                "clientOrderId": f"{order_id[:31]}{mark}",
+                "clientOrderId": f"{order_id[: client_id_max(self.venue) - 1]}{mark}",
             }
             try:
                 order = self.client.create_order(self.symbol, "market", away, amount, None, params)
@@ -1026,7 +1038,11 @@ class VenueHand:
             return f"{self.venue} cannot set leverage through ccxt; set it at the venue and say so"
         answered = False
         try:
-            set_leverage(leverage_number(self.leverage), self.symbol)
+            extra = leverage_params(self.venue)
+            if extra:
+                set_leverage(leverage_number(self.leverage), self.symbol, extra)
+            else:
+                set_leverage(leverage_number(self.leverage), self.symbol)
             answered = True
         except Exception as exc:
             said.append(f"leverage: {self._answer(exc)}")
@@ -1090,17 +1106,39 @@ class VenueHand:
         fetch = getattr(self.client, "fetch_leverage", None)
         if fetch is None:
             return None, ""
-        try:
+        found: Mapping[str, Any] = {}
+        with suppress(Exception):
             found = fetch(self.symbol) or {}
-            mode = str(found.get("marginMode") or "").lower()
-            value = found.get("longLeverage") or found.get("leverage")
-            if value is None:
-                return None, mode
+        value = found.get("longLeverage") or found.get("leverage")
+        mode = str(found.get("marginMode") or "").lower()
+        if value is None:
+            # Seen on 2026-10-20: one venue keeps the leverage on the position itself and reads it
+            # nowhere else through ccxt, flat or not; the position list carries it with the mode.
+            row = self._position_row()
+            value, mode = row.get("leverage"), str(row.get("marginMode") or "").lower()
+        elif not mode and (getattr(self.client, "has", {}) or {}).get("fetchMarginMode"):
+            with suppress(Exception):
+                mode = str(self.client.fetch_margin_mode(self.symbol).get("marginMode") or "")
+                mode = mode.lower()
+        if value is None:
+            return None, mode
+        try:
             read = Decimal(str(value))
-            # Venues answer 10.0 for 10; the record and the refusal should say 10.
-            return (read.to_integral_value() if read == read.to_integral_value() else read), mode
-        except Exception:
-            return None, ""
+        except ArithmeticError:
+            return None, mode
+        # Venues answer 10.0 for 10; the record and the refusal should say 10.
+        return (read.to_integral_value() if read == read.to_integral_value() else read), mode
+
+    def _position_row(self) -> Mapping[str, Any]:
+        """This symbol's row of the position list, flat rows included, or nothing."""
+        fetch = getattr(self.client, "fetch_positions", None)
+        if fetch is None:
+            return {}
+        with suppress(Exception):
+            for row in fetch([self.symbol]) or []:
+                if row.get("symbol") == self.symbol:
+                    return dict(row)
+        return {}
 
     def _capital(
         self, notional: Decimal, side: str, mid: Decimal, intent: Mapping[str, Any]
@@ -1271,12 +1309,12 @@ class VenueHand:
                 None,
                 # A close carries an id of its own like every other order. Without one, ccxt fills
                 # in its own broker id on some venues (seen on 2026-10-20 on a demo close).
-                {"clientOrderId": f"tra{int(self.clock() * 1000)}c"}
+                {"clientOrderId": self.close_id()}
                 if spot
                 else {
                     **self.order_params(),
                     "reduceOnly": True,
-                    "clientOrderId": f"tra{int(self.clock() * 1000)}c",
+                    "clientOrderId": self.close_id(),
                 },
             )
         except Exception as exc:
@@ -1579,6 +1617,19 @@ class VenueHand:
         return ""
 
 
+def key_hint(missing: Sequence[str], expected: Sequence[str], env: Mapping[str, str]) -> str:
+    """Names set beside the missing ones under the same venue prefix, by name and never by value.
+
+    Seen on 2026-10-20: an exchange's own page calls the secret a "secret key", and a `.env` held
+    GATE_SECRET_KEY where GATE_API_SECRET is read.
+    """
+    prefixes = tuple({name.split("_", 1)[0] + "_" for name in missing})
+    near = sorted(n for n in env if n.startswith(prefixes) and n not in expected and env.get(n))
+    if not near:
+        return ""
+    return f"{', '.join(near)} is set; the names read are {', '.join(expected)}"
+
+
 def leverage_number(leverage: Decimal) -> int | float:
     """A whole leverage as an integer: one venue refused 3.0 as malformed (2026-10-20)."""
     whole = leverage.to_integral_value()
@@ -1620,15 +1671,23 @@ def _slippage_bps(average: Any, mid: Decimal, side: str) -> str | None:
     return str((moved if side == "buy" else -moved).quantize(Decimal("0.01")))
 
 
-def _client_id(intent: Mapping[str, Any]) -> str:
+def _client_id(intent: Mapping[str, Any], longest: int = 32, prefix: str = "") -> str:
     """One id per cycle and instrument, so a cycle run twice cannot open two positions.
 
-    Letters and digits only, 32 at most: the narrowest rule among the venues holds for all.
+    Letters and digits only, 32 at most, behind a prefix the venue requires. A venue that takes
+    fewer gets a digest of the same id, which is just as fixed for the cycle and cannot lose the
+    instrument the way a cut would.
     """
     cycle = re.sub(r"[^0-9A-Za-z]", "", str(intent.get("at", "")) or "unknown")
     instrument = re.sub(r"[^0-9A-Za-z]", "", str(intent.get("instrument", "")))
     body = cycle if instrument and cycle.endswith(instrument) else cycle + instrument
-    return f"tra{body}"[:32]
+    full = f"{prefix}tra{body}"
+    if len(full) <= longest:
+        return full
+    if longest >= 32 and not prefix:
+        return full[:32]
+    digest = hashlib.sha256(full.encode("ascii")).hexdigest()
+    return f"{prefix}tra{digest[: longest - len(prefix) - 3]}"
 
 
 def account_fees(
