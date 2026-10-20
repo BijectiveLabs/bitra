@@ -57,7 +57,14 @@ def test_a_proposing_role_is_never_handed_the_desks_rules(role: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "name", ["technical_analyst_live", "technical_analyst", "validator", "event_analyst"]
+    "name",
+    [
+        "technical_analyst_live",
+        "technical_analyst",
+        "validator",
+        "validator_judge",
+        "event_analyst",
+    ],
 )
 def test_the_prompts_do_not_describe_what_code_will_accept(name: str) -> None:
     text = (PROMPTS / f"{name}.md").read_text(encoding="utf-8").lower()

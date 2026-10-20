@@ -61,6 +61,12 @@ All notable changes to this project are recorded here. The format follows
   analysts' declared states (`readings`) or the derivatives positioning series, which the on-chain
   analyst reads; the validators no longer receive the declared states. The readings are weighed once,
   by code, in confluence and conviction. A test holds each brief to its own data.
+- The validators work as a judged case. With pro, contra and neutral declared, pro and contra build
+  the strongest case for and against the proposal apart, neither seeing the other's; code checks
+  every claim; neutral judges the two checked cases, without the advocates' verdicts, and its verdict
+  is the only one confluence and conviction count. Code decides without asking neutral when only one
+  side has a case. Measured before: pro supported 63 times in 64, contra opposed 61 in 63, and a
+  neutral asked alone abstained in 33 of 37 cycles.
 - An answer that does not fit its schema is asked for once more with the reason after the brief,
   rather than with the same brief again; the event analyst gets the same second call.
 - The console's separator lines take the home screen's colour, so they no longer read as text.

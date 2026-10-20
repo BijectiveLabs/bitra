@@ -23,7 +23,7 @@ the system's own rules, tested and failing closed, and a role acts through them,
 | `macro_analyst` | series the operator mapped in (events, cross-venue funding, sentiment) | nothing | every cycle in `tra run`; once per session in a session, when series are given |
 | `onchain_analyst` | on-chain series the operator mapped in | nothing | every cycle in `tra run`; once per session in a session, when series are given |
 | `sentiment_analyst` | dated scores and dated notes the operator curates, through the same series engine | `negative`, `neutral`, `positive`, or `not declared` when nothing was mapped in | reads only; nothing is scraped |
-| `validator` | `figures_of`, `checked` over the brief the deciding analyst was given | one stance (pro, contra, neutral): the proposal as the analyst gave it (side, setup, levels, confidence) and the figures it was built from, never another analyst's reading, the cost, the claimed edge or the desk's rules; every claim it makes has to cite one of those figures with its value, and the system discards the ones that do not | once per cycle, when `[agents].validators` is set |
+| `validator` | `figures_of`, `checked` over the brief the deciding analyst was given | one stance (pro, contra, neutral): the proposal as the analyst gave it (side, setup, levels, confidence) and the figures it was built from, never another analyst's reading, the cost, the claimed edge or the desk's rules; every claim it makes has to cite one of those figures with its value, and the system discards the ones that do not. With all three stances, pro and contra build their cases apart and neutral judges both ([the validators](/opensource/cycle#the-validators)) | once per cycle, when `[agents].validators` is set |
 | `risk_manager` | in `tra run`: the client's limits, what is in force, the alarms, the round trips by instrument; in a session: the limits, the canary caps, the ladder, latency, net against the registration | in `tra run`: `reduce` (size multiple below 1), `pause` (instruments), `halt` (the kill switch), each for `hold_hours`; in a session: `tighten_limits`, `demote`, `arm_kill_switch` | in `tra run`, between cycles whenever the quant auditor is asked; in a session, after the runs |
 | `executor` | the venue, the rate limits, the allocation across instruments | an allocation, fractions summing to at most one | after the risk decision |
 | `auditor` | the ledger, every run, `usage.jsonl`, the ladder | `audit.json` | last |
@@ -143,7 +143,8 @@ the schema its answer fills.
 | `macro_analyst` | its series with what was known when, the operator's thresholds, measured correlations with n, the calendar | `regime`, `events`, `reason`, `figures_used`, `data_as_of` | the schema, every citation, words that belong to a later step (recorded) |
 | `onchain_analyst` | its series, their net over a window and z-scores | `signal`, `reason`, `figures_used`, `data_as_of` | the same |
 | `sentiment_analyst` | its scores and dated notes | `state`, `figures_used`, `reason`, `data_as_of` | the same |
-| validators | the proposal and the figures it was built from | `stance`, `claims`, `verdict`, `reason` | the schema; a claim that does not cite a figure it was given is dropped |
+| validators: pro, contra | the proposal and the figures it was built from; neither sees the other's case | `stance`, `claims`, `verdict`, `reason` | the schema; a claim that does not cite a figure it was given is dropped |
+| validator: neutral, as judge | the same, and both cases as code checked them, without the advocates' verdicts | `stance`, `claims`, `verdict`, `reason` | the same; its verdict is the one that counts, and it is not asked when only one side has a case |
 | `event_analyst` | the question, the outcome's book and recent prices, the calendar and your notes | `probability`, `confidence`, `reason`, `figures_used` | the schema, every citation |
 | `market_screener` | one live snapshot per admitted instrument | `kept`, `excluded`, `picks` | it can only drop an instrument, never add one |
 
@@ -346,7 +347,8 @@ A question worth answering plainly, because it decides where the token bill goes
 |---|---|---|
 | read one class of data and label it | a reading analyst | say what it sees, in its own vocabulary; the score it is weighed by is graded by the system from the same figures against the operator's lines |
 | propose a direction and a horizon | the technical analyst | one target, one confidence, one reason |
-| argue for or against that proposal | the validators | claims that cite figures from the brief; the system discards the rest |
+| argue for or against that proposal | pro and contra, apart | claims that cite figures from the brief; the system discards the rest |
+| judge the two cases | neutral | one verdict from the claims that survived, weighed on the premise of the setup |
 | decide whether the context agrees | the confluence matrix, in the system | admit or refuse, from declared states and vote counts |
 | decide how much goes behind it | the conviction rule, in the system | weigh every voice by its strength (confidence, graded scores, votes) and pick a size multiple off the operator's ladder; it may only shrink the base size |
 | price the round trip | the cost gate, in the system | refuse a claim that does not clear its own cost |

@@ -176,7 +176,7 @@ SCOPES: dict[str, Scope] = {
     ),
     VALIDATOR: Scope(
         role=VALIDATOR,
-        reads=("instrument", "stance", "proposal", "figures"),
+        reads=("instrument", "stance", "proposal", "figures", "case_for", "case_against"),
         answers=("stance", "claims", "verdict", "reason"),
         decides="one vote, and only through claims that cite a figure it was given",
         prose=("reason",),

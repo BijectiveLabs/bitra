@@ -16,7 +16,7 @@ from trading_research_agents.agents.briefs import (
     data_brief,
     technical_brief,
 )
-from trading_research_agents.agents.cycle import CycleConfig, CycleError, run_cycle
+from trading_research_agents.agents.cycle import CycleConfig, CycleError, CycleResult, run_cycle
 from trading_research_agents.agents.parallel import FanOut, Task, run_tasks
 from trading_research_agents.data.schema import Candle, Direction
 from trading_research_agents.data.sources import Fetched, SourceChain, SourceError
@@ -1417,3 +1417,89 @@ def test_each_analyst_reads_its_own_data_and_none_sees_another_analysts_reading(
         assert [w for w in words if w in seen[role]] == [], role
     # The readings are still weighed, once, by code.
     assert result.context["macro_analyst"]["regime"] == "risk-off"
+
+
+def judged_cycle(
+    tmp_path: Path, envelope: Envelope, answers: dict[str, str]
+) -> tuple[CycleResult, ByStance]:
+    from trading_research_agents.execution.confluence import Matrix
+
+    stances = ByStance(answers)
+    fake = Scripted({"technical_analyst": analyst_answer()})
+    usage = UsageLedger(tmp_path / "usage.jsonl")
+    limits = BudgetLimits(token_budget=500_000, max_calls_per_hour=1000, min_interval_s=0)
+    metered: dict[str, MeteredCompleter] = {}
+
+    def completer_for(role: str) -> MeteredCompleter:
+        if role not in metered:
+            inner = stances if role == "validator" else fake.for_role(role)
+            metered[role] = MeteredCompleter(
+                inner, role=role, provider="fake", limits=limits, ledger=usage, clock=lambda: 0.0
+            )
+        return metered[role]
+
+    cfg = CycleConfig(
+        instrument="BTCUSDT",
+        envelope=envelope,
+        venue_key=envelope.cheapest(None).key,
+        chains=chains(),
+        completer_for=completer_for,
+        usage=usage,
+        root=tmp_path / "cycles",
+        mechanism="short-horizon reversion after a burst of prints",
+        size=Decimal("5"),
+        magnitude_bps=Decimal("40"),
+        clock=lambda: datetime(2026, 9, 27, 10, 0, tzinfo=UTC),
+        lookback_bars=5,
+        validators=("pro", "contra", "neutral"),
+        matrix=Matrix(min_support=1),
+    )
+    return run_cycle(cfg), stances
+
+
+def test_neutral_judges_both_cases_and_only_its_verdict_counts(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    pro = json.loads(validator_answer("pro", "support"))
+    pro["claims"].append({"figure": "made_up", "value": "1", "says": "an invented figure"})
+    result, stances = judged_cycle(
+        tmp_path,
+        envelope,
+        {
+            "pro": json.dumps(pro),
+            "contra": validator_answer("contra", "oppose"),
+            "neutral": validator_answer("neutral", "oppose"),
+        },
+    )
+    # The advocates first, apart; the judge last, with both cases as code checked them.
+    first, judge = stances.calls[:2], json.loads(stances.calls[2].user)
+    assert {json.loads(c.user)["stance"] for c in first} == {"pro", "contra"}
+    assert not any("case_for" in json.loads(c.user) for c in first)
+    assert [c["figure"] for c in judge["case_for"]] == ["zscore"]
+    assert [c["figure"] for c in judge["case_against"]] == ["zscore"]
+    # It weighs the evidence, not the advocates' votes.
+    assert "verdict" not in json.dumps(judge["case_for"]) and "reason" not in judge["case_for"][0]
+    assert stances.calls[2].system != stances.calls[0].system
+    assert result.context["validator_neutral"]["judged"] == "neutral"
+    # Pro supported, but the judge opposed, and only the judge counts: min_support 1 is not met.
+    assert result.confluence is not None and result.confluence.support == 0
+    assert not result.acted
+
+
+def test_a_case_nobody_answers_is_decided_by_code_without_asking_the_judge(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    result, stances = judged_cycle(
+        tmp_path,
+        envelope,
+        {
+            "pro": validator_answer("pro", "support"),
+            "contra": validator_answer("contra", "oppose", figure="made_up", value="1"),
+        },
+    )
+    assert len(stances.calls) == 2
+    judged = result.context["validator_neutral"]
+    assert judged["verdict"] == "support" and judged["judged"] == "code"
+    assert "neutral was not asked" in judged["reason"]
+    assert result.confluence is not None and result.confluence.support == 1
+    assert result.acted

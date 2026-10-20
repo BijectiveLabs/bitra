@@ -4836,11 +4836,20 @@ def _gate_lines(
     matrix = cfg.confluence
     stances = () if cfg.agents is None else cfg.agents.validators
     if stances:
+        from trading_research_agents.agents.cycle import judge_mode
+
         weight = cfg.conviction.validator_weight
+        how = (
+            "; the advocates build their cases apart and neutral judges them, its verdict the one "
+            "that counts; with a case on one side only, code decides without asking it"
+            if judge_mode(stances)
+            else ""
+        )
         good.append(
             f"validators: {', '.join(stances)}; asked once there is a proposal and the system "
             "has not already refused it"
-            + (f"; each vote moves conviction by {weight}" if weight > 0 else "")
+            + how
+            + (f"; each counted vote moves conviction by {weight}" if weight > 0 else "")
         )
     if matrix.idle:
         good.append("confluence: not declared; the context is recorded but gates nothing")

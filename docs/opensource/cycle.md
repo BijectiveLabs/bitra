@@ -107,7 +107,7 @@ the universe (system: one data pull each, the trigger per instrument, ordered by
   -> technical analyst + reading analysts   (parallel)
   -> the round trip priced (system)
   -> the stop and the target (the analyst's levels, held in your [exit] bounds; break-even checked)
-  -> validators                             (parallel, when configured)
+  -> validators          (when configured: pro and contra apart, then neutral judges both)
   -> confluence matrix   (system: declared states and votes)   -> whether to trade at all
   -> conviction          (system: the same voices, weighted)    -> how much the desk wants on
   -> risk per trade      (system: the loss at the stop, against equity) -> how much it can afford
@@ -516,52 +516,76 @@ support required than there are validators to give it.
 
 ## The validators
 
-Three stances of one role, pro, contra and neutral, asked after the deciding analyst answers and
-after the round trip is priced, in parallel with each other:
+Three stances of one role, asked after the deciding analyst answers and after the round trip is
+priced:
 
 ```toml
 [agents]
 validators = ["pro", "contra", "neutral"]
 ```
 
-Each one receives the proposal and the figures it was built from: not the round trip, not the
-claimed edge, and not the other analysts' readings, which code weighs once in conviction. Each must
-answer with claims that cite a figure by the brief's own name, with that figure's value, and the
-figures it may cite are every figure in the brief it was handed:
+With all three, they work as a judged case rather than a vote:
+
+```
+proposal -> pro    (the strongest case that the reading is right)  \  apart, at the same time,
+         -> contra (the strongest case that it is wrong or noise)  /   neither sees the other
+         -> code checks every claim in both cases against the figures
+         -> neutral (judges the two checked cases)  -> the one verdict that counts
+```
+
+Pro looks for what makes the setup real: the regime and structure it belongs in, higher timeframes
+agreeing, a move beyond one bar's ordinary range, levels resting on structure. Contra looks for what
+makes it wrong, early or noise: a regime or structure it does not fit, a higher timeframe against
+it, a move inside the noise, a stop inside that noise, a target behind the next level, a book
+leaning the other way. Neither is told what the other found.
+
+Neutral then reads both cases, but only the claims that survived the check, so an invented figure
+never reaches the judge, and not the advocates' own verdicts, so it weighs evidence rather than
+votes. It is told to weigh claims about the premise of the setup above claims about details, to
+treat several claims that say the same thing as one, and to abstain only when the two cases are
+even. Its verdict is the one that counts in confluence and conviction.
+
+When there is nothing to weigh, code decides without paying for the call: no surviving claim on
+either side is an abstention, a contra with nothing that holds is support, a pro with nothing that
+holds is opposition, and the record says neutral was not asked.
+
+Every stance receives the proposal and the figures it was built from: not the round trip, not the
+claimed edge, and not the other analysts' readings, which code weighs once in conviction. Each
+answers with claims that cite a figure by the brief's own name, with that figure's value:
 
 ```json
 {"stance": "contra",
- "claims": [{"figure": "volume_ratio", "value": "7.971", "says": "the burst is not finished"}],
+ "claims": [{"figure": "atr_bps", "value": "61.32", "says": "the last move is inside one bar's range"}],
  "verdict": "oppose",
  "reason": "..."}
 ```
 
-The system checks every claim against the brief. A figure that is not there is discarded, a value that
-does not match is discarded, both are recorded, and a verdict with no surviving claim becomes
-`abstain` - a verdict resting on nothing is nothing. A claim may round the figure it cites: "-1.63"
-against a brief's "-1.631" is the same citation said with fewer digits, and it is kept. Then the
-matrix counts the votes.
+A figure that is not in the brief is discarded, a value that does not match is discarded, both are
+recorded, and a verdict with no surviving claim becomes `abstain`. A claim may round the figure it
+cites: "-1.63" against a brief's "-1.631" is the same citation said with fewer digits, and it is kept.
 
-Each stance is one more call, which is why they are off until an operator asks for them.
+Why it is built this way: when the three were asked side by side and each counted, pro supported 63
+times in 64 and contra opposed 61 times in 63 on the first demo desk, so their votes carried their
+assignment and nothing else, and a neutral asked alone on the OKX demo desk abstained in 33 of 37
+cycles. An advocate's value is the evidence it finds; the decision belongs to the role that sees
+both sides.
 
-No stance decides, neutral included. Pro argues for the proposal, contra against it, neutral weighs
-both and says which side the figures favour; each answers support, oppose or abstain. Their votes
-count in exactly two places, both yours to declare:
+Each stance is one more call, which is why they are off until an operator asks for them; with all
+three, a cycle makes two calls at once and then at most one more.
+
+What counts, and where, is yours to declare:
 
 | Where | Setting | Effect |
 |---|---|---|
 | the confluence matrix | `[confluence].min_support`, `max_opposition` | a hard gate: too few supports or too many opposes refuses the trade |
-| conviction | `[conviction].validator_weight` | each vote that says something adds or takes away that weight; the size follows the score |
+| conviction | `[conviction].validator_weight` | each counted vote that says something adds or takes away that weight; the size follows the score |
 
-With neither declared, the votes are recorded and move nothing, and `tra check` says so: three
-calls a cycle that change no decision are a cost with no purpose.
+With neither declared, the verdicts are recorded and move nothing, and `tra check` says so.
 
-Conviction weighs what a vote says beyond its stance. Pro argues for and contra against by
-assignment, so a pro that supports and a contra that opposes tell conviction nothing and weigh
-nothing (on the demo desk pro supported 36 times in 37 and contra opposed 34 times in 35; counted as
-votes, they only diluted every score). A pro that abstains or opposes counts as opposition, a contra
-that abstains or supports counts as support, and neutral counts as it votes. The confluence matrix
-still counts the verdicts as given, because its numbers are the ones you declared.
+Other sets of stances still work. Neutral alone weighs the proposal itself. Pro or contra without
+neutral are counted for what they say beyond their stance: a pro that supports or a contra that
+opposes says nothing new and weighs nothing in conviction, while a pro that abstains or opposes
+counts as opposition and a contra that abstains or supports counts as support.
 
 ## Conviction: who weighs the analysts, and how much goes behind the idea
 
@@ -634,7 +658,7 @@ rounding down and never up.
 |---|---|---|
 | a short at 0.70, macro barely bullish (+0.15), sentiment barely bullish (+0.057) | 1.222 / 2.178 = **0.561** | half the base |
 | a long at 0.70, macro +0.6, on-chain +0.5, sentiment -0.4 | 2.55 / 3.55 = **0.718** | half the base |
-| a long at 0.90, every analyst a full band in agreement, two validators for, one abstaining | 6.8 / 7.0 = **0.971** | the whole base |
+| a long at 0.90, every analyst a full band in agreement, the judge for | 5.8 / 6.0 = **0.967** | the whole base |
 | a short at 0.70, every analyst a full band bullish | below zero, so **0** | no trade |
 
 The first row is a real cycle from 2026-10-04. Before scores were graded it read as two full

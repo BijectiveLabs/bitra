@@ -413,6 +413,8 @@ class CycleResult:
 # A desk picks its setup from the market in front of it; the research core trades one registered
 # mechanism. Same role and schema, so only the instructions differ.
 LIVE_PROMPTS = {technical_analyst.ROLE: "technical_analyst_live"}
+# Neutral fills the validator's schema, but as the judge of the two cases it has its own job.
+JUDGE_PROMPT = "validator_judge"
 
 
 def _ask(
@@ -421,6 +423,7 @@ def _ask(
     question: Mapping[str, Any],
     schema: Mapping[str, Any],
     refused: str = "",
+    system: str = "",
 ) -> str:
     completer = cfg.completer_for(role)
     user = json.dumps(question, sort_keys=True, default=str, separators=COMPACT)
@@ -431,7 +434,7 @@ def _ask(
             "Answer again with one JSON object that fills the schema."
         )
     done = completer.complete(
-        system=prompt(LIVE_PROMPTS.get(role, role)), user=user, schema=dict(schema)
+        system=prompt(system or LIVE_PROMPTS.get(role, role)), user=user, schema=dict(schema)
     )
     return done.text
 
@@ -490,6 +493,7 @@ def _ask_readable(
     question: Mapping[str, Any],
     schema: Mapping[str, Any],
     parse: Callable[[str], Any],
+    system: str = "",
 ) -> str:
     """Ask, and ask once more, with the reason, when the answer does not fit its schema.
 
@@ -498,11 +502,11 @@ def _ask_readable(
     place). One more call is cheaper than a lost cycle, and a model told what was wrong with its
     answer does not have to guess; a second malformed answer is left to fail.
     """
-    text = _ask(cfg, role, question, schema)
+    text = _ask(cfg, role, question, schema, system=system)
     try:
         parse(text)
     except (RoleError, ValueError) as exc:
-        return _ask(cfg, role, question, schema, refused=str(exc)[:300])
+        return _ask(cfg, role, question, schema, refused=str(exc)[:300], system=system)
     return text
 
 
@@ -1702,6 +1706,9 @@ def _run_validators(
     The proposal is the analyst's reading as given. The round trip, the claimed edge and the
     desk's rules are left out: whether a trade clears them is code's question, and a vote that
     could see them would be a second, softer cost gate.
+
+    With neutral beside pro or contra, the advocates build their cases apart, neither seeing the
+    other's, and neutral judges the two cases once code has checked every claim in them.
     """
     # The analyst's last reading is its own continuity, not evidence about this proposal.
     figures = {k: v for k, v in figures_of(asked).items() if not k.startswith("previous.")}
@@ -1715,9 +1722,12 @@ def _run_validators(
         "reason": analyst.reason,
         "mechanism": cfg.mechanism,
     }
+    judged = judge_mode(cfg.validators)
     tasks = []
     seen: dict[str, dict[str, str]] = {}
     for stance in cfg.validators:
+        if judged and stance == "neutral":
+            continue
         name = f"validator_{stance}"
         brief = _within_scope(
             validator.ROLE,
@@ -1749,23 +1759,112 @@ def _run_validators(
         if budget_spent(error):
             result.stopped_by = f"{name}: {error}"
     for name, answer in fan.answers.items():
-        stance = name.partition("_")[2]
-        try:
-            said = validator.parse(str(answer))
-        except (RoleError, ValueError) as exc:
-            result.context[name] = {"stance": stance, "error": str(exc)}
-            result.refusals.append(f"{name}: {exc}")
-            continue
-        verdict = checked(said, seen.get(name, figures))
-        record = verdict.record()
-        reached = crossings(validator.ROLE, {"reason": verdict.reason})
-        if reached:
-            record["out_of_scope"] = list(reached)
-            for finding in reached:
-                result.refusals.append(f"{name}: {finding}; it changes nothing here")
-        for dropped_claim in verdict.discarded:
-            result.refusals.append(f"{name}: discarded a claim, {dropped_claim}")
-        result.context[name] = record
+        _record_verdict(result, name, answer, seen.get(name, figures))
+    if judged and result.stopped_by is None:
+        _judge(cfg, where, result, proposal=proposal, figures=figures)
+
+
+def judge_mode(stances: tuple[str, ...]) -> bool:
+    """Neutral judges the advocates' cases when at least one advocate is asked beside it."""
+    return "neutral" in stances and bool({"pro", "contra"} & set(stances))
+
+
+def _record_verdict(
+    result: CycleResult, name: str, answer: Any, figures: Mapping[str, str]
+) -> dict[str, Any] | None:
+    stance = name.partition("_")[2]
+    try:
+        said = validator.parse(str(answer))
+    except (RoleError, ValueError) as exc:
+        result.context[name] = {"stance": stance, "error": str(exc)}
+        result.refusals.append(f"{name}: {exc}")
+        return None
+    verdict = checked(said, figures)
+    record = verdict.record()
+    reached = crossings(validator.ROLE, {"reason": verdict.reason})
+    if reached:
+        record["out_of_scope"] = list(reached)
+        for finding in reached:
+            result.refusals.append(f"{name}: {finding}; it changes nothing here")
+    for dropped_claim in verdict.discarded:
+        result.refusals.append(f"{name}: discarded a claim, {dropped_claim}")
+    result.context[name] = record
+    return record
+
+
+def _judge(
+    cfg: CycleConfig,
+    where: CycleDir,
+    result: CycleResult,
+    *,
+    proposal: Mapping[str, Any],
+    figures: Mapping[str, str],
+) -> None:
+    """Neutral reads both cases, as code checked them, and its verdict is the one that counts.
+
+    Only claims that survived the check reach it, so an invented figure never gets as far as being
+    weighed. When there is nothing to weigh, code says so without paying for a call: no case on
+    either side is an abstention, and a case nobody answered is uncontested.
+    """
+    name = "validator_neutral"
+    cases = {s: result.context.get(f"validator_{s}") or {} for s in ("pro", "contra")}
+    asked = [s for s in ("pro", "contra") if s in cfg.validators]
+    silent = [s for s in asked if not cases[s] or "error" in cases[s]]
+    case_for = list(cases["pro"].get("claims") or [])
+    case_against = list(cases["contra"].get("claims") or [])
+    decided = ""
+    verdict = "abstain"
+    if silent:
+        decided = f"{' and '.join(silent)} did not answer, so there are not two cases to weigh"
+    elif not case_for and not case_against:
+        decided = "neither side made a claim that survived the check"
+    elif not case_against and "contra" in asked:
+        verdict, decided = "support", "contra found nothing in the figures against the proposal"
+    elif not case_for and "pro" in asked:
+        verdict, decided = "oppose", "pro found nothing in the figures for the proposal"
+    if decided:
+        result.context[name] = {
+            "stance": "neutral",
+            "verdict": verdict,
+            "claims": [],
+            "discarded": [],
+            "reason": f"{decided}; judged by code, neutral was not asked",
+            "judged": "code",
+        }
+        announce(cfg.watch, name, DONE, f"{verdict}: {decided}")
+        return
+    brief = _within_scope(
+        validator.ROLE,
+        {
+            **validator_brief(
+                instrument=cfg.instrument, stance="neutral", proposal=proposal, figures=figures
+            ),
+            "case_for": case_for,
+            "case_against": case_against,
+        },
+        result,
+    )
+    write_json(where.brief(name), brief)
+    work = timed(
+        cfg.watch,
+        name,
+        lambda: _ask_readable(
+            cfg, validator.ROLE, brief, validator.SCHEMA, validator.parse, system=JUDGE_PROMPT
+        ),
+    )
+    try:
+        answer = work()
+    except Exception as exc:
+        error = f"{exc.__class__.__name__}: {exc}"
+        result.context[name] = {"stance": "neutral", "error": error}
+        result.refusals.append(f"{name}: {error}")
+        if budget_spent(error):
+            result.stopped_by = f"{name}: {error}"
+        return
+    write_json(where.answer(name), answer)
+    record = _record_verdict(result, name, answer, figures_of(brief))
+    if record is not None:
+        record["judged"] = "neutral"
 
 
 def _validator_task(cfg: CycleConfig, brief: Mapping[str, Any]) -> Callable[[], str]:
@@ -1775,13 +1874,19 @@ def _validator_task(cfg: CycleConfig, brief: Mapping[str, Any]) -> Callable[[], 
     return ask
 
 
+def _counted(result: CycleResult) -> list[tuple[str, Mapping[str, Any]]]:
+    """The verdicts that count: the judge's alone when there was one, else every stance's."""
+    rows = [
+        (role, said)
+        for role, said in sorted(result.context.items())
+        if role.startswith("validator") and isinstance(said.get("verdict"), str)
+    ]
+    return [row for row in rows if row[1].get("judged")] or rows
+
+
 def _votes(result: CycleResult) -> tuple[str, ...]:
     """The validators' verdicts, after code checked the claims they rest on."""
-    out = []
-    for role, said in sorted(result.context.items()):
-        if role.startswith("validator") and isinstance(said.get("verdict"), str):
-            out.append(str(said["verdict"]))
-    return tuple(out)
+    return tuple(str(said["verdict"]) for _, said in _counted(result))
 
 
 # What a stance's verdict tells conviction. Pro argues for and contra against by assignment, so
@@ -1797,10 +1902,8 @@ STANCE_SIGNAL: dict[str, dict[str, str]] = {
 def _informative_votes(result: CycleResult) -> tuple[str, ...]:
     """The validators' verdicts as conviction weighs them: what each one says beyond its stance."""
     out = []
-    for role, said in sorted(result.context.items()):
-        verdict = said.get("verdict") if role.startswith("validator") else None
-        if not isinstance(verdict, str):
-            continue
+    for role, said in _counted(result):
+        verdict = str(said["verdict"])
         stance = role.partition("_")[2]
         out.append(STANCE_SIGNAL.get(stance, {}).get(verdict, verdict))
     return tuple(out)
