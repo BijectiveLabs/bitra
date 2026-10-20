@@ -73,6 +73,7 @@ from trading_research_agents.data import (
     audit,
     load_mapping,
     manifest_from_audit,
+    mapped_table,
     mapped_trades,
     open_archive_lines,
     read_manifest,
@@ -232,7 +233,9 @@ def build_parser() -> argparse.ArgumentParser:
     funding_cmd.add_argument("--json", action="store_true")
 
     audit_cmd = data.add_parser("audit", help="is this file safe to backtest on?")
-    audit_cmd.add_argument("archive", type=Path, help=".csv, .csv.gz or .zip of one CSV")
+    audit_cmd.add_argument(
+        "archive", type=Path, help=".csv, .csv.gz, .zip of one CSV, or .parquet with --mapping"
+    )
     layout = audit_cmd.add_mutually_exclusive_group(required=True)
     layout.add_argument("--venue", choices=venues, help="a bundled or installed venue layout")
     layout.add_argument("--mapping", type=Path, help="a column map for any other source")
@@ -726,7 +729,7 @@ def build_parser() -> argparse.ArgumentParser:
     venues_cmd.add_argument(
         "--environment",
         choices=("demo", "testnet", "mainnet"),
-        help="with --setup: where to read your fees; default is the venue's practice account",
+        help="with --setup: where to read your fees; default is the venue's demo or testnet API",
     )
     venues_cmd.add_argument(
         "--instrument", default="BTCUSDT", help="with --setup: the market to read fees for"
@@ -1029,17 +1032,30 @@ def data_fetch(args: argparse.Namespace) -> int:
 
 
 def data_audit(args: argparse.Namespace) -> int:
+    table = args.archive.suffix.lower() == ".parquet"
     if args.venue is not None:
+        if table:
+            raise MappingError(
+                "a venue plugin reads the venue's own archive; a Parquet file of your own is read "
+                "through a column map (--mapping mapping.toml)"
+            )
         source_name = str(args.venue)
-        normalise = archive_venue(source_name).normalise
+        plugin = archive_venue(source_name).normalise
+
+        def read() -> Iterator[Trade | Rejection]:
+            return plugin(open_archive_lines(args.archive), instrument=args.instrument)
     else:
         mapping = load_mapping(args.mapping)
         source_name = mapping.source
 
-        def normalise(lines: Iterable[str], *, instrument: str) -> Iterator[Trade | Rejection]:
-            return mapped_trades(lines, mapping, instrument=instrument)
+        def read() -> Iterator[Trade | Rejection]:
+            if table:
+                return mapped_table(args.archive, mapping, instrument=args.instrument)
+            return mapped_trades(
+                open_archive_lines(args.archive), mapping, instrument=args.instrument
+            )
 
-    records = normalise(open_archive_lines(args.archive), instrument=args.instrument)
+    records = read()
     report = audit(
         records,
         max_gap=args.max_gap,
@@ -1070,7 +1086,7 @@ def data_audit(args: argparse.Namespace) -> int:
     written = None
     if args.parquet is not None and report.passed:
         # Second pass over the file. The audit already told us the scales the source uses.
-        again = normalise(open_archive_lines(args.archive), instrument=args.instrument)
+        again = read()
         result = write_trades(
             (r for r in again if isinstance(r, Trade)),
             args.parquet,
@@ -1985,6 +2001,12 @@ def _hindsight_lines(payload: dict[str, Any]) -> list[str]:
         f"  side: the model's {side['model_side']['mean_net_bps']} bps against "
         f"{side['opposite_side']['mean_net_bps']} on the reverse; {side['verdict']}"
     )
+    levels = payload.get("levels") or {}
+    if levels.get("applied", {}).get("decisions"):
+        lines.append(
+            f"  levels: code's {levels['applied']['mean_net_bps']} bps against the analyst's own "
+            f"{levels['analyst_own']['mean_net_bps']}; {levels['verdict']}"
+        )
     left = {k: v for k, v in payload["skipped"].items() if v}
     if left:
         lines.append("  not replayed: " + ", ".join(f"{v} {k}" for k, v in left.items()))
@@ -2493,7 +2515,16 @@ def show_venues(args: argparse.Namespace) -> int:
             "  execution   "
             + ", ".join(
                 f"{what}: {'yes' if able.execution.get(what) else 'no'}"
-                for what in ("create_order", "attached_exits", "position", "open_orders", "cancel")
+                for what in (
+                    "create_order",
+                    "attached_exits",
+                    "position",
+                    "open_orders",
+                    "cancel",
+                    "order_status",
+                    "leverage",
+                    "fills",
+                )
             )
         )
         lines.append(f"  practice    {able.practice}")
@@ -2535,8 +2566,8 @@ def _read_fees(
 ) -> tuple[tuple[Decimal, Decimal] | None, str]:
     """Maker and taker in bps: the account's own, else the venue's standard tier, else nothing.
 
-    The account's figure is the true one, and it is asked for first. Some practice accounts do not
-    report fees at all (one demo answers every fee request with a parameter error), and a
+    The account's figure is the true one, and it is asked for first. Some demo and testnet APIs
+    do not report fees at all (one demo answers every fee request with a parameter error), and a
     desk without keys yet has no account to ask. Then the venue's standard tier from its own
     market list is used and said to be: it is the base tier, the one a new account pays, so an
     account on a better tier pays less than the gate prices, never more.
@@ -2572,7 +2603,7 @@ def _read_fees(
             fees = account_fees(
                 venue, symbol=symbol, env=env, environment=environment, client=probe.client
             )
-            return fees, f"read from your {environment} account for {symbol}"
+            return fees, f"read from your {environment} API for {symbol}"
         except DispatchError as exc:
             why = str(exc)
         except Exception as exc:
@@ -2682,7 +2713,7 @@ def _fill_account_fees(
         by_role = {"maker": fees[0], "taker": fees[1]}
         stamp = f"{when:%Y-%m-%d}"
         origin = (
-            f"read from your {venue} account on {stamp}"
+            f"read from your {venue} API on {stamp}"
             if from_account
             else f"{venue} {STANDARD_MARK}, {stamp}; replaced once your account reports its own"
         )
@@ -2758,6 +2789,8 @@ def venue_setup(
     purpose: a fee is the largest figure in the cost gate, and a placeholder number would price
     every trade at a rate nobody checked. A blank one makes the file refuse to load, and says why.
     """
+    from trading_research_agents.trading.venues.exits import exit_reads
+
     name = able.venue
     serves = list(able.serves_data)
     environment = "demo" if able.demo else "testnet" if able.testnet else "mainnet"
@@ -2799,7 +2832,12 @@ def venue_setup(
         "leverage = 3                     # yours to choose; applied at the venue and read back",
         'margin_mode = "isolated"         # isolated keeps one position from drawing on the rest',
     ]
-    if able.level == "exits-none":
+    if able.level == "exits-none" and able.can_place_exits and exit_reads(name):
+        out += [
+            'exits = "separate"               # no stop with the entry here; both go out as',
+            "                                 # reduce-only orders right after the fill",
+        ]
+    elif able.level == "exits-none":
         out += [
             'exits = "none"                   # this venue cannot attach a stop to the entry;',
             "                                 # you carry the stop and take profit yourself",
@@ -2813,7 +2851,7 @@ def venue_setup(
 
 def _environment_words(able: Any) -> str:
     if able.demo:
-        return "this venue's demo account"
+        return "this venue's demo API"
     if able.testnet:
         return "ccxt's sandbox switch, which is this venue's demo or testnet"
     return "this venue has no practice environment through ccxt"
@@ -4627,6 +4665,7 @@ def _venue_hand(
         markets=mandate.markets,
         rate=rate,
         env=env,
+        ccxt_options=mandate.ccxt_options,
     )
 
 
@@ -4797,11 +4836,20 @@ def _gate_lines(
     matrix = cfg.confluence
     stances = () if cfg.agents is None else cfg.agents.validators
     if stances:
+        from trading_research_agents.agents.cycle import judge_mode
+
         weight = cfg.conviction.validator_weight
+        how = (
+            "; the advocates build their cases apart and neutral judges them, its verdict the one "
+            "that counts; with a case on one side only, code decides without asking it"
+            if judge_mode(stances)
+            else ""
+        )
         good.append(
             f"validators: {', '.join(stances)}; asked once there is a proposal and the system "
             "has not already refused it"
-            + (f"; each vote moves conviction by {weight}" if weight > 0 else "")
+            + how
+            + (f"; each counted vote moves conviction by {weight}" if weight > 0 else "")
         )
     if matrix.idle:
         good.append("confluence: not declared; the context is recorded but gates nothing")
@@ -4838,7 +4886,7 @@ def _gate_lines(
             else "execution: signals; intents are written for your own executor"
         )
     else:
-        from trading_research_agents.trading.dispatch import credentials_for
+        from trading_research_agents.trading.dispatch import credentials_for, key_hint
 
         keys = tuple(credentials_for(mandate.venue).values())
         stops = blocking(
@@ -4850,6 +4898,9 @@ def _gate_lines(
         )
         if stops:
             bad.extend(f"execution: {stop}" for stop in stops)
+            hint = key_hint([k for k in keys if not env.get(k)], keys, env)
+            if hint:
+                bad.append(f"execution: {hint}")
         else:
             good.append(
                 f"execution: venue {mandate.venue}, signed by {mandate.acknowledged_by} on "
@@ -4864,6 +4915,11 @@ def _gate_lines(
                 good.append(
                     "execution: the stop and the take profit go to the venue with the entry, so a "
                     "fill is never left unattended"
+                )
+            elif mandate.exits == "separate":
+                good.append(
+                    "execution: the stop and the take profit go to the venue as reduce-only orders "
+                    "right after the fill; a fill they cannot be placed for is closed at once"
                 )
             else:
                 bad.append(

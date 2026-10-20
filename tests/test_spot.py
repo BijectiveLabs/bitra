@@ -149,7 +149,9 @@ def test_a_spot_close_frees_the_coins_from_their_exits_and_sells_what_is_held() 
     closed = hand(venue).close_position("held past its limit")
     assert venue.cancelled == ["exit-0", "exit-1"]
     sale = venue.orders[0]
-    assert sale["side"] == "sell" and sale["type"] == "market" and sale["params"] == {}
+    assert sale["side"] == "sell" and sale["type"] == "market"
+    # A spot sale cannot be reduce-only; it still carries its own id.
+    assert set(sale["params"]) == {"clientOrderId"}
     # Down to the step, never above the balance: 1.998 sells as 1.99.
     assert sale["amount"] == 1.99 and closed["closed"] is True and closed["size"] == "1.99"
 

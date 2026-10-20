@@ -43,7 +43,36 @@ def _okx(client: Any) -> str:
     return ""
 
 
-CHECKS: dict[str, Callable[[Any], str]] = {"okx": _okx, "myokx": _okx, "okxus": _okx}
+def _bitget(client: Any) -> str:
+    """A Bitget key made for the unified trading account, on a client sent to the classic API.
+
+    Read through `GET /api/v2/spot/account/info`, whose `authorities` list the key's grants. Such a
+    key is routed to the unified API by `margin.route`; this refuses only when `uta = false` was set
+    in [execution].ccxt_options. On the demo on 2026-10-19 that path set nothing: every margin mode
+    change came back 40014, "need future pos write permissions".
+    """
+    read = getattr(client, "privateSpotGetV2SpotAccountInfo", None)
+    if read is None or (getattr(client, "options", None) or {}).get("uta"):
+        return ""
+    try:
+        grants = [str(g) for g in ((read() or {}).get("data") or {}).get("authorities") or []]
+    except Exception:
+        return ""
+    if grants and all(g.startswith("ua") for g in grants):
+        return (
+            f"the Bitget key is a unified trading account key (grants {grants}) and "
+            "[execution].ccxt_options sets uta = false, which sends it to Bitget's classic "
+            "futures API, where this key cannot set anything. Remove uta from ccxt_options"
+        )
+    return ""
+
+
+CHECKS: dict[str, Callable[[Any], str]] = {
+    "okx": _okx,
+    "myokx": _okx,
+    "okxus": _okx,
+    "bitget": _bitget,
+}
 
 
 def _bybit_key(client: Any, *, ip_unbound_ok: bool, now: float) -> str:

@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import statistics
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -50,6 +50,9 @@ class Decision:
     stop_bps: Decimal | None
     take_bps: Decimal | None
     round_trip_bps: Decimal | None
+    # The levels the analyst named, before code held them to the operator's bounds.
+    own_stop_bps: Decimal | None = None
+    own_take_bps: Decimal | None = None
 
     @property
     def day(self) -> str:
@@ -63,10 +66,15 @@ class Outcome:
     ended: str
     opposite_gross_bps: Decimal
     round_trip_bps: Decimal
+    own_gross_bps: Decimal | None = None
 
     @property
     def net_bps(self) -> Decimal:
         return self.gross_bps - self.round_trip_bps
+
+    @property
+    def own_net_bps(self) -> Decimal | None:
+        return None if self.own_gross_bps is None else self.own_gross_bps - self.round_trip_bps
 
     @property
     def opposite_net_bps(self) -> Decimal:
@@ -120,6 +128,15 @@ def _levels(record: Mapping[str, Any]) -> tuple[Decimal | None, Decimal | None, 
     return mid, None, None
 
 
+def _distances(
+    mid: Decimal | None, stop: Decimal | None, take: Decimal | None, side: int
+) -> tuple[Decimal | None, Decimal | None]:
+    """Stop and take as bps from the mid, when both sit on the side they belong."""
+    if not (mid and stop and take) or (take - mid) * side <= 0 or (mid - stop) * side <= 0:
+        return None, None
+    return abs(mid - stop) / mid * BPS, abs(take - mid) / mid * BPS
+
+
 def decision_of(
     record: Mapping[str, Any], cost: Mapping[str, Any] | None = None
 ) -> Decision | None:
@@ -130,12 +147,10 @@ def decision_of(
     if side is None or not finished or record.get("held"):
         return None
     mid, stop, take = _levels(record)
-    stop_bps = take_bps = None
-    if mid and stop and take:
-        stop_bps = abs(mid - stop) / mid * BPS
-        take_bps = abs(take - mid) / mid * BPS
-        if (take - mid) * side <= 0 or (mid - stop) * side <= 0:
-            stop_bps = take_bps = None
+    stop_bps, take_bps = _distances(mid, stop, take, side)
+    own_stop_bps, own_take_bps = _distances(
+        mid, _number(analyst.get("stop_price")), _number(analyst.get("target_price")), side
+    )
     verdict = record.get("cost") or {}
     priced = (verdict.get("cost") or {}).get("round_trip_bps") or (cost or {}).get("round_trip_bps")
     return Decision(
@@ -147,6 +162,8 @@ def decision_of(
         stop_bps=stop_bps,
         take_bps=take_bps,
         round_trip_bps=_number(priced),
+        own_stop_bps=own_stop_bps,
+        own_take_bps=own_take_bps,
     )
 
 
@@ -290,7 +307,15 @@ def outcomes(
         cost = decision.round_trip_bps
         if cost is None:
             cost = statistics.median(known) if known else Decimal(0)
-        done.append(Outcome(decision, mine[0], mine[1], other[0], cost))
+        own = None
+        if decision.own_stop_bps is not None and decision.own_take_bps is not None:
+            as_named = replace(
+                decision, stop_bps=decision.own_stop_bps, take_bps=decision.own_take_bps
+            )
+            own = replay(as_named, candles, hold_s=hold_s, bar_s=bar_s)
+        done.append(
+            Outcome(decision, mine[0], mine[1], other[0], cost, None if own is None else own[0])
+        )
     return done, skipped
 
 
@@ -347,9 +372,20 @@ def _independent(found: Sequence[Outcome], hold_s: int) -> int:
     return count
 
 
+def _by_days(by_day: Mapping[str, Sequence[float]], seed: int) -> tuple[float, float]:
+    """A 95% interval of the mean, resampling whole days: one day's tape moves every decision on
+    it together, so a day is the unit that is independent."""
+    rng = np.random.default_rng(seed)
+    days = [np.asarray(xs, dtype=float) for xs in by_day.values()]
+    means = sorted(
+        float(np.concatenate([days[i] for i in rng.integers(0, len(days), len(days))]).mean())
+        for _ in range(RESAMPLES)
+    )
+    return means[int(0.025 * RESAMPLES)], means[int(0.975 * RESAMPLES) - 1]
+
+
 def side_check(found: Sequence[Outcome], seed: int = SEED) -> dict[str, Any]:
-    """The model's side against its reverse, resampled by whole days: one day's tape moves every
-    decision on it together, so a day is the unit that is independent."""
+    """The model's side against its reverse, resampled by whole days."""
     by_day: dict[str, list[float]] = {}
     for o in found:
         by_day.setdefault(o.decision.day, []).append(float(o.net_bps - o.opposite_net_bps))
@@ -362,19 +398,45 @@ def side_check(found: Sequence[Outcome], seed: int = SEED) -> dict[str, Any]:
     if len(by_day) < MIN_DAYS or len(diffs) < MIN_EACH:
         result["verdict"] = "too few to tell"
         return result
-    rng = np.random.default_rng(seed)
-    days = [np.asarray(xs, dtype=float) for xs in by_day.values()]
-    means = sorted(
-        float(np.concatenate([days[i] for i in rng.integers(0, len(days), len(days))]).mean())
-        for _ in range(RESAMPLES)
-    )
-    low, high = means[int(0.025 * RESAMPLES)], means[int(0.975 * RESAMPLES) - 1]
+    low, high = _by_days(by_day, seed)
     result["difference_bps"] = _bps(statistics.mean(diffs))
     result["interval_bps"] = [_bps(low), _bps(high)]
     if low > 0:
         result["verdict"] = "the model's side did better than its reverse"
     elif high < 0:
         result["verdict"] = "the reverse of the model's side did better; its calls carried no edge"
+    else:
+        result["verdict"] = "no clear difference yet"
+    return result
+
+
+def levels_check(found: Sequence[Outcome], seed: int = SEED) -> dict[str, Any]:
+    """The levels code applied against the ones the analyst named, on the same decisions.
+
+    Same side, same entry, same round trip: the only difference is where the stop and the take
+    sat, so this measures what the operator's bounds did to the analyst's own reading.
+    """
+    paired = [o for o in found if o.own_net_bps is not None and o.decision.stop_bps is not None]
+    by_day: dict[str, list[float]] = {}
+    for o in paired:
+        own = o.own_net_bps if o.own_net_bps is not None else Decimal(0)
+        by_day.setdefault(o.decision.day, []).append(float(o.net_bps - own))
+    diffs = [x for xs in by_day.values() for x in xs]
+    result: dict[str, Any] = {
+        "days": len(by_day),
+        "applied": _summary([float(o.net_bps) for o in paired]),
+        "analyst_own": _summary([float(o.own_net_bps or 0) for o in paired]),
+    }
+    if len(by_day) < MIN_DAYS or len(diffs) < MIN_EACH:
+        result["verdict"] = "too few to tell"
+        return result
+    low, high = _by_days(by_day, seed)
+    result["difference_bps"] = _bps(statistics.mean(diffs))
+    result["interval_bps"] = [_bps(low), _bps(high)]
+    if low > 0:
+        result["verdict"] = "the levels code applied did better than the analyst's own"
+    elif high < 0:
+        result["verdict"] = "the analyst's own levels did better; review the [exit] bounds"
     else:
         result["verdict"] = "no clear difference yet"
     return result
@@ -415,4 +477,5 @@ def report(
         "gates": gates,
         "all_refused": {**_summary(refused), "verdict": overall, "p_admitted_better": p_overall},
         "side": side_check(found),
+        "levels": levels_check(found),
     }

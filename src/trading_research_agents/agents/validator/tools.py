@@ -71,8 +71,6 @@ def validator_brief(
     stance: str,
     proposal: Mapping[str, Any],
     figures: Mapping[str, str],
-    declared_states: Mapping[str, Any],
-    cost_bps: str | None = None,
 ) -> dict[str, Any]:
     """One validator's brief: the proposal, the figures it was built from, and the declarations."""
     return {
@@ -80,6 +78,4 @@ def validator_brief(
         "stance": stance,
         "proposal": dict(proposal),
         "figures": dict(figures),
-        "declared_states": dict(declared_states),
-        "cost_bps": cost_bps,
     }

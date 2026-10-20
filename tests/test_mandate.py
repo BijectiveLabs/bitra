@@ -142,7 +142,7 @@ def test_venue_mode_names_everything_standing_in_the_way(tmp_path: Path) -> None
     assert any("names the live venue" in s for s in stops)
     assert any("max_notional" in s for s in stops)
     assert any("ladder is at SHADOW" in s for s in stops)
-    # A practice account is where the ladder's evidence is earned, so it does not wait on it.
+    # A demo or testnet API is where the ladder's evidence is earned, so it does not wait on it.
     practice = blocking(Mandate(mode="venue"), project=tmp_path, tier="SHADOW", practice=True)
     assert not any("ladder" in s for s in practice)
 
@@ -685,7 +685,7 @@ def test_the_setup_for_a_venue_without_a_live_plugin_has_no_live_table() -> None
         able,
         ["OKX_API_KEY"],
         fees=(Decimal("2.0"), Decimal("5.0")),
-        fees_note="read from your testnet account for BTC/USDT:USDT",
+        fees_note="read from your testnet API for BTC/USDT:USDT",
     )
     assert "[live]" not in text and 'environment = "testnet"' in text
     assert "size_step" not in text.split("# 3.")[1].split("# 4.")[0].replace("[run].size_step", "")
@@ -965,6 +965,40 @@ def test_an_okx_account_in_spot_mode_is_refused_before_anything_is_sent() -> Non
         max_notional=Decimal(2000),
         keys=("K", "S"),
         client=Futures(),
+    )(LONG)["sent"]
+
+
+def test_a_bitget_unified_key_sent_to_the_classic_api_is_refused_before_anything_is_sent() -> None:
+    class Unified(FakeExchange):
+        grants = ["uamw", "uatw"]
+        options = {"uta": False}
+
+        def privateSpotGetV2SpotAccountInfo(self) -> dict[str, Any]:  # noqa: N802 - ccxt's own name
+            return {"data": {"authorities": self.grants}}
+
+    venue = Unified()
+    hand = VenueHand(
+        venue="bitget",
+        symbol="BTC/USDT:USDT",
+        max_notional=Decimal(2000),
+        keys=("K", "S"),
+        client=venue,
+    )
+    assert "unified trading account" in hand.ready()
+    placed = hand(LONG)
+    assert placed["sent"] is False and "unified trading account" in placed["refused"]
+    assert venue.orders == []
+
+    class Classic(Unified):
+        # Any grant outside the unified set means the key was not made for that account alone.
+        grants = ["uamw", "futures"]
+
+    assert VenueHand(
+        venue="bitget",
+        symbol="BTC/USDT:USDT",
+        max_notional=Decimal(2000),
+        keys=("K", "S"),
+        client=Classic(),
     )(LONG)["sent"]
 
 

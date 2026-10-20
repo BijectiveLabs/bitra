@@ -142,7 +142,7 @@ tra run
 tra run --every 15m
 ```
 
-**6. When you want real orders.** Start on the exchange's practice account:
+**6. When you want real orders.** Start on the exchange's demo or testnet API:
 - put its keys in `.env`;
 - read the mandate with `tra mandate`, then sign it with `tra mandate --sign "Your Name"`;
 - in `[execution]` of `strategy.toml`, set `mode = "venue"`, a `leverage` and `max_notional` (the
@@ -315,16 +315,22 @@ it has been tested, the last:
 
 | Venue | What a cycle can do there | Practice environment | Run end to end by us |
 |---|---|---|---|
-| **Bybit** (the default) | everything: orders with the stop and take profit attached | demo, testnet | **yes**, on demo: real orders, exits attached, a resting order cancelled |
-| **OKX** | everything | demo (ccxt's testnet switch) | **yes**, on demo: real orders, exits attached, closed by the venue's own exits |
-| Bitget, BingX, KuCoin Futures, Hyperliquid | everything | varies, see `tra venues` | ready for its run; reports wanted for [Bitget](https://github.com/BijectiveLabs/trading-research-agents/issues/5), [BingX](https://github.com/BijectiveLabs/trading-research-agents/issues/6), [Hyperliquid](https://github.com/BijectiveLabs/trading-research-agents/issues/7) |
-| Binance, Deribit, HTX, Gate, MEXC | orders, but you carry the stop yourself (`exits = "none"`) | varies | ready for its run |
+| **Bybit** (the default) | everything: orders with the stop and take profit attached | demo, testnet | **yes**, on the demo API: real orders, exits attached, a resting order cancelled |
+| **OKX** | everything | demo (ccxt's testnet switch) | **yes**, on the demo API: real orders, exits attached, closed by the venue's own exits |
+| **Bitget** | everything, on a classic or a unified trading account | demo | **yes**, on the demo API, unified account |
+| **BingX** | everything | demo (VST, ccxt's testnet switch) | **yes**, on the demo API |
+| **Binance**, **Gate** | orders, with the stop and take profit placed right after the fill (`exits = "separate"`) | demo (Binance), testnet (Gate) | **yes**, on their practice APIs |
+| WEEX, BloFin, WOO X | everything | testnet | ready for its run |
+| Hyperliquid, Pacifica, WOOFi Pro, ModeTrade (decentralised) | everything | testnet | ready for its run; [report wanted for Hyperliquid](https://github.com/BijectiveLabs/trading-research-agents/issues/7) |
+| KuCoin Futures, Deepcoin | everything | none | integrated; no practice environment |
+| dYdX, Paradex, Extended, Lighter (decentralised); Deribit, Crypto.com, Coinbase International | orders, but no exits at the venue through ccxt, and some cannot set leverage | testnet | not for a desk that needs its exits at the venue |
 | Kraken, Kraken Futures, Phemex | data for now: ccxt does not report their positions, and no order is sent into a position nobody can see | | |
 
 "Everything" means ccxt reports the five things a safe order needs: send it, attach the exits, read
 the position, read the open orders, cancel. "Run end to end" is the stronger claim, a full run
-with real orders on the venue's practice account, and Bybit and OKX are the two that have had it
-so far. Any other venue that takes orders can have that run at any time: start on its practice environment, watch a
+with real orders on the venue's demo or testnet API, and Bybit, OKX, Bitget, BingX, Binance and Gate
+have had it so far. How to make a key on each is in
+[Exchange accounts and keys](https://docs.bijectivelabs.dev/opensource/exchange-keys). Any other venue that takes orders can have that run at any time: start on its practice environment, watch a
 few cycles and read what it sends. Each report moves a venue into the last column.
 
 Adding the venue you trade on is four steps, and one command writes most of it:
@@ -399,10 +405,11 @@ An agent desk goes through three steps, and you can stay at any of them as long 
 | Step | How | What happens | Needs |
 |---|---|---|---|
 | 1. Sandbox | `tra run` | the full cycle on live data; every decision written down, no order sent | a model key |
-| 2. Practice account | `tra run` with `[execution].mode = "venue"` and `environment = "demo"` or `"testnet"` | real orders on the exchange's practice account, exits attached, positions looked after | a signed mandate, a leverage, `max_notional`, practice keys |
+| 2. Demo or testnet API | `tra run` with `[execution].mode = "venue"` and `environment = "demo"` or `"testnet"` | real orders on the exchange's demo or testnet API, exits attached, positions looked after | a signed mandate, a leverage, `max_notional`, practice keys |
 | 3. Real capital | the same, with `environment = "mainnet"` | real orders with real money | all of the above, plus the ladder at its canary tier (`tra ladder promote`, with evidence) |
 
-Steps 1 and 2 have been run end to end on Bybit's and OKX's practice accounts. Step 3 has not
+Steps 1 and 2 have been run end to end on the demo or testnet APIs of Bybit, OKX, Bitget, BingX,
+Binance and Gate. Step 3 has not
 been run by us; treat it as yours to verify, small, first.
 
 If you bring a scripted strategy of your own instead of the agents, it has a research path of its
@@ -499,7 +506,7 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | `tra check` | every setting read against the others, with what to fix |
 | `tra keys --probe` | proves every key works; no key is printed, no prompt or order sent |
 | `tra models groq` | the models your key can use on a provider, read from the vendor; no prompt sent |
-| `tra init my-desk --profile autonomous --venue okx` | a desk wired for one exchange: data, orders, practice account, keys |
+| `tra init my-desk --profile autonomous --venue okx` | a desk wired for one exchange: data, orders, demo or testnet API, keys |
 | `tra venues` | every venue the docs describe, and what each can do |
 | `tra venues okx --setup` | what a venue can do, and the blocks to paste to trade on it |
 | `tra mandate` | the text venue mode requires; `--sign "Your Name"` keeps it as `MANDATE.md` and signs `[execution]` in one step |
@@ -520,7 +527,7 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | Command | What it does |
 |---|---|
 | `tra data get BTCUSDT 2025-01-01` | download a day, verify its checksum, audit it, write Parquet and funding |
-| `tra data audit export.csv --mapping mapping.toml` | your own CSV, through the same audit |
+| `tra data audit export.csv --mapping mapping.toml` | your own CSV or Parquet, through the same audit |
 | `tra data pull BTCUSDT` | one live snapshot through the chains in `data.toml` |
 | `tra sources show`, `tra sources pull` | where the reading analysts' series come from and how old they are; refresh them now |
 | `tra sources add macro us10y --from fred --id DGS10 --high bearish` | a series onto the shelf in one step: pulled now, its lines drawn from its own history |
@@ -567,8 +574,8 @@ where it stops.
   built; inverse and dated futures and options follow, each added with its own cost model, exit rules,
   sizing and tests before venue mode accepts it.
 - **More venues run end to end.** Every venue ccxt supports already goes through the same order
-  path and gates. Each one joins Bybit and OKX in the last column of the venues table after a full
-  run on its practice account, ours or yours.
+  path and gates. Each one joins the six already in the last column of the venues table after a
+  full run on its demo or testnet API, ours or yours.
 - **The rest of the not-built-yet list,** one piece at a time, without weakening a guarantee.
 
 **Use the release.** What PyPI installs is the latest release, and it is the version to run.
@@ -591,7 +598,7 @@ The full documentation is at [docs.bijectivelabs.dev](https://docs.bijectivelabs
 | [Venues](https://docs.bijectivelabs.dev/opensource/venues) | which venues work, and adding yours |
 | [Working with language models](https://docs.bijectivelabs.dev/opensource/llm), [Model providers](https://docs.bijectivelabs.dev/opensource/providers) | how models are used: fallback, spend, adding a provider |
 | [The live tier](https://docs.bijectivelabs.dev/opensource/live), [The trading agent](https://docs.bijectivelabs.dev/opensource/trading) | the ladder from replay to a live session |
-| [The data gate](https://docs.bijectivelabs.dev/opensource/data) | the data gate, and bringing your own data |
+| [Your own data](https://docs.bijectivelabs.dev/opensource/your-data), [The data gate](https://docs.bijectivelabs.dev/opensource/data) | trade history, series and vendor feeds you bring, in CSV, JSON or Parquet, and the checks every file passes |
 | [Boundaries](https://docs.bijectivelabs.dev/opensource/boundaries), [Liability](https://docs.bijectivelabs.dev/opensource/liability) | what is guaranteed, what is not built yet, and who is responsible |
 | [The agent](https://docs.bijectivelabs.dev/opensource/agent), [The MCP server](https://docs.bijectivelabs.dev/opensource/mcp) | the research agent, and the MCP server |
 | [Architecture](https://docs.bijectivelabs.dev/opensource/architecture) | packages, import rules, file formats |

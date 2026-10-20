@@ -309,22 +309,30 @@ def read_series(spec: SeriesSpec, base: Path) -> Series:
     path = (base / spec.file) if not Path(spec.file).is_absolute() else Path(spec.file)
     if not path.is_file():
         raise SeriesError(f"{spec.name}: {path} does not exist")
-    text = path.read_text(encoding="utf-8")
     rows: list[dict[str, str]]
-    if path.suffix.lower() == ".json":
+    if path.suffix.lower() == ".parquet":
+        from trading_research_agents.data import table
+
         try:
-            loaded = json.loads(text)
+            rows = list(table.records(path))
+        except table.TableError as exc:
+            raise SeriesError(f"{spec.name}: {exc}") from exc
+    elif path.suffix.lower() == ".json":
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             raise SeriesError(f"{spec.name}: not JSON: {exc}") from exc
         if not isinstance(loaded, list):
             raise SeriesError(f"{spec.name}: a JSON series is a list of objects")
         rows = [dict(r) for r in loaded]
     else:
+        text = path.read_text(encoding="utf-8")
         reader = csv.DictReader(text.splitlines(), delimiter=spec.delimiter)
         rows = [dict(r) for r in reader]
     points: list[Point] = []
     lag_ns = int(spec.publish_lag.total_seconds() * NS_PER_S)
-    for number, row in enumerate(rows, start=2 if spec.has_header else 1):
+    first = 1 if path.suffix.lower() == ".parquet" or not spec.has_header else 2
+    for number, row in enumerate(rows, start=first):
         if spec.ts not in row or spec.value not in row:
             raise SeriesError(f"{spec.name}: row {number} lacks {spec.ts!r} or {spec.value!r}")
         try:

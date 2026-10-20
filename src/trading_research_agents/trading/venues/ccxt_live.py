@@ -32,6 +32,8 @@ from trading_research_agents.trading.dispatch import (
 )
 from trading_research_agents.trading.venue import Fill, Intent, VenueError
 from trading_research_agents.trading.venues.accounts import account_refusal, key_refusal
+from trading_research_agents.trading.venues.limits import client_id_prefix
+from trading_research_agents.trading.venues.margin import route
 from trading_research_agents.trading.venues.registry import LiveVenueSettings
 
 SUBMIT_RETRIES = 3
@@ -148,7 +150,7 @@ class CcxtLiveVenue:
             raise VenueError("size must be positive")
         self._seq += 1
         # Letters and digits only: the narrowest client id rule among the venues holds for all.
-        client_id = f"tra{self.s.run_id[:8]}{self._seq:06d}"
+        client_id = f"{client_id_prefix(self.hand.venue)}tra{self.s.run_id[:8]}{self._seq:06d}"
         if len(client_id) > CLIENT_ID_MAX:
             raise VenueError(f"the client id would exceed {CLIENT_ID_MAX} characters")
         held = self._signed_size
@@ -176,7 +178,7 @@ class CcxtLiveVenue:
         if off_step:
             self._pending = None
             raise VenueError(off_step)
-        params: dict[str, Any] = {"clientOrderId": order.client_id}
+        params: dict[str, Any] = {"clientOrderId": order.client_id, **self.hand.order_params()}
         if order.reduce_only:
             params["reduceOnly"] = True
         side = "buy" if order.intent.direction is Direction.LONG else "sell"
@@ -336,6 +338,7 @@ class CcxtLiveFactory:
                 env=env,
             )
             hand.symbol = _resolved(hand, settings.instrument)
+            route(hand.venue, hand.client, hand.symbol)
         except DispatchError as exc:
             raise VenueError(str(exc)) from None
         return CcxtLiveVenue(hand, settings)

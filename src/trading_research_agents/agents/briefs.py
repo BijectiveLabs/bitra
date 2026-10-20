@@ -21,7 +21,7 @@ from trading_research_agents.agents.onchain_analyst.tools import onchain_brief
 from trading_research_agents.agents.sentiment_analyst.tools import sentiment_brief
 from trading_research_agents.agents.technical_analyst.tools import Features, features
 from trading_research_agents.data.schema import Candle, Direction
-from trading_research_agents.data.series import Event, Series, threshold_state
+from trading_research_agents.data.series import Event, Series
 from trading_research_agents.data.sources.base import Fetched, OrderBook
 from trading_research_agents.envelope.model import Channel
 from trading_research_agents.execution.pretrade import (
@@ -117,8 +117,6 @@ class TechnicalBrief:
     book_imbalance: str | None = None
     timeframes: Mapping[str, Mapping[str, Any]] | None = None
     open_interest: Mapping[str, Any] | None = None
-    readings: Mapping[str, Mapping[str, Any]] | None = None
-    positioning: Sequence[Mapping[str, Any]] | None = None
 
     def record(self) -> dict[str, Any]:
         out = {
@@ -138,10 +136,6 @@ class TechnicalBrief:
             out["timeframes"] = {k: dict(v) for k, v in self.timeframes.items()}
         if self.open_interest:
             out["open_interest"] = dict(self.open_interest)
-        if self.readings:
-            out["readings"] = {k: dict(v) for k, v in self.readings.items()}
-        if self.positioning:
-            out["positioning"] = [dict(row) for row in self.positioning]
         return out
 
 
@@ -155,14 +149,12 @@ def technical_brief(
     rule: RegimeRule | None = None,
     context: Mapping[int, Fetched] | None = None,
     previous_open_interest: Mapping[str, Any] | None = None,
-    readings: Mapping[str, Mapping[str, Any]] | None = None,
-    positioning: Sequence[Mapping[str, Any]] | None = None,
 ) -> TechnicalBrief:
     """Features from the closed candles in the snapshot, with the market state around them.
 
-    `context` is the higher timeframes' candles, `previous_open_interest` the open interest the last
-    snapshot of this instrument recorded, and `readings` what the operator's thresholds say on each
-    reading analyst's series. All of it is optional; a missing piece is left out, never estimated.
+    `context` is the higher timeframes' candles and `previous_open_interest` the open interest the
+    last snapshot of this instrument recorded. Both are optional; a missing piece is left out, never
+    estimated. Nothing another analyst reads or says is in here: the readings are weighed by code.
     """
     rule = rule or RegimeRule()
     if lookback_bars < 2:
@@ -208,42 +200,7 @@ def technical_brief(
         book_imbalance=imbalance,
         timeframes=frames or None,
         open_interest=held,
-        readings=dict(readings) if readings else None,
-        positioning=list(positioning) if positioning else None,
     )
-
-
-def positioning_rows(
-    series: Sequence[Series], *, instrument: str, at_ns: int, change_over: int = 3600
-) -> list[dict[str, Any]]:
-    """The derivatives series on this instrument's asset, as the technical analyst reads them: the
-    last value, its change over the last hour, its age and the operator's declared state."""
-    asset = base_of(instrument)
-    rows = []
-    for s in series:
-        if s.spec.asset and s.spec.asset != asset:
-            continue
-        state = threshold_state(s, at_ns)
-        if state.get("value") is None:
-            continue
-        now, before = s.as_of(at_ns), s.as_of(at_ns - change_over * NS_PER_S)
-        change = None
-        if now is not None and before is not None and now.observed_ns != before.observed_ns:
-            change = str(now.value - before.value)
-        rows.append(
-            {
-                "series": s.spec.name,
-                "source": s.spec.source,
-                "unit": s.spec.unit,
-                "value": state.get("value"),
-                "observed_at": state.get("observed_at"),
-                "change_1h": change,
-                "state": state.get("state"),
-                "threshold": state.get("threshold"),
-                "stale": bool(state.get("stale")),
-            }
-        )
-    return rows
 
 
 def interval_name(seconds: int) -> str:

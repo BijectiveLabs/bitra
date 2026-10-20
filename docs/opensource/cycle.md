@@ -107,7 +107,7 @@ the universe (system: one data pull each, the trigger per instrument, ordered by
   -> technical analyst + reading analysts   (parallel)
   -> the round trip priced (system)
   -> the stop and the target (the analyst's levels, held in your [exit] bounds; break-even checked)
-  -> validators                             (parallel, when configured)
+  -> validators          (when configured: pro and contra apart, then neutral judges both)
   -> confluence matrix   (system: declared states and votes)   -> whether to trade at all
   -> conviction          (system: the same voices, weighted)    -> how much the desk wants on
   -> risk per trade      (system: the loss at the stop, against equity) -> how much it can afford
@@ -276,13 +276,11 @@ that picture too, all of it computed by the system from the snapshot:
 | `regime` | trending up, trending down, ranging or mixed, on the decision timeframe | `trend_strength` against the lines in `[regime]` |
 | `trend_strength` | net move over the path walked, times the square root of the steps; a random walk sits near 1 on any window | the window's closes |
 | `market_structure` | the trend the swings make, the last break of structure or change of character, the level whose loss changes the trend, and the nearest unbroken support and resistance; see [Market structure](#market-structure) | the window's bars |
-| `positioning` | the derivatives series you declared for this asset: last value, change over the last hour, age, declared state | `sources/derivatives.toml` ([sources](/opensource/sources#positioning-for-the-technical-analyst)) |
 | `variance_ratio` | the variance of four-bar returns against four times that of one-bar returns: below 1 the window's moves were given back, above 1 they were followed by more of the same, near 1 is a random walk | the window's closes |
 | `window_move_bps` | the price move from the first close of the window to the last; a market move, not the trade's net | the window's closes |
 | `timeframes.<tf>` | the same regime, net move, z-score and position in range on each higher timeframe, with its structure and its last structure event | `[run].context_intervals`, one candle pull each |
 | `book_imbalance` | resting bids against resting asks over the first 10 levels, from -1 to 1; positive leans to the bid | the order book already in the snapshot |
 | `open_interest` | the change in percent since the previous snapshot of this instrument, and how long ago that was | the open interest already pulled, and the last snapshot on disk |
-| `readings.<role>` | what your own thresholds say on the macro, on-chain or sentiment series this cycle | the same declared state conviction reads, known before any model is asked |
 
 Nothing here is required. A higher timeframe the venue cannot serve is named in the refusals and
 left out, and so is an open interest with nothing earlier to compare it to.
@@ -376,14 +374,15 @@ trade a single idea. The research core in `tra backtest` and `tra agent session`
 trades one registered mechanism, by design.
 
 The macro analyst's regime is a different thing: risk-on or risk-off is about the world outside the
-chart, and it can disagree with what price is doing. Both are kept. The analyst sees the declared
-macro state in `readings`, and conviction weighs the macro analyst's graded score as before.
+chart, and it can disagree with what price is doing. Both are kept, apart: the technical analyst
+does not see the macro state, and conviction weighs the macro analyst's graded score against the
+technical reading after both have answered.
 
 ## Who is asked, and what each one reads
 
 | Agent | Reads | Answers | Asked when |
 |---|---|---|---|
-| `technical_analyst` | the closed candles of the snapshot, the spread, the funding rate, the regime on each timeframe, the book imbalance, the open interest change, and your thresholds' reading of the other series | a target, a named setup, a confidence, a horizon, a reason, and the figures it read | every cycle; it is the role that decides |
+| `technical_analyst` | the closed candles of the snapshot, the spread, the funding rate, the regime on each timeframe, the book imbalance, the open interest change; nothing from the other analysts | a target, a named setup, a confidence, a horizon, a reason, and the figures it read | every cycle; it is the role that decides |
 | `macro_analyst` | macro series and the dated text of `news.toml` | a regime, the events it saw, a reason | when `sources/macro.toml` or `sources/news.toml` declares something, or `--macro` / `--news` names a file |
 | `onchain_analyst` | chain figures and derivative figures, read side by side | accumulation, distribution or neutral, and why | when `sources/onchain.toml` or `sources/derivatives.toml` declares something, or `--onchain` / `--derivatives` |
 | `sentiment_analyst` | dated scores, plus the same dated text as notes | negative, neutral, positive, or not declared | when `sources/sentiment.toml` declares something, or `--sentiment` |
@@ -517,52 +516,76 @@ support required than there are validators to give it.
 
 ## The validators
 
-Three stances of one role, pro, contra and neutral, asked after the deciding analyst answers and
-after the round trip is priced, in parallel with each other:
+Three stances of one role, asked after the deciding analyst answers and after the round trip is
+priced:
 
 ```toml
 [agents]
 validators = ["pro", "contra", "neutral"]
 ```
 
-Each one receives the proposal, the figures it was built from, the declared states and what the
-round trip costs. Each must answer with claims that cite a figure by the brief's own name, with that
-figure's value - and the figures it may cite are every figure in the brief it was handed, the
-proposal's claimed edge and the cost included, rather than a narrower set it never saw:
+With all three, they work as a judged case rather than a vote:
+
+```
+proposal -> pro    (the strongest case that the reading is right)  \  apart, at the same time,
+         -> contra (the strongest case that it is wrong or noise)  /   neither sees the other
+         -> code checks every claim in both cases against the figures
+         -> neutral (judges the two checked cases)  -> the one verdict that counts
+```
+
+Pro looks for what makes the setup real: the regime and structure it belongs in, higher timeframes
+agreeing, a move beyond one bar's ordinary range, levels resting on structure. Contra looks for what
+makes it wrong, early or noise: a regime or structure it does not fit, a higher timeframe against
+it, a move inside the noise, a stop inside that noise, a target behind the next level, a book
+leaning the other way. Neither is told what the other found.
+
+Neutral then reads both cases, but only the claims that survived the check, so an invented figure
+never reaches the judge, and not the advocates' own verdicts, so it weighs evidence rather than
+votes. It is told to weigh claims about the premise of the setup above claims about details, to
+treat several claims that say the same thing as one, and to abstain only when the two cases are
+even. Its verdict is the one that counts in confluence and conviction.
+
+When there is nothing to weigh, code decides without paying for the call: no surviving claim on
+either side is an abstention, a contra with nothing that holds is support, a pro with nothing that
+holds is opposition, and the record says neutral was not asked.
+
+Every stance receives the proposal and the figures it was built from: not the round trip, not the
+claimed edge, and not the other analysts' readings, which code weighs once in conviction. Each
+answers with claims that cite a figure by the brief's own name, with that figure's value:
 
 ```json
 {"stance": "contra",
- "claims": [{"figure": "volume_ratio", "value": "7.971", "says": "the burst is not finished"}],
+ "claims": [{"figure": "atr_bps", "value": "61.32", "says": "the last move is inside one bar's range"}],
  "verdict": "oppose",
  "reason": "..."}
 ```
 
-The system checks every claim against the brief. A figure that is not there is discarded, a value that
-does not match is discarded, both are recorded, and a verdict with no surviving claim becomes
-`abstain` - a verdict resting on nothing is nothing. A claim may round the figure it cites: "-1.63"
-against a brief's "-1.631" is the same citation said with fewer digits, and it is kept. Then the
-matrix counts the votes.
+A figure that is not in the brief is discarded, a value that does not match is discarded, both are
+recorded, and a verdict with no surviving claim becomes `abstain`. A claim may round the figure it
+cites: "-1.63" against a brief's "-1.631" is the same citation said with fewer digits, and it is kept.
 
-Each stance is one more call, which is why they are off until an operator asks for them.
+Why it is built this way: when the three were asked side by side and each counted, pro supported 63
+times in 64 and contra opposed 61 times in 63 on the first demo desk, so their votes carried their
+assignment and nothing else, and a neutral asked alone on the OKX demo desk abstained in 33 of 37
+cycles. An advocate's value is the evidence it finds; the decision belongs to the role that sees
+both sides.
 
-No stance decides, neutral included. Pro argues for the proposal, contra against it, neutral weighs
-both and says which side the figures favour; each answers support, oppose or abstain. Their votes
-count in exactly two places, both yours to declare:
+Each stance is one more call, which is why they are off until an operator asks for them; with all
+three, a cycle makes two calls at once and then at most one more.
+
+What counts, and where, is yours to declare:
 
 | Where | Setting | Effect |
 |---|---|---|
 | the confluence matrix | `[confluence].min_support`, `max_opposition` | a hard gate: too few supports or too many opposes refuses the trade |
-| conviction | `[conviction].validator_weight` | each vote that says something adds or takes away that weight; the size follows the score |
+| conviction | `[conviction].validator_weight` | each counted vote that says something adds or takes away that weight; the size follows the score |
 
-With neither declared, the votes are recorded and move nothing, and `tra check` says so: three
-calls a cycle that change no decision are a cost with no purpose.
+With neither declared, the verdicts are recorded and move nothing, and `tra check` says so.
 
-Conviction weighs what a vote says beyond its stance. Pro argues for and contra against by
-assignment, so a pro that supports and a contra that opposes tell conviction nothing and weigh
-nothing (on the demo desk pro supported 36 times in 37 and contra opposed 34 times in 35; counted as
-votes, they only diluted every score). A pro that abstains or opposes counts as opposition, a contra
-that abstains or supports counts as support, and neutral counts as it votes. The confluence matrix
-still counts the verdicts as given, because its numbers are the ones you declared.
+Other sets of stances still work. Neutral alone weighs the proposal itself. Pro or contra without
+neutral are counted for what they say beyond their stance: a pro that supports or a contra that
+opposes says nothing new and weighs nothing in conviction, while a pro that abstains or opposes
+counts as opposition and a contra that abstains or supports counts as support.
 
 ## Conviction: who weighs the analysts, and how much goes behind the idea
 
@@ -635,7 +658,7 @@ rounding down and never up.
 |---|---|---|
 | a short at 0.70, macro barely bullish (+0.15), sentiment barely bullish (+0.057) | 1.222 / 2.178 = **0.561** | half the base |
 | a long at 0.70, macro +0.6, on-chain +0.5, sentiment -0.4 | 2.55 / 3.55 = **0.718** | half the base |
-| a long at 0.90, every analyst a full band in agreement, two validators for, one abstaining | 6.8 / 7.0 = **0.971** | the whole base |
+| a long at 0.90, every analyst a full band in agreement, the judge for | 5.8 / 6.0 = **0.967** | the whole base |
 | a short at 0.70, every analyst a full band bullish | below zero, so **0** | no trade |
 
 The first row is a real cycle from 2026-10-04. Before scores were graded it read as two full
@@ -1071,7 +1094,7 @@ Venue mode does not start until all of this is true, and `tra check` names whate
 3. `[execution].max_notional` caps one order, and `[execution].leverage` is chosen. Neither has
    a default: both are what a defect would cost you.
 4. On mainnet, the ladder stands at `CANARY`, promoted with evidence and a signature. A demo or
-   testnet account holds no capital, so it is where that evidence is earned and does not wait on
+   testnet API holds no capital, so it is where that evidence is earned and does not wait on
    the ladder.
 5. The venue's keys are in the environment: the shell, an `--env-file` you name, or the `.env`
    beside `strategy.toml`, never `strategy.toml` itself. They are read by the execution layer alone,
@@ -1150,9 +1173,11 @@ computes both against the price the cost gate priced on, from the market's own r
 the fixed fractions ([where they sit](#where-the-stop-and-the-take-profit-sit)), so no model is
 ever asked where a stop belongs. A filled position with no
 exit is the one state this software must never create, because it is the state that survives our
-process dying - and if the venue cannot take them with the entry, the order is not sent at all. An
-operator who carries the exits in their own system says so with `[execution].exits = "none"`, and
-`tra check` lists that as something to fix rather than a setting to admire.
+process dying - and if the venue cannot take them with the entry, the order is not sent at all,
+unless `[execution].exits = "separate"` places them as reduce-only orders the moment it fills
+([Venues](/opensource/venues#exits-a-venue-will-not-take-with-the-entry)). An operator who carries
+the exits in their own system says so with `[execution].exits = "none"`, and `tra check` lists that
+as something to fix rather than a setting to admire.
 
 The same read that protects against a wrong-way position protects against a second one: any open
 position on the instrument refuses a new entry unless `adopt_open_position` says otherwise, because
@@ -1209,7 +1234,7 @@ hindsight: 81 decisions replayed over 7 day(s), 43 of them independent, each hel
   side: the model's -79.5 bps against 36.4 on the reverse; the reverse of the model's side did better; its calls carried no edge
 ```
 
-That is a real desk: an OKX demo account, decisions from 8 to 16 October 2026. Read it the way it is
+That is a real desk on OKX's demo API, with decisions from 8 to 16 October 2026. Read it the way it is
 meant to be read. The targets gate kept out trades that would have lost far more than the ones it admitted.
 The regime gate kept out trades that would have done better, on eleven decisions, which is a reason
 to watch it, not yet a reason to switch it off. And the last line is the one that matters most: on

@@ -419,7 +419,7 @@ def test_init_for_a_venue_wires_data_orders_and_fees_for_that_venue(tmp_path: Pa
     data = (target / "data.toml").read_text(encoding="utf-8")
     assert "bybit" not in data and "intervalTime" not in data
     assert '[data.orderbook]\nchain = ["venue"]' in data
-    # Read for the desk, the book comes from the practice account the orders go to.
+    # Read for the desk, the book comes from the demo or testnet API the orders go to.
     desk = load_data_config(target / "data.toml").on_venue("okx", "testnet")
     assert desk.for_kind("orderbook").chain == ("ccxt:okx@testnet",)
     assert desk.for_kind("ohlcv").chain == ("ccxt:okx", "file:data")
@@ -500,7 +500,7 @@ def test_blank_fees_are_read_from_the_account_and_written_ones_are_checked(
     monkeypatch.setattr(
         cli,
         "_read_fees",
-        lambda *a: ((Decimal("2"), Decimal("5")), "read from your testnet account"),
+        lambda *a: ((Decimal("2"), Decimal("5")), "read from your testnet API"),
     )
     good, bad = cli._fill_account_fees(envelope, cfg, {}, datetime(2026, 10, 8, tzinfo=UTC))
     channels = load_envelope(envelope).channels
@@ -554,7 +554,7 @@ def test_a_standard_tier_fee_is_replaced_by_the_accounts_own_once_it_reports_one
     )
     good, _ = cli._fill_account_fees(envelope, cfg, {}, when)
     assert load_envelope(envelope).channels[0].entry_fee_bps == Decimal("4")
-    assert "read from your okx account" in envelope.read_text(encoding="utf-8")
+    assert "read from your okx API" in envelope.read_text(encoding="utf-8")
     assert "written into envelope.toml" in good[0]
 
 
@@ -588,7 +588,7 @@ def test_spot_fees_are_checked_against_the_spot_pair_and_base_fees_against_the_p
         asked.append(args[5])
         spot = args[5] == "SOL/USDT"
         rate = Decimal(10) if spot else Decimal("5.5")
-        return (rate, rate), "read from your demo account"
+        return (rate, rate), "read from your demo API"
 
     monkeypatch.setattr(cli, "_read_fees", fees)
     _, bad = cli._fill_account_fees(
@@ -625,7 +625,7 @@ def test_a_spot_only_desk_does_not_hold_a_channels_unused_base_fees_to_the_spot_
     )
     monkeypatch.setattr(cli, "_symbol_for", lambda *a: "SOL/USDT")
     monkeypatch.setattr(
-        cli, "_read_fees", lambda *a: ((Decimal(10), Decimal(10)), "read from your demo account")
+        cli, "_read_fees", lambda *a: ((Decimal(10), Decimal(10)), "read from your demo API")
     )
     good, bad = cli._fill_account_fees(
         envelope,

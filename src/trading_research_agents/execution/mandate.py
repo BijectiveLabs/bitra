@@ -84,6 +84,9 @@ class Mandate:
     price_offset_bps: Decimal = Decimal(0)
     adopt_open_position: bool = False
     params: Mapping[str, Any] = field(default_factory=dict)
+    # Set on ccxt's client for the venue, over the package's own defaults (a broker id, a fee the
+    # library adds). Credentials never go here; they are read from the environment.
+    ccxt_options: Mapping[str, Any] = field(default_factory=dict)
     # How far the mid may have moved against the trade between the snapshot it was priced on and
     # the moment it is sent. Undeclared means no bound, and the move is still recorded.
     max_drift_bps: Decimal | None = None
@@ -126,8 +129,8 @@ class Mandate:
             raise MandateError(
                 "[execution].max_orders_per_cycle is 1: one decision sends at most one order"
             )
-        if self.exits not in ("attached", "none"):
-            raise MandateError('[execution].exits is "attached" or "none"')
+        if self.exits not in ("attached", "separate", "none"):
+            raise MandateError('[execution].exits is "attached", "separate" or "none"')
         if self.limit_timeout_s <= 0:
             raise MandateError("[execution].limit_timeout_s is positive")
         if self.price_offset_bps < 0:
@@ -254,10 +257,10 @@ def blocking(
             "venue before the first order and checked against the stop on every order"
         )
     if tier != LIVE_TIER and not practice:
-        # A demo or testnet account holds no capital, so it is where the evidence is earned.
+        # A demo or testnet API holds no capital, so it is where the evidence is earned.
         stops.append(
             f"the ladder is at {tier}; venue mode on mainnet needs {LIVE_TIER}, promoted with "
-            "evidence; a demo or testnet account does not"
+            "evidence; a demo or testnet API does not"
         )
     if missing_keys:
         stops.append(

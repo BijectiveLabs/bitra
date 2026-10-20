@@ -4,7 +4,7 @@
 #
 # A source name is scheme:target, or `venue`.
 #   venue          the venue this desk trades on ([run].venue_key); its book is the one orders meet,
-#                  the practice account's book when orders go there. Change venue in strategy.toml
+#                  the demo or testnet API's book when orders go there. Change venue in strategy.toml
 #                  and every chain that says `venue` follows.
 #   ccxt:<venue>   public endpoints of a named venue through ccxt (pip install '...[ccxt]')
 #   file:data      whatever `tra data get` already wrote into data/, no network, no keys

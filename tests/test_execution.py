@@ -466,3 +466,48 @@ def test_a_cancel_the_venue_refuses_is_recorded_as_what_it_is() -> None:
     # Still open and the cancel was refused: that is an order resting at a venue, said loudly.
     resting = send("open")
     assert not resting["cancelled"] and "may still be resting" in resting["note"]
+
+
+def test_a_signed_client_starts_with_the_builder_fee_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    from trading_research_agents.trading import dispatch
+
+    seen: list[dict[str, Any]] = []
+
+    class Signed:
+        def __init__(self) -> None:
+            self.options: dict[str, Any] = {}
+
+        def enable_demo_trading(self, on: bool) -> None:
+            self.demo = on
+
+    def build(venue: str, config: dict[str, Any]) -> Signed:
+        seen.append(config)
+        return Signed()
+
+    monkeypatch.setattr(dispatch, "build_client", build)
+    monkeypatch.setattr(dispatch, "exchange_class", lambda venue: Signed)
+    env = {"SOMEVENUE_API_KEY": "k", "SOMEVENUE_API_SECRET": "s"}
+    dispatch.hand_for(venue="somevenue", symbol="ETH/USDT:USDT", max_notional=Decimal(200), env=env)
+    dispatch.hand_for(
+        venue="somevenue",
+        symbol="ETH/USDT:USDT",
+        max_notional=Decimal(200),
+        env=env,
+        ccxt_options={"builderFee": True, "brokerId": "desk"},
+    )
+    # A fee the library adds on top of the venue's is off unless the operator turns it on.
+    assert seen[0]["options"] == {"builderFee": False}
+    assert seen[1]["options"] == {"builderFee": True, "brokerId": "desk"}
+    assert (seen[0]["apiKey"], seen[0]["secret"]) == ("k", "s")
+
+
+def test_ccxt_options_are_a_table_and_never_carry_a_credential() -> None:
+    from trading_research_agents.trading.config import ConfigError, _ccxt_options
+
+    assert _ccxt_options({}) == {}
+    assert _ccxt_options({"ccxt_options": {"builderFee": True}}) == {"builderFee": True}
+    for leaked in ({"apiKey": "x"}, {"walletAddress": "0x1"}, {"secret": "s"}, {"privateKey": "p"}):
+        with pytest.raises(ConfigError, match="environment"):
+            _ccxt_options({"ccxt_options": leaked})
+    with pytest.raises(ConfigError, match="table"):
+        _ccxt_options({"ccxt_options": "builderFee"})

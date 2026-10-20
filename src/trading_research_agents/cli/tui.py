@@ -37,6 +37,8 @@ BANNER = r"""
   |_|  |_| \_\/_/   \_\
 """.strip("\n")
 
+# The home screen's colour, and the colour of every line that separates one answer from the next.
+ACCENT = "cyan"
 NAME = "trading-research-agents"
 TAGLINE = (
     "autonomous trading agents with deterministic execution; the agents propose, the system decides"
@@ -176,7 +178,9 @@ def home(version: str, good: Sequence[str], bad: Sequence[str], next_command: st
         lines = block.splitlines()
         # One width for every row of a block, so centring moves it whole, not row by row.
         wide = max(len(line) for line in lines)
-        rows.append(Align.center(Text("\n".join(line.ljust(wide) for line in lines), "bold cyan")))
+        rows.append(
+            Align.center(Text("\n".join(line.ljust(wide) for line in lines), f"bold {ACCENT}"))
+        )
     head = Group(
         Text(""),
         *rows,

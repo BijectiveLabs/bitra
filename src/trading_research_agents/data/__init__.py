@@ -22,6 +22,7 @@ from trading_research_agents.data.mapping import (
     ColumnMap,
     MappingError,
     load_mapping,
+    mapped_table,
     mapped_trades,
     parse_mapping,
 )
@@ -59,6 +60,7 @@ __all__ = [
     "fetch_checksum",
     "load_mapping",
     "manifest_from_audit",
+    "mapped_table",
     "mapped_trades",
     "open_archive_lines",
     "parse_mapping",

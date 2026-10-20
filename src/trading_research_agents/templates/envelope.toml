@@ -26,6 +26,8 @@ name = "maker-taker"
 entry_fee_bps = 2.0
 exit_fee_bps = 5.5
 
+# Hyperliquid's own fees. ccxt's 1 bp builder fee is off by default; a desk that turns it on
+# in [execution].ccxt_options adds 1 bp to each side here (docs: Venues, Broker tags).
 [[channel]]
 venue = "hyperliquid"
 name = "taker-taker"

@@ -30,27 +30,38 @@ A cycle reaches a venue through ccxt, so "which venues are supported" has two ho
 we have run end to end, and what ccxt says a venue can do. The second is read from the library by
 `tra venues`, with no network and no key.
 
-| Venue | What a cycle can do there | Practice environment | Keys in `.env` | Run end to end by us |
-|---|---|---|---|---|
-| Bybit | everything: orders with the stop and take profit attached | demo, testnet | `BYBIT_API_KEY`, `BYBIT_API_SECRET` | yes, on demo: real orders, exits attached, a resting order cancelled |
-| OKX | everything | testnet | `OKX_API_KEY`, `OKX_API_SECRET`, `OKX_API_PASSPHRASE` | yes, on demo: real orders, exits attached, closed by the venue's own exits |
-| Bitget | everything | demo | `BITGET_API_KEY`, `BITGET_API_SECRET`, `BITGET_API_PASSPHRASE` | ready for its run; [report wanted](https://github.com/BijectiveLabs/trading-research-agents/issues/5) |
-| BingX | everything | testnet | `BINGX_API_KEY`, `BINGX_API_SECRET` | ready for its run; [report wanted](https://github.com/BijectiveLabs/trading-research-agents/issues/6) |
-| KuCoin Futures | everything | none | `KUCOINFUTURES_API_KEY`, `KUCOINFUTURES_API_SECRET`, `KUCOINFUTURES_API_PASSPHRASE` | integrated; it has no practice environment to run on |
-| Hyperliquid | everything | testnet | `HYPERLIQUID_WALLET_ADDRESS`, `HYPERLIQUID_PRIVATE_KEY` | ready for its run; [report wanted](https://github.com/BijectiveLabs/trading-research-agents/issues/7) |
-| Binance | orders, but you carry the stop yourself (`exits = "none"`) | demo, testnet | `BINANCE_API_KEY`, `BINANCE_API_SECRET` | ready for its run; it is the data fallback in the default project |
-| Deribit, HTX, Gate, MEXC | orders with `exits = "none"` | varies, see `tra venues` | `<VENUE>_API_KEY`, `<VENUE>_API_SECRET` | ready for its run |
-| Kraken, Kraken Futures, Phemex | data for now: ccxt does not report their positions, and the venue hand will not send without one | | | |
+| Venue | Type | What a cycle can do there | Practice environment | Keys in `.env` | Run end to end by us |
+|---|---|---|---|---|---|
+| Bybit | exchange | everything: orders with the stop and take profit attached | demo, testnet | `BYBIT_API_KEY`, `BYBIT_API_SECRET` | yes, on the demo API: real orders, exits attached, a resting order cancelled |
+| OKX | exchange | everything | testnet | `OKX_API_KEY`, `OKX_API_SECRET`, `OKX_API_PASSPHRASE` | yes, on the demo API: real orders, exits attached, closed by the venue's own exits |
+| Bitget | exchange | everything, on a classic or a unified trading account; a unified account key is recognised and sent through Bitget's unified API ([below](#bitget-s-unified-trading-account)) | demo | `BITGET_API_KEY`, `BITGET_API_SECRET`, `BITGET_API_PASSPHRASE` | yes, on the demo API with a unified account: entries with exits attached, a resting order cancelled, a position closed by the venue's own stop, the kill path |
+| BingX | exchange | everything; the demo (VST) is reached with the account's own key ([below](#bingx-the-demo-uses-your-account-s-own-key)) | testnet | `BINGX_API_KEY`, `BINGX_API_SECRET` | yes, on the demo API (VST): entries with exits attached, a refused second entry, a reduce-only close, a cancelled post-only order, a close by the venue's own exit, the kill path |
+| Binance | exchange | orders, with the stop and take profit placed right after the fill (`exits = "separate"`); `binance` trades USD-M futures for a futures symbol | demo, testnet | `BINANCE_API_KEY`, `BINANCE_API_SECRET` | yes, on the demo API: entries, exits placed after the fill, a close that takes them off, a cancelled post-only order, the kill path. On 2026-10-20 the demo's order book was stamped hours old, and orders are refused until it is current |
+| Gate | exchange | orders, exits placed right after the fill (`exits = "separate"`) | testnet | `GATE_API_KEY`, `GATE_API_SECRET` | yes, on the testnet API: entries with exits placed after the fill, a refused second entry, a close that took them off, a cancelled post-only order, a close by the venue's own exit, the kill path |
+| WEEX, BloFin, WOO X | exchange | everything | testnet | `<VENUE>_API_KEY`, `<VENUE>_API_SECRET` (and `_API_PASSPHRASE` for WEEX and BloFin) | ready for its run |
+| Hyperliquid | decentralised | everything; leverage is confirmed by the venue's reply, since ccxt cannot read it back | testnet | `HYPERLIQUID_WALLET_ADDRESS`, `HYPERLIQUID_PRIVATE_KEY` | ready for its run; [report wanted](https://github.com/BijectiveLabs/trading-research-agents/issues/7) |
+| Pacifica | decentralised | everything | testnet | `PACIFICA_PRIVATE_KEY` | ready for its run |
+| WOOFi Pro, ModeTrade | decentralised (Orderly Network) | everything | testnet | `<VENUE>_API_KEY`, `<VENUE>_API_SECRET`, `<VENUE>_ACCOUNT_ID` | ready for its run |
+| KuCoin Futures, Deepcoin | exchange | everything | none | `<VENUE>_API_KEY`, `<VENUE>_API_SECRET`, `<VENUE>_API_PASSPHRASE` | integrated; no practice environment to run on |
+| dYdX, Paradex, Extended, Lighter | decentralised | orders, but no stop or take profit at the venue through ccxt (`exits = "none"`); dYdX also cannot set leverage or report fills | testnet | see `tra venues` | not for a desk that needs its exits at the venue |
+| Deribit, Crypto.com, Coinbase International | exchange | orders, but leverage cannot be set through ccxt, so a derivative desk refuses, and no exits at the venue | testnet | see `tra venues` | not for a derivative desk |
+| HTX, MEXC, CoinEx and others | exchange | orders with `exits = "none"` | none | see `tra venues` | not run |
+| Kraken, Kraken Futures, Phemex; Aster, Apex, GRVT, Derive | exchange; decentralised | data for now: ccxt does not report their positions, and the venue hand will not send without one | | | |
 
 No venue is blocked here. The table says two separate things: what ccxt reports a venue can do,
 and what we have run ourselves. A venue ccxt says takes orders can be used; the only one the desk
 declines is a venue it cannot read the account of, because sending into a position nobody can see
 is the one mistake that cannot be undone. Everything else is a limit we state, not a gate we add.
 
-"Everything" means ccxt reports the five things the venue hand needs: send an order, attach the
-stop and take profit to it, read the position, read the open orders, and cancel. "Run end to end"
-is the stronger claim, a full run with real orders on the venue's practice account, and Bybit and
-OKX are the two that have had it so far, both on their demo accounts. Every other venue that takes
+"Everything" means ccxt reports what the venue hand needs: send an order, attach the stop and
+take profit to it, read the position and the open orders, cancel, read what became of an order,
+read the balance, set the leverage and read the fills. `tra venues` names any of these a venue
+lacks. The table above was read from ccxt 4.5.85 on 2026-10-19, and each practice environment was
+asked for its markets and an order book with no key: all answered except WOO X's staging API,
+which did not respond that day, and the Orderly Network venues, which ask for a key even to list
+markets. "Run end to end"
+is the stronger claim, a full run with real orders on the venue's demo or testnet API, and Bybit and
+OKX are the two that have had it so far, both on their demo APIs. Every other venue that takes
 orders is integrated the same way and ready for that run at any time: start it on its practice
 environment, watch a few cycles, and read `placed.json` before you point it at money. A report of
 that run, from us or from you, moves the venue into the last column.
@@ -102,8 +113,8 @@ is 4 contracts, and 20 million PEPE where a contract is 10 million is 2. A size 
 number of contracts is refused with both figures, a venue that does not report its contract size is
 refused, and what the venue reports back, fills and positions, is read in the base again.
 
-Bybit and OKX have been run end to end with real orders, on their demo accounts. For the other
-venues the contract arithmetic and the name resolution are tested against the shapes ccxt returns;
+Bybit, OKX, Bitget, Binance, BingX and Gate have been run end to end with real orders, on their
+demo or testnet APIs. For the other venues the contract arithmetic and the name resolution are tested against the shapes ccxt returns;
 the run against the venue's own account is the step still open, so start any of them on its
 practice environment first.
 
@@ -114,7 +125,7 @@ shape what applies: contracts, margin, leverage, where the exits go. Two types a
 `linear perpetual` and `spot`. The list defaults to perpetuals only, a desk adds spot by naming it
 (`markets = ["linear perpetual", "spot"]`), and a symbol of a type not listed, or not built, is
 refused by name before anything is sent. Tokenized stocks and prediction markets join as each is
-built and run end to end on a practice account; the venue and the symbol stay where they are, in
+built and run end to end on a demo or testnet API; the venue and the symbol stay where they are, in
 the same settings.
 
 What the same order path does when the market is spot:
@@ -163,7 +174,7 @@ exit_fee_bps = 10
  Spot was run on 2026-10-17: the order path end to end on the Bybit demo and the OKX demo
 (SOL/USDT; entry with the exits attached, the exits found at the venue, close, flat), and a full
 desk cycle on SOL/USDT in sandbox and in venue mode on the Bybit demo, which priced the round trip
-at the spot fee and refused the trade on its break-even rate. Start on a practice account.
+at the spot fee and refused the trade on its break-even rate. Start on a demo or testnet API.
 
 ## Stocks on a crypto venue
 
@@ -251,7 +262,7 @@ A channel that says neither is refused rather than priced at zero.
 Run on 2026-10-17: a sandbox cycle on Polymarket's public data (an outcome on the 2028 US
 presidential election), where the event analyst answered with the mid and a confidence of 0.2,
 citing the book, and the cycle stopped at the confidence floor. The order path is covered by tests
-against ccxt's prediction shapes. Sending orders needs a practice account: Kalshi has a demo
+against ccxt's prediction shapes. Sending orders needs a demo or testnet API: Kalshi has a demo
 environment that ccxt reaches (an API key and an RSA private key); Polymarket signs with a wallet
 and has no practice environment.
 
@@ -285,11 +296,78 @@ them:
 
 In venue mode the first two are enforced: a chain that reads the book or the funding from any
 venue other than the one orders go to is refused before anything is pulled, with the line that
-names it. A candle chain may fall back to another venue deliberately,
+names it. A source from a plugin is asked which venue it serves (its `venue` attribute), and one
+that does not say is refused the same way: a book of unknown origin is not the venue's book. A candle chain may fall back to another venue deliberately,
 `chain = ["venue", "ccxt:binance", "file:data"]`, and `tra check` says so every time. Whatever the
 chains say, an order is priced once more against the execution venue's own book when it is sent:
 the drift check refuses a decision the market has moved away from, and the slippage bound is
 measured from that venue's touch.
+
+## Exits a venue will not take with the entry
+
+Some venues take an order and a stop, but not both in one request. Binance futures is the largest
+of them. `[execution].exits` says what the desk does there:
+
+| Setting | What happens |
+|---|---|
+| `"attached"` (default) | the stop and take profit go out with the entry; a venue that cannot take them refuses the order before anything is sent |
+| `"separate"` | the entry goes out alone; the moment it fills, the stop and take profit follow as two reduce-only orders of their own, for what filled |
+| `"none"` | no exit at the venue; you carry them yourself, and `tra check` lists that as something to fix |
+
+With `"separate"`, three things keep a position from ever standing unprotected:
+
+1. **A fill whose exits cannot be placed is closed at once.** The leg that did go out comes off, a
+   reduce-only market order closes the position, and the record says why.
+2. **Exits outlive the position when one of them fires.** The stop closes the trade and the take
+   profit is still resting, sized for a position that is gone. Before the next entry on that
+   instrument, with nothing held, the desk takes off every exit it finds resting. One that will
+   not come off refuses the entry. A close by time or by `tra kill` takes them off as well.
+3. **It runs only where the resting exits are read.** Binance keeps a futures stop and take profit
+   as algo orders, which ccxt lists and cancels only when asked for them by kind, and that read is
+   built in. On a venue where it is not, `"separate"` is refused rather than left to chance.
+
+It is for positions the venue can reduce: perpetuals and futures. A spot desk on the same venue
+keeps `"attached"` where the venue takes it, or `"none"`.
+
+There is a moment between the fill and the exits, the time two orders take to send. A desk that
+cannot accept it trades where exits go with the entry. Run on Binance's demo API on 2026-10-20:
+both exits rested as algo orders, a close took them off, and a fill whose stop the venue would not
+take was closed at once.
+
+## Broker tags
+
+Exchanges run broker programmes. Software that sends orders for its users identifies itself with
+a tag, and the exchange shares part of the fee it already charges with whoever made the software.
+On most venues the user pays the same fee either way. Hyperliquid is the exception: there the
+software's share is charged on top.
+
+This package adds no tag of its own today. ccxt, which sends the orders, adds its own on several
+venues. As read from ccxt 4.5.85:
+
+| Venue | What ccxt sends | What it costs you |
+|---|---|---|
+| Bybit | `Referer: CCXT` on every signed request | nothing extra; the share comes out of Bybit's fee |
+| BingX | `X-SOURCE-KEY: CCXT` | nothing extra |
+| Bitget | `X-CHANNEL-API-CODE` with ccxt's channel code | nothing extra |
+| MEXC | `source: CCXT` | nothing extra |
+| OKX, Binance, HTX | a broker prefix on the client order id, but only when the order carries no id of its own | nothing, and no tag either: the desk always sends its own client order id |
+| Hyperliquid | by ccxt's default, an approval signed with your wallet for ccxt's builder address at up to 0.01%, then a builder fee of 1 basis point on every order. This package turns the fee off: the approval is signed at 0% and the builder is attached at zero | nothing extra by default. With the fee turned back on, **1 bp per order on top of Hyperliquid's fee** |
+
+The default is set on every client that signs with your keys, and `[execution].ccxt_options` is
+laid over it, as handed to ccxt:
+
+```toml
+[execution]
+ccxt_options = { builderFee = true }   # ccxt's Hyperliquid builder fee back on
+```
+
+A desk that turns the fee on adds 1 bp to each side of its Hyperliquid channel in `envelope.toml`,
+so the round trip the gates price is the one it pays. Credentials are refused in this table; they
+come from the environment only.
+
+Bijective plans to join these programmes as a software vendor. When a venue issues an id, it will
+be set the same way, shown by `tra check`, and you can replace it or leave it empty. The venue will
+be listed on this page first. Until then nothing this package sends carries a Bijective tag.
 
 ## Changing venue, and turning the others off
 
@@ -331,13 +409,13 @@ tra keys --probe                                      # reads the account, sends
 ```
 
 What `--venue` does: the data chains read from the venue the desk trades on, `[run].venue_key` and
-`[execution].venue` name it, `[execution].environment` is its practice account where it has one,
+`[execution].venue` name it, `[execution].environment` is its demo or testnet API where it has one,
 the order mode stays `sandbox`, and `.env.example` lists the keys that venue signs with. Sizes use
 the venue's own step, so there is no table of increments to copy.
 
 Fees are filled in for you. `tra check` (and `tra run`) asks the account for its maker and taker
 fee and writes them on the blank lines of `envelope.toml`, with a comment that says where they came
-from. When the account cannot report them (no keys yet, or a practice account that does not
+from. When the account cannot report them (no keys yet, or a demo or testnet API that does not
 answer: Bybit's demo returns a parameter error for every fee request), the venue's standard tier
 from its market list is written instead and labelled so; it is the base tier, the one a new
 account pays, so an account on a better tier pays less than the gate prices, never more. Those lines are replaced
@@ -347,14 +425,14 @@ and `tra check` warns when it is below what your account pays.
 OKX's demo trading is reached through ccxt's sandbox switch, so in this project it is
 `environment = "testnet"`. A demo key only works on the demo.
 
-A practice account has its own order book, and it can sit apart from the live one: on 2026-10-10
+A demo or testnet API has its own order book, and it can sit apart from the live one: on 2026-10-10
 OKX's demo FIL book was 6 bps wide against 1 bps live. So the book a desk prices on is the
 practice environment's when its orders go there (`venue` reads as `ccxt:okx@testnet` or
 `ccxt:bybit@demo`), and the drift check, the spread and the slippage a desk records are measured on
 the book its orders meet. Candles, funding and open interest stay on the live market. Any
 `ccxt:<venue>` source takes `@demo` or `@testnet`.
 
-The price can drift too. On OKX's demo account, in 6 of 52 decisions recorded to 2026-10-13, the
+The price can drift too. On OKX's demo API, in 6 of 52 decisions recorded to 2026-10-13, the
 demo book's mid sat outside the live market's range for that minute: 30 to 40 bps on NEAR and 149
 bps once on MAGIC. The analyst reads live candles, while the cost and the entry are priced on the
 demo book. Treat demo results on thin instruments as a test of the plumbing, not of the strategy;
@@ -371,8 +449,64 @@ as isolated (ccxt would otherwise default to cross), the client order id is lett
 and at most 32 characters, sizes are sent as contracts, and the stop and take profit go with the
 entry as attached algo orders at the market price. The request ccxt builds for a limit IOC entry
 with both was inspected offline on 2026-10-08 and carries `tdMode` isolated, `ordType` ioc,
-`attachAlgoOrds` and the id. It has been sent to OKX's demo account since 2026-10-10: entries
+`attachAlgoOrds` and the id. It has been sent to OKX's demo API since 2026-10-10: entries
 filled with both exits attached, and positions closed by those exits at the venue.
+
+### Binance futures
+
+`venue = "binance"` with a futures symbol (`BTC/USDT:USDT`) trades USD-M futures: the client is sent
+to the futures API, since ccxt's `binance` class otherwise reads the spot wallet for the balance.
+The position is read from Binance's position list, the balance from Binance's own rows where
+ccxt's parse comes back empty (as it did on the demo API), and a whole leverage is sent as an
+integer, which Binance requires. Exits go out after the fill (`exits = "separate"`).
+
+Every order is priced against the venue's book at the moment of sending, and a book the venue
+stamped more than 30 seconds ago is refused, on any venue. On 2026-10-20 Binance's demo API served a
+book 3.2 hours old, about 35 bps from where its own trades printed; `tra keys --probe` names it.
+
+### BingX: the demo uses your account's own key
+
+BingX has no separate key page for its demo. A key made in API Management on your account reaches
+both its live API and its demo, VST (virtual USDT), at `open-api-vst.bingx.com`; which one is used
+depends only on where the request goes. With `environment = "testnet"` the desk sends everything to
+VST, and mainnet stays behind the ladder and the mandate like everywhere else. Because the key can
+reach the live account, make it a trading key only: no withdrawals, no transfers, bound to your IP.
+
+### Gate
+
+`venue = "gate"` with a futures symbol trades USDT perpetuals: the client is sent to the futures
+account and loads only the markets of the symbol's kind (Gate's testnet timed out on its full
+lists). Gate keeps the leverage on the position, so the desk reads it from the position list, where
+isolated margin shows as a leverage above zero. Client order ids carry Gate's required `t-` prefix
+and fit its 28 characters. When the venue's stop closes a position, the take profit it placed after
+the fill is still resting; it is taken off before the next entry on that instrument and by
+`tra kill`, as on every venue with exits placed after the fill.
+
+### Bitget's unified trading account
+
+Bitget's demo offers the unified trading account, and its key page then shows two grants, manage
+and trade. ccxt reaches that account with its `uta` option for orders, positions, balances, fills
+and leverage, but still changes the margin mode and reads the leverage through Bitget's classic
+futures API, which a unified key cannot reach. The desk handles the difference:
+
+- The key's grants are read once, when the client is built. A key with only unified grants is
+  sent through the unified API; `uta` in `[execution].ccxt_options`, either way, is not overruled.
+- On that account the leverage is kept per symbol and per margin mode, and both can exist at once.
+  The desk sets the declared leverage in the declared margin mode, reads it back from that row, and
+  sends the margin mode with every order, the close included, because an order that names none
+  trades crossed.
+- The position mode is read from the account settings, and long/short (hedge) mode is refused.
+- ccxt reports a fee Bitget charged as a negative cost there (a rebate, read literally); the fee
+  is taken from Bitget's own `feeDetail` instead, and a filled order with no average price is
+  priced from its own fills.
+
+What you set, once, in Bitget's Demo trading: the position mode to one-way, and funds in the demo
+account. Run on 2026-10-20 at 3x isolated on BTCUSDT: entries filled with the stop and take
+profit attached as Bitget's position exits, a second entry was refused while one was open, a
+reduce-only close left nothing resting, a post-only order was cancelled at its timeout, and a
+position was closed by its own stop at the venue three minutes after entry. Bitget refuses a take
+profit that is not beyond the order's own limit price, so a target inside the slippage band of a
+taker entry is refused by the venue: nothing fills, and the cycle records Bitget's answer.
 
 ## Adding a venue you trade on
 
@@ -406,8 +540,9 @@ tra venues okx --setup
 It prints what goes in `envelope.toml` (two channels, taker and maker), the line to change in
 `data.toml`, the `[run]`, `[execution]` and `[live]` tables for `strategy.toml` with the practice
 environment already chosen, and the variable names for `.env`. For a venue that cannot attach exits
-it adds `exits = "none"` and says why; for one that can only feed data it prints the data line and
-nothing else.
+it adds `exits = "separate"` where the venue takes them as orders of their own and this package
+reads where they rest, else `exits = "none"`, and says why; for one that can only feed data it
+prints the data line and nothing else.
 
 The fee lines come filled in. The fee is the biggest number in the cost gate and it depends on
 your account's tier, so the setup asks the account first and falls back to the venue's standard
@@ -572,7 +707,8 @@ the venue reported. [The live tier](/opensource/live) is the review a new adapte
 | `binance` | monthly `.zip` of one CSV, no header, `.CHECKSUM` sidecar verified | none | through ccxt, like every venue | through ccxt, like every venue |
 
 The archives live in `data/venues/`, and a venue's account checks that ccxt does
-not unify (OKX's account mode, Bybit's key permissions) in `trading/venues/accounts.py`; nowhere
+not unify (OKX's account mode, Bybit's key permissions) in `trading/venues/accounts.py`, Bitget's
+unified account in `trading/venues/margin.py` and `trading/venues/fills.py`; nowhere
 else names a venue. They
 are examples of the protocols as much as they are integrations, and a plugin for another
 venue is expected to be about the same size.

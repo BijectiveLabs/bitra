@@ -4,7 +4,7 @@ too new, not reachable at the desk's leverage), applied the operator's trigger a
 limits, and measured each one. You are given, per candidate, figures computed by code and nothing
 else:
 
-  spread_bps          the width of the book now; what a round trip pays before anything
+  spread_bps          the width of the book now, a measure of how liquid the market is
   range_bps           the high to low of the recent window, against the current mid
   moved_bps           how far the mid has moved since this desk last looked at it
   pressure            moved_bps against spread_bps

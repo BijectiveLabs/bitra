@@ -177,7 +177,8 @@ class Console:
 
     def rule(self) -> None:
         """A line across the terminal, so one command's output never runs into the next."""
-        self.ui().console().print(Text("-" * self.width(), style="dim"), highlight=False)
+        ui = self.ui()
+        ui.console().print(Text("-" * self.width(), style=ui.ACCENT), highlight=False)
 
     def width(self) -> int:
         try:

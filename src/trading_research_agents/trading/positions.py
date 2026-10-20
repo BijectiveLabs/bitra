@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from trading_research_agents.records import append_line, has_index, read_lines, recent
+from trading_research_agents.trading.venues.fills import charged
 
 JOURNAL = "positions.jsonl"
 ROUND_TRIPS = "round_trips.jsonl"
@@ -335,7 +336,8 @@ class Keeper:
         exits = _up_to(exits and [f for f in ordered if f.get("side") == exit_side], entry.size)
         opening = _up_to(opening, entry.size)
         base = _base(hand)
-        fees = sum((_fee_in_quote(f, base) for f in (*opening, *exits)), Decimal(0))
+        venue = str(getattr(hand, "venue", ""))
+        fees = sum((_fee_in_quote(f, base, venue) for f in (*opening, *exits)), Decimal(0))
         amount = sum((Decimal(str(f.get("amount") or 0)) for f in exits), Decimal(0))
         if amount == 0:
             # Held to resolution: no sale, the venue settled the shares at 1 or 0 instead.
@@ -438,10 +440,14 @@ def _base(hand: Any) -> str:
     return str(getattr(hand, "symbol", "")).partition("/")[0]
 
 
-def _fee_in_quote(fill: Mapping[str, Any], base: str) -> Decimal:
+def _fee_in_quote(fill: Mapping[str, Any], base: str, venue: str = "") -> Decimal:
     """A fill's fee in the quote currency. A spot buy is often charged in the coin it bought."""
     fee = fill.get("fee") or {}
-    cost = Decimal(str(fee.get("cost") or 0))
+    said = charged(venue, fill) if venue else None
+    cost = Decimal(str(fee.get("cost") or 0)) if said is None else said
+    if cost < 0 and fill.get("takerOrMaker") == "taker":
+        # No venue pays a taker to take; a negative taker fee is a sign read the wrong way.
+        cost = -cost
     if base and str(fee.get("currency") or "") == base:
         return cost * Decimal(str(fill.get("price") or 0))
     return cost

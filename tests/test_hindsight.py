@@ -23,6 +23,7 @@ from trading_research_agents.execution.hindsight import (
     Outcome,
     decision_of,
     gate_of,
+    levels_check,
     outcomes,
     price_path,
     replay,
@@ -321,3 +322,46 @@ def test_tra_hindsight_replays_a_desk_and_writes_its_report(
     assert payload["replayed"] == 2 and payload["admitted"]["decisions"] == 1
     assert payload["gates"][0]["gate"] == "regime"
     assert (cycles / "hindsight.json").exists() and len(list((cycles / "hindsight").iterdir())) == 2
+
+
+# -- the analyst's own levels beside the ones code applied --------------------------------------
+
+
+def test_the_analysts_own_levels_are_kept_beside_the_ones_code_applied() -> None:
+    held = decision_of(record(intent={"mid": "100", "stop_price": "98", "take_price": "104"}))
+    assert held is not None and (held.stop_bps, held.take_bps) == (Decimal(200), Decimal(400))
+    assert (held.own_stop_bps, held.own_take_bps) == (Decimal(100), Decimal(300))
+
+
+def test_both_sets_of_levels_are_replayed_on_the_same_path() -> None:
+    # A dip of 60 bps takes out the analyst's own 50 bps stop; code's 100 bps one stands.
+    path = [bar(0, "100", "100.1", "99.4", "100"), *flat(11, start=1)]
+
+    def fetch(instrument: str, since_ms: int, limit: int) -> list[Candle]:
+        return [c for c in path if c.start_ns >= since_ms * 1_000_000][:limit]
+
+    named = decision(own_stop_bps=Decimal(50), own_take_bps=Decimal(400))
+    found, _ = outcomes([named], fetch, hold_s=3600, bar_s=BAR, now=AT + timedelta(hours=5))
+    assert found[0].gross_bps == Decimal(0) and found[0].own_gross_bps == Decimal(-50)
+    assert found[0].own_net_bps == Decimal(-60)
+
+
+def test_levels_that_beat_the_analysts_own_day_after_day_are_named() -> None:
+    found = []
+    for d in range(6):
+        for i in range(3):
+            o = outcome(ADMITTED, 20 + i, day=d, n=i)
+            found.append(
+                Outcome(
+                    o.decision,
+                    o.gross_bps,
+                    "hold",
+                    o.opposite_gross_bps,
+                    o.round_trip_bps,
+                    own_gross_bps=o.gross_bps - 30,
+                )
+            )
+    levels = levels_check(found)
+    assert levels["verdict"] == "the levels code applied did better than the analyst's own"
+    assert levels["difference_bps"] == "30.0" and levels["days"] == 6
+    assert levels_check(found[:4])["verdict"] == "too few to tell"

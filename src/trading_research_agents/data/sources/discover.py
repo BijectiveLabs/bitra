@@ -306,7 +306,7 @@ def aligned(found: Found, client: Any, environment: str) -> Found:
 
     Ranking and filtering read the live market, where volume and spreads mean something. What an
     order is sized by, and whether the market exists at all, is read from the environment the
-    order goes to, which on a practice account can differ market by market.
+    order goes to, which on a demo or testnet API can differ market by market.
     """
     markets = getattr(client, "markets", None) or {}
     tick = getattr(client, "precisionMode", TICK_SIZE) == TICK_SIZE

@@ -27,13 +27,52 @@ between an operator and the reason their trade was refused.
 | What people mean by memory | What this project uses |
 |---|---|
 | conversation history in a thread | Nothing. Each role call is stateless: one system prompt, one brief built by the system. |
+| what it said last time | The technical analyst's brief carries its own last reading of the instrument, when there is one inside the window it reads (`previous`): how long ago, the target, setup, confidence and levels it gave, the close then and how far it has moved since. Code builds it from the record. What became of that reading (traded, refused, won, lost) is left out, since that would tell a proposing role the desk's rules. |
 | what happened in earlier cycles | The record on disk: `runs/cycles/*/cycle.json`, the intents, `usage.jsonl`, the ledger. The auditors read exactly that. |
+| one store the analysts share | The cycle directory. Every brief and every answer is a file in it, written atomically (a temporary file, then a rename), and an index per day finds them again. Reading analysts' answers are also kept by the figures they read (`runs/cycles/reuse/`), which is how an unchanged reading is not paid for twice. |
 | a vector store of past decisions | Not used. A decision is retrieved by reading the cycle it belongs to, which is a file with a timestamp in its name. |
 | caching a fetched value | `store/cache.py`: a TTL-bounded file cache, and the data chain's own freshness window. |
 
 That is a deliberate trade. Stateless roles mean the same brief produces the same question no matter
 which model answers it, which is what makes a model swap, a retry or an audit meaningful. A
-conversation would make each of those a different thing.
+conversation would make each of those a different thing. The last reading is no exception: it is in
+the brief, so it is on disk with everything else the model was shown.
+
+Why the analyst sees its last reading at all: on two demo desks, between 2026-09-28 and 2026-10-16,
+8 of 36 and 4 of 37 pairs of answers on the same instrument less than 90 minutes apart pointed
+opposite ways, long then short or the reverse. Some of those are the market turning. The point of
+showing the earlier reading is that a reversal is now a decision with its reason written down
+("what changed in the figures"), not two unrelated answers.
+
+## When an answer does not fit, or points at nothing
+
+Three checks stand between a model's text and anything that reads it.
+
+1. **The schema is enforced at the vendor where the vendor can**: strict JSON schema output on
+   Anthropic, Google and the OpenAI-compatible servers that support it, JSON mode with the schema in
+   the prompt on the rest. Code then parses the answer again and refuses any field outside it, a
+   wrong value in a closed list, or a number out of range.
+2. **A malformed answer is asked once more, with the reason.** The second call carries the same
+   brief, then one line saying what was wrong ("response lacks verdict, reason"), so the model does
+   not have to guess and the provider's cached prefix still holds. A second malformed answer fails
+   the call and the cycle records it.
+3. **Every figure a role cites is checked against its brief**, by name and value. A citation that
+   names a figure the brief does not carry, or a different value, is discarded, and a deciding
+   answer with none left is refused. On the OKX demo desk, from 2026-10-12 to 2026-10-16, no
+   citation was discarded across 44 technical analyst answers, 132 reading analyst answers and 17
+   validator answers. Between 2026-10-08 and 2026-10-11 the reading analysts had 27 discarded, all
+   of them names the brief did not use, such as `fear_greed_zscore` for
+   `series.fear_greed.zscore_vs_recent`.
+
+## How much a role is given
+
+Measured on the same desk (342 calls, `openai/gpt-oss-120b` and `-20b` on Groq): a call carries a
+median of about 1,950 tokens for the technical analyst and the macro analyst, 1,730 for on-chain,
+1,350 for sentiment, 1,390 for a validator and 1,540 for the screener, system prompt included. The
+largest was 2,915. Each call starts from a fresh context, so nothing accumulates across a cycle or a
+day, and no role comes near any current model's window. The one place a context grows is the
+research auditor's tool loop, which is capped at six calls with each observation cut at 6,000
+characters.
 
 ## When a provider is rate limited or down
 
@@ -96,19 +135,19 @@ book does not spend a provider's rate on cycles that could only be refused.
 
 The Anthropic adapter marks the system prompt as cacheable and reads back what the provider says it
 cached; the OpenAI-compatible adapter reads `prompt_tokens_details.cached_tokens` where a server
-reports it (Groq did not, for `openai/gpt-oss-120b`, on 2026-10-06). Both figures are written to
-`usage.jsonl` per call:
+reports it. Groq reported a cached prefix on 14 of the 342 calls above (12 of them the screener's).
+Both figures are written to `usage.jsonl` per call:
 
 ```json
 {"role": "technical_analyst", "input_tokens": 1180, "cached_tokens": 0, "cache_write_tokens": 0}
 ```
 
 Read that column before believing in the saving. Caching pays when the stable prefix is large, and
-the minimum cacheable prefix is between 512 and 4096 tokens depending on the model. This project's
-role prompts are deliberately short - a few hundred tokens, because the figures live in the brief
-rather than in the prompt - so on a cycle the cache often will not engage at all. That is a
-consequence of a design choice we would make again, and the honest thing is to measure it rather
-than to claim it.
+the minimum cacheable prefix is between 512 and 4096 tokens depending on the model. The figures
+live in the brief rather than in the prompt, so most role prompts are a few hundred words; the
+deciding analyst's is the longest, about 1,400 words, which is above some vendors' minimum. The
+brief follows the prompt as sorted JSON, so the stable part comes first. Whether a vendor caches it
+is the vendor's decision, and the honest thing is to measure it rather than to claim it.
 
 Where it does pay: a long tool loop (`tra agent session`), where the same system prompt and a
 growing history are sent every turn. The silent invalidators to avoid are the usual ones - a

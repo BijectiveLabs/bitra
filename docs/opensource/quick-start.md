@@ -64,7 +64,7 @@ tra run
 tra run --every 15m
 ```
 
-**6. When you want real orders.** Start on the exchange's practice account:
+**6. When you want real orders.** Start on the exchange's demo or testnet API:
 - put its keys in `.env`;
 - read the mandate with `tra mandate`, then sign it with `tra mandate --sign "Your Name"`;
 - in `[execution]` of `strategy.toml`, set `mode = "venue"`, a `leverage` and `max_notional` (the
@@ -139,7 +139,7 @@ An agent desk goes through three steps, and you can stay at any of them as long 
 | Step | How | What happens | Needs |
 |---|---|---|---|
 | 1. Sandbox | `tra run` | the full cycle on live data; every decision written down, no order sent | a model key |
-| 2. Practice account | `tra run` with `[execution].mode = "venue"` and `environment = "demo"` or `"testnet"` | real orders on the exchange's practice account, exits attached, positions looked after | a signed mandate, a leverage, `max_notional`, practice keys |
+| 2. Demo or testnet API | `tra run` with `[execution].mode = "venue"` and `environment = "demo"` or `"testnet"` | real orders on the exchange's demo or testnet API, exits attached, positions looked after | a signed mandate, a leverage, `max_notional`, practice keys |
 | 3. Real capital | the same, with `environment = "mainnet"` | real orders with real money | all of the above, plus the ladder at its canary tier (`tra ladder promote`, with evidence) |
 
 Venue mode is the only mode that can lose money, so it has a door in front of it. Read the

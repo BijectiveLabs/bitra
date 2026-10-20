@@ -6,6 +6,114 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-20
+
+### Added
+
+- `[execution].exits = "separate"` for a venue that takes no stop with the entry, Binance futures
+  first: the stop and take profit follow the fill as two reduce-only orders. A fill they cannot be
+  placed for is closed at once; exits left resting by an earlier position are taken off before the
+  next entry, and an entry is refused while one will not come off; a close by time takes them off
+  too. Refused on spot and on a venue whose resting exits are not read yet. `tra venues --setup`
+  suggests it where it applies. Run on Binance's demo API and Gate's testnet API on 2026-10-20.
+- A venue's leverage is confirmed by its own reply where ccxt cannot read it back (Hyperliquid),
+  and the record says so; a reply that is an error still refuses. Before, every derivative order
+  there was refused for want of a read-back.
+- An order's status is found in the venue's open and closed lists where ccxt has no single-order
+  read (BloFin, Lighter).
+- `tra venues` names what the order path needs beyond sending: order status, balance, leverage and
+  fills. Gate joins the venues whose exits placed after the fill are read (price orders), and
+  venues that sign for an account id (WOOFi Pro, ModeTrade) are asked for `<VENUE>_ACCOUNT_ID`.
+- `[execution].ccxt_options`: a table set on ccxt's client for the execution venue, over the
+  package's own defaults. Credentials are refused in it.
+- Bitget's unified trading account. A key with only unified grants is recognised when the client is
+  built and sent through Bitget's unified API; the leverage is set and read back in the declared
+  margin mode, every order names that margin mode, and hedge mode is refused from the account's own
+  settings. Run on Bitget's demo API on 2026-10-20: entries with exits attached, a refused second
+  entry, a reduce-only close, a cancelled post-only order, a close by the venue's own stop, the kill
+  path.
+- Binance futures through `venue = "binance"`: a futures symbol sends the client to the futures
+  API (ccxt's `binance` reads the spot wallet otherwise), the position is read from the position
+  list, a balance ccxt did not parse is read from Binance's own rows, and a whole leverage is sent as
+  an integer. Run on Binance's demo API on 2026-10-20 with exits placed after the fill.
+- Gate and BingX on their practice APIs. Gate: a futures symbol uses the futures account and loads
+  only the markets of its kind, the leverage is read from the position list, and client order ids
+  carry Gate's `t-` prefix within its 28 characters. BingX: a futures symbol uses the swap account,
+  its demo's VST counts as the USDT its contracts settle in, and the leverage is set for both sides
+  of a one-way position. Both run end to end on 2026-10-20.
+- When a venue key is missing and a similar name is set (`GATE_SECRET_KEY` for `GATE_API_SECRET`),
+  `tra check` and `tra keys --probe` name both, never the value.
+- Parquet files of your own: `tra data audit FILE.parquet --mapping mapping.toml` reads trade
+  history through the same column map and audit as a CSV, and a `[[series]]` may name a `.parquet`
+  file. A zoned timestamp is kept to the nanosecond; one without a zone is refused.
+- The technical analyst sees its own last reading of the instrument inside the window it reads
+  (`previous`: when, the target, setup, confidence and levels, the move since), so a reversal comes
+  with its reason. What became of that reading is not shown. Validators do not receive it.
+
+### Changed
+
+- The analyst and the validators propose without the desk's rules. The technical analyst's prompt no
+  longer describes what code accepts (the cost multiple, the reward-to-risk default, the stop bounds,
+  the risk per trade, what the regime gate refuses); validators no longer receive the round trip or
+  the claimed edge, and the claimed edge could be an operator's declared magnitude. A test keeps
+  those settings out of both roles' briefs and prompts.
+- The analyst's own target is recorded beside the one applied (`proposed_take_bps`, as
+  `proposed_stop_bps` already was), and `tra hindsight` replays both sets of levels on the same path
+  (`levels` in the report): what the operator's bounds did to the analyst's reading, measured.
+- ccxt's Hyperliquid builder fee (1 bp on every order, on top of the venue's fee and outside the
+  round trip the gates price) is off by default on every client that signs with the operator's
+  keys. `ccxt_options = { builderFee = true }` turns it back on.
+- Docs, site and messages say demo API and testnet API rather than account: the software reaches
+  an exchange's practice environment through its API, not through an app.
+- Every analyst reads only its own data. The technical analyst no longer receives the other
+  analysts' declared states (`readings`) or the derivatives positioning series, which the on-chain
+  analyst reads; the validators no longer receive the declared states. The readings are weighed once,
+  by code, in confluence and conviction. A test holds each brief to its own data.
+- The validators work as a judged case. With pro, contra and neutral declared, pro and contra build
+  the strongest case for and against the proposal apart, neither seeing the other's; code checks
+  every claim; neutral judges the two checked cases, without the advocates' verdicts, and its verdict
+  is the only one confluence and conviction count. Code decides without asking neutral when only one
+  side has a case. Measured before: pro supported 63 times in 64, contra opposed 61 in 63, and a
+  neutral asked alone abstained in 33 of 37 cycles.
+- An answer that does not fit its schema is asked for once more with the reason after the brief,
+  rather than with the same brief again; the event analyst gets the same second call.
+- The console's separator lines take the home screen's colour, so they no longer read as text.
+
+### Fixed
+
+- The margin mode is read back with the leverage: a symbol the venue reports in cross margin while
+  `[execution].margin_mode` is isolated refuses the order, as a wrong leverage already did. Both
+  refusals now quote what the venue answered when it would not change the setting (on the Bitget
+  demo API: a key that could not reach its futures settings).
+- A fee ccxt reports as negative on a taker fill is counted as paid, since no venue pays a taker;
+  on Bitget's unified account the fee is read from Bitget's own fill. Before, a round trip there
+  would have shown its fees as a rebate.
+- An order is refused when the venue's book, read at the moment of sending, is stamped more than
+  30 seconds ago; `tra keys --probe` says so. Binance's demo API served a book 3.2 hours old on
+  2026-10-20, 35 bps from where its own trades printed.
+- A close carries a client order id of its own, as entries always did; without one, ccxt put its
+  own broker id on a Binance close.
+- A filled order the venue reports without an average price is priced from its own fills, so the
+  entry's slippage is recorded (Bitget's unified account).
+- In venue mode, a book or funding source from a plugin is now held to the execution venue too. It
+  is asked which venue it serves, and one that does not say is refused, where before only `ccxt:`
+  sources were checked.
+
+### Documentation
+
+- Venues: a "Broker tags" section with what ccxt adds to orders on each venue, and the default
+  this package sets on Hyperliquid's builder fee.
+- Your own data: a page on bringing trade history, series and vendor feeds in CSV, JSON or Parquet,
+  the rules every file is held to, and how each is stored (datasets as Parquet that DuckDB, Polars
+  or pandas open directly).
+- Working with language models: what a role is given, measured; how an answer that does not fit or
+  cites nothing is handled, with the counts from a demo desk; the analyst's last reading.
+- Agents: what goes in and what comes out of every role in a cycle, in one table.
+- Exchange accounts and keys: making a key on each venue, for the practice environment and for live
+  trading, with the settings each one needs and what has been run end to end.
+- For exchanges: how the software reaches a venue, what "run end to end" checks, and how orders
+  identify themselves.
+
 ## [0.8.0] - 2026-10-18
 
 ### Added
@@ -244,7 +352,7 @@ All notable changes to this project are recorded here. The format follows
 - One address per role: the product page `www.bijectivelabs.dev/open-source` is the homepage on
   PyPI, in the citation and in the README's web badge; the docs stay at `docs.bijectivelabs.dev`;
   company links go to `www.bijectivelabs.dev` without a redirect.
-- Docs: the venues page says Bybit and OKX have both been run end to end on demo, matching its own
+- Docs: the venues page says Bybit and OKX have both been run end to end on the demo API, matching its own
   table; the providers page names all three providers with a default model.
 - Locked dependencies move to newer minor and patch releases: anthropic 1.13, openai 3.28,
   google-genai 2.29 and mcp 2.3; ruff 0.17 and mypy 2.4 for development.
@@ -354,7 +462,7 @@ All notable changes to this project are recorded here. The format follows
 - Docs brought in line with the code: `--every 15m` throughout, no `--env-file .env` where the
   `.env` beside the config is read anyway, the ladder at CANARY only on mainnet, `max_notional`
   among what venue mode needs, the risk manager's part in `tra run`, OKX run end to end on its
-  demo account, and fees filled in from the account rather than left blank.
+  demo API, and fees filled in from the account rather than left blank.
 - The screen `tra` opens on is called the console everywhere; the word cockpit is gone from the
   docs, the code and the screenshot names.
 - The README published to PyPI points its images at this release's tag, so each version's page
@@ -402,7 +510,7 @@ All notable changes to this project are recorded here. The format follows
 - Simpler setup. `[controls]` figures have standard defaults (risk per trade 50 bps, daily loss
   300 bps, 6 orders a minute; `max_position` optional). An agent desk can leave out `[exit]`
   (volatility stops, 240-bar timeout) and the research cost figures in `[run]`. Venue mode on a
-  demo or testnet account no longer waits on the ladder, and no longer needs a `[canary]` table,
+  demo or testnet API no longer waits on the ladder, and no longer needs a `[canary]` table,
   which only `tra live` reads. `[execution].max_orders_per_cycle` is out of the template.
 - Unknown keys in `[controls]` are refused.
 - `tra init --agent` writes a 15-minute decision timeframe with 1h and 4h as context.
@@ -430,7 +538,7 @@ All notable changes to this project are recorded here. The format follows
 - Docs: why the exits are built the way they are, and a table of when each auditor is asked.
 - Unknown keys in `[exit]` are refused.
 - A ccxt data source can read a venue's practice environment: `ccxt:okx@testnet`, `ccxt:bybit@demo`.
-  `tra init --venue` points the order book there, so a desk trading a practice account prices,
+  `tra init --venue` points the order book there, so a desk trading a demo or testnet API prices,
   checks drift and measures slippage on the book its orders meet. Seen on OKX's demo: 9.22 bps of
   "drift" that was the gap between the live and the demo book.
 - The sentiment prompt asks for figures named in full, as the macro and on-chain ones do.
@@ -448,7 +556,7 @@ All notable changes to this project are recorded here. The format follows
   (`trading/venues/accounts.py`). The first: an OKX account in Spot mode, which refuses every
   perpetual order with sCode 51010, is named with the setting to change.
 - Everything an order is sized, stepped or resolved by is read from the market list of the
-  environment orders go to, not the live one. A practice account is not a copy of live: OKX's demo
+  environment orders go to, not the live one. A demo or testnet API is not a copy of live: OKX's demo
   listed 155 linear perpetuals against 485 live, and 50 of the 138 on both had another contract
   size or lot (MET: 1 coin a contract live, 10 on the demo). Discovery still ranks on the live
   market and keeps only what the environment lists, with its steps.
@@ -465,7 +573,7 @@ All notable changes to this project are recorded here. The format follows
 - `tra keys --probe` reads the account before the mandate is signed; a key that cannot reach the
   account is worth knowing first. A refused key shows in `tra check`.
 - Fees fill themselves. `tra check` and `tra run` read the maker and taker fee from the account
-  and write them on blank `envelope.toml` lines, labelled. Without keys, or on a practice account
+  and write them on blank `envelope.toml` lines, labelled. Without keys, or on a demo or testnet API
   that does not report fees, the venue's standard tier from its market list is written instead,
   labelled, and replaced by the account's own once it reports one. A fee the operator wrote is kept
   and checked: one below what the account pays is reported.
