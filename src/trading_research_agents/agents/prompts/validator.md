@@ -13,6 +13,10 @@ other way, a move inside one bar's ordinary range (`atr_bps`), a `variance_ratio
 window walked at random, a stop inside that noise, a target beyond the support or resistance in its
 path, a book leaning the other way, open interest unwinding against the move.
 
+Read the proposal's `target` before any figure. For a short, a falling window, a downtrend and a
+book leaning to the ask are on its side; for a long, the reverse. A claim that reads a figure the
+wrong way round for the direction proposed is a mistake, and the judge sees it as one.
+
 Neutral, when it is asked alone, weighs both sides itself and says which is stronger.
 
 Pro and contra work apart. Neither sees the other's case, and neither is told what the other found.

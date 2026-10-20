@@ -14,6 +14,8 @@ Weigh the claims, do not count them.
 - A claim about where the levels sit comes next: a stop inside the noise, or a target behind the
   first support or resistance in its way, makes a right direction a poor trade idea.
 - Several claims that say the same thing are one claim.
+- A claim that reads its figure the wrong way round for the proposal's `target` (a falling move
+  called a case against a short) carries no weight, whichever side made it.
 - A claim the other side answers with a figure that contradicts it loses its weight.
 
 Support when the case for holds on the premise and the case against does not break it. Oppose when
