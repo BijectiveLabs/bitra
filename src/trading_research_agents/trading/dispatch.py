@@ -51,6 +51,11 @@ from trading_research_agents.trading.market import Market, MarketError
 from trading_research_agents.trading.venues.accounts import account_refusal
 from trading_research_agents.trading.venues.exits import exit_cancel_params, exit_reads
 from trading_research_agents.trading.venues.limits import price_band
+from trading_research_agents.trading.venues.margin import (
+    AccountSettings,
+    account_settings,
+    route,
+)
 
 SIDES = {"long": "buy", "short": "sell"}
 # Read from ccxt 4.5 on 2026-09-29: a venue reaches its demo environment through
@@ -218,6 +223,7 @@ class VenueHand:
         config["options"] = {**SIGNED_DEFAULTS, **dict(config.get("options") or {})}
         client = build_client(self.venue, config)
         self.to_environment(client)
+        route(self.venue, client)
         return client
 
     def to_environment(self, client: Any) -> None:
@@ -449,6 +455,8 @@ class VenueHand:
         # The prediction venues take no client id through ccxt; their orders are matched by the id
         # the venue returns, and one decision still sends one order.
         params: dict[str, Any] = {} if market.outcome else {"clientOrderId": order_id}
+        if derivative:
+            params.update(self.order_params())
         params.update(self.params)
         protective = {} if market.outcome else self._protective(intent, target)
         if isinstance(protective, str):
@@ -514,7 +522,9 @@ class VenueHand:
         }
         if self.role == "maker":
             placed.update(self._settle(str(placed["order_id"])))
-        elif placed["filled"] is None:
+        elif placed["filled"] is None or placed["average"] is None:
+            # A reply with a fill and no price is not an execution report (seen on 2026-10-20: a
+            # venue answered a create with its ids alone), so the venue's own order is read.
             placed.update(self._taken(str(placed["order_id"])))
         placed["slippage_bps"] = _slippage_bps(placed.get("average"), mid, side)
         if swept:
@@ -559,14 +569,38 @@ class VenueHand:
             status = self.order_status(order_id) if order_id else None
             state = "" if status is None else str(status.get("status", ""))
             if status is not None and state in ("closed", "filled", *ENDED):
+                average = status.get("average")
+                if average is None and Decimal(str(status.get("filled") or 0)) > 0:
+                    average = self._filled_average(order_id)
                 return {
                     "status": state,
                     "filled": str(status.get("filled") or 0),
-                    "average": None if status.get("average") is None else str(status["average"]),
+                    "average": None if average is None else str(average),
                 }
             if attempt + 1 < tries:
                 self.sleep(0.5)
         return {"note": "the venue had not reported a fill when this record was written"}
+
+    def _filled_average(self, order_id: str) -> str | None:
+        """The price an order filled at, from its own fills, where the venue's order omits it.
+
+        Seen on 2026-10-20: Bitget's unified account reports a filled order with no average through
+        ccxt, and without one the slippage of the entry cannot be measured.
+        """
+        fetch = getattr(self.client, "fetch_my_trades", None)
+        if fetch is None:
+            return None
+        try:
+            fills = [f for f in fetch(self.symbol) or [] if str(f.get("order") or "") == order_id]
+            size = sum((Decimal(str(f["amount"])) for f in fills), Decimal(0))
+            paid = sum(
+                (Decimal(str(f["amount"])) * Decimal(str(f["price"])) for f in fills), Decimal(0)
+            )
+        except Exception:
+            return None
+        if size <= 0:
+            return None
+        return f"{(paid / size).quantize(Decimal('0.00000001')).normalize():f}"
 
     def _protective(self, intent: Mapping[str, Any], target: str) -> dict[str, Any] | str:
         """The stop and the take profit, attached to the entry so no fill is left unattended.
@@ -615,6 +649,11 @@ class VenueHand:
             "takeProfit": {"triggerPrice": float(high)},
         }
 
+    def order_params(self) -> dict[str, Any]:
+        """What a derivatives order on this account carries beyond ccxt's own fields."""
+        found = account_settings(self.venue, self.client)
+        return found.order_params(self.margin_mode) if found is not None else {}
+
     def redact(self, text: str) -> str:
         """A venue's message without this hand's key or secret in it, before it is recorded."""
         for name in self.credentials.values():
@@ -630,21 +669,24 @@ class VenueHand:
         belongs to, and a reduce-only close means something else. The exits, the position reads and
         the close here are written for one position per instrument, so this does not guess.
         """
+        refusal = (
+            f"the {self.venue} account is in long/short position mode; set it to one-way (net) "
+            "mode, because this desk holds one position per instrument"
+        )
+        found = account_settings(self.venue, self.client)
         has = getattr(self.client, "has", {}) or {}
         read = getattr(self.client, "fetch_position_mode", None)
-        if read is None or not has.get("fetchPositionMode"):
-            return ""
         try:
-            mode = read(self.symbol) or {}
+            if found is not None:
+                hedged = found.hedged()
+            elif read is not None and has.get("fetchPositionMode"):
+                hedged = (read(self.symbol) or {}).get("hedged")
+            else:
+                return ""
         except Exception:
             # Not readable is not the same as hedged; a venue that cannot say refuses at its end.
             return ""
-        if mode.get("hedged") is True:
-            return (
-                f"the {self.venue} account is in long/short position mode; set it to one-way (net) "
-                "mode, because this desk holds one position per instrument"
-            )
-        return ""
+        return refusal if hedged is True else ""
 
     def clock_skew(self) -> str:
         """Empty when this machine's clock agrees with the venue's; otherwise by how much."""
@@ -776,6 +818,7 @@ class VenueHand:
         made: dict[str, str] = {}
         for leg, key, level, mark in legs:
             params = {
+                **self.order_params(),
                 **self.params,
                 key: float(Decimal(str(level))),
                 "reduceOnly": True,
@@ -923,6 +966,9 @@ class VenueHand:
         """
         if self.leverage is None or self.leverage_set:
             return ""
+        found = account_settings(self.venue, self.client)
+        if found is not None:
+            return self._ensure_leverage_on(found, self.leverage)
         # What the venue answered when a setting was refused. Some venues refuse a value they
         # already hold, so this is only said when the read-back shows the setting did not take.
         said: list[str] = []
@@ -963,6 +1009,32 @@ class VenueHand:
             return (
                 f"{self.symbol} is in {mode} margin at the venue and [execution].margin_mode is "
                 f"{self.margin_mode}; it could not be changed{why}, so nothing was sent"
+            )
+        self.leverage_set = True
+        return ""
+
+    def _ensure_leverage_on(self, found: AccountSettings, leverage: Decimal) -> str:
+        """The same confirmation on an account whose leverage is kept per margin mode."""
+        said = ""
+        try:
+            found.apply(self.symbol, leverage, self.margin_mode)
+        except Exception as exc:
+            said = f" (the venue said {self._answer(exc)})"
+        try:
+            now = found.leverage(self.symbol, self.margin_mode)
+        except Exception as exc:
+            now, said = None, said or f" (the read said {self._answer(exc)})"
+        if now is None:
+            return (
+                f"{self.venue} would not confirm the leverage on {self.symbol} in "
+                f"{self.margin_mode} margin{said}; nothing was sent"
+            )
+        if now != leverage:
+            shown = now.to_integral_value() if now == now.to_integral_value() else now
+            return (
+                f"{self.symbol} is at {shown}x in {self.margin_mode} margin at the venue and "
+                f"[execution].leverage is {leverage}x; it could not be changed{said}, so nothing "
+                "was sent"
             )
         self.leverage_set = True
         return ""
@@ -1154,7 +1226,7 @@ class VenueHand:
                 side,
                 float(amount),
                 None,
-                {} if spot else {"reduceOnly": True},
+                {} if spot else {**self.order_params(), "reduceOnly": True},
             )
         except Exception as exc:
             return {

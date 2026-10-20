@@ -968,9 +968,10 @@ def test_an_okx_account_in_spot_mode_is_refused_before_anything_is_sent() -> Non
     )(LONG)["sent"]
 
 
-def test_a_bitget_unified_account_key_is_refused_before_anything_is_sent() -> None:
+def test_a_bitget_unified_key_sent_to_the_classic_api_is_refused_before_anything_is_sent() -> None:
     class Unified(FakeExchange):
         grants = ["uamw", "uatw"]
+        options = {"uta": False}
 
         def privateSpotGetV2SpotAccountInfo(self) -> dict[str, Any]:  # noqa: N802 - ccxt's own name
             return {"data": {"authorities": self.grants}}

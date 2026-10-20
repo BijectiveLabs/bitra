@@ -127,6 +127,24 @@ def mapped_trades(
     else:
         header = list(mapping.columns)
         first = 1
+    return _mapped(header, reader, mapping, instrument=instrument, first=first)
+
+
+def mapped_table(path: Path, mapping: ColumnMap, *, instrument: str) -> Iterator[Trade | Rejection]:
+    """A Parquet file through the same map. Its column names are its header; row 1 is data."""
+    from trading_research_agents.data import table
+
+    return _mapped(table.header(path), table.rows(path), mapping, instrument=instrument, first=1)
+
+
+def _mapped(
+    header: list[str],
+    reader: Iterable[list[str]],
+    mapping: ColumnMap,
+    *,
+    instrument: str,
+    first: int,
+) -> Iterator[Trade | Rejection]:
     index: dict[str, int] = {name: i for i, name in enumerate(header)}
     needed = [mapping.ts, mapping.price, mapping.qty, mapping.side, mapping.trade_id]
     if mapping.seq:

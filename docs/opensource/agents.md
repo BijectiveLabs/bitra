@@ -124,12 +124,32 @@ size, or declared by the operator and labelled as such.
 | Role | Tools (`agents/<role>/tools.py`) | What the brief carries |
 |---|---|---|
 | `market_screener` | `screen_figures` | per instrument: rows, print rate, realised volatility, first-lag autocorrelation, the 1:10 variance ratio, largest gap, last-hour volume against the average, turnover, the cost floor for the claimed edge, and a regime the system proposes from a written rule (`[agents.screen]` sets the two thresholds: `min_prints_per_minute`, `volatile_above_bps`) |
-| `technical_analyst` | `features` | on each closed bar: returns over 1, 5 and 20 bars, the close as a z-score of the window, the gap to VWAP, the last bar's volume and range against the window's, the position between the window's high and low, the net move and trend strength with the regime they give, the variance ratio, and the market structure (swings labelled HH, HL, LH, LL, the trend they make, the last break of structure or change of character, invalidation, support and resistance); the same regime and structure on each higher timeframe in `[run].context_intervals`; the book imbalance, the open interest change since the last snapshot, the derivatives positioning declared for its asset, and the declared state of the other series (see [the cycle](/opensource/cycle#the-market-around-the-decision)) |
+| `technical_analyst` | `features` | on each closed bar: returns over 1, 5 and 20 bars, the close as a z-score of the window, the gap to VWAP, the last bar's volume and range against the window's, the position between the window's high and low, the net move and trend strength with the regime they give, the variance ratio, and the market structure (swings labelled HH, HL, LH, LL, the trend they make, the last break of structure or change of character, invalidation, support and resistance); the same regime and structure on each higher timeframe in `[run].context_intervals`; the book imbalance, the open interest change since the last snapshot, the derivatives positioning declared for its asset, the declared state of the other series (see [the cycle](/opensource/cycle#the-market-around-the-decision)), and in `tra run` its own last reading of the instrument with the move since (`previous`) |
 | `macro_analyst` | `macro_brief` over `data/series.py` | per series in `series.toml`: the value known at the time and when it became known (publication lag honoured), the state against the operator's declared threshold, the correlation and strongest lead-lag with the instrument's returns measured on the operator's data with n, the calendar events inside the horizon |
 | `onchain_analyst` | `onchain_brief` | the same engine, plus the net over a window and the last value as a z-score of its own history |
 | `risk_manager` | `risk_brief` | per run: latency from intent to fill (median, max, n, ratio to the declared), net per round trip overall and over the last window against the claimed magnitude, maximum drawdown, the favourable and adverse excursions of the closed round trips with what the winners gave back, which control refused and how often |
 | `executor` | `size_for`, `rate_budget`, `export_signals` | a size that never exceeds a cap, rounded down to the venue's step; what the minute still allows; the run's admitted intents as `signals.jsonl` or CSV for execution elsewhere (`tra signals export RUN`) |
 | `auditor` | `audit_brief`, then a tool loop over `read_run_report`, `show_ledger`, `search_ledger`, `list_runs`, `show_ladder` | usage per role with tokens per closed round trip, each promotion with whether its evidence names a gate, and a run against its replay trade by trade; then whatever it chooses to read, up to six calls |
+
+### In a cycle: what goes in, what comes out
+
+Every role in a cycle is told three things in its prompt and held to them in code: what its brief
+carries, that every figure in it was computed before it was asked (so it has nothing to call), and
+the schema its answer fills.
+
+| Role | Reads | Answers | Code then checks |
+|---|---|---|---|
+| `technical_analyst` | the features, structure, regime and higher timeframes of its instrument, the book, open interest, positioning, the other series' declared states, its own last reading | `target`, `setup`, `confidence`, `horizon_bars`, `stop_price`, `target_price`, `reason`, `figures_used` | the schema, the setup against the measured regime, the levels on the right side of the price, every citation |
+| `macro_analyst` | its series with what was known when, the operator's thresholds, measured correlations with n, the calendar | `regime`, `events`, `reason`, `figures_used`, `data_as_of` | the schema, every citation, words that belong to a later step (recorded) |
+| `onchain_analyst` | its series, their net over a window and z-scores | `signal`, `reason`, `figures_used`, `data_as_of` | the same |
+| `sentiment_analyst` | its scores and dated notes | `state`, `figures_used`, `reason`, `data_as_of` | the same |
+| validators | the proposal, the figures it was built from, the declared states | `stance`, `claims`, `verdict`, `reason` | the schema; a claim that does not cite a figure it was given is dropped |
+| `event_analyst` | the question, the outcome's book and recent prices, the calendar and your notes | `probability`, `confidence`, `reason`, `figures_used` | the schema, every citation |
+| `market_screener` | one live snapshot per admitted instrument | `kept`, `excluded`, `picks` | it can only drop an instrument, never add one |
+
+An answer that does not fit its schema is asked for once more with the reason, and then refused.
+How that and the citation check have done on a demo desk is in
+[Working with language models](/opensource/llm#when-an-answer-does-not-fit-or-points-at-nothing).
 
 ### Reading, not calculating
 
@@ -168,7 +188,7 @@ the market alone, and code applies your settings afterwards.
 
 | Who | Knows | Does not know |
 |---|---|---|
-| `technical_analyst` | the market figures, the structure, the regime, the higher timeframes, the readings of the other series, your mechanism as a preference | the cost of the round trip, every `[targets]`, `[exit]`, `[run]` sizing and `[controls]` setting |
+| `technical_analyst` | the market figures, the structure, the regime, the higher timeframes, the readings of the other series, your mechanism as a preference, its own last reading | the cost of the round trip, every `[targets]`, `[exit]`, `[run]` sizing and `[controls]` setting, and what became of its last reading |
 | validators | the analyst's proposal as given, the figures it was built from, the declared states | the same, and the claimed edge |
 | `event_analyst` (prediction markets) | the question, the outcome's bid, ask and mid, its recent prices, your dated notes and calendar | the fee, the margin an estimate has to clear and the size |
 | code | everything you declared | nothing it has to guess |
@@ -396,7 +416,7 @@ The short version for anyone reviewing this before putting money behind it:
 
 | Concern | How it is handled | Where |
 |---|---|---|
-| Memory | None between calls. Each call is one system prompt plus one brief built by the system. Earlier cycles are files on disk, and only the auditors read them. | [Working with language models](/opensource/llm), `store/cycles.py` |
+| Memory | None between calls. Each call is one system prompt plus one brief built by the system; the deciding analyst's brief includes its own last reading, built by code from the record. Earlier cycles are files on disk, and only the auditors read them. | [Working with language models](/opensource/llm), `store/cycles.py` |
 | What a role sees | Its own sections of the brief. Anything else is removed and the removal is recorded. | `agents/scope.py` |
 | What a role may say | A closed JSON schema per role. Extra fields, a wrong enum, or a number out of range are refused before anyone reads the answer. | `agents/<role>/role.py`, `llm/form.py` |
 | Whether its figures are real | Every cited figure is checked against the brief, value included. Citations that do not hold are discarded, and a deciding answer with nothing left is refused. | `agents/cited.py` |

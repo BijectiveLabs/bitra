@@ -44,15 +44,15 @@ def _okx(client: Any) -> str:
 
 
 def _bitget(client: Any) -> str:
-    """A Bitget key made for the unified trading account cannot reach the futures endpoints.
+    """A Bitget key made for the unified trading account, on a client sent to the classic API.
 
-    Read through `GET /api/v2/spot/account/info`, whose `authorities` list the key's grants. On the
-    demo on 2026-10-19 a key with only unified grants (`uamw`, `uatw`) read the account and set
-    nothing: every margin mode change came back 40014, "need future pos write permissions", and
-    the leverage read stayed on the classic account, so every order would have been refused.
+    Read through `GET /api/v2/spot/account/info`, whose `authorities` list the key's grants. Such a
+    key is routed to the unified API by `margin.route`; this refuses only when `uta = false` was set
+    in [execution].ccxt_options. On the demo on 2026-10-19 that path set nothing: every margin mode
+    change came back 40014, "need future pos write permissions".
     """
     read = getattr(client, "privateSpotGetV2SpotAccountInfo", None)
-    if read is None:
+    if read is None or (getattr(client, "options", None) or {}).get("uta"):
         return ""
     try:
         grants = [str(g) for g in ((read() or {}).get("data") or {}).get("authorities") or []]
@@ -60,10 +60,9 @@ def _bitget(client: Any) -> str:
         return ""
     if grants and all(g.startswith("ua") for g in grants):
         return (
-            f"the Bitget key is a unified trading account key (grants {grants}); ccxt sets the "
-            "margin mode and reads the leverage through Bitget's futures API, which this key "
-            "cannot reach. Use a classic account and a key with futures orders and positions "
-            "allowed (in Demo trading for a demo key)"
+            f"the Bitget key is a unified trading account key (grants {grants}) and "
+            "[execution].ccxt_options sets uta = false, which sends it to Bitget's classic "
+            "futures API, where this key cannot set anything. Remove uta from ccxt_options"
         )
     return ""
 

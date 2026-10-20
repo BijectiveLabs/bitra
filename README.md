@@ -523,7 +523,7 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | Command | What it does |
 |---|---|
 | `tra data get BTCUSDT 2025-01-01` | download a day, verify its checksum, audit it, write Parquet and funding |
-| `tra data audit export.csv --mapping mapping.toml` | your own CSV, through the same audit |
+| `tra data audit export.csv --mapping mapping.toml` | your own CSV or Parquet, through the same audit |
 | `tra data pull BTCUSDT` | one live snapshot through the chains in `data.toml` |
 | `tra sources show`, `tra sources pull` | where the reading analysts' series come from and how old they are; refresh them now |
 | `tra sources add macro us10y --from fred --id DGS10 --high bearish` | a series onto the shelf in one step: pulled now, its lines drawn from its own history |
@@ -594,7 +594,7 @@ The full documentation is at [docs.bijectivelabs.dev](https://docs.bijectivelabs
 | [Venues](https://docs.bijectivelabs.dev/opensource/venues) | which venues work, and adding yours |
 | [Working with language models](https://docs.bijectivelabs.dev/opensource/llm), [Model providers](https://docs.bijectivelabs.dev/opensource/providers) | how models are used: fallback, spend, adding a provider |
 | [The live tier](https://docs.bijectivelabs.dev/opensource/live), [The trading agent](https://docs.bijectivelabs.dev/opensource/trading) | the ladder from replay to a live session |
-| [The data gate](https://docs.bijectivelabs.dev/opensource/data) | the data gate, and bringing your own data |
+| [Your own data](https://docs.bijectivelabs.dev/opensource/your-data), [The data gate](https://docs.bijectivelabs.dev/opensource/data) | trade history, series and vendor feeds you bring, in CSV, JSON or Parquet, and the checks every file passes |
 | [Boundaries](https://docs.bijectivelabs.dev/opensource/boundaries), [Liability](https://docs.bijectivelabs.dev/opensource/liability) | what is guaranteed, what is not built yet, and who is responsible |
 | [The agent](https://docs.bijectivelabs.dev/opensource/agent), [The MCP server](https://docs.bijectivelabs.dev/opensource/mcp) | the research agent, and the MCP server |
 | [Architecture](https://docs.bijectivelabs.dev/opensource/architecture) | packages, import rules, file formats |

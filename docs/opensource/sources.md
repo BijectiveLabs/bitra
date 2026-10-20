@@ -29,7 +29,7 @@ my-desk/sources/
   news.toml          dated text: releases, statements, your own notes
 ```
 
-Each `[[series]]` names a CSV file and how to read it. The analyst only ever reads that file. What
+Each `[[series]]` names a file (CSV, JSON or Parquet) and how to read it. The analyst only ever reads that file. What
 changes from desk to desk is who keeps the file current: you, or `fetch`.
 
 ```toml

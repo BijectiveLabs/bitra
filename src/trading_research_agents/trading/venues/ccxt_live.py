@@ -176,7 +176,7 @@ class CcxtLiveVenue:
         if off_step:
             self._pending = None
             raise VenueError(off_step)
-        params: dict[str, Any] = {"clientOrderId": order.client_id}
+        params: dict[str, Any] = {"clientOrderId": order.client_id, **self.hand.order_params()}
         if order.reduce_only:
             params["reduceOnly"] = True
         side = "buy" if order.intent.direction is Direction.LONG else "sell"

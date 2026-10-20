@@ -134,6 +134,7 @@ SCOPES: dict[str, Scope] = {
             "open_interest",
             "readings",
             "positioning",
+            "previous",
         ),
         answers=(
             "target",

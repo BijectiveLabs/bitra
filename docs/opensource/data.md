@@ -38,8 +38,9 @@ Two ship with the package; any other is a small class registered under the
 `trading_research_agents.venues` entry point (see [Venues](/opensource/venues)). `tra data fetch --venue`
 and `tra data audit --venue` take any registered name.
 
-A **column map** takes any other CSV: a vendor export, a Client's own recorder, a venue with
-no plugin yet. See the next section.
+A **column map** takes any other file, CSV or Parquet: a vendor export, a Client's own recorder,
+a venue with no plugin yet. See the next section, and [Your own data](/opensource/your-data) for
+every kind of data a desk can bring.
 
 ### Bundled venue plugins
 
@@ -59,7 +60,9 @@ to disk.
 
 ### Any other source: a column map
 
-A `mapping.toml` names every field and its unit; nothing is guessed.
+A `mapping.toml` names every field and its unit; nothing is guessed. The file can be a CSV or a
+Parquet file; a Parquet file's own types are read as
+[Your own data](/opensource/your-data#parquet) describes, and then through the same map.
 
 ```toml
 [mapping]

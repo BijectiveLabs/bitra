@@ -34,7 +34,7 @@ we have run end to end, and what ccxt says a venue can do. The second is read fr
 |---|---|---|---|---|---|
 | Bybit | exchange | everything: orders with the stop and take profit attached | demo, testnet | `BYBIT_API_KEY`, `BYBIT_API_SECRET` | yes, on the demo API: real orders, exits attached, a resting order cancelled |
 | OKX | exchange | everything | testnet | `OKX_API_KEY`, `OKX_API_SECRET`, `OKX_API_PASSPHRASE` | yes, on the demo API: real orders, exits attached, closed by the venue's own exits |
-| Bitget | exchange | everything, on a classic account; the key needs futures order and position permissions, since margin mode and leverage are set through them. A unified trading account key is refused by `tra check` before any order | demo | `BITGET_API_KEY`, `BITGET_API_SECRET`, `BITGET_API_PASSPHRASE` | ready for its run; [report wanted](https://github.com/BijectiveLabs/trading-research-agents/issues/5) |
+| Bitget | exchange | everything, on a classic or a unified trading account; a unified account key is recognised and sent through Bitget's unified API ([below](#bitget-s-unified-trading-account)) | demo | `BITGET_API_KEY`, `BITGET_API_SECRET`, `BITGET_API_PASSPHRASE` | yes, on the demo API with a unified account: entries with exits attached, a resting order cancelled, a position closed by the venue's own stop, the kill path |
 | BingX | exchange | everything | testnet | `BINGX_API_KEY`, `BINGX_API_SECRET` | ready for its run; [report wanted](https://github.com/BijectiveLabs/trading-research-agents/issues/6) |
 | Binance | exchange | orders, with the stop and take profit placed right after the fill (`exits = "separate"`) | demo, testnet | `BINANCE_API_KEY`, `BINANCE_API_SECRET` | ready for its run; it is the data fallback in the default project |
 | Gate | exchange | orders, exits placed right after the fill (`exits = "separate"`) | testnet | `GATE_API_KEY`, `GATE_API_SECRET` | ready for its run |
@@ -451,6 +451,32 @@ with both was inspected offline on 2026-10-08 and carries `tdMode` isolated, `or
 `attachAlgoOrds` and the id. It has been sent to OKX's demo API since 2026-10-10: entries
 filled with both exits attached, and positions closed by those exits at the venue.
 
+### Bitget's unified trading account
+
+Bitget's demo offers the unified trading account, and its key page then shows two grants, manage
+and trade. ccxt reaches that account with its `uta` option for orders, positions, balances, fills
+and leverage, but still changes the margin mode and reads the leverage through Bitget's classic
+futures API, which a unified key cannot reach. The desk handles the difference:
+
+- The key's grants are read once, when the client is built. A key with only unified grants is
+  sent through the unified API; `uta` in `[execution].ccxt_options`, either way, is not overruled.
+- On that account the leverage is kept per symbol and per margin mode, and both can exist at once.
+  The desk sets the declared leverage in the declared margin mode, reads it back from that row, and
+  sends the margin mode with every order, the close included, because an order that names none
+  trades crossed.
+- The position mode is read from the account settings, and long/short (hedge) mode is refused.
+- ccxt reports a fee Bitget charged as a negative cost there (a rebate, read literally); the fee
+  is taken from Bitget's own `feeDetail` instead, and a filled order with no average price is
+  priced from its own fills.
+
+What you set, once, in Bitget's Demo trading: the position mode to one-way, and funds in the demo
+account. Run on 2026-10-20 at 3x isolated on BTCUSDT: entries filled with the stop and take
+profit attached as Bitget's position exits, a second entry was refused while one was open, a
+reduce-only close left nothing resting, a post-only order was cancelled at its timeout, and a
+position was closed by its own stop at the venue three minutes after entry. Bitget refuses a take
+profit that is not beyond the order's own limit price, so a target inside the slippage band of a
+taker entry is refused by the venue: nothing fills, and the cycle records Bitget's answer.
+
 ## Adding a venue you trade on
 
 Four steps, and the command writes most of them for you.
@@ -650,7 +676,8 @@ the venue reported. [The live tier](/opensource/live) is the review a new adapte
 | `binance` | monthly `.zip` of one CSV, no header, `.CHECKSUM` sidecar verified | none | through ccxt, like every venue | through ccxt, like every venue |
 
 The archives live in `data/venues/`, and a venue's account checks that ccxt does
-not unify (OKX's account mode, Bybit's key permissions) in `trading/venues/accounts.py`; nowhere
+not unify (OKX's account mode, Bybit's key permissions) in `trading/venues/accounts.py`, Bitget's
+unified account in `trading/venues/margin.py` and `trading/venues/fills.py`; nowhere
 else names a venue. They
 are examples of the protocols as much as they are integrations, and a plugin for another
 venue is expected to be about the same size.

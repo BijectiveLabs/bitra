@@ -42,7 +42,7 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | Command | What it does |
 |---|---|
 | `tra data get BTCUSDT 2025-01-01` | download a day, verify its checksum, audit it, write Parquet and funding |
-| `tra data audit export.csv --mapping mapping.toml` | your own CSV, through the same audit |
+| `tra data audit export.csv --mapping mapping.toml` | your own CSV or Parquet, through the same audit ([Your own data](/opensource/your-data)) |
 | `tra data pull BTCUSDT` | one live snapshot through the chains in `data.toml` |
 | `tra sources show`, `tra sources pull` | where the reading analysts' series come from and how old they are; refresh them now |
 | `tra sources add macro us10y --from fred --id DGS10 --high bearish` | a series onto the shelf in one step: pulled now, its lines drawn from its own history |

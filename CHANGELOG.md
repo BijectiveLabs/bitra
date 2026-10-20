@@ -25,6 +25,18 @@ All notable changes to this project are recorded here. The format follows
   venues that sign for an account id (WOOFi Pro, ModeTrade) are asked for `<VENUE>_ACCOUNT_ID`.
 - `[execution].ccxt_options`: a table set on ccxt's client for the execution venue, over the
   package's own defaults. Credentials are refused in it.
+- Bitget's unified trading account. A key with only unified grants is recognised when the client is
+  built and sent through Bitget's unified API; the leverage is set and read back in the declared
+  margin mode, every order names that margin mode, and hedge mode is refused from the account's own
+  settings. Run on Bitget's demo API on 2026-10-20: entries with exits attached, a refused second
+  entry, a reduce-only close, a cancelled post-only order, a close by the venue's own stop, the kill
+  path.
+- Parquet files of your own: `tra data audit FILE.parquet --mapping mapping.toml` reads trade
+  history through the same column map and audit as a CSV, and a `[[series]]` may name a `.parquet`
+  file. A zoned timestamp is kept to the nanosecond; one without a zone is refused.
+- The technical analyst sees its own last reading of the instrument inside the window it reads
+  (`previous`: when, the target, setup, confidence and levels, the move since), so a reversal comes
+  with its reason. What became of that reading is not shown. Validators do not receive it.
 
 ### Changed
 
@@ -41,6 +53,9 @@ All notable changes to this project are recorded here. The format follows
   keys. `ccxt_options = { builderFee = true }` turns it back on.
 - Docs, site and messages say demo API and testnet API rather than account: the software reaches
   an exchange's practice environment through its API, not through an app.
+- An answer that does not fit its schema is asked for once more with the reason after the brief,
+  rather than with the same brief again; the event analyst gets the same second call.
+- The console's separator lines take the home screen's colour, so they no longer read as text.
 
 ### Fixed
 
@@ -48,9 +63,11 @@ All notable changes to this project are recorded here. The format follows
   `[execution].margin_mode` is isolated refuses the order, as a wrong leverage already did. Both
   refusals now quote what the venue answered when it would not change the setting (on the Bitget
   demo API: a key that could not reach its futures settings).
-- A Bitget key made for a unified trading account is refused by `tra check` and before any
-  order: ccxt sets the margin mode and reads the leverage through Bitget's futures API, which
-  that key cannot reach, so every order would have been refused one by one.
+- A fee ccxt reports as negative on a taker fill is counted as paid, since no venue pays a taker;
+  on Bitget's unified account the fee is read from Bitget's own fill. Before, a round trip there
+  would have shown its fees as a rebate.
+- A filled order the venue reports without an average price is priced from its own fills, so the
+  entry's slippage is recorded (Bitget's unified account).
 - In venue mode, a book or funding source from a plugin is now held to the execution venue too. It
   is asked which venue it serves, and one that does not say is refused, where before only `ccxt:`
   sources were checked.
@@ -59,6 +76,11 @@ All notable changes to this project are recorded here. The format follows
 
 - Venues: a "Broker tags" section with what ccxt adds to orders on each venue, and the default
   this package sets on Hyperliquid's builder fee.
+- Your own data: a page on bringing trade history, series and vendor feeds in CSV, JSON or Parquet,
+  and the rules every file is held to.
+- Working with language models: what a role is given, measured; how an answer that does not fit or
+  cites nothing is handled, with the counts from a demo desk; the analyst's last reading.
+- Agents: what goes in and what comes out of every role in a cycle, in one table.
 
 ## [0.8.0] - 2026-10-18
 

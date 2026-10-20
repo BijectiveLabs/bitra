@@ -143,6 +143,8 @@ MODES = MANDATE_MODES
 TARGETS = {"long": Direction.LONG, "short": Direction.SHORT}
 # Snapshots looked through for the last open interest; a desk that slept longer starts afresh.
 OPEN_INTEREST_LOOK_BACK = 12
+# Cycles looked through for the analyst's last reading; most of them were held by the trigger.
+PREVIOUS_LOOK_BACK = 96
 # The analysts that only read and label. They run beside the technical analyst, they never place
 # anything, and each one's answer is recorded whether or not the operator gave it a source.
 # The shelf files that feed each reading analyst, for saying where to declare one.
@@ -415,13 +417,22 @@ LIVE_PROMPTS = {technical_analyst.ROLE: "technical_analyst_live"}
 
 
 def _ask(
-    cfg: CycleConfig, role: str, question: Mapping[str, Any], schema: Mapping[str, Any]
+    cfg: CycleConfig,
+    role: str,
+    question: Mapping[str, Any],
+    schema: Mapping[str, Any],
+    refused: str = "",
 ) -> str:
     completer = cfg.completer_for(role)
+    user = json.dumps(question, sort_keys=True, default=str, separators=COMPACT)
+    if refused:
+        # After the brief, so the prefix a provider caches is the same on both calls.
+        user += (
+            f"\n\nYour last answer to this brief was refused before anyone read it: {refused}. "
+            "Answer again with one JSON object that fills the schema."
+        )
     done = completer.complete(
-        system=prompt(LIVE_PROMPTS.get(role, role)),
-        user=json.dumps(question, sort_keys=True, default=str, separators=COMPACT),
-        schema=dict(schema),
+        system=prompt(LIVE_PROMPTS.get(role, role)), user=user, schema=dict(schema)
     )
     return done.text
 
@@ -481,17 +492,18 @@ def _ask_readable(
     schema: Mapping[str, Any],
     parse: Callable[[str], Any],
 ) -> str:
-    """Ask, and ask once more when the answer does not fit its schema.
+    """Ask, and ask once more, with the reason, when the answer does not fit its schema.
 
     A malformed answer is a failed call, not a verdict, and with on_missing_validator at refuse one
     of them stops a trade (seen 2026-10-06: a validator's JSON came back with its fields out of
-    place). One more call is cheaper than a lost cycle; a second malformed answer is left to fail.
+    place). One more call is cheaper than a lost cycle, and a model told what was wrong with its
+    answer does not have to guess; a second malformed answer is left to fail.
     """
     text = _ask(cfg, role, question, schema)
     try:
         parse(text)
-    except (RoleError, ValueError):
-        return _ask(cfg, role, question, schema)
+    except (RoleError, ValueError) as exc:
+        return _ask(cfg, role, question, schema, refused=str(exc)[:300])
     return text
 
 
@@ -692,7 +704,18 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         result.stopped_by = f"no technical brief: {exc}"
         _finish(cfg, where, result)
         return result
-    asked = _within_scope(technical_analyst.ROLE, technical.record(), result)
+    shown = technical.record()
+    last = _previous_reading(
+        cfg.root,
+        cfg.instrument,
+        cycle,
+        shown.get("close"),
+        now=cfg.clock(),
+        within_s=cfg.lookback_bars * cfg.interval_s,
+    )
+    if last is not None:
+        shown["previous"] = last
+    asked = _within_scope(technical_analyst.ROLE, shown, result)
     write_json(where.brief("technical"), asked)
     announce(cfg.watch, "regime", DONE, _regime_line(cfg, technical))
 
@@ -1223,7 +1246,9 @@ def _decide_on_an_outcome(
     write_json(where.brief(event_analyst.ROLE), brief)
     announce(cfg.watch, event_analyst.ROLE, RUNNING)
     try:
-        answer = _ask(cfg, event_analyst.ROLE, brief, event_analyst.SCHEMA)
+        answer = _ask_readable(
+            cfg, event_analyst.ROLE, brief, event_analyst.SCHEMA, event_analyst.parse
+        )
         analyst = event_analyst.parse(answer)
     except Exception as exc:
         why = f"{event_analyst.ROLE}: {exc.__class__.__name__}: {exc}"
@@ -1417,6 +1442,57 @@ def _previous_open_interest(root: Path, instrument: str, cycle: str) -> dict[str
         found = values.get("open_interest")
         if isinstance(found, dict):
             return found
+    return None
+
+
+def _previous_reading(
+    root: Path, instrument: str, cycle: str, close: Any, *, now: datetime, within_s: float
+) -> dict[str, Any] | None:
+    """The technical analyst's own last reading of this instrument, inside the window it reads.
+
+    The reading and the market since, nothing more. Whether it was traded, refused or how it ended
+    would tell a proposing role the desk's rules, which it is not given.
+    """
+    if not root.is_dir():
+        return None
+    if has_index(root):
+        rows = (r for r in recent(root, instrument=instrument) if str(r["cycle_id"]) < cycle)
+        names = [str(r["cycle_id"]) for r in islice(rows, PREVIOUS_LOOK_BACK)]
+    else:
+        safe = "".join(c for c in instrument if c.isalnum() or c in "-_")
+        found = (p.name for p in root.glob(f"*-{safe}") if p.is_dir() and p.name < cycle)
+        names = sorted(found, reverse=True)[:PREVIOUS_LOOK_BACK]
+    for name in names:
+        try:
+            at = datetime.strptime(name[:20], "%Y-%m-%dT%H-%M-%SZ").replace(tzinfo=UTC)
+        except ValueError:
+            continue
+        age_s = (now - at).total_seconds()
+        if age_s > within_s:
+            return None
+        folder = root / name
+        answer = folder / "answers" / "technical.json"
+        if not answer.is_file():
+            continue
+        try:
+            raw = json.loads(answer.read_text(encoding="utf-8"))
+            said = technical_analyst.parse(raw if isinstance(raw, str) else json.dumps(raw))
+            then = Decimal(
+                str(json.loads((folder / "briefs" / "technical.json").read_text("utf-8"))["close"])
+            )
+            moved = (Decimal(str(close)) / then - 1) * BPS if close is not None and then else None
+        except (OSError, ValueError, KeyError, ArithmeticError):
+            continue
+        return {
+            "minutes_ago": round(age_s / 60, 1),
+            "target": said.target,
+            "setup": said.setup,
+            "confidence": said.confidence,
+            "stop_price": None if said.stop_price is None else str(said.stop_price),
+            "target_price": None if said.target_price is None else str(said.target_price),
+            "close_then": str(then),
+            "move_since_bps": None if moved is None else str(moved.quantize(Decimal("0.01"))),
+        }
     return None
 
 
@@ -1646,7 +1722,8 @@ def _run_validators(
     desk's rules are left out: whether a trade clears them is code's question, and a vote that
     could see them would be a second, softer cost gate.
     """
-    figures = figures_of(asked)
+    # The analyst's last reading is its own continuity, not evidence about this proposal.
+    figures = {k: v for k, v in figures_of(asked).items() if not k.startswith("previous.")}
     proposal = {
         "target": analyst.target,
         "setup": analyst.setup,

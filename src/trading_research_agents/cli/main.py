@@ -73,6 +73,7 @@ from trading_research_agents.data import (
     audit,
     load_mapping,
     manifest_from_audit,
+    mapped_table,
     mapped_trades,
     open_archive_lines,
     read_manifest,
@@ -232,7 +233,9 @@ def build_parser() -> argparse.ArgumentParser:
     funding_cmd.add_argument("--json", action="store_true")
 
     audit_cmd = data.add_parser("audit", help="is this file safe to backtest on?")
-    audit_cmd.add_argument("archive", type=Path, help=".csv, .csv.gz or .zip of one CSV")
+    audit_cmd.add_argument(
+        "archive", type=Path, help=".csv, .csv.gz, .zip of one CSV, or .parquet with --mapping"
+    )
     layout = audit_cmd.add_mutually_exclusive_group(required=True)
     layout.add_argument("--venue", choices=venues, help="a bundled or installed venue layout")
     layout.add_argument("--mapping", type=Path, help="a column map for any other source")
@@ -1029,17 +1032,30 @@ def data_fetch(args: argparse.Namespace) -> int:
 
 
 def data_audit(args: argparse.Namespace) -> int:
+    table = args.archive.suffix.lower() == ".parquet"
     if args.venue is not None:
+        if table:
+            raise MappingError(
+                "a venue plugin reads the venue's own archive; a Parquet file of your own is read "
+                "through a column map (--mapping mapping.toml)"
+            )
         source_name = str(args.venue)
-        normalise = archive_venue(source_name).normalise
+        plugin = archive_venue(source_name).normalise
+
+        def read() -> Iterator[Trade | Rejection]:
+            return plugin(open_archive_lines(args.archive), instrument=args.instrument)
     else:
         mapping = load_mapping(args.mapping)
         source_name = mapping.source
 
-        def normalise(lines: Iterable[str], *, instrument: str) -> Iterator[Trade | Rejection]:
-            return mapped_trades(lines, mapping, instrument=instrument)
+        def read() -> Iterator[Trade | Rejection]:
+            if table:
+                return mapped_table(args.archive, mapping, instrument=args.instrument)
+            return mapped_trades(
+                open_archive_lines(args.archive), mapping, instrument=args.instrument
+            )
 
-    records = normalise(open_archive_lines(args.archive), instrument=args.instrument)
+    records = read()
     report = audit(
         records,
         max_gap=args.max_gap,
@@ -1070,7 +1086,7 @@ def data_audit(args: argparse.Namespace) -> int:
     written = None
     if args.parquet is not None and report.passed:
         # Second pass over the file. The audit already told us the scales the source uses.
-        again = normalise(open_archive_lines(args.archive), instrument=args.instrument)
+        again = read()
         result = write_trades(
             (r for r in again if isinstance(r, Trade)),
             args.parquet,

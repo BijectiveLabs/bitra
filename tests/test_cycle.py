@@ -1336,3 +1336,46 @@ def test_a_spot_cycle_is_priced_at_the_channels_spot_fees(
     result = run_cycle(cfg)
     fee = next(c for c in result.briefs["cost"]["components"] if c["name"] == "fee_round_trip")
     assert Decimal(fee["bps"]) == Decimal(20) and fee["source"].endswith("its spot fees")
+
+
+def test_the_analyst_is_shown_its_own_last_reading_and_never_what_became_of_it(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    first, _, _ = cycle_config(tmp_path, envelope, [analyst_answer(confidence=0.7)])
+    assert run_cycle(first).intent is not None
+    later = datetime(2026, 9, 27, 10, 3, tzinfo=UTC)
+    second, fake, _ = cycle_config(
+        tmp_path, envelope, [analyst_answer(target="flat")], clock=lambda: later
+    )
+    run_cycle(second)
+    shown = json.loads(fake.calls[0].user)["previous"]
+    assert shown["target"] == "long" and shown["confidence"] == 0.7
+    assert shown["minutes_ago"] == 3.0 and shown["move_since_bps"] == "0.00"
+    # The reading and the market since; nothing about whether it was traded.
+    assert set(shown) == {
+        "minutes_ago",
+        "target",
+        "setup",
+        "confidence",
+        "stop_price",
+        "target_price",
+        "close_then",
+        "move_since_bps",
+    }
+    # Past the window the analyst reads (five bars of a minute), there is nothing to carry over.
+    far = datetime(2026, 9, 27, 10, 30, tzinfo=UTC)
+    third, fake, _ = cycle_config(tmp_path, envelope, [analyst_answer()], clock=lambda: far)
+    run_cycle(third)
+    assert "previous" not in json.loads(fake.calls[0].user)
+
+
+def test_a_malformed_answer_is_asked_again_with_the_reason(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    cfg, fake, _ = cycle_config(tmp_path, envelope, ['{"target": "long"}', analyst_answer()])
+    result = run_cycle(cfg)
+    assert result.analyst is not None and len(fake.calls) == 2
+    again = fake.calls[1].user
+    assert "refused before anyone read it: response lacks" in again
+    # The brief comes first, unchanged, so a provider's cached prefix holds for the second call.
+    assert again.startswith(fake.calls[0].user)

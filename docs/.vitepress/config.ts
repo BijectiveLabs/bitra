@@ -52,6 +52,7 @@ const sidebar = [
       { text: 'The cycle', link: '/opensource/cycle' },
       { text: 'Agents', link: '/opensource/agents' },
       { text: 'Data sources', link: '/opensource/sources' },
+      { text: 'Your own data', link: '/opensource/your-data' },
       { text: 'Capital, orders and positions', link: '/opensource/capital' },
       { text: 'Venues', link: '/opensource/venues' }
     ]
