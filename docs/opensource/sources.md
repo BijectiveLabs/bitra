@@ -203,12 +203,13 @@ reader_labels = 0.5     # 0 (the default) keeps labels out; 1 counts a label lik
 The label counts only when the analyst cited what it read; an answer that points at nothing is
 still nothing.
 
-## Positioning for the technical analyst
+## Derivatives positioning
 
-Series in `sources/derivatives.toml` on the traded instrument's asset (or with no asset) are handed
-to the technical analyst as `positioning`: each one's last value, its change over the last hour, its
-age and your declared state. With the venue presets above, refreshed every five minutes, that is
-who is long against who is short and who is buying against who is selling, as of the decision.
+Series in `sources/derivatives.toml` (long/short ratios, taker volume, open interest history,
+liquidations) are read by the on-chain analyst beside the chain figures, and your thresholds on
+them reach confluence and conviction like any other series. The technical analyst does not see
+them: it reads its own market's candles, book, funding and open interest, so its reading does not
+lean on another analyst's data.
 
 ## When an analyst is not asked
 

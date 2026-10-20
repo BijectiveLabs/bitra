@@ -276,13 +276,11 @@ that picture too, all of it computed by the system from the snapshot:
 | `regime` | trending up, trending down, ranging or mixed, on the decision timeframe | `trend_strength` against the lines in `[regime]` |
 | `trend_strength` | net move over the path walked, times the square root of the steps; a random walk sits near 1 on any window | the window's closes |
 | `market_structure` | the trend the swings make, the last break of structure or change of character, the level whose loss changes the trend, and the nearest unbroken support and resistance; see [Market structure](#market-structure) | the window's bars |
-| `positioning` | the derivatives series you declared for this asset: last value, change over the last hour, age, declared state | `sources/derivatives.toml` ([sources](/opensource/sources#positioning-for-the-technical-analyst)) |
 | `variance_ratio` | the variance of four-bar returns against four times that of one-bar returns: below 1 the window's moves were given back, above 1 they were followed by more of the same, near 1 is a random walk | the window's closes |
 | `window_move_bps` | the price move from the first close of the window to the last; a market move, not the trade's net | the window's closes |
 | `timeframes.<tf>` | the same regime, net move, z-score and position in range on each higher timeframe, with its structure and its last structure event | `[run].context_intervals`, one candle pull each |
 | `book_imbalance` | resting bids against resting asks over the first 10 levels, from -1 to 1; positive leans to the bid | the order book already in the snapshot |
 | `open_interest` | the change in percent since the previous snapshot of this instrument, and how long ago that was | the open interest already pulled, and the last snapshot on disk |
-| `readings.<role>` | what your own thresholds say on the macro, on-chain or sentiment series this cycle | the same declared state conviction reads, known before any model is asked |
 
 Nothing here is required. A higher timeframe the venue cannot serve is named in the refusals and
 left out, and so is an open interest with nothing earlier to compare it to.
@@ -376,14 +374,15 @@ trade a single idea. The research core in `tra backtest` and `tra agent session`
 trades one registered mechanism, by design.
 
 The macro analyst's regime is a different thing: risk-on or risk-off is about the world outside the
-chart, and it can disagree with what price is doing. Both are kept. The analyst sees the declared
-macro state in `readings`, and conviction weighs the macro analyst's graded score as before.
+chart, and it can disagree with what price is doing. Both are kept, apart: the technical analyst
+does not see the macro state, and conviction weighs the macro analyst's graded score against the
+technical reading after both have answered.
 
 ## Who is asked, and what each one reads
 
 | Agent | Reads | Answers | Asked when |
 |---|---|---|---|
-| `technical_analyst` | the closed candles of the snapshot, the spread, the funding rate, the regime on each timeframe, the book imbalance, the open interest change, and your thresholds' reading of the other series | a target, a named setup, a confidence, a horizon, a reason, and the figures it read | every cycle; it is the role that decides |
+| `technical_analyst` | the closed candles of the snapshot, the spread, the funding rate, the regime on each timeframe, the book imbalance, the open interest change; nothing from the other analysts | a target, a named setup, a confidence, a horizon, a reason, and the figures it read | every cycle; it is the role that decides |
 | `macro_analyst` | macro series and the dated text of `news.toml` | a regime, the events it saw, a reason | when `sources/macro.toml` or `sources/news.toml` declares something, or `--macro` / `--news` names a file |
 | `onchain_analyst` | chain figures and derivative figures, read side by side | accumulation, distribution or neutral, and why | when `sources/onchain.toml` or `sources/derivatives.toml` declares something, or `--onchain` / `--derivatives` |
 | `sentiment_analyst` | dated scores, plus the same dated text as notes | negative, neutral, positive, or not declared | when `sources/sentiment.toml` declares something, or `--sentiment` |
@@ -525,10 +524,10 @@ after the round trip is priced, in parallel with each other:
 validators = ["pro", "contra", "neutral"]
 ```
 
-Each one receives the proposal, the figures it was built from, the declared states and what the
-round trip costs. Each must answer with claims that cite a figure by the brief's own name, with that
-figure's value - and the figures it may cite are every figure in the brief it was handed, the
-proposal's claimed edge and the cost included, rather than a narrower set it never saw:
+Each one receives the proposal and the figures it was built from: not the round trip, not the
+claimed edge, and not the other analysts' readings, which code weighs once in conviction. Each must
+answer with claims that cite a figure by the brief's own name, with that figure's value, and the
+figures it may cite are every figure in the brief it was handed:
 
 ```json
 {"stance": "contra",

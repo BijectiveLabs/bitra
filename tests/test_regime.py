@@ -110,14 +110,14 @@ def test_the_brief_carries_the_regime_on_every_timeframe_it_was_given() -> None:
         lookback_bars=20,
         now=NOW,
         context={900: frame(rising, 900), 3600: frame(list(reversed(rising)), 3600)},
-        readings={"macro_analyst": {"declared": "risk-off", "score": "-0.4"}},
     )
     record = brief.record()
     assert record["regime"] == "ranging"
     assert record["timeframes"]["15m"]["regime"] == "trending up"
     assert record["timeframes"]["1h"]["regime"] == "trending down"
     assert record["timeframes"]["15m"]["bars"] == 20
-    assert record["readings"]["macro_analyst"]["declared"] == "risk-off"
+    # Another analyst's reading is never in this brief; code weighs it after the answer.
+    assert "readings" not in record
     # The fixture's book holds 55 on each side.
     assert record["book_imbalance"] == "0.000"
     assert interval_name(900) == "15m" and interval_name(86_400) == "1d"

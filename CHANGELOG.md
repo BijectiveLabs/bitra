@@ -31,6 +31,10 @@ All notable changes to this project are recorded here. The format follows
   settings. Run on Bitget's demo API on 2026-10-20: entries with exits attached, a refused second
   entry, a reduce-only close, a cancelled post-only order, a close by the venue's own stop, the kill
   path.
+- Binance futures through `venue = "binance"`: a futures symbol sends the client to the futures
+  API (ccxt's `binance` reads the spot wallet otherwise), the position is read from the position
+  list, a balance ccxt did not parse is read from Binance's own rows, and a whole leverage is sent as
+  an integer. Run on Binance's demo API on 2026-10-20 with exits placed after the fill.
 - Parquet files of your own: `tra data audit FILE.parquet --mapping mapping.toml` reads trade
   history through the same column map and audit as a CSV, and a `[[series]]` may name a `.parquet`
   file. A zoned timestamp is kept to the nanosecond; one without a zone is refused.
@@ -53,6 +57,10 @@ All notable changes to this project are recorded here. The format follows
   keys. `ccxt_options = { builderFee = true }` turns it back on.
 - Docs, site and messages say demo API and testnet API rather than account: the software reaches
   an exchange's practice environment through its API, not through an app.
+- Every analyst reads only its own data. The technical analyst no longer receives the other
+  analysts' declared states (`readings`) or the derivatives positioning series, which the on-chain
+  analyst reads; the validators no longer receive the declared states. The readings are weighed once,
+  by code, in confluence and conviction. A test holds each brief to its own data.
 - An answer that does not fit its schema is asked for once more with the reason after the brief,
   rather than with the same brief again; the event analyst gets the same second call.
 - The console's separator lines take the home screen's colour, so they no longer read as text.
@@ -66,6 +74,11 @@ All notable changes to this project are recorded here. The format follows
 - A fee ccxt reports as negative on a taker fill is counted as paid, since no venue pays a taker;
   on Bitget's unified account the fee is read from Bitget's own fill. Before, a round trip there
   would have shown its fees as a rebate.
+- An order is refused when the venue's book, read at the moment of sending, is stamped more than
+  30 seconds ago; `tra keys --probe` says so. Binance's demo API served a book 3.2 hours old on
+  2026-10-20, 35 bps from where its own trades printed.
+- A close carries a client order id of its own, as entries always did; without one, ccxt put its
+  own broker id on a Binance close.
 - A filled order the venue reports without an average price is priced from its own fills, so the
   entry's slippage is recorded (Bitget's unified account).
 - In venue mode, a book or funding source from a plugin is now held to the execution venue too. It
@@ -77,7 +90,8 @@ All notable changes to this project are recorded here. The format follows
 - Venues: a "Broker tags" section with what ccxt adds to orders on each venue, and the default
   this package sets on Hyperliquid's builder fee.
 - Your own data: a page on bringing trade history, series and vendor feeds in CSV, JSON or Parquet,
-  and the rules every file is held to.
+  the rules every file is held to, and how each is stored (datasets as Parquet that DuckDB, Polars
+  or pandas open directly).
 - Working with language models: what a role is given, measured; how an answer that does not fit or
   cites nothing is handled, with the counts from a demo desk; the analyst's last reading.
 - Agents: what goes in and what comes out of every role in a cycle, in one table.

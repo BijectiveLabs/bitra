@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -243,7 +244,9 @@ def test_a_position_past_its_hold_limit_is_closed_reduce_only(tmp_path: Path) ->
     )
     said = keeper(tmp_path, venue, at=datetime(2026, 10, 5, 3, 0, tzinfo=UTC)).run()
     close = venue.orders[-1]
-    assert close["type"] == "market" and close["params"] == {"reduceOnly": True}
+    assert close["type"] == "market" and close["params"]["reduceOnly"] is True
+    # A close carries an id of its own, so no library fills in one of its own.
+    assert re.fullmatch(r"tra[0-9]+c", close["params"]["clientOrderId"])
     assert close["side"] == "sell" and close["amount"] == 0.002
     assert "past its timeout limit of 4h 00m" in said[0]
     trip = json.loads((tmp_path / ROUND_TRIPS).read_text("utf-8").splitlines()[-1])
@@ -478,7 +481,7 @@ def test_a_fill_whose_exit_cannot_be_placed_is_closed_at_once() -> None:
     # The stop that did go out comes off, and the position goes with a reduce-only close.
     assert placed["closed_unprotected"]["closed"] is True and venue.held == 0
     assert "exit-2" in venue.cancelled
-    assert venue.orders[-1]["params"] == {"reduceOnly": True}
+    assert venue.orders[-1]["params"]["reduceOnly"] is True
 
 
 def test_an_exit_left_from_an_earlier_position_comes_off_before_the_entry() -> None:

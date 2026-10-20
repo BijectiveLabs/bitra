@@ -44,7 +44,6 @@ from trading_research_agents.agents.briefs import (
     data_brief,
     declared_state,
     interval_name,
-    positioning_rows,
     technical_brief,
 )
 from trading_research_agents.agents.cited import survived
@@ -697,8 +696,6 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
             rule=cfg.regime,
             context=context,
             previous_open_interest=_previous_open_interest(cfg.root, cfg.instrument, cycle),
-            readings={role: _reading_state(role, brief) for role, brief in reading_briefs.items()},
-            positioning=_positioning(cfg, snapshot, result),
         )
     except BriefError as exc:
         result.stopped_by = f"no technical brief: {exc}"
@@ -717,7 +714,8 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         shown["previous"] = last
     asked = _within_scope(technical_analyst.ROLE, shown, result)
     write_json(where.brief("technical"), asked)
-    announce(cfg.watch, "regime", DONE, _regime_line(cfg, technical))
+    states = {role: _reading_state(role, brief) for role, brief in reading_briefs.items()}
+    announce(cfg.watch, "regime", DONE, _regime_line(cfg, technical, states))
 
     tasks = [
         Task(
@@ -1504,13 +1502,14 @@ def _reading_state(role: str, brief: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _regime_line(cfg: CycleConfig, brief: Any) -> str:
+def _regime_line(cfg: CycleConfig, brief: Any, states: Mapping[str, Any]) -> str:
     said = [f"{brief.regime} on {interval_name(cfg.interval_s)}"]
     if brief.features.structure is not None:
         shape = brief.features.structure
         said.append(f"structure {shape.trend}" + (f", {shape.event}" if shape.event else ""))
     said.extend(f"{name} {frame['regime']}" for name, frame in (brief.timeframes or {}).items())
-    said.extend(f"{role} {state['declared']}" for role, state in (brief.readings or {}).items())
+    # Shown to the operator; the analyst's brief does not carry them.
+    said.extend(f"{role} {state['declared']}" for role, state in states.items())
     return ", ".join(said)
 
 
@@ -1594,24 +1593,6 @@ def _reading_task(cfg: CycleConfig, module: Any, brief: dict[str, Any]) -> Calla
         return _ask_readable(cfg, module.ROLE, brief, module.SCHEMA, module.parse)
 
     return ask
-
-
-def _positioning(cfg: CycleConfig, snapshot: Snapshot, result: CycleResult) -> list[dict[str, Any]]:
-    """`sources/derivatives.toml`, on this instrument's asset, for the technical analyst."""
-    series: list[Series] = []
-    for path in cfg.series.get(onchain_analyst.ROLE, ()):
-        if path.stem != "derivatives":
-            continue
-        try:
-            readable, _problems = load_readable(path)
-        except SeriesError as exc:
-            result.refusals.append(f"positioning {path.name}: {exc}")
-            continue
-        series.extend(readable)
-    if not series:
-        return []
-    at_ns = int(cfg.clock().timestamp() * 1_000_000_000)
-    return positioning_rows(series, instrument=cfg.instrument, at_ns=at_ns)
 
 
 def _conviction_states(cfg: CycleConfig, result: CycleResult) -> dict[str, Mapping[str, Any]]:
@@ -1734,11 +1715,6 @@ def _run_validators(
         "reason": analyst.reason,
         "mechanism": cfg.mechanism,
     }
-    states = {
-        role: said.get("declared_state", {})
-        for role, said in result.context.items()
-        if isinstance(said.get("declared_state"), Mapping)
-    }
     tasks = []
     seen: dict[str, dict[str, str]] = {}
     for stance in cfg.validators:
@@ -1750,7 +1726,6 @@ def _run_validators(
                 stance=stance,
                 proposal=proposal,
                 figures=figures,
-                declared_states=states,
             ),
             result,
         )

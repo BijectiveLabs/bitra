@@ -73,6 +73,9 @@ BPS = Decimal(10_000)
 # The same bound a live session holds itself to. ccxt signs with a wider receive window, so a clock
 # past this still works until the day it drifts a little further, mid-order.
 MAX_CLOCK_SKEW_MS = 1000
+# A venue's book stamped older than this is not the market an order is about to meet. Seen on
+# 2026-10-20: a demo API served a book 3.2 hours old, 35 bps from where its own trades printed.
+MAX_BOOK_AGE_S = 30.0
 
 
 # ccxt's credential fields, and the suffix of the environment variable each is read from. Most
@@ -184,6 +187,7 @@ class VenueHand:
     # Set when the venue applied the leverage but ccxt has no way to read it back.
     leverage_by_reply: bool = False
     sent_count: int = 0
+    book_age_s: float | None = None
 
     def __post_init__(self) -> None:
         if self.max_notional <= 0:
@@ -223,7 +227,7 @@ class VenueHand:
         config["options"] = {**SIGNED_DEFAULTS, **dict(config.get("options") or {})}
         client = build_client(self.venue, config)
         self.to_environment(client)
-        route(self.venue, client)
+        route(self.venue, client, self.symbol)
         return client
 
     def to_environment(self, client: Any) -> None:
@@ -283,6 +287,12 @@ class VenueHand:
                 return setting
             self._open_orders()
             self.position()
+            self._touch_now()
+            if self.book_age_s is not None and self.book_age_s > MAX_BOOK_AGE_S:
+                return (
+                    f"the venue's book for {self.symbol} is stamped {self.book_age_s:.0f}s ago; "
+                    "every order would be refused until it is current"
+                )
         except DispatchError as exc:
             return str(exc)
         except Exception as exc:
@@ -424,6 +434,14 @@ class VenueHand:
         # half a minute is ordinary. Seen on 2026-10-04: a post-only order rested at that stale
         # touch was on the wrong side of a market that had moved, and the venue rejected it at once.
         now_bid, now_ask = self._touch_now()
+        if self.book_age_s is not None and self.book_age_s > MAX_BOOK_AGE_S:
+            return {
+                "sent": False,
+                "refused": (
+                    f"the venue's book for {self.symbol} is stamped {self.book_age_s:.0f}s ago; "
+                    "an order is not priced against a book that old"
+                ),
+            }
         drift = _drift_bps(mid, now_bid, now_ask, side)
         if drift is not None and self.max_drift_bps is not None and drift > self.max_drift_bps:
             return {
@@ -898,14 +916,21 @@ class VenueHand:
         try:
             held = fetch(self.symbol)
         except Exception as exc:
-            if type(exc).__name__ == "NullResponse":
+            if type(exc).__name__ == "NotSupported":
+                # Seen on 2026-10-20: a venue that reads one position only for options through
+                # ccxt reads its futures from the whole list, filtered here.
+                held = self._position_in_list()
+                if held is None:
+                    return None
+            elif type(exc).__name__ == "NullResponse":
                 # The venue answered, with no position in it. Some adapters say that by raising
                 # (seen through ccxt 4.5.84, 2026-10-08) rather than returning an empty one;
                 # it is a read that succeeded and found the account flat, not a failed read.
                 return Decimal(0)
-            raise DispatchError(
-                self.redact(f"cannot read the account: {exc.__class__.__name__}: {exc}")
-            ) from exc
+            else:
+                raise DispatchError(
+                    self.redact(f"cannot read the account: {exc.__class__.__name__}: {exc}")
+                ) from exc
         if not held:
             return Decimal(0)
         contracts = held.get("contracts")
@@ -913,6 +938,24 @@ class VenueHand:
             return Decimal(0)
         signed = Decimal(str(contracts)) * self.contract_size()
         return -signed if str(held.get("side", "")).lower() == "short" else signed
+
+    def _position_in_list(self) -> Mapping[str, Any] | None:
+        """This symbol's row of the venue's position list: empty when flat, None when unreadable."""
+        fetch = getattr(self.client, "fetch_positions", None)
+        if fetch is None:
+            return None
+        try:
+            rows = list(fetch([self.symbol]) or [])
+        except Exception as exc:
+            raise DispatchError(
+                self.redact(f"cannot read the positions: {exc.__class__.__name__}: {exc}")
+            ) from exc
+        mine = [r for r in rows if r.get("symbol") == self.symbol and r.get("contracts")]
+        if len(mine) > 1:
+            raise DispatchError(
+                f"the venue reports {len(mine)} positions on {self.symbol}; this desk holds one"
+            )
+        return mine[0] if mine else {}
 
     def _shares(self) -> Decimal:
         """The shares of this outcome the account holds, as the venue's positions report them.
@@ -983,7 +1026,7 @@ class VenueHand:
             return f"{self.venue} cannot set leverage through ccxt; set it at the venue and say so"
         answered = False
         try:
-            set_leverage(float(self.leverage), self.symbol)
+            set_leverage(leverage_number(self.leverage), self.symbol)
             answered = True
         except Exception as exc:
             said.append(f"leverage: {self._answer(exc)}")
@@ -1226,7 +1269,15 @@ class VenueHand:
                 side,
                 float(amount),
                 None,
-                {} if spot else {**self.order_params(), "reduceOnly": True},
+                # A close carries an id of its own like every other order. Without one, ccxt fills
+                # in its own broker id on some venues (seen on 2026-10-20 on a demo close).
+                {"clientOrderId": f"tra{int(self.clock() * 1000)}c"}
+                if spot
+                else {
+                    **self.order_params(),
+                    "reduceOnly": True,
+                    "clientOrderId": f"tra{int(self.clock() * 1000)}c",
+                },
             )
         except Exception as exc:
             return {
@@ -1240,6 +1291,8 @@ class VenueHand:
         if order_id and state not in ("closed", "filled", *ENDED):
             taken = self._taken(order_id)
             state, average = str(taken.get("status") or state), taken.get("average", average)
+        if average is None and order_id:
+            average = self._filled_average(order_id)
         # Accepted is not filled. Seen on a demo on 2026-10-17: a reduce-only market close on a
         # stock perpetual whose book sat outside the venue's price band rested unfilled, and the
         # account still held the position. The record says closed only when the account agrees.
@@ -1354,10 +1407,14 @@ class VenueHand:
         fetch = getattr(self.client, "fetch_order_book", None)
         if fetch is None:
             return None, None
+        self.book_age_s = None
         try:
             book = fetch(self.symbol)
             bid = Decimal(str(book["bids"][0][0])) if book.get("bids") else None
             ask = Decimal(str(book["asks"][0][0])) if book.get("asks") else None
+            stamp = book.get("timestamp")
+            if stamp:
+                self.book_age_s = self.clock() - float(stamp) / 1000
         except Exception:
             # Without a fresh book the order rests at the snapshot's touch, as it always did.
             return None, None
@@ -1520,6 +1577,12 @@ class VenueHand:
         except Exception as exc:
             return self.redact(f"{exc.__class__.__name__}: {exc}")[:200]
         return ""
+
+
+def leverage_number(leverage: Decimal) -> int | float:
+    """A whole leverage as an integer: one venue refused 3.0 as malformed (2026-10-20)."""
+    whole = leverage.to_integral_value()
+    return int(whole) if leverage == whole else float(leverage)
 
 
 def _drift_bps(

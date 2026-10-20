@@ -23,7 +23,7 @@ the system's own rules, tested and failing closed, and a role acts through them,
 | `macro_analyst` | series the operator mapped in (events, cross-venue funding, sentiment) | nothing | every cycle in `tra run`; once per session in a session, when series are given |
 | `onchain_analyst` | on-chain series the operator mapped in | nothing | every cycle in `tra run`; once per session in a session, when series are given |
 | `sentiment_analyst` | dated scores and dated notes the operator curates, through the same series engine | `negative`, `neutral`, `positive`, or `not declared` when nothing was mapped in | reads only; nothing is scraped |
-| `validator` | `figures_of`, `checked` over the brief the deciding analyst was given | one stance (pro, contra, neutral): the proposal as the analyst gave it (side, setup, levels, confidence), the figures it was built from and the declared states, never the cost, the claimed edge or the desk's rules; every claim it makes has to cite one of those figures with its value, and the system discards the ones that do not | once per cycle, when `[agents].validators` is set |
+| `validator` | `figures_of`, `checked` over the brief the deciding analyst was given | one stance (pro, contra, neutral): the proposal as the analyst gave it (side, setup, levels, confidence) and the figures it was built from, never another analyst's reading, the cost, the claimed edge or the desk's rules; every claim it makes has to cite one of those figures with its value, and the system discards the ones that do not | once per cycle, when `[agents].validators` is set |
 | `risk_manager` | in `tra run`: the client's limits, what is in force, the alarms, the round trips by instrument; in a session: the limits, the canary caps, the ladder, latency, net against the registration | in `tra run`: `reduce` (size multiple below 1), `pause` (instruments), `halt` (the kill switch), each for `hold_hours`; in a session: `tighten_limits`, `demote`, `arm_kill_switch` | in `tra run`, between cycles whenever the quant auditor is asked; in a session, after the runs |
 | `executor` | the venue, the rate limits, the allocation across instruments | an allocation, fractions summing to at most one | after the risk decision |
 | `auditor` | the ledger, every run, `usage.jsonl`, the ladder | `audit.json` | last |
@@ -124,7 +124,7 @@ size, or declared by the operator and labelled as such.
 | Role | Tools (`agents/<role>/tools.py`) | What the brief carries |
 |---|---|---|
 | `market_screener` | `screen_figures` | per instrument: rows, print rate, realised volatility, first-lag autocorrelation, the 1:10 variance ratio, largest gap, last-hour volume against the average, turnover, the cost floor for the claimed edge, and a regime the system proposes from a written rule (`[agents.screen]` sets the two thresholds: `min_prints_per_minute`, `volatile_above_bps`) |
-| `technical_analyst` | `features` | on each closed bar: returns over 1, 5 and 20 bars, the close as a z-score of the window, the gap to VWAP, the last bar's volume and range against the window's, the position between the window's high and low, the net move and trend strength with the regime they give, the variance ratio, and the market structure (swings labelled HH, HL, LH, LL, the trend they make, the last break of structure or change of character, invalidation, support and resistance); the same regime and structure on each higher timeframe in `[run].context_intervals`; the book imbalance, the open interest change since the last snapshot, the derivatives positioning declared for its asset, the declared state of the other series (see [the cycle](/opensource/cycle#the-market-around-the-decision)), and in `tra run` its own last reading of the instrument with the move since (`previous`) |
+| `technical_analyst` | `features` | on each closed bar: returns over 1, 5 and 20 bars, the close as a z-score of the window, the gap to VWAP, the last bar's volume and range against the window's, the position between the window's high and low, the net move and trend strength with the regime they give, the variance ratio, and the market structure (swings labelled HH, HL, LH, LL, the trend they make, the last break of structure or change of character, invalidation, support and resistance); the same regime and structure on each higher timeframe in `[run].context_intervals`; the book imbalance and the open interest change since the last snapshot (see [the cycle](/opensource/cycle#the-market-around-the-decision)), and in `tra run` its own last reading of the instrument with the move since (`previous`). Nothing another analyst reads or says |
 | `macro_analyst` | `macro_brief` over `data/series.py` | per series in `series.toml`: the value known at the time and when it became known (publication lag honoured), the state against the operator's declared threshold, the correlation and strongest lead-lag with the instrument's returns measured on the operator's data with n, the calendar events inside the horizon |
 | `onchain_analyst` | `onchain_brief` | the same engine, plus the net over a window and the last value as a z-score of its own history |
 | `risk_manager` | `risk_brief` | per run: latency from intent to fill (median, max, n, ratio to the declared), net per round trip overall and over the last window against the claimed magnitude, maximum drawdown, the favourable and adverse excursions of the closed round trips with what the winners gave back, which control refused and how often |
@@ -139,15 +139,22 @@ the schema its answer fills.
 
 | Role | Reads | Answers | Code then checks |
 |---|---|---|---|
-| `technical_analyst` | the features, structure, regime and higher timeframes of its instrument, the book, open interest, positioning, the other series' declared states, its own last reading | `target`, `setup`, `confidence`, `horizon_bars`, `stop_price`, `target_price`, `reason`, `figures_used` | the schema, the setup against the measured regime, the levels on the right side of the price, every citation |
+| `technical_analyst` | the features, structure, regime and higher timeframes of its instrument, the book, open interest, its own last reading | `target`, `setup`, `confidence`, `horizon_bars`, `stop_price`, `target_price`, `reason`, `figures_used` | the schema, the setup against the measured regime, the levels on the right side of the price, every citation |
 | `macro_analyst` | its series with what was known when, the operator's thresholds, measured correlations with n, the calendar | `regime`, `events`, `reason`, `figures_used`, `data_as_of` | the schema, every citation, words that belong to a later step (recorded) |
 | `onchain_analyst` | its series, their net over a window and z-scores | `signal`, `reason`, `figures_used`, `data_as_of` | the same |
 | `sentiment_analyst` | its scores and dated notes | `state`, `figures_used`, `reason`, `data_as_of` | the same |
-| validators | the proposal, the figures it was built from, the declared states | `stance`, `claims`, `verdict`, `reason` | the schema; a claim that does not cite a figure it was given is dropped |
+| validators | the proposal and the figures it was built from | `stance`, `claims`, `verdict`, `reason` | the schema; a claim that does not cite a figure it was given is dropped |
 | `event_analyst` | the question, the outcome's book and recent prices, the calendar and your notes | `probability`, `confidence`, `reason`, `figures_used` | the schema, every citation |
 | `market_screener` | one live snapshot per admitted instrument | `kept`, `excluded`, `picks` | it can only drop an instrument, never add one |
 
 An answer that does not fit its schema is asked for once more with the reason, and then refused.
+
+No analyst sees another's data or another's answer. The technical analyst reads its own market and
+not the macro, on-chain or sentiment readings; each reading analyst reads its own shelf and nothing
+the others were given; the validators argue from the proposal's own figures. A view that knows the
+other views can lean toward them, and then two analysts agreeing says less than it seems to. The
+readings are combined once, by code, in confluence and conviction, after every analyst has
+answered on its own.
 How that and the citation check have done on a demo desk is in
 [Working with language models](/opensource/llm#when-an-answer-does-not-fit-or-points-at-nothing).
 
@@ -188,8 +195,8 @@ the market alone, and code applies your settings afterwards.
 
 | Who | Knows | Does not know |
 |---|---|---|
-| `technical_analyst` | the market figures, the structure, the regime, the higher timeframes, the readings of the other series, your mechanism as a preference, its own last reading | the cost of the round trip, every `[targets]`, `[exit]`, `[run]` sizing and `[controls]` setting, and what became of its last reading |
-| validators | the analyst's proposal as given, the figures it was built from, the declared states | the same, and the claimed edge |
+| `technical_analyst` | the market figures, the structure, the regime, the higher timeframes, your mechanism as a preference, its own last reading | the cost of the round trip, every `[targets]`, `[exit]`, `[run]` sizing and `[controls]` setting, what became of its last reading, and the other analysts' readings |
+| validators | the analyst's proposal as given and the figures it was built from | the same, and the claimed edge |
 | `event_analyst` (prediction markets) | the question, the outcome's bid, ask and mid, its recent prices, your dated notes and calendar | the fee, the margin an estimate has to clear and the size |
 | code | everything you declared | nothing it has to guess |
 

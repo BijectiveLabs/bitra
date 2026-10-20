@@ -36,7 +36,7 @@ we have run end to end, and what ccxt says a venue can do. The second is read fr
 | OKX | exchange | everything | testnet | `OKX_API_KEY`, `OKX_API_SECRET`, `OKX_API_PASSPHRASE` | yes, on the demo API: real orders, exits attached, closed by the venue's own exits |
 | Bitget | exchange | everything, on a classic or a unified trading account; a unified account key is recognised and sent through Bitget's unified API ([below](#bitget-s-unified-trading-account)) | demo | `BITGET_API_KEY`, `BITGET_API_SECRET`, `BITGET_API_PASSPHRASE` | yes, on the demo API with a unified account: entries with exits attached, a resting order cancelled, a position closed by the venue's own stop, the kill path |
 | BingX | exchange | everything | testnet | `BINGX_API_KEY`, `BINGX_API_SECRET` | ready for its run; [report wanted](https://github.com/BijectiveLabs/trading-research-agents/issues/6) |
-| Binance | exchange | orders, with the stop and take profit placed right after the fill (`exits = "separate"`) | demo, testnet | `BINANCE_API_KEY`, `BINANCE_API_SECRET` | ready for its run; it is the data fallback in the default project |
+| Binance | exchange | orders, with the stop and take profit placed right after the fill (`exits = "separate"`); `binance` trades USD-M futures for a futures symbol | demo, testnet | `BINANCE_API_KEY`, `BINANCE_API_SECRET` | yes, on the demo API: entries, exits placed after the fill, a close that takes them off, a cancelled post-only order, the kill path. On 2026-10-20 the demo's order book was stamped hours old, and orders are refused until it is current |
 | Gate | exchange | orders, exits placed right after the fill (`exits = "separate"`) | testnet | `GATE_API_KEY`, `GATE_API_SECRET` | ready for its run |
 | WEEX, BloFin, WOO X | exchange | everything | testnet | `<VENUE>_API_KEY`, `<VENUE>_API_SECRET` (and `_API_PASSPHRASE` for WEEX and BloFin) | ready for its run |
 | Hyperliquid | decentralised | everything; leverage is confirmed by the venue's reply, since ccxt cannot read it back | testnet | `HYPERLIQUID_WALLET_ADDRESS`, `HYPERLIQUID_PRIVATE_KEY` | ready for its run; [report wanted](https://github.com/BijectiveLabs/trading-research-agents/issues/7) |
@@ -330,8 +330,9 @@ It is for positions the venue can reduce: perpetuals and futures. A spot desk on
 keeps `"attached"` where the venue takes it, or `"none"`.
 
 There is a moment between the fill and the exits, the time two orders take to send. A desk that
-cannot accept it trades where exits go with the entry. The path is built against ccxt 4.5.85's
-Binance code and tested offline; it has not yet had its run on the demo API.
+cannot accept it trades where exits go with the entry. Run on Binance's demo API on 2026-10-20:
+both exits rested as algo orders, a close took them off, and a fill whose stop the venue would not
+take was closed at once.
 
 ## Broker tags
 
@@ -450,6 +451,18 @@ entry as attached algo orders at the market price. The request ccxt builds for a
 with both was inspected offline on 2026-10-08 and carries `tdMode` isolated, `ordType` ioc,
 `attachAlgoOrds` and the id. It has been sent to OKX's demo API since 2026-10-10: entries
 filled with both exits attached, and positions closed by those exits at the venue.
+
+### Binance futures
+
+`venue = "binance"` with a futures symbol (`BTC/USDT:USDT`) trades USD-M futures: the client is sent
+to the futures API, since ccxt's `binance` class otherwise reads the spot wallet for the balance.
+The position is read from Binance's position list, the balance from Binance's own rows where
+ccxt's parse comes back empty (as it did on the demo API), and a whole leverage is sent as an
+integer, which Binance requires. Exits go out after the fill (`exits = "separate"`).
+
+Every order is priced against the venue's book at the moment of sending, and a book the venue
+stamped more than 30 seconds ago is refused, on any venue. On 2026-10-20 Binance's demo API served a
+book 3.2 hours old, about 35 bps from where its own trades printed; `tra keys --probe` names it.
 
 ### Bitget's unified trading account
 

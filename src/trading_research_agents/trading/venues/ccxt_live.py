@@ -32,6 +32,7 @@ from trading_research_agents.trading.dispatch import (
 )
 from trading_research_agents.trading.venue import Fill, Intent, VenueError
 from trading_research_agents.trading.venues.accounts import account_refusal, key_refusal
+from trading_research_agents.trading.venues.margin import route
 from trading_research_agents.trading.venues.registry import LiveVenueSettings
 
 SUBMIT_RETRIES = 3
@@ -336,6 +337,7 @@ class CcxtLiveFactory:
                 env=env,
             )
             hand.symbol = _resolved(hand, settings.instrument)
+            route(hand.venue, hand.client, hand.symbol)
         except DispatchError as exc:
             raise VenueError(str(exc)) from None
         return CcxtLiveVenue(hand, settings)

@@ -14,7 +14,7 @@ mode is set with the leverage, read back from the matching row, and sent with ev
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol
 
@@ -49,7 +49,9 @@ class BitgetUnified:
         return {"marginMode": self._mode(margin_mode)}
 
     def apply(self, symbol: str, leverage: Decimal, margin_mode: str) -> None:
-        self.client.set_leverage(float(leverage), symbol, {"marginMode": self._mode(margin_mode)})
+        whole = leverage.to_integral_value()
+        amount = int(whole) if leverage == whole else float(leverage)
+        self.client.set_leverage(amount, symbol, {"marginMode": self._mode(margin_mode)})
 
     def _settings(self) -> Mapping[str, Any]:
         return (self.client.privateUtaGetV3AccountSettings() or {}).get("data") or {}
@@ -108,11 +110,30 @@ def _bitget_route(client: Any) -> None:
         options["uta"] = True
 
 
-ROUTES = {"bitget": _bitget_route}
+def _binance_route(client: Any, symbol: str) -> None:
+    """Send a Binance client for a futures symbol to the futures API.
+
+    ccxt's `binance` class defaults to spot for every call that names no symbol, the balance first:
+    on the demo API on 2026-10-20 that call went to the spot wallet endpoint, which the demo does
+    not have, and on mainnet it would read the spot wallet instead of the futures one. A symbol
+    that settles in its quote is a USD-M future, one that settles in its base a COIN-M one.
+    """
+    options = getattr(client, "options", None)
+    rest = symbol.partition("/")[2]
+    quote, _, settle = rest.partition(":")
+    if not isinstance(options, dict) or not settle or options.get("defaultType") != "spot":
+        return
+    options["defaultType"] = "future" if settle == quote else "delivery"
 
 
-def route(venue: str, client: Any) -> None:
-    """Point a signed client at the account its key belongs to, where a venue has two kinds."""
+ROUTES: dict[str, Callable[[Any, str], None]] = {
+    "bitget": lambda client, symbol: _bitget_route(client),
+    "binance": _binance_route,
+}
+
+
+def route(venue: str, client: Any, symbol: str = "") -> None:
+    """Point a signed client at the account its key and its symbol belong to."""
     send = ROUTES.get(venue.strip().lower())
     if send is not None:
-        send(client)
+        send(client, symbol)

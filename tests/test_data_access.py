@@ -1,4 +1,4 @@
-"""What the system hands the analysts: vendor and venue presets, fetched news, positioning, and a
+"""What the system hands the analysts: vendor and venue presets, fetched news, and a
 reading analyst's own label where nothing is declared.
 
 Every request goes through a recorded answer, in the shape the vendor's reference documents or the
@@ -16,13 +16,10 @@ from typing import Any
 
 import pytest
 
-from trading_research_agents.agents.briefs import positioning_rows
 from trading_research_agents.data.news import news_due, plain, pull_news
 from trading_research_agents.data.pull import PullError, plan, pull
 from trading_research_agents.data.series import (
     NewsSpec,
-    Point,
-    Series,
     SeriesError,
     SeriesSpec,
     Threshold,
@@ -222,39 +219,6 @@ def test_a_news_declaration_names_how_it_is_fetched(tmp_path: Path) -> None:
     )
     with pytest.raises(SeriesError, match="rss"):
         load_news_map(path)
-
-
-# -- positioning --------------------------------------------------------------------------------
-
-
-def series(name: str, asset: str, values: list[tuple[int, str]]) -> Series:
-    s = SeriesSpec(
-        name=name,
-        file="x.csv",
-        ts="date",
-        ts_unit="iso8601",
-        value="value",
-        unit="ratio",
-        publish_lag=timedelta(0),
-        source="bybit account-ratio",
-        threshold=Threshold(bearish_above=Decimal("0.65"), bullish_below=Decimal("0.55")),
-        max_age=timedelta(hours=1),
-        asset=asset,
-    )
-    points = tuple(
-        Point(NOW_NS - minutes * 60_000_000_000, NOW_NS - minutes * 60_000_000_000, Decimal(v))
-        for minutes, v in values
-    )
-    return Series(spec=s, points=tuple(sorted(points, key=lambda p: p.published_ns)))
-
-
-def test_positioning_reads_the_instruments_own_asset_with_its_last_hour() -> None:
-    btc = series("btc_long_short", "BTC", [(65, "0.60"), (55, "0.62"), (5, "0.66")])
-    eth = series("eth_long_short", "ETH", [(5, "0.40")])
-    rows = positioning_rows([btc, eth], instrument="BTCUSDT", at_ns=NOW_NS)
-    assert [r["series"] for r in rows] == ["btc_long_short"]
-    assert rows[0]["value"] == "0.66" and rows[0]["change_1h"] == "0.06"
-    assert rows[0]["state"] == "bearish" and not rows[0]["stale"]
 
 
 # -- a reading analyst's own label ----------------------------------------------------------------

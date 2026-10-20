@@ -11,8 +11,8 @@ structure code measured on your timeframe (trending up, trending down, ranging o
 `trend_strength`, where a random walk sits near 1); `timeframes`, the same reading on the higher
 timeframes the operator declared, with the net move, z-score and position in range on each;
 `book_imbalance`, resting bids against resting asks near the touch, from -1 to 1;
-`open_interest`, its change since the previous snapshot; and `readings`, what the operator's own
-thresholds say on the macro and other series this cycle, before any analyst reads them. A setup
+and `open_interest`, its change since the previous snapshot. Nothing another analyst reads or
+says is in your brief: code weighs the readings after you answer. A setup
 has to belong in the regime and point the way its own figures point: a trend setup needs a measured trend (trending up or down) and trades with it, so not in
 a ranging or mixed market; range_reversion fades the stretch, long below the window's mean and
 short above it; momentum_exhaustion trades against the window's move; range_breakout trades the

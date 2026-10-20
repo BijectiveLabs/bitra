@@ -132,8 +132,6 @@ SCOPES: dict[str, Scope] = {
             "timeframes",
             "book_imbalance",
             "open_interest",
-            "readings",
-            "positioning",
             "previous",
         ),
         answers=(
@@ -178,7 +176,7 @@ SCOPES: dict[str, Scope] = {
     ),
     VALIDATOR: Scope(
         role=VALIDATOR,
-        reads=("instrument", "stance", "proposal", "figures", "declared_states"),
+        reads=("instrument", "stance", "proposal", "figures"),
         answers=("stance", "claims", "verdict", "reason"),
         decides="one vote, and only through claims that cite a figure it was given",
         prose=("reason",),

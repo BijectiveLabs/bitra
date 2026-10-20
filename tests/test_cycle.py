@@ -1379,3 +1379,41 @@ def test_a_malformed_answer_is_asked_again_with_the_reason(
     assert "refused before anyone read it: response lacks" in again
     # The brief comes first, unchanged, so a provider's cached prefix holds for the second call.
     assert again.startswith(fake.calls[0].user)
+
+
+def test_each_analyst_reads_its_own_data_and_none_sees_another_analysts_reading(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    macro = series_for(tmp_path, "us10y", "4.4", "{ bearish_above = 4.25 }")
+    onchain = series_for(tmp_path, "venue_net_flow", "120", "{ bearish_above = 100 }")
+    answers = {
+        "technical_analyst": analyst_answer(),
+        "macro_analyst": reading_answer("macro_analyst"),
+        "onchain_analyst": reading_answer("onchain_analyst"),
+    }
+    cfg, _fake, _ = cycle_config(
+        tmp_path,
+        envelope,
+        answers,
+        series={"macro_analyst": (macro,), "onchain_analyst": (onchain,)},
+        analysts=("technical_analyst", "macro_analyst", "onchain_analyst"),
+    )
+    result = run_cycle(cfg)
+    where = Path(str(result.path)) / "briefs"
+    seen = {
+        role: (where / f"{name}.json").read_text("utf-8")
+        for role, name in (
+            ("technical_analyst", "technical"),
+            ("macro_analyst", "macro_analyst"),
+            ("onchain_analyst", "onchain_analyst"),
+        )
+    }
+    others = {
+        "technical_analyst": ("us10y", "venue_net_flow", "macro_analyst", "onchain_analyst"),
+        "macro_analyst": ("venue_net_flow", "onchain_analyst", "technical", "market_structure"),
+        "onchain_analyst": ("us10y", "macro_analyst", "technical", "market_structure"),
+    }
+    for role, words in others.items():
+        assert [w for w in words if w in seen[role]] == [], role
+    # The readings are still weighed, once, by code.
+    assert result.context["macro_analyst"]["regime"] == "risk-off"

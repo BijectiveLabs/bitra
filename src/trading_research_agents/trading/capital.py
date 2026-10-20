@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from trading_research_agents.records import append_line, write_json
+from trading_research_agents.trading.venues.balances import unparsed
 
 BPS = Decimal(10_000)
 EQUITY_LOG = "equity.jsonl"
@@ -60,6 +61,8 @@ def read_account(client: Any, currency: str) -> Account:
     try:
         balance = client.fetch_balance()
         row = balance.get(currency) or {}
+        if row.get("total") is None:
+            row = unparsed(str(getattr(client, "id", "") or ""), balance, currency) or row
         unrealized = Decimal(0)
         positions = getattr(client, "fetch_positions", None)
         if positions is not None:

@@ -134,13 +134,12 @@ def test_the_schema_is_closed_and_the_stance_and_verdict_are_named() -> None:
         parse(answer(claims=[{"figure": "", "value": "1", "says": "nothing"}]))
 
 
-def test_the_brief_carries_the_proposal_and_the_declarations_and_nothing_else() -> None:
+def test_the_brief_carries_the_proposal_and_its_figures_and_nothing_else() -> None:
     brief = validator_brief(
         instrument="BTCUSDT",
         stance="neutral",
         proposal={"target": "long", "confidence": 0.71},
         figures=figures_of(BRIEF),
-        declared_states={"macro_analyst": {"declared": "bullish"}},
     )
 
     assert set(brief) == {
@@ -148,7 +147,6 @@ def test_the_brief_carries_the_proposal_and_the_declarations_and_nothing_else() 
         "stance",
         "proposal",
         "figures",
-        "declared_states",
     }
     # The cost and the desk's rules are code's question, so they are not in a validator's brief.
     assert brief["stance"] == "neutral" and "cost_bps" not in brief

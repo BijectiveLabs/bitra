@@ -19,6 +19,27 @@ directly. It reads the figures the system computed from it, with their age and w
 | dated text: releases, statements, your own notes | CSV, JSON | `sources/news.toml` | read as events by the macro analyst and as notes by the sentiment analyst |
 | a live feed from a data vendor: candles, the book, funding, open interest | anything your code can read | a source plugin, named in a chain in `data.toml` | asked like any other source, its answer stamped with its age and origin, refused when older than the chain's `ttl` |
 
+## How it is stored
+
+Whatever shape a file arrives in, the package keeps one shape of its own, and where the data is
+large it keeps it in a columnar store:
+
+| Data | Arrives as | Kept as |
+|---|---|---|
+| trade history | a venue archive, a CSV export, your own Parquet | the canonical trade, one Parquet file per dataset under `data/`: prices and sizes as `decimal128` at the scale the source used, time as UTC nanoseconds, `zstd` compressed, with a `manifest.json` beside it (source files and their SHA-256, row counts, the audit's findings) |
+| candles for a cycle | built from that Parquet, or fetched live | in the cycle's `snapshot.json`, with the source and age of each value |
+| dated series and text | CSV, JSON, Parquet | read in place, through the as-of rule, on every cycle; they are small, and a file you correct is read as corrected on the next cycle |
+| what the desk decided | written by the desk | one directory per cycle (briefs, answers, intents, orders) as JSON, and one index line per cycle per day |
+
+There is no database server to run. The datasets are plain Parquet, so the same files open in
+DuckDB, Polars, pandas or Spark for your own analysis, without an export step:
+
+```sql
+-- DuckDB, over every dataset of one instrument
+SELECT date_trunc('hour', ts) AS hour, count(*) AS trades, sum(qty) AS volume
+FROM 'data/BTCUSDT-*.parquet' GROUP BY 1 ORDER BY 1;
+```
+
 ## The rules every file is held to
 
 These are the same for a venue's archive, a vendor's export and a file you wrote yourself:
