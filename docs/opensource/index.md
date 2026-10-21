@@ -16,8 +16,9 @@ down or sends one order with the stop attached. Every decision and every refusal
 with its reason, so you can check afterwards what happened and why.
 
 It is an early release, so expect settings to change between versions. What works
-today: a universe of perpetuals found and measured by the system, a screener that picks where to
-look, the full autonomous cycle on live data, four analysts and up to three validators, stops and
+today: linear perpetuals, spot pairs (stock perpetuals and tokenized stocks among them) and
+prediction market outcomes through one order path, a universe of perpetuals found and measured by
+the system, a screener that picks where to look, the full autonomous cycle on live data, four analysts and up to three validators, stops and
 targets the analyst names inside bounds you set, the gates that decide, sizing from your own rules,
 real orders on a venue's practice environment behind a mandate you sign, a risk manager that can
 only make the desk more careful, and two auditors that read the records.
@@ -33,7 +34,11 @@ The command is `tra`. Start with the [quick start](/opensource/quick-start).
 | The agent sizes its own position | Size comes from your conviction ladder and your risk limit. No model can make a trade bigger. |
 | A model "decides" to ignore your settings | Your declared thresholds decide. A model's opinion is recorded beside them, never instead of them. |
 | Something went wrong and there is no trace | Each cycle keeps its snapshot, briefs, answers, the intent and what the venue said. Nothing is rewritten. |
-| A crash leaves a position with no stop | The stop and take profit go to the venue attached to the entry, so they survive this process dying. |
+| A crash leaves a position with no stop | The stop and take profit go to the venue with the entry, or right after the fill where the venue takes them no other way, so they survive this process dying. |
+| Text from a feed tells the model what to do | The model that proposes a direction reads numbers code computed; outside text reaches only roles that decide nothing, and no model can send an order or reach a key. |
+
+None of these is hypothetical. [Why it is built this way](/opensource/why) lists the documented
+failures behind each one, with their sources.
 
 ## How one cycle decides
 
@@ -76,7 +81,8 @@ flowchart TD
 | on-chain analyst | chain and derivatives figures | accumulation, distribution or neutral | propose a direction |
 | sentiment analyst | dated scores and notes you curate | negative, neutral, positive, or not declared | invent a mood no figure supports |
 | market screener | what the system measured for each admitted instrument: move, spread, regime, volume, correlation to BTC | which instruments to take, in what order, citing their figures | add an instrument the system did not admit |
-| validators (pro, contra, neutral) | the proposal and the figures behind it | support, oppose or abstain, with cited claims | decide, or cite a figure it wasn't given |
+| validators: pro and contra | the proposal and the figures behind it, each without the other's case | the strongest case for or against, as cited claims | see the other side's case, or cite a figure it wasn't given |
+| validator: neutral, as judge | the same, and both cases once code has checked every claim | support, oppose or abstain, the one verdict that counts | see the advocates' verdicts, or count claims instead of weighing them |
 | risk manager | what the run recorded: round trips, the losing streak, your limits, the alarm that woke it | continue, cut the size of new entries, pause instruments, or halt, each for a stated number of hours | loosen a limit you set, or add size |
 | technology and quant auditors | the cycles this desk recorded | findings and proposed changes | change anything |
 
@@ -86,15 +92,22 @@ has the full table of what an agent can reach, and [The cycle](/opensource/cycle
 
 ## What it trades
 
-Today: **linear perpetual futures** (USDT- or USDC-margined swaps) on any venue ccxt reaches, long
-and short, with the leverage and margin mode you declare. Every exchange ccxt supports is already
-integrated through the same order path and gates; Bybit, OKX, Bitget, BingX, Binance and Gate have
-been run end to end, and any other can have that run on its demo or testnet API at any time
-([Venues](/opensource/venues), [Exchange accounts and keys](/opensource/exchange-keys)).
+Today, through one order path and the same gates:
 
-That is where the project started, not where it stops. Spot, dated futures, inverse contracts and
-options are on the way, each with its own cost model, exit rules and tests. Until a market type has
-those, venue mode checks the type on every order and refuses it, because a market the system cannot
+| Market | How | Run |
+|---|---|---|
+| Linear perpetuals (USDT- or USDC-margined swaps) | long and short, with the leverage and margin mode you declare; the default | end to end on the demo or testnet APIs of Bybit, OKX, Bitget, BingX, Binance and Gate |
+| Spot pairs | long only, paid in full; list `spot` in `[execution].markets` | the order path and a desk cycle on the Bybit and OKX demos |
+| Stock perpetuals and tokenized stocks | a perpetual and a spot pair to the venue, entered only while the underlying's session trades | a stock perpetual on the OKX demo, a tokenized stock on the Bybit demo |
+| Prediction market outcomes | long only, decided on a probability by the event analyst and priced to resolution; list `prediction` | sandbox cycles on live data; the order path is tested against ccxt's shapes |
+
+Every exchange ccxt supports is reached through that same path, and any other can have its run on
+its demo or testnet API at any time ([Venues](/opensource/venues),
+[Exchange accounts and keys](/opensource/exchange-keys)).
+
+That is where the project started, not where it stops. Dated futures, inverse contracts and options
+are on the way, each with its own cost model, exit rules and tests. Until a market type has those,
+venue mode checks the type on every order and refuses it, because a market the system cannot
 yet price and protect is not one it should send to. [Boundaries](/opensource/boundaries) lists what
 is guaranteed, what is not built yet, and what adding each piece would take.
 

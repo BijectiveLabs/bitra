@@ -64,14 +64,22 @@ tra run
 tra run --every 15m
 ```
 
-**6. When you want real orders.** Start on the exchange's demo or testnet API:
-- put its keys in `.env`;
-- read the mandate with `tra mandate`, then sign it with `tra mandate --sign "Your Name"`;
-- in `[execution]` of `strategy.toml`, set `mode = "venue"`, a `leverage` and `max_notional` (the
-  most one order may be worth).
+**6. When you want real orders.** Start on the exchange's demo or testnet API. Make the desk for
+that exchange from the start, and the rest is three commands:
 
-`tra check` lists whatever is still missing. [Toward real orders](#toward-real-orders) below has
-the whole path.
+```bash
+tra init my-desk --profile autonomous --agent groq --venue bitget
+cd my-desk                       # put the exchange's keys in .env beside your model key
+tra keys --probe --prepare       # reads the account; on a demo or testnet sets one-way mode
+tra mandate --sign "Your Name" --venue-mode
+tra check
+```
+
+`--venue` writes everything that exchange needs into `[execution]`: its demo or testnet API, 3x
+isolated leverage, at most 200 per order, how its stop and take profit are placed, and orders sized
+at 100 of the quote currency. Change any of it; `tra check` says what each line does. How to make
+the key on each exchange is in [Exchange accounts and keys](/opensource/exchange-keys), and
+[Toward real orders](#toward-real-orders) below has the whole path.
 
 **What a new desk does before you change anything**
 
@@ -121,7 +129,7 @@ will do in your project, defaults included.
 | `[targets].max_break_even_win_rate` | `0.5` | refuse a trade that would need more than half its kind to win to cover the stops and the costs |
 | `[exit].timeout_bars` | four hours of bars: `240` at 1m, `16` at 15m | a position closes by time after this many bars; a measured stop is sized over the same span |
 | `[run].bar_interval_s` | `60`; `tra init --agent` writes `900` with 1h and 4h as context | the decision timeframe; the round trip costs the same on any of them, so a longer one leaves more of the move |
-| `[run].settlement_interval_s` | `28800` | the venue's funding clock |
+| `[run].settlement_interval_s` | `28800` | the funding clock used only when the venue does not report an instrument's own |
 | `[execution].environment` | `demo` | where orders go: `demo`, `testnet` or `mainnet` |
 
 A scripted strategy (`[strategy].file`) is research, so it declares its own exit and cost figures:
@@ -145,8 +153,8 @@ An agent desk goes through three steps, and you can stay at any of them as long 
 Venue mode is the only mode that can lose money, so it has a door in front of it. Read the
 mandate with `tra mandate`; when you accept it, `tra mandate --sign "Your Name"` keeps it in the
 project as `MANDATE.md` and signs `[execution]` with your name and today's date, in one step.
-Signing does not switch anything on. Read [Capital, orders and positions](/opensource/capital)
-before you open it.
+Signing alone does not switch anything on; `--venue-mode` signs and turns orders on together. Read
+[Capital, orders and positions](/opensource/capital) before you open it.
 
 ```toml
 [execution]

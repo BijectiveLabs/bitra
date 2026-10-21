@@ -5,10 +5,11 @@ account can afford to be wrong about, which is a different question and the one 
 paid to ask: with the stop where it is, what does this position lose if it is hit, and is that
 inside the fraction of equity the operator declared?
 
-The answer is arithmetic, not judgement. Risk per trade is the distance to the stop times the size,
-against the equity, in basis points. If that exceeds `[controls].max_risk_per_trade_bps`, the size
-is cut until it fits - never the stop moved, because moving a stop to make a trade fit is how a desk
-learns the wrong lesson from a loss.
+The answer is arithmetic, not judgement. Risk per trade is what a stopped-out position loses: the
+distance to the stop plus the round trip it pays on the way in and out, times the size, against the
+equity, in basis points. If that exceeds `[controls].max_risk_per_trade_bps`, the size is cut until
+it fits - never the stop moved, because moving a stop to make a trade fit is how a desk learns the
+wrong lesson from a loss.
 """
 
 from __future__ import annotations
@@ -44,23 +45,51 @@ class RiskVerdict:
         }
 
 
-def risk_bps_of(*, size: Decimal, entry: Decimal, stop: Decimal, equity: Decimal) -> Decimal:
+def loss_per_unit(*, entry: Decimal, stop: Decimal, cost_bps: Decimal = Decimal(0)) -> Decimal:
+    """What one unit loses at the stop: the price distance and the round trip paid on it."""
+    if cost_bps < 0:
+        raise RiskError("the round trip cost is not negative")
+    return abs(entry - stop) + entry * cost_bps / BPS
+
+
+def risk_bps_of(
+    *,
+    size: Decimal,
+    entry: Decimal,
+    stop: Decimal,
+    equity: Decimal,
+    cost_bps: Decimal = Decimal(0),
+) -> Decimal:
     """What this position loses if the stop is hit, against the equity, in basis points."""
     if equity <= 0:
         raise RiskError("equity is positive when risk per trade is declared")
     if size <= 0 or entry <= 0:
         raise RiskError("size and entry are positive")
-    distance = abs(entry - stop)
-    return ((distance * size) / equity * BPS).quantize(Decimal("0.01"))
+    return _exact_bps(size=size, entry=entry, stop=stop, equity=equity, cost_bps=cost_bps).quantize(
+        Decimal("0.01")
+    )
+
+
+def _exact_bps(
+    *, size: Decimal, entry: Decimal, stop: Decimal, equity: Decimal, cost_bps: Decimal
+) -> Decimal:
+    distance = loss_per_unit(entry=entry, stop=stop, cost_bps=cost_bps)
+    return (distance * size) / equity * BPS
 
 
 def size_for_risk(
-    *, allowed_bps: Decimal, entry: Decimal, stop: Decimal, equity: Decimal, step: Decimal
+    *,
+    allowed_bps: Decimal,
+    entry: Decimal,
+    stop: Decimal,
+    equity: Decimal,
+    step: Decimal,
+    cost_bps: Decimal = Decimal(0),
 ) -> Decimal:
     """The largest size whose loss at the stop is inside the allowance, rounded down to the step."""
-    distance = abs(entry - stop)
-    if distance <= 0:
+    if entry == stop:
         raise RiskError("the stop and the entry are the same price; there is no risk to size from")
+    distance = loss_per_unit(entry=entry, stop=stop, cost_bps=cost_bps)
     capital = equity * allowed_bps / BPS
     raw = capital / distance
     if step <= 0:
@@ -76,6 +105,7 @@ def within_risk(
     equity: Decimal | None,
     allowed_bps: Decimal | None,
     step: Decimal = Decimal("0.000001"),
+    cost_bps: Decimal = Decimal(0),
 ) -> RiskVerdict:
     """Cut the size until the loss at the stop fits the allowance, or say why it cannot.
 
@@ -87,11 +117,20 @@ def within_risk(
     if allowed_bps <= 0:
         raise RiskError("[controls].max_risk_per_trade_bps is positive")
 
-    at_risk = risk_bps_of(size=size, entry=entry, stop=stop, equity=equity)
-    if at_risk <= allowed_bps:
+    at_risk = risk_bps_of(size=size, entry=entry, stop=stop, equity=equity, cost_bps=cost_bps)
+    # The unrounded figure decides: 50.004 bps is over a 50 bps cap even though it prints as 50.00.
+    exact = _exact_bps(size=size, entry=entry, stop=stop, equity=equity, cost_bps=cost_bps)
+    if exact <= allowed_bps:
         return RiskVerdict(admitted=True, size=size, risk_bps=at_risk, allowed_bps=allowed_bps)
 
-    cut = size_for_risk(allowed_bps=allowed_bps, entry=entry, stop=stop, equity=equity, step=step)
+    cut = size_for_risk(
+        allowed_bps=allowed_bps,
+        entry=entry,
+        stop=stop,
+        equity=equity,
+        step=step,
+        cost_bps=cost_bps,
+    )
     if cut <= 0:
         return RiskVerdict(
             admitted=False,
@@ -106,7 +145,7 @@ def within_risk(
     return RiskVerdict(
         admitted=True,
         size=cut,
-        risk_bps=risk_bps_of(size=cut, entry=entry, stop=stop, equity=equity),
+        risk_bps=risk_bps_of(size=cut, entry=entry, stop=stop, equity=equity, cost_bps=cost_bps),
         allowed_bps=allowed_bps,
         reasons=(
             f"{size} would risk {at_risk} bps of equity at the stop, above the declared "

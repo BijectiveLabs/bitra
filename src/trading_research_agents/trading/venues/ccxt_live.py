@@ -103,7 +103,7 @@ class CcxtLiveVenue:
             if market.label != "linear perpetual":
                 raise VenueError(
                     f"{self.hand.symbol} is a {market.label} market; the live tier trades linear "
-                    "perpetual futures today"
+                    "perpetuals, and spot or prediction markets go through venue mode in tra run"
                 )
             unit = market.unit()
             held = self._venue_position()

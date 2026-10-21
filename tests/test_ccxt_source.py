@@ -28,6 +28,8 @@ class FakeCcxt:
         self.answers = answers
         self.seen: list[tuple[str, tuple[Any, ...]]] = []
         self.markets_by_id: dict[str, Any] = answers.get("markets_by_id", {})
+        self.markets: dict[str, Any] = {}
+        self.has: dict[str, Any] = {}
         self.loaded = 0
 
     def load_markets(self) -> None:
@@ -146,6 +148,55 @@ def test_a_book_level_with_more_than_a_price_and_a_size_is_read() -> None:
         "orderbook", "BTCUSDT", levels=2
     )
     assert got.value.mid == Decimal("100.6")
+
+
+def test_a_book_quoted_in_contracts_is_read_in_the_base() -> None:
+    # OKX quotes its Bitcoin perpetual in contracts of 0.01 BTC: 593 contracts is 5.93 coins.
+    raw = {"bids": [[100.5, 593]], "asks": [[100.7, 200]], "timestamp": OPEN_AT}
+    client = FakeCcxt(fetch_order_book=raw)
+    client.markets = {"BTC/USDT:USDT": {"swap": True, "contract": True, "contractSize": 0.01}}
+    got = source(client, now_ms=OPEN_AT + 1_000).fetch("orderbook", "BTCUSDT", levels=1)
+    assert got.value.bids[0].size == Decimal("5.93") and got.value.asks[0].size == Decimal("2.00")
+    assert got.detail["contract_size"] == "0.01" and got.detail["sizes"] == "in the base"
+
+    # A venue that quotes the base, and a contract whose size is unknown, which is refused.
+    client.markets["BTC/USDT:USDT"]["contractSize"] = 1
+    same = source(client, now_ms=OPEN_AT + 1_000).fetch("orderbook", "BTCUSDT", levels=1)
+    assert same.value.bids[0].size == Decimal("593") and "contract_size" not in same.detail
+    client.markets["BTC/USDT:USDT"]["contractSize"] = None
+    with pytest.raises(SourceError, match="no contract size"):
+        source(client, now_ms=OPEN_AT + 1_000).fetch("orderbook", "BTCUSDT", levels=1)
+
+
+def test_a_funding_interval_missing_from_the_rate_is_asked_for_and_kept_an_hour() -> None:
+    client = FakeCcxt(fetch_funding_rate={"fundingRate": "0.0001", "timestamp": OPEN_AT})
+    asked: list[str] = []
+
+    def interval(symbol: str) -> dict[str, str]:
+        asked.append(symbol)
+        return {"interval": "4h"}
+
+    client.has = {"fetchFundingInterval": True}
+    client.fetch_funding_interval = interval  # type: ignore[attr-defined]
+    now = {"ms": OPEN_AT}
+    src = CcxtSource(
+        "binanceusdm",
+        client=client,
+        symbols={"BTCUSDT": "BTC/USDT:USDT"},
+        clock=lambda: now["ms"] / 1000,
+    )
+    assert src.fetch("funding", "BTCUSDT").detail["interval"] == "4h"
+    src.fetch("funding", "BTCUSDT")
+    assert asked == ["BTC/USDT:USDT"]
+    now["ms"] += 3_600_000
+    src.fetch("funding", "BTCUSDT")
+    assert len(asked) == 2
+
+    # Nothing to ask: the declared interval stands, and the detail says nothing it does not know.
+    plain = source(
+        FakeCcxt(fetch_funding_rate={"fundingRate": "0.0001", "timestamp": OPEN_AT}), now_ms=OPEN_AT
+    )
+    assert "interval" not in plain.fetch("funding", "BTCUSDT").detail
 
 
 def test_a_funding_rate_with_no_timestamp_is_as_old_as_it_was_read_not_the_next_settlement() -> (

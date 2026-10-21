@@ -439,6 +439,27 @@ def test_init_for_a_venue_wires_data_orders_and_fees_for_that_venue(tmp_path: Pa
     assert "OKX_API_PASSPHRASE=" in example and "BYBIT" not in example
 
 
+def test_init_for_a_venue_writes_everything_that_venue_needs_to_trade(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from trading_research_agents.trading.config import load_strategy_config
+
+    target = tmp_path / "binance-desk"
+    assert main(["init", str(target), "--profile", "autonomous", "--venue", "binance"]) == 0
+    said = capsys.readouterr().out
+    assert "tra keys --probe --prepare" in said and "at binance: " in said
+    config = load_strategy_config(target / "strategy.toml")
+    execution = config.execution
+    assert execution.environment == "demo" and execution.exits == "separate"
+    assert execution.leverage == Decimal(3) and execution.margin_mode == "isolated"
+    assert execution.max_notional == Decimal(200) and execution.mode == "sandbox"
+    # An agent desk sizes in money, which means the same on every instrument.
+    assert config.run.size_quote == Decimal(100) and not config.run.size
+    okx = tmp_path / "okx-desk"
+    assert main(["init", str(okx), "--profile", "autonomous", "--venue", "okx"]) == 0
+    assert load_strategy_config(okx / "strategy.toml").execution.exits == "attached"
+
+
 def test_models_lists_what_the_key_can_use_and_init_takes_a_default_model(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

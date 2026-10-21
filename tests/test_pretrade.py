@@ -20,6 +20,7 @@ from trading_research_agents.execution.pretrade import (
     book_from_levels,
     horizon_seconds,
     impact_bps,
+    interval_seconds,
     pre_trade_cost,
     settlements_in,
 )
@@ -102,7 +103,8 @@ def test_every_component_carries_its_certainty_and_the_total_is_their_sum(channe
     assert record["size"] == "10" and record["mid"] == "100.00"
     assert [c["certainty"] for c in record["components"]][-1] == "estimated"
 
-    # A short pays the funding a long receives, so the sign follows the direction.
+    # A short receives what the long pays, and a receipt at today's rate is never counted against
+    # the cost: the rate can turn before the settlement comes.
     short = pre_trade_cost(
         channel=channel,
         book=book(),
@@ -111,8 +113,29 @@ def test_every_component_carries_its_certainty_and_the_total_is_their_sum(channe
         horizon_s=1800,
         funding_rate=Decimal("0.0001"),
     )
-    funding = {c.name: c.bps for c in short.components}["funding_accrual"]
-    assert funding == pytest.approx(Decimal("-1"), abs=Decimal("0.0001"))
+    received = {c.name: c for c in short.components}["funding_accrual"]
+    assert received.bps == 0 and "a receipt of 1.0000 bps is not counted" in received.source
+    paying = pre_trade_cost(
+        channel=channel,
+        book=book(),
+        size=Decimal("5"),
+        direction=Direction.SHORT,
+        horizon_s=1800,
+        funding_rate=Decimal("-0.0001"),
+    )
+    assert {c.name: c.bps for c in paying.components}["funding_accrual"] == Decimal("1")
+
+
+def test_the_venue_interval_decides_how_many_settlements_a_hold_meets() -> None:
+    assert interval_seconds("8h") == 28_800 and interval_seconds("4h") == 14_400
+    assert interval_seconds("1h") == 3600 and interval_seconds("30m") == 1800
+    # A dated contract settles no funding, and text this cannot read is not guessed at.
+    assert interval_seconds("0h") is None and interval_seconds("weekly") is None
+    assert interval_seconds("") is None
+    # Six hours held: one charge at eight hours, two at four, six at one.
+    assert settlements_in(21_600, 28_800) == 1
+    assert settlements_in(21_600, 14_400) == 2
+    assert settlements_in(21_600, 3600) == 6
 
 
 def test_funding_and_latency_are_absent_when_nothing_is_known(channel: Channel) -> None:

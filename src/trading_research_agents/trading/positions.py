@@ -6,6 +6,10 @@ reduce-only order when it has outlived its hold limit, records the result when t
 stop or take profit already closed it, or flattens everything when the kill switch is armed.
 Every action is a line in `positions.jsonl`, and every finished round trip a line in
 `round_trips.jsonl`, which is what the quant auditor reads.
+
+A finished round trip also carries its excursion, read from the venue's own candles over the hold,
+and its result as a multiple of the loss the cycle planned at the stop, which is what the sizing
+reads.
 """
 
 from __future__ import annotations
@@ -19,6 +23,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from trading_research_agents.data.schema import Direction
+from trading_research_agents.execution.excursion import excursion_of
 from trading_research_agents.records import append_line, has_index, read_lines, recent
 from trading_research_agents.trading.venues.fills import charged
 
@@ -27,6 +33,9 @@ ROUND_TRIPS = "round_trips.jsonl"
 HOLD_LIMITS = ("timeout", "horizon", "none")
 SIDES = {"long": "buy", "short": "sell"}
 FINISHED = ("closed_by_venue", "closed_by_time", "flattened")
+# The finest candles that cover a hold in at most this many bars; a longer hold reads coarser ones.
+FRAMES = (("1m", 60), ("5m", 300), ("15m", 900), ("1h", 3600))
+MAX_BARS = 1000
 
 
 @dataclass(frozen=True)
@@ -43,6 +52,8 @@ class Entry:
     horizon_bars: int | None = None
     stop_price: str | None = None
     take_price: str | None = None
+    # What the cycle planned to lose at the stop, in bps of the entry notional, round trip included.
+    loss_at_stop_bps: str | None = None
     # False when the venue never reported a fill: such an entry is looked after only while the
     # venue actually shows a position, and never written up as a finished trade on its own.
     confirmed: bool = True
@@ -111,8 +122,9 @@ def filled_entries(root: Path) -> dict[str, Entry]:
             order_id=str(placed.get("order_id", "")),
             cycle=cycle,
             horizon_bars=int(intent["horizon_bars"]) if intent.get("horizon_bars") else None,
-            stop_price=placed.get("stop_price"),
-            take_price=placed.get("take_price"),
+            stop_price=placed.get("stop_price") or intent.get("stop_price"),
+            take_price=placed.get("take_price") or intent.get("take_price"),
+            loss_at_stop_bps=intent.get("loss_at_stop_bps"),
             confirmed=placed.get("filled") not in (None, ""),
         )
     return found
@@ -242,6 +254,9 @@ class Keeper:
                 opened_at=opened,
                 order_id=str(row.get("order_id", "")),
                 cycle=str(row.get("cycle", "")),
+                stop_price=row.get("stop"),
+                take_price=row.get("take"),
+                loss_at_stop_bps=row.get("loss_at_stop_bps"),
             )
             try:
                 trip = self._round_trip(
@@ -293,6 +308,15 @@ class Keeper:
             "order_id": entry.order_id,
             "cycle": entry.cycle,
             "closed_by": how,
+            **{
+                key: value
+                for key, value in (
+                    ("stop", entry.stop_price),
+                    ("take", entry.take_price),
+                    ("loss_at_stop_bps", entry.loss_at_stop_bps),
+                )
+                if value is not None
+            },
         }
         exit_side = "sell" if entry.side == "buy" else "buy"
         fills: list[Mapping[str, Any]] = []
@@ -366,6 +390,19 @@ class Keeper:
                     "net": str((gross - fees).quantize(Decimal("0.0001"))),
                 }
             )
+            net_bps = (gross - fees) / notional * 10_000
+            planned = _positive(entry.loss_at_stop_bps)
+            if planned is not None:
+                # The result in units of the loss the cycle planned at the stop: -1 is a stop hit
+                # as priced, and the figure the sizing reads, whatever the size was.
+                trip["r"] = str((net_bps / planned).quantize(Decimal("0.001")))
+            try:
+                excursion = _excursion(hand, entry, last_exit)
+            except Exception as exc:
+                # The result stands without it; the record says why the shape is missing.
+                excursion = {"note": f"the candles could not be read ({exc.__class__.__name__})"}
+            if excursion is not None:
+                trip["excursion"] = excursion
         else:
             trip["note"] = "the venue returned no exit fills for this position"
         funding = getattr(hand.client, "fetch_funding_history", None)
@@ -396,6 +433,62 @@ def _up_to(fills: Any, size: Decimal) -> list[Mapping[str, Any]]:
         kept.append(fill)
         total += Decimal(str(fill.get("amount") or 0))
     return kept
+
+
+def _positive(value: Any) -> Decimal | None:
+    try:
+        number = Decimal(str(value))
+    except (ArithmeticError, ValueError, TypeError):
+        return None
+    return number if number.is_finite() and number > 0 else None
+
+
+def _excursion(hand: Any, entry: Entry, until_ms: int | None) -> dict[str, Any] | None:
+    """How far the position went for and against it, from the venue's candles over the hold.
+
+    The first and the last bar can hold prices from just before the entry and just after the exit,
+    which is why the finest candles that cover the hold are used.
+    """
+    fetch = getattr(hand.client, "fetch_ohlcv", None)
+    since = int(entry.opened_at.timestamp() * 1000)
+    if fetch is None or until_ms is None or until_ms <= since or entry.side not in SIDES.values():
+        return None
+    frame, step = next(
+        ((f, s) for f, s in FRAMES if (until_ms - since) / (s * 1000) <= MAX_BARS), FRAMES[-1]
+    )
+    start = since - since % (step * 1000)
+    rows: dict[int, tuple[Decimal, Decimal]] = {}
+    cursor = start
+    while cursor <= until_ms and len(rows) < MAX_BARS:
+        got = [r for r in fetch(hand.symbol, frame, cursor, MAX_BARS) or [] if int(r[0]) >= cursor]
+        if not got:
+            break
+        for row in got:
+            if int(row[0]) <= until_ms:
+                rows[int(row[0])] = (Decimal(str(row[2])), Decimal(str(row[3])))
+        cursor = max(int(r[0]) for r in got) + step * 1000
+    if not rows:
+        return None
+    direction = Direction.LONG if entry.side == "buy" else Direction.SHORT
+    seen = excursion_of(entry.price, direction, [rows[t] for t in sorted(rows)])
+    out: dict[str, Any] = {
+        **seen.record(),
+        "timeframe": frame,
+        "source": "the venue's candles over the hold",
+        "complete": max(rows) + step * 1000 > until_ms,
+    }
+    for name, price, side in (
+        ("mae_of_stop", entry.stop_price, -1),
+        ("mfe_of_take", entry.take_price, 1),
+    ):
+        level = _positive(price)
+        if level is None:
+            continue
+        distance = abs(level - entry.price) / entry.price * 10_000
+        if distance > 0:
+            moved = seen.mae_bps if side < 0 else seen.mfe_bps
+            out[name] = str((abs(moved) / distance).quantize(Decimal("0.001")))
+    return out
 
 
 def _span(delta: timedelta) -> str:

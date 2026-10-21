@@ -121,12 +121,13 @@ practice environment first.
 What kind of market a desk may send to is one setting, `[execution].markets`. Every market, on
 every venue, is read into one shape from what ccxt reports (see
 [Architecture](/opensource/architecture#adoption-rules)), and the order path decides from that
-shape what applies: contracts, margin, leverage, where the exits go. Two types are built,
-`linear perpetual` and `spot`. The list defaults to perpetuals only, a desk adds spot by naming it
-(`markets = ["linear perpetual", "spot"]`), and a symbol of a type not listed, or not built, is
-refused by name before anything is sent. Tokenized stocks and prediction markets join as each is
-built and run end to end on a demo or testnet API; the venue and the symbol stay where they are, in
-the same settings.
+shape what applies: contracts, margin, leverage, where the exits go. Three types are built:
+`linear perpetual` (stock perpetuals among them), `spot` (tokenized stocks among them) and
+`prediction`. The list defaults to perpetuals only, a desk adds the others by naming them
+(`markets = ["linear perpetual", "spot"]`), and a symbol of a type not listed, or not built yet
+(an inverse perpetual, a dated future, an option), is refused by name before anything is sent. A
+bare name such as `BTCUSDT` resolves to the perpetual; a spot pair is named by its unified symbol,
+`SOL/USDT`, in `[data].symbols`.
 
 What the same order path does when the market is spot:
 
@@ -404,17 +405,20 @@ the first thing to try.
 tra init my-desk --profile autonomous --venue okx      # data, orders and fees wired for OKX
 cd my-desk
 # put OKX_API_KEY, OKX_API_SECRET and OKX_API_PASSPHRASE in .env, and your model key
-tra check                                             # fills the fees, then says what is left
-tra keys --probe                                      # reads the account, sends nothing
+tra keys --probe --prepare        # fills the fees, reads the account, sets one-way on a demo
+tra mandate --sign "Your Name" --venue-mode
+tra check                                             # says what is left, if anything
 ```
 
 What `--venue` does: the data chains read from the venue the desk trades on, `[run].venue_key` and
 `[execution].venue` name it, `[execution].environment` is its demo or testnet API where it has one,
-the order mode stays `sandbox`, and `.env.example` lists the keys that venue signs with. Sizes use
-the venue's own step, so there is no table of increments to copy.
+leverage is 3x isolated, one order is capped at 200, the exits are placed the way that venue takes
+them, the order mode stays `sandbox`, and `.env.example` lists the keys that venue signs with. An
+agent desk sizes each order at 100 of the quote currency. Sizes use the venue's own step, so there
+is no table of increments to copy. What to set once at the exchange is printed at the end.
 
-Fees are filled in for you. `tra check` (and `tra run`) asks the account for its maker and taker
-fee and writes them on the blank lines of `envelope.toml`, with a comment that says where they came
+Fees are filled in for you. `tra check`, `tra keys --probe` and `tra run` ask the account for its maker and taker
+fee and write them on the blank lines of `envelope.toml`, with a comment that says where they came
 from. When the account cannot report them (no keys yet, or a demo or testnet API that does not
 answer: Bybit's demo returns a parameter error for every fee request), the venue's standard tier
 from its market list is written instead and labelled so; it is the base tier, the one a new
@@ -441,8 +445,9 @@ Bybit's demo book stayed inside the live range in all 63 recorded decisions.
 Three things only you can do, in the OKX app or website (in Demo trading for a demo key): set the
 account mode to Futures mode (Menu, Settings, Trading mode), because an account in Spot mode cannot
 trade perpetuals at all and OKX does not let an API key change it; set the position mode to
-one-way (net), because the desk refuses long/short mode; and turn venue mode on when you are ready (`tra mandate --sign "Your Name"`,
-then `mode = "venue"`; on mainnet the ladder as well).
+one-way (net), because the desk refuses long/short mode (`tra keys --probe --prepare` does this on
+a demo or testnet account); and turn venue mode on when you are ready
+(`tra mandate --sign "Your Name" --venue-mode`; on mainnet the ladder as well).
 
 What the desk does for OKX that it does not need to for Bybit: margin mode and leverage are applied
 as isolated (ccxt would otherwise default to cross), the client order id is letters and digits only

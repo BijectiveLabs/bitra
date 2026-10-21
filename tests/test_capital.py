@@ -281,6 +281,70 @@ def test_a_position_the_venue_closed_is_recorded_with_its_result(tmp_path: Path)
     assert venue.orders == []
 
 
+class CandleVenue(Venue):
+    """A venue that also serves the candles of the hold, one minute at a time."""
+
+    def __init__(self, candles: list[list[Any]], **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.candles = candles
+        self.asked: list[tuple[str, int]] = []
+
+    def fetch_ohlcv(self, symbol: str, timeframe: str, since: int, limit: int) -> list[list[Any]]:
+        self.asked.append((timeframe, since))
+        return [row for row in self.candles if row[0] >= since][:2]
+
+
+def test_a_finished_trade_carries_its_excursion_and_its_result_in_planned_losses(
+    tmp_path: Path,
+) -> None:
+    entry_cycle(tmp_path, "2026-10-04T17-55-13Z-BTCUSDT")
+    intents = tmp_path / "2026-10-04T17-55-13Z-BTCUSDT" / "intents.jsonl"
+    row = json.loads(intents.read_text("utf-8"))
+    planned = {**row, "loss_at_stop_bps": "112.50"}
+    intents.write_text(json.dumps(planned) + "\n", encoding="utf-8")
+    opened = int(datetime(2026, 10, 4, 17, 55, 13, tzinfo=UTC).timestamp() * 1000)
+    minute = opened - opened % 60_000
+    # Five one-minute bars, fetched two at a time: the low is 85000.0, the high 87100.0.
+    candles = [
+        [minute + i * 60_000, 0, high, low, 0, 1]
+        for i, (high, low) in enumerate(
+            [(85400, 85200), (85350, 85000), (86000, 85300), (87100, 86500), (87050, 86900)]
+        )
+    ]
+    venue = CandleVenue(
+        candles,
+        position="0",
+        fills=[
+            {
+                "side": "buy",
+                "amount": 0.002,
+                "price": 85298.9,
+                "fee": {"cost": 0.034},
+                "timestamp": opened + 1_000,
+            },
+            {
+                "side": "sell",
+                "amount": 0.002,
+                "price": 87005.2,
+                "fee": {"cost": 0.096},
+                "timestamp": minute + 4 * 60_000 + 30_000,
+            },
+        ],
+    )
+    keeper(tmp_path, venue, at=datetime(2026, 10, 5, 3, 0, tzinfo=UTC)).run()
+    trip = json.loads((tmp_path / ROUND_TRIPS).read_text("utf-8").splitlines()[-1])
+
+    assert trip["net_bps"] == "192.4" and trip["loss_at_stop_bps"] == "112.50"
+    assert trip["r"] == "1.710" and trip["stop"] == "84446.3"
+    seen = trip["excursion"]
+    assert seen["timeframe"] == "1m" and seen["bars"] == 5 and seen["complete"] is True
+    assert seen["mfe_bps"] == "211.15" and seen["mae_bps"] == "-35.04"
+    assert seen["bars_to_mfe"] == 4 and seen["bars_to_mae"] == 2
+    # Under water by 35 bps against a stop 99.95 bps away: a third of the stop was used.
+    assert seen["mae_of_stop"] == "0.351" and seen["mfe_of_take"] == "1.056"
+    assert [t for t, _ in venue.asked] == ["1m", "1m", "1m"]
+
+
 class ContractVenue(Venue):
     """The same account on a venue where one contract is 0.01 of the base."""
 

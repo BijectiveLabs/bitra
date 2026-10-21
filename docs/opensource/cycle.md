@@ -110,7 +110,10 @@ the universe (system: one data pull each, the trigger per instrument, ordered by
   -> validators          (when configured: pro and contra apart, then neutral judges both)
   -> confluence matrix   (system: declared states and votes)   -> whether to trade at all
   -> conviction          (system: the same voices, weighted)    -> how much the desk wants on
-  -> risk per trade      (system: the loss at the stop, against equity) -> how much it can afford
+  -> sizing              (system, when [sizing] is declared: Kelly from the desk's own round trips,
+                          cut for the drawdown ahead) -> how much the record supports
+  -> risk per trade      (system: the loss at the stop, round trip included, against equity)
+                                                                -> how much it can afford
   -> the desk            (system: what the whole book is already carrying) -> whether it fits
   -> cost gate           (system: the claim against the cost)
   -> targets             (system: net bps, the edge over the cost, reward-to-risk, research, count)
@@ -344,24 +347,20 @@ and the figures that make the claim are in the brief. On the decision timeframe,
 | `volatility_expansion` | never on direction: it is about a regime changing, not which way |
 
 The rule came from a live cycle on 2026-10-08: a `pullback_in_trend` short in a market measured as
-mixed and rising 53 bps over the window, which the earlier rule let through because it only
-checked trends it could measure. A short setup against a higher timeframe's trend is still left to
+mixed and rising over the window, which the earlier rule let through because it only checked
+trends it could measure. A short setup against a higher timeframe's trend is still left to
 the analyst to weigh, because fading the hourly on the minute chart is sometimes the whole trade;
 the reason has to say so. With `setups_must_fit = false` a misfit is written down and the trade
 goes on. `tra check` prints the lines and the timeframes in use.
 
 Why the variance ratio, and not trend strength alone: a window can net out to nothing, and read
-as a range, while each move inside it is followed by more of the same. On the demo desks, the
-analyst proposed 94 range fades between 2026-10-06 and 10-16 (the stretch for which the desks kept
-their raw inputs), each replayed with the same exits for four hours: the 28 with a variance ratio
-of 1 or above averaged -101 bps net and won 21% of the time, the rest -46 bps. A fade is paid only
-where moves are given back, so that is what it is now held to. The line sits at 1, the random
-walk, rather than at a value fitted to those trades.
+as a range, while each move inside it is followed by more of the same. A fade is paid only where
+moves are given back, so that is what it is held to. The line sits at 1, the random walk, rather
+than at a value fitted to any desk's trades.
 
 The fade has been held to the same standard as the trend setups since 0.6.4. Before that,
 `range_reversion` was refused only in a trend, so in a mixed market it was the one regime-bound
-setup still allowed. Across the demo desks' record to 2026-10-13, fades in a mixed market were
-right 27% of the time (n = 30), against 60% in a measured range (n = 37).
+setup still allowed.
 
 **The analyst picks the setup; the mechanism does not.** In `tra run` the technical analyst reads
 the regime and the higher timeframes first and names the setup the market supports. A mixed market
@@ -493,6 +492,11 @@ phrases no reading analyst has reason to write - "go long", "stop loss", "positi
 "leverage". A hit is recorded as a crossing beside the answer and changes nothing, because the
 answer was never what decides. We cannot stop a model from writing a sentence; we can make the
 sentence carry no authority and leave a mark when it tries to.
+
+The same check looks for a rule a role made up. No role is told the desk's rules, so an answer that
+says "the desk requires" or names a desk minimum is stating one that does not exist. That is
+recorded for every role, the technical analyst included, and changes nothing: the rules that apply
+are the ones in your configuration, run by code after the answer.
 
 ## The confluence matrix
 
@@ -725,8 +729,12 @@ manager is paid to ask: with the stop where it is, what does this position lose 
 max_risk_per_trade_bps = 50      # of [run].equity, at the stop from [exit]
 ```
 
-The arithmetic is the distance to the stop times the size, against the equity, in basis points. If
-it is over the allowance, **the size is cut until it fits** - never the stop moved, because moving a
+The arithmetic is what a stopped-out position loses: the distance to the stop plus the round trip it
+pays on the way in and out, times the size, against the equity, in basis points. The round trip is
+priced at the size being checked or the base, whichever is larger, so neither a conviction rung
+above 1x nor the cut that follows understates it, and the cap is decided on the exact figure, not
+the one rounded for the record. If it is over the
+allowance, **the size is cut until it fits** - never the stop moved, because moving a
 stop to make a trade fit is how a desk learns the wrong lesson from a loss. If the size that would
 fit is below one step of the venue, the cycle refuses. The cut and the figures behind it go into the
 record and into the intent, so `risk_bps` is there beside the size for every trade the desk took.
@@ -735,6 +743,11 @@ This is a fixed calculation, not a role. A model asked how much to risk answers 
 on Monday from the same figures, and the session runtime has always enforced this limit - a cycle
 that can send its own orders has to enforce it too. `tra check` refuses the combination that cannot
 be applied: a declared risk limit with no stop, or with no equity to measure against.
+
+With `[sizing]` declared, the desk's own finished trades can lower that allowance: the Kelly fraction
+the record supports, a fraction of it, and a seeded Monte Carlo of the drawdown the next trades could
+take the account through. It never raises it, and a record that shows no edge refuses new entries.
+[Sizing from the record](/opensource/sizing) has the arithmetic.
 
 ## The desk: what the whole book may carry
 
@@ -981,8 +994,8 @@ component says how much we actually know:
 |---|---|---|
 | `fee_round_trip` | declared | the channel's schedule in `envelope.toml` |
 | `spread_cost` | measured | half the spread of this snapshot's book, both legs |
-| `impact` | computed | walking the visible levels at the declared size; the exit leg is assumed symmetric |
-| `funding_accrual` | declared | the settlements a horizon spans, at the rate that stands now |
+| `impact` | computed | walking the visible levels at the declared size, in the base; the exit leg is assumed symmetric |
+| `funding_accrual` | declared | the settlements a horizon spans at the venue's own interval for that instrument, at the rate that stands now; only what the position pays |
 | `latency_slippage` | estimated | `[run].slippage_bps`, an operator's bound, not a measurement |
 
 The gate is one comparison: the claimed edge must be at least the total plus the margin the
@@ -1014,6 +1027,20 @@ intent: long 0.01 (sandbox)
 Read the fee line again: eleven of the thirteen and a half basis points are the venue's own
 schedule. That is the number most agent frameworks never show, and it is usually the number that
 decides whether the whole idea is worth running.
+
+Three details decide whether these figures are right on every venue, and each was checked against
+the venues on 2026-10-21:
+
+- **Depth is read in the base.** OKX and Gate quote a perpetual's book in contracts (0.01 and 0.0001
+  of a Bitcoin), every size here is in the base, so the book is converted with the market's contract
+  size before it is walked. A contract with no published size is refused rather than guessed.
+- **Funding settles on each instrument's own clock.** On Binance, Bybit, OKX, Gate, Bitget and BingX,
+  40 to 58 percent of the perpetuals settle every four hours, and every Hyperliquid perpetual every
+  hour, not every eight. The interval comes
+  from the venue with the rate, or from its own interval endpoint, and `[run].settlement_interval_s`
+  is only the fallback. The cost line says which one it used.
+- **A receipt is not a discount.** When the standing rate would pay the position, nothing is taken off
+  the cost: the rate can turn before the settlement comes. The cost line says how much was left out.
 
 ## Watching a desk you are not running
 
@@ -1089,10 +1116,11 @@ Venue mode does not start until all of this is true, and `tra check` names whate
    `tra mandate` - it says that the losses are yours - then `tra mandate --sign "Your Name"` does
    both: it writes `MANDATE.md` when the project has none (one you wrote yourself is never
    overwritten) and sets the two lines, with today's date or `--on YYYY-MM-DD`. Venue mode stays off
-   until you set `[execution].mode = "venue"`.
+   until you set `[execution].mode = "venue"`, or sign with `--venue-mode`, which does it too.
 2. The signature is yours alone: no role, model or tool on the MCP surface can sign.
 3. `[execution].max_notional` caps one order, and `[execution].leverage` is chosen. Neither has
-   a default: both are what a defect would cost you.
+   a default in the code: both are what a defect would cost you. `tra init --venue` writes 200 and
+   3x as a start, on lines you can see and change.
 4. On mainnet, the ladder stands at `CANARY`, promoted with evidence and a signature. A demo or
    testnet API holds no capital, so it is where that evidence is earned and does not wait on
    the ladder.
@@ -1226,20 +1254,20 @@ trade would have done. `tra hindsight` replays every directional decision in `ru
 candles that followed it, then puts each gate's refusals next to what the desk let through:
 
 ```text
-hindsight: 81 decisions replayed over 7 day(s), 43 of them independent, each held 4h on 5m candles, net of its round trip
-  admitted                 21  mean   -41.3 bps  median   -61.6  won  14%  sum   -867.4
-  refused by targets       16  mean  -281.6 bps  median   -73.7  won  12%  sum  -4505.2  refused worse trades than it let through
-  refused by exit          14  mean   -47.2 bps  median   -46.6  won  21%  sum   -661.2  no clear difference yet
-  refused by regime        11  mean    62.0 bps  median    65.1  won  64%  sum    681.8  refused better trades than it let through; review it
-  side: the model's -79.5 bps against 36.4 on the reverse; the reverse of the model's side did better; its calls carried no edge
+hindsight: <n> decisions replayed over <d> day(s), <k> of them independent, each held 4h on 5m candles, net of its round trip
+  admitted             <n>  mean <bps>  median <bps>  won <%>  sum <bps>
+  refused by targets   <n>  mean <bps>  median <bps>  won <%>  sum <bps>  <what the refusals would have done>
+  refused by regime    <n>  mean <bps>  median <bps>  won <%>  sum <bps>  <what the refusals would have done>
+  side: the model's <bps> against <bps> on the reverse; <which side did better>
 ```
 
-That is a real desk on OKX's demo API, with decisions from 8 to 16 October 2026. Read it the way it is
-meant to be read. The targets gate kept out trades that would have lost far more than the ones it admitted.
-The regime gate kept out trades that would have done better, on eleven decisions, which is a reason
-to watch it, not yet a reason to switch it off. And the last line is the one that matters most: on
-those days the deciding model's side did worse than its exact reverse. No gate can fix that. A gate
-only refuses; it cannot turn a call with no edge into one with an edge.
+Each row is one gate: how many decisions it refused, and what those decisions would have done net
+of their round trip, beside the ones the desk let through. The verdict at the end of a row says
+whether the gate kept out worse trades or better ones; with few decisions it says there is no clear
+difference yet, and that is the honest answer until the sample grows. The last line asks whether the
+deciding model's side did better than its exact reverse. No gate can fix a side with no edge: a gate
+only refuses; it cannot turn a call with no edge into one with an edge. Read these numbers only once
+there are enough independent decisions behind them to audit.
 
 How each decision is replayed:
 

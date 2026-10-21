@@ -52,8 +52,11 @@ there; where the two meet, the guarantee wins and the feature finds another shap
   a horizon, argue for or against a proposal citing its figures, or write an audit finding for a
   person to apply. It never sizes a trade, changes a configuration file, promotes a tier, loosens a
   control, or touches an order.
-- If a model writes the language of an order or a size in its prose, that is recorded as a crossing
-  beside its answer and changes nothing (`agents/scope.py`).
+- If a model writes the language of an order or a size in its prose, or states a desk rule it was
+  never told, that is recorded as a crossing beside its answer and changes nothing
+  (`agents/scope.py`).
+- An auditor's proposed change has to name a setting the configuration accepts, and the loader
+  refuses an unknown key, so a rule a model made up cannot take effect.
 
 ## Safety and responsibility
 

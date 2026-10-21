@@ -148,6 +148,20 @@ def settlements_in(horizon_s: int, interval_s: int) -> int:
     return -(-horizon_s // interval_s)
 
 
+def interval_seconds(text: str) -> int | None:
+    """A venue's settlement interval as ccxt writes it ("8h", "4h", "1h") to seconds.
+
+    None for anything else, "0h" included: a dated contract settles no funding, and an interval
+    this cannot read is left to the declared one rather than guessed at.
+    """
+    raw = text.strip().lower()
+    units = {"h": 3600, "m": 60}
+    if len(raw) < 2 or raw[-1] not in units or not raw[:-1].isdigit():
+        return None
+    seconds = int(raw[:-1]) * units[raw[-1]]
+    return seconds or None
+
+
 def pre_trade_cost(
     *,
     channel: Channel,
@@ -158,6 +172,7 @@ def pre_trade_cost(
     funding_rate: Decimal | None = None,
     settlement_interval_s: int = 28_800,
     latency_slippage_bps: Decimal = Decimal(0),
+    interval_source: str = "[run].settlement_interval_s",
 ) -> PreTradeCost:
     """Assemble the cost of a round trip that has not happened yet, component by component."""
     if not isinstance(size, Decimal) or size <= 0:
@@ -211,16 +226,21 @@ def pre_trade_cost(
         if not isinstance(funding_rate, Decimal) or not funding_rate.is_finite():
             raise PreTradeError("funding_rate is a finite Decimal or None")
         charges = settlements_in(horizon_s, settlement_interval_s)
-        sign = Decimal(direction.sign)
+        signed = Decimal(direction.sign) * funding_rate * BPS * charges
+        source = (
+            f"{charges} settlement(s) of {settlement_interval_s}s ({interval_source}) inside a "
+            f"{horizon_s}s horizon, charged at the rate that stands now"
+        )
+        if signed < 0:
+            # The rate is the one standing now and it can turn before the settlement comes, so a
+            # payment the position would receive is never counted against what it pays.
+            source += f"; a receipt of {(-signed).quantize(QUANTUM)} bps is not counted"
         components.append(
             CostComponent(
                 name="funding_accrual",
-                bps=sign * funding_rate * BPS * charges,
+                bps=max(signed, Decimal(0)),
                 certainty=Certainty.DECLARED,
-                source=(
-                    f"{charges} settlement(s) of {settlement_interval_s}s inside a {horizon_s}s "
-                    "horizon, charged at the rate that stands now"
-                ),
+                source=source,
             )
         )
     if latency_slippage_bps:
@@ -299,6 +319,7 @@ __all__ = [
     "book_from_levels",
     "horizon_seconds",
     "impact_bps",
+    "interval_seconds",
     "pre_trade_cost",
     "settlements_in",
 ]

@@ -133,8 +133,7 @@ class EffectiveCost:
 
     The orders that fail to fill are not a random subset: they are the names moving away, which
     is why they did not fill, and their drift compounds while the order rests. Extending the wait
-    budget makes this worse, not better; measured drift on unfilled names rose from +11.7 bps at
-    sixty seconds to +102.2 bps at one hour.
+    budget makes this worse, not better: the longer it was, the further unfilled names had moved.
     """
 
     mode: FillMode

@@ -331,7 +331,7 @@ class VenueHand:
                 "sent": False,
                 "refused": (
                     f"{self.symbol} is a {kind} market; venue mode trades "
-                    f"{' and '.join(MARKETS)} markets today, and other market types are not "
+                    f"{', '.join(MARKETS)} markets today, and other market types are not "
                     "built yet"
                 ),
             }
@@ -717,6 +717,34 @@ class VenueHand:
             # Not readable is not the same as hedged; a venue that cannot say refuses at its end.
             return ""
         return refusal if hedged is True else ""
+
+    def make_one_way(self) -> str:
+        """Set a hedged practice account to one-way, when nothing on this symbol could be hurt.
+
+        What changed, or why it was not changed; empty when there was nothing to do. A position or
+        a working order in long/short mode means something only its owner can untangle, and on
+        mainnet the setting is the operator's to change at the exchange, never this software's.
+        """
+        if not self.hedged():
+            return ""
+        if self.environment == "mainnet":
+            return "the account is in long/short mode; set it to one-way at the exchange"
+        if self.position() or self._open_orders():
+            return (
+                f"the account is in long/short mode and holds a position or an order on "
+                f"{self.symbol}; flatten it, then run this again"
+            )
+        found = account_settings(self.venue, self.client)
+        try:
+            if found is not None:
+                found.set_one_way()
+            else:
+                self.client.set_position_mode(False, self.symbol)
+        except Exception as exc:
+            return f"the venue would not switch to one-way: {self._answer(exc)}"
+        if self.hedged():
+            return "the venue accepted the switch to one-way but still reads long/short"
+        return "position mode set to one-way on this demo or testnet account"
 
     def clock_skew(self) -> str:
         """Empty when this machine's clock agrees with the venue's; otherwise by how much."""

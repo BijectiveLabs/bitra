@@ -13,8 +13,9 @@ shape or is listed here with what we do instead.
 
 There is no LangChain, LangGraph, CrewAI or agent framework in the dependency tree. The fan-out is
 forty lines: a thread pool, an answer written to a file the moment it arrives, and `--resume` to
-reuse the answers already on disk. A cycle is two rounds - the analysts together, then the
-validators - and the order is in one function you can read top to bottom.
+reuse the answers already on disk. A cycle is at most three rounds - the analysts together, then the
+two advocating validators together, then the judge - and the order is in one function you can read
+top to bottom.
 
 The criteria that would make us adopt a graph framework were written down before the decision and
 still hold: a cycle that needs conditional re-entry into earlier steps, a run that must survive a

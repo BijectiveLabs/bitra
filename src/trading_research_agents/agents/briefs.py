@@ -28,6 +28,7 @@ from trading_research_agents.execution.pretrade import (
     PreTradeCost,
     PreTradeError,
     horizon_seconds,
+    interval_seconds,
     pre_trade_cost,
 )
 from trading_research_agents.execution.regime import RegimeRule, label
@@ -459,6 +460,14 @@ def cost_brief(
     if not isinstance(book, OrderBook):
         raise BriefError(f"{snapshot.instrument}: the book in the snapshot is not a book")
     funding = snapshot.get("funding").value if "funding" in snapshot.values else None
+    interval_source = "[run].settlement_interval_s; the venue reported no interval"
+    if funding is not None:
+        # The venue's own interval for this instrument wins over the declared default: 40 to 58% of
+        # the perpetuals on six venues settled every four hours on 2026-10-21, and one venue hourly.
+        detail = getattr(snapshot.get("funding"), "detail", None) or {}
+        venue_s = interval_seconds(str(detail.get("interval", "")))
+        if venue_s is not None:
+            settlement_interval_s, interval_source = venue_s, "the venue's interval"
     try:
         cost = pre_trade_cost(
             channel=channel,
@@ -469,6 +478,7 @@ def cost_brief(
             funding_rate=funding,
             settlement_interval_s=settlement_interval_s,
             latency_slippage_bps=latency_slippage_bps,
+            interval_source=interval_source,
         )
     except PreTradeError as exc:
         raise BriefError(f"{snapshot.instrument}: {exc}") from exc

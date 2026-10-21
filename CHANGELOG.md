@@ -6,6 +6,75 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-21
+
+### Added
+
+- `tra init --venue` writes a complete `[execution]` block for that exchange: its demo or testnet
+  API, 3x isolated leverage, at most 200 per order, and `exits = "separate"` where the venue takes no
+  stop with the entry. An agent desk made with `--venue` sizes orders in quote currency
+  (`size_quote = 100`), which means the same on every instrument. The next steps it prints include
+  what to set once at that exchange.
+- `tra mandate --sign "Your Name" --venue-mode` signs and turns venue mode on in one step.
+- `tra keys --prepare`: the probe, and on a demo or testnet API an account in long/short mode with
+  nothing open is set to one-way. Never on mainnet.
+- `tra keys --probe` reads the execution venue's account as soon as its keys are set, before venue
+  mode is on, and fills blank fee lines first, so it works on a desk straight from `tra init`.
+- An auditor's proposed change has to name a setting its table accepts; one the software does not
+  have is discarded with the reason. An answer that states a desk rule no role was told is recorded
+  beside it for every role, the technical analyst included, and the prompts say no role states one.
+- `[sizing]`: the desk's own round trips lower the risk per trade, never raise it. The Kelly fraction
+  from the record (win share, average win and loss in planned losses), a declared fraction of it,
+  then a seeded Monte Carlo that cuts it until the chance of using up the room left under
+  `[controls].max_drawdown_bps` within the next trades is inside the declared tolerance. Below
+  `min_round_trips` the declared risk stands; a record with no edge refuses new entries. Off until
+  `kelly_fraction` is declared.
+- Every intent carries `loss_at_stop_bps`, and every finished round trip its result in those planned
+  losses (`r`), its stop and target, and its excursion (MFE, MAE, when each happened, and each as a
+  share of the stop and target distance) read from the venue's candles over the hold. The run-time
+  risk manager reads the excursions of the last 20 trades.
+- `tra sizing`: the same calculation a cycle makes, from the records, without changing anything.
+
+### Fixed
+
+- A conviction rung above 1x has its loss at the stop priced at its own size, and the risk cap is
+  decided on the exact figure rather than the one rounded to a hundredth for the record.
+- `sizing` is written into `cycle.json` with the rest of the cycle.
+- The lock takes certifi 2026.10.19 (PYSEC-2026-4320) until ccxt moves its exact pin.
+- Order books quoted in contracts (OKX, Gate) are read in the base before they are walked; the
+  impact on those venues was priced on depth 100 to 10,000 times the real one for Bitcoin, and a
+  contract larger than one coin was priced on too little.
+- Funding is counted at each instrument's own settlement interval, from the venue, instead of eight
+  hours everywhere; 40 to 58 percent of perpetuals on the venues run here settle every four hours.
+- A funding payment the position would receive at the standing rate is no longer taken off the cost.
+- Risk per trade counts the round trip a stopped-out position pays, not only the distance to the
+  stop, so `[controls].max_risk_per_trade_bps` is the loss it says.
+- With keys set, fees are read through the client orders go through, and the standard tier comes
+  from the market list of the environment orders go to; a venue's slow public list no longer stops
+  the read (Gate's timed out while its testnet answered). A key that cannot read fees but can trade
+  (Gate keeps fees behind wallet read) is no longer reported as something to fix.
+
+### Documentation
+
+- What it trades, stated the same everywhere: linear perpetuals, spot pairs, stock perpetuals and
+  tokenized stocks, and prediction outcomes, each with what has been run; the live tier stays on
+  linear perpetuals.
+- Sizing from the record: Kelly, the drawdown simulation and the excursions, with the arithmetic.
+- Why it is built this way: the documented failures the design answers (language models trading
+  real money, overtrading, wrong numbers in financial answers, instructions hidden in data, agents
+  with authority over funds, automation without pre-trade controls, regulators' expectations), each
+  with its source, and what we found building it.
+- Validators and orchestration described as the judged case everywhere they appear.
+- Why it is built this way: rules a model is asked to follow, and rules a model makes up, with
+  their sources and how the software keeps every limit in code.
+
+### Changed
+
+- Trade results are out of the source and the docs: the figures from our demo desks and from the
+  research this package descends from (net per trade in bps, win rates) are replaced by what they
+  showed in words, and report examples show their format, not a desk's numbers. Results will be
+  published when there is a sample large enough to audit.
+
 ## [0.9.0] - 2026-10-20
 
 ### Added
@@ -202,8 +271,7 @@ All notable changes to this project are recorded here. The format follows
   never given; they now name the figures it has.
 - A range fade is refused where the window's moves have been carrying on: the technical brief
   carries `variance_ratio` (four-bar against one-bar return variance), and `range_reversion` needs
-  it below `[regime].fade_below_variance_ratio`, 1 by default, 0 to turn it off. On the demo desks
-  the fades it would have refused averaged -101 bps net against -46 for the rest. The analyst's
+  it below `[regime].fade_below_variance_ratio`, 1 by default, 0 to turn it off. The analyst's
   instructions name `range_breakout` or flat for a range whose moves carry on.
 - Every MCP tool says what it is for, when to use it against its siblings, what it returns and
   that it only reads, and every argument carries a description in the input schema. The server's
@@ -405,8 +473,7 @@ All notable changes to this project are recorded here. The format follows
   where one mechanism might work.
 - `range_reversion` needs a measured range, as the trend setups need a measured trend: it is now
   refused in a mixed market with a measured trend strength. A regime that could not be measured
-  still refuses nothing. On the demo desks' record, fades in a mixed market were right 27% of the
-  time (n = 30), against 60% in a measured range (n = 37).
+  still refuses nothing.
 - `tra init --agent` writes a mechanism that names no setup: "trade the setup the measured regime
   supports: with a trend, inside a range, or flat".
 

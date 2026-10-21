@@ -55,7 +55,11 @@ def candles(closes: list[str], volume: str = "10") -> list[Candle]:
 
 
 def snapshot_with(
-    *, closes: list[str] | None = None, book: bool = True, funding: bool = True
+    *,
+    closes: list[str] | None = None,
+    book: bool = True,
+    funding: bool = True,
+    funding_detail: dict[str, str] | None = None,
 ) -> Snapshot:
     snap = Snapshot(cycle="2026-09-27T10-00-00Z", instrument="BTCUSDT")
     rows = candles(closes or ["100", "101", "99", "100", "102"])
@@ -97,7 +101,7 @@ def snapshot_with(
                 tier="free",
                 fetched_at=NOW,
                 as_of_ns=int(NOW * 1_000_000_000),
-                detail={"rate": "0.0001"},
+                detail=funding_detail or {"rate": "0.0001"},
             )
         )
     return snap
@@ -337,6 +341,26 @@ def test_the_briefs_are_computed_by_code_and_name_their_sources(envelope: Envelo
             direction=Direction.LONG,
             horizon_bars=30,
         )
+
+
+def test_the_cost_counts_funding_at_the_venues_own_interval(envelope: Envelope) -> None:
+    def funding_of(detail: dict[str, str] | None) -> dict[str, str]:
+        costs = cost_brief(
+            snapshot_with(funding_detail=detail),
+            channel=envelope.cheapest(None),
+            size=Decimal("5"),
+            direction=Direction.LONG,
+            horizon_bars=360,
+            bar_interval_s=60,
+        )
+        return next(c for c in costs.record()["components"] if c["name"] == "funding_accrual")
+
+    # Six hours held at one basis point a settlement: once at the declared eight hours, six times
+    # where the venue settles every hour.
+    declared = funding_of(None)
+    assert declared["bps"] == "1.0000" and "[run].settlement_interval_s" in declared["source"]
+    hourly = funding_of({"rate": "0.0001", "interval": "1h"})
+    assert hourly["bps"] == "6.0000" and "the venue's interval" in hourly["source"]
 
 
 def test_tasks_run_together_keep_their_order_and_survive_one_failure(tmp_path: Path) -> None:

@@ -16,7 +16,7 @@ from typing import Any
 import pytest
 
 from trading_research_agents.agents.audit import AuditConfig, as_markdown, run_audit, tables_in
-from trading_research_agents.agents.auditor_report import checked
+from trading_research_agents.agents.auditor_report import Report, checked
 from trading_research_agents.agents.auditor_report import parse as parse_report
 from trading_research_agents.agents.audits import (
     AuditError,
@@ -209,6 +209,24 @@ def test_a_proposal_names_a_table_the_project_has(tmp_path: Path) -> None:
     )
     refused = checked(shapeless, figures={"agents.failed": "2"}, tables=["agents"])
     assert "is not a configuration key" in refused.discarded[0]
+
+
+def test_a_proposal_cannot_invent_a_setting() -> None:
+    def proposing(key: str) -> Report:
+        change = {"key": key, "from": "1", "to": "2"}
+        finding = {**ANSWER["findings"][0], "change": change}
+        return parse_report(json.dumps({**ANSWER, "findings": [finding]}), role="quant_auditor")
+
+    figures = {"agents.failed": "2"}
+    made_up = checked(proposing("[targets].min_edge_multiple_strict"), figures=figures)
+    assert made_up.findings == () and "there is no such rule" in made_up.discarded[0]
+    per_role = checked(proposing("[agents.roles.macro_analyst].veto_power"), figures=figures)
+    assert per_role.findings == ()
+
+    assert checked(proposing("[agents].max_output_tokens"), figures=figures).findings
+    assert checked(proposing("[agents.roles.macro_analyst].model"), figures=figures).findings
+    # A table without a fixed list of settings is judged by the table check alone.
+    assert checked(proposing("[sources.rates].file"), figures=figures).findings
 
 
 def test_a_finding_with_no_citation_is_worth_nothing() -> None:

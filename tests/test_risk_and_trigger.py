@@ -327,10 +327,12 @@ def test_a_cycle_cuts_the_size_to_the_declared_risk_and_the_intent_says_so(
     result = run_cycle(cfg)
 
     assert result.risk is not None and result.risk.admitted
-    assert result.risk.size == Decimal("2.941") and result.risk.risk_bps == Decimal("3.00")
+    # The loss at the stop is the 1% to the stop and the round trip paid on the way in and out:
+    # 5.10 bps of equity from the distance alone, 5.80 with the cost, so the cut goes further.
+    assert result.risk.size == Decimal("2.584") and result.risk.risk_bps == Decimal("3.00")
     assert result.acted and result.intent is not None
-    assert result.intent["size"] == "2.941" and result.intent["risk_bps"] == "3.00"
-    assert any("would risk 5.10 bps" in r for r in result.refusals)
+    assert result.intent["size"] == "2.584" and result.intent["risk_bps"] == "3.00"
+    assert any("would risk 5.80 bps" in r for r in result.refusals)
 
 
 def test_a_declared_risk_limit_with_no_stop_refuses_rather_than_sending_an_unchecked_size(

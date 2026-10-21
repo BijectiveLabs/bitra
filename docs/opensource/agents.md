@@ -207,7 +207,7 @@ What code changes is written beside what was proposed: each cycle's `exits.measu
 path and says which did better, in a line like this one:
 
 ```
-  levels: code's -12.4 bps against the analyst's own -31.0; no clear difference yet
+  levels: code's <net> bps against the analyst's own <net>; <which did better, or no clear difference yet>
 ```
 
 So a result can be traced to one of three things: the data the desk was given, how good the model
@@ -222,8 +222,9 @@ figures, on every trading screen, not settings of yours.
 Two different jobs share the word, and keeping them apart is deliberate.
 
 **The step.** How much this trade may lose, and the size that follows, is arithmetic over the
-operator's own declarations: the distance to the stop times the size, against equity, against
-`[controls].max_risk_per_trade_bps`. It runs inside every cycle, between the conviction ladder and
+operator's own declarations: the distance to the stop plus the round trip, times the size, against
+equity, against `[controls].max_risk_per_trade_bps`, lowered by the desk's own record when `[sizing]`
+is declared ([Sizing from the record](/opensource/sizing)). It runs inside every cycle, between the conviction ladder and
 the cost gate, and it cuts the size to fit or refuses. No model is asked, because a model asked how
 much to risk answers differently on Tuesday than on Monday from the same figures, and a size that
 depends on which sentence was written last cannot be backtested or audited. See [The cycle](/opensource/cycle).
@@ -252,8 +253,9 @@ of a cycle.
 
 Both answer in the same shape: findings, each tied to figures from the brief with their values, each
 carrying a proposal, and at most one proposed configuration change with the value it has now and the
-value proposed. The system checks every citation against the brief and every proposed key against the
-project's own tables, and discards what fails, keeping the reason. A report with nothing left says
+value proposed. The system checks every citation against the brief, and every proposed key against
+the project's own tables and the settings each table accepts, and discards what fails, keeping the
+reason. An auditor cannot propose a setting the software does not have. A report with nothing left says
 so rather than implying a finding.
 
 **Nothing is applied.** The audit writes `audits/<time>/`: the briefs as they were given, the answers
@@ -430,7 +432,7 @@ The short version for anyone reviewing this before putting money behind it:
 | What a role may say | A closed JSON schema per role. Extra fields, a wrong enum, or a number out of range are refused before anyone reads the answer. | `agents/<role>/role.py`, `llm/form.py` |
 | Whether its figures are real | Every cited figure is checked against the brief, value included. Citations that do not hold are discarded, and a deciding answer with nothing left is refused. | `agents/cited.py` |
 | Tools | None in a cycle. In a session the auditor gets five read tools in a loop capped at six steps; every path a model writes has to resolve inside the project, the session or the ladder's directory, and hidden files (`.env`, `.git`, `.tra-history`) are never readable. The MCP server applies the same fence to whatever host calls it (`tra mcp serve --root`). | `agents/react.py`, `surface/confine.py` |
-| Orchestration | A fixed pipeline with one parallel round (analysts) and one optional second round (validators). No graph to configure, no role calling another, no loop that a model controls. | `agents/cycle.py`, `agents/parallel.py` |
+| Orchestration | A fixed pipeline: one parallel round (analysts), then, when validators are declared, the advocates together and the judge after them. Code passes the checked claims from one to the other. No graph to configure, no role calling another, no loop that a model controls. | `agents/cycle.py`, `agents/parallel.py` |
 | Spend | Every call is a line in `usage.jsonl`. Declared ceilings (`token_budget`, `max_calls_per_hour`, `min_interval_s`) apply to the whole desk in one run, not to each role. | `llm/usage.py` |
 | Credentials | Keys come from the environment: the shell, an `--env-file` you name, or the `.env` beside `strategy.toml`; never from a config file. A vendor or venue error is scrubbed of any credential this process holds before it goes into a record or a brief. | `llm/completer.py`, `trading/dispatch.py` |
 | Text from outside | Headlines, notes, vendor messages and another role's reason reach some briefs as material to read. The prompts say so, and more to the point, none of those roles decides: the gates read the operator's declared states and measured figures. The role that proposes a direction reads numbers only. | `agents/prompts/` |

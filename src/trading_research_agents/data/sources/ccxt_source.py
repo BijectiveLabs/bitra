@@ -52,6 +52,7 @@ TIMEFRAMES = {
 DEFAULT_INTERVAL_S = 60
 DEFAULT_LIMIT = 240
 DEFAULT_BOOK_LEVELS = 25
+INTERVAL_TTL_S = 3600
 
 
 def _params(options: Mapping[str, Any], venue: str) -> dict[str, Any]:
@@ -106,6 +107,7 @@ class CcxtSource:
         self.environment = "" if environment == "mainnet" else environment
         self.symbols = dict(symbols or {})
         self.clock = clock
+        self._intervals: dict[str, tuple[str, float]] = {}
         self._tier = tier
         if client is None:
             client = self._build(settings or {})
@@ -248,14 +250,18 @@ class CcxtSource:
         if levels <= 0:
             raise SourceError("levels is positive")
         raw = self._client.fetch_order_book(symbol, levels, _params(options, self.venue))
+        # OKX and Gate quote a perpetual's depth in contracts (0.01 and 0.0001 of a Bitcoin on
+        # 2026-10-21), and every size here is in the base, so the book is read in the base too.
+        # Walked in contracts, the depth would look a hundred to ten thousand times deeper.
+        unit = self._contract_unit(symbol)
         # A level is [price, size], and some venues append more after those two (OKX adds the
         # count of orders), so only the first two are read.
         bids = tuple(
-            BookLevel(_decimal(level[0], "bid price"), _decimal(level[1], "bid size"))
+            BookLevel(_decimal(level[0], "bid price"), _decimal(level[1], "bid size") * unit)
             for level in list(raw.get("bids") or [])[:levels]
         )
         asks = tuple(
-            BookLevel(_decimal(level[0], "ask price"), _decimal(level[1], "ask size"))
+            BookLevel(_decimal(level[0], "ask price"), _decimal(level[1], "ask size") * unit)
             for level in list(raw.get("asks") or [])[:levels]
         )
         if not bids or not asks:
@@ -272,8 +278,29 @@ class CcxtSource:
             tier=self.tier,
             fetched_at=now,
             as_of_ns=as_of_ns,
-            detail={"symbol": symbol, **book.record()},
+            detail={
+                "symbol": symbol,
+                **({"contract_size": f"{unit:f}", "sizes": "in the base"} if unit != 1 else {}),
+                **book.record(),
+            },
         )
+
+    def _contract_unit(self, symbol: str) -> Decimal:
+        """How much of the base one contract of `symbol` is; 1 where the venue quotes the base."""
+        markets = getattr(self._client, "markets", None)
+        market = markets.get(symbol) if isinstance(markets, Mapping) else None
+        if not isinstance(market, Mapping) or not (market.get("swap") or market.get("future")):
+            return Decimal(1)
+        size = market.get("contractSize")
+        if size is None:
+            raise SourceError(
+                f"{self.name}: {symbol} is a contract with no contract size, so its depth cannot "
+                "be read in the base"
+            )
+        unit = _decimal(size, "contractSize")
+        if unit <= 0:
+            raise SourceError(f"{self.name}: {symbol} contract size {unit} is not positive")
+        return unit
 
     def _funding(self, instrument: str, symbol: str, **options: Any) -> Fetched:
         raw = self._client.fetch_funding_rate(symbol, _params(options, self.venue))
@@ -287,6 +314,10 @@ class CcxtSource:
         for key in ("interval", "nextFundingTimestamp", "markPrice"):
             if raw.get(key) is not None:
                 detail[key] = str(raw[key])
+        if "interval" not in detail:
+            interval = self._funding_interval(symbol)
+            if interval:
+                detail["interval"] = interval
         return Fetched(
             kind="funding",
             instrument=instrument,
@@ -297,6 +328,28 @@ class CcxtSource:
             as_of_ns=as_of_ns,
             detail=detail,
         )
+
+    def _funding_interval(self, symbol: str) -> str:
+        """The settlement interval where the rate itself does not carry it (Binance and Bitget on
+        2026-10-21, where 58% and 45% of the perpetuals settled every four hours, not eight)."""
+        now = self.clock()
+        known = self._intervals.get(symbol)
+        # Venues move a perpetual to a shorter interval when its funding runs hot, so an answer
+        # is good for an hour rather than for the life of the process.
+        if known is not None and now - known[1] < INTERVAL_TTL_S:
+            return known[0]
+        has = getattr(self._client, "has", None) or {}
+        if not has.get("fetchFundingInterval"):
+            return ""
+        try:
+            answer = self._client.fetch_funding_interval(symbol)
+        except Exception:
+            # Not remembered: the next fetch asks again rather than settling on the default.
+            return ""
+        found = str((answer or {}).get("interval") or "")
+        if found:
+            self._intervals[symbol] = (found, now)
+        return found
 
     def _open_interest(self, instrument: str, symbol: str, **options: Any) -> Fetched:
         raw = self._client.fetch_open_interest(symbol, _params(options, self.venue))

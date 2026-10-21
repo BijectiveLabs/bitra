@@ -64,6 +64,18 @@ def test_signing_again_replaces_the_signature_and_keeps_the_rest(tmp_path: Path)
     assert load_strategy_config(config).audit.on_alarm
 
 
+def test_signing_with_venue_mode_turns_orders_on_in_the_same_step(tmp_path: Path) -> None:
+    target = tmp_path / "desk"
+    assert main(["init", str(target), "--profile", "autonomous", "--venue", "okx"]) == 0
+    config = target / "strategy.toml"
+    assert main(["mandate", "--sign", "Ana", "--venue-mode", "--config", str(config)]) == 0
+    mandate = load_strategy_config(config).execution
+    assert mandate.mode == "venue" and mandate.acknowledged_by == "Ana"
+    # The sandbox line it replaced is gone, so the table carries one mode.
+    lines = config.read_text("utf-8").splitlines()
+    assert lines.count('mode = "venue"') == 1 and 'mode = "sandbox"' not in lines
+
+
 def test_a_mandate_file_someone_else_wrote_is_left_alone(tmp_path: Path) -> None:
     config = desk(tmp_path)
     (config.parent / MANDATE_FILE).write_text("our own notes\n", encoding="utf-8")

@@ -90,9 +90,9 @@ threshold = 3.0
   response distribution at the horizon and the response curve bar by bar.
 
 On one day of BTCUSDT perpetual prints (2025-01-01, 909,330 prints, 1,440 bars) the example
-event fired 71 times across all four subperiods, so it recurs; its median absolute response
-at five bars was 5.6 bps against the 20 bps claimed, which is the layer-0 stop the research
-record kept reporting.
+event fired 71 times across all four subperiods, so it recurs; its median absolute response at
+five bars was well under the 20 bps claimed, which is the layer-0 stop the research record kept
+reporting.
 
 ## Layer 3: the pre-registration
 
@@ -197,14 +197,14 @@ run, each of which replaced a specific way the research programme had fooled its
 
 | Requirement | What runs | Prevents |
 |---|---|---|
-| Net from day one | every trade net of its own cost; gross reported beside it and never a verdict | a programme measured mid to mid, corrected to -5.6 bps |
+| Net from day one | every trade net of its own cost; gross reported beside it and never a verdict | a programme measured mid to mid, whose expectation changed sign once its costs were counted |
 | Correlation-aware inference | collapse to one portfolio return per timestamp, then a moving-block bootstrap interval | fifteen instruments carrying the information of 1.33 treated as fifteen; a sign flip from +0.86 to -8.74 |
 | Live-path sizing | the declared weights, not equal weights | a sign flip between aggregation conventions |
-| Subperiod stability | the sample cut into three sequential blocks | +338 bps at p = 0.001 that lived entirely in the final third |
+| Subperiod stability | the sample cut into three sequential blocks | a significant result that lived entirely in the final third of the sample |
 | Declared power | timestamps against the declared sample; a kill without power is `NOT PROVEN` | underpowered results recorded as kills |
-| Matched null | sign permutation (direction flipped, cost kept) or cross-sectional shuffle (weights permuted, turnover guarded) | a time-shuffle control that manufactured 2,200 bps of edge |
+| Matched null | sign permutation (direction flipped, cost kept) or cross-sectional shuffle (weights permuted, turnover guarded) | a time-shuffle control that manufactured an edge of its own |
 | Multiple-testing correction | `benjamini_hochberg` for a family of tests | a best-of-N result reported as a single finding |
-| No post-hoc selection | `anchor_robustness` over every rebalance phase, two-sided, terciles | a +14.11 bps headline that was the best of 24 undisclosed phases |
+| No post-hoc selection | `anchor_robustness` over every rebalance phase, two-sided, terciles | a headline result that was the best of many undisclosed phases |
 
 The null is costed: the control pays the same round trip, so its mean sits near minus the cost,
 and a null centred at zero is the sign that costs were not applied. Its p-value never reaches
