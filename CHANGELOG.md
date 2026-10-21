@@ -6,6 +6,27 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `tra hindsight` says whether the analyst's confidence and the conviction score separate good
+  decisions from bad: rank correlation against the replayed outcome, tested against seeded
+  shuffles, and the outcomes by confidence band.
+- Every finished round trip carries its fees in bps beside the fees the gate priced, and the entry's
+  slippage against the touch it was priced at; `tra sizing` gives the medians.
+- `tra check` says when a conviction rung above 1x lets agreement add size beyond the base.
+- Docs: what the checks do not prove, and where each gap is measured instead.
+
+### Changed
+
+- strategy.toml refuses a table it does not read, with the closest name: a misspelt `[sizng]` was
+  ignored and left sizing off without a word.
+
+### Fixed
+
+- A perpetual whose funding rate could not be read is refused before it is priced, instead of being
+  priced without the funding term.
+- The docs summary that crawlers and language models read names every market built.
+
 ## [0.10.0] - 2026-10-21
 
 ### Added

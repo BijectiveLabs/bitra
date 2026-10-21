@@ -123,7 +123,7 @@ they no longer have to infer the shape of a trade from its result.
 | the cycle record, `sizing` in `cycle.json` | the rule, the measured figures, f*, the ceiling, the simulation and why |
 | `intents.jsonl` | `loss_at_stop_bps` on every intent |
 | `round_trips.jsonl` | `loss_at_stop_bps`, `r`, `stop`, `take` and `excursion` on every finished trade |
-| `tra sizing` | the same calculation the cycle makes, from the records, without changing anything |
+| `tra sizing` | the same calculation the cycle makes, from the records, without changing anything; and the fills against their prices: the median entry slippage against the touch, and the median fees against what the gate counted |
 
 Trades written before this version have no `loss_at_stop_bps`, so they are not counted: the record
 starts with the first trade that knows what it planned to lose.

@@ -27,6 +27,20 @@ This page separates two things that are easy to confuse.
 | Sandbox is the default, and there is no production tier | `execution/mandate.py`, the ladder |
 | The research chain does not select among variants: a claim that only survives after many tries has not survived | `chain/`; the walk-forward harness ships, an optimiser that feeds the chain does not |
 
+## What the checks do not prove
+
+The guarantees above keep a model from inventing a figure, sending an order or loosening a limit.
+They do not make its reasoning right, and they do not make a strategy profitable. What is left, and
+where the software measures it instead of assuming it:
+
+| What is not proven | Why | Where it is measured |
+|---|---|---|
+| A cited figure supports the claim made with it | the citation check confirms the figure was given and its value is right; whether it means what the claim says is a judgement, and a deterministic rule here would misread a reversion thesis as a contradiction | the judged validators argue for and against apart and a neutral judge weighs both; `tra hindsight` replays every decision against its reverse |
+| A high confidence or conviction means a better trade | neither is a calibrated probability | `tra hindsight`: rank correlation and confidence bands against outcomes |
+| The claimed edge is the expected move | it is the analyst's own target, held inside your bounds; the break-even win rate is the probability check on it | `[sizing]`: Kelly from the desk's own finished trades refuses entries when the record shows no edge |
+| The thresholds you chose hold out of sample | regime lines, weights, exit bounds and targets are parameters and can be fitted to the past | the research chain's walk-forward harness for scripted cores; a sensitivity sweep for agent desks is not built yet |
+| The prices the gate used match the fills | the gate prices on the book at the decision | `tra sizing`: entry slippage against the priced touch and fees against the priced schedule, per finished trade |
+
 ## Not built yet
 
 | Area | Today | What a contribution would need |

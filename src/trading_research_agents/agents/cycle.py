@@ -867,6 +867,19 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         return result
 
     direction = TARGETS[analyst.target]
+    # After the book, which is the first thing a price needs and the first refusal to name.
+    if not no_contract and "orderbook" in snapshot.values and "funding" not in snapshot.values:
+        # A perpetual pays funding while it is held. Priced without the rate, the round trip would
+        # look cheaper than it is, so the trade is refused rather than priced on a missing term.
+        why = snapshot.refused.get("funding", "no funding chain is declared in data.toml")
+        result.refusals.append(
+            f"cost: the funding rate for {cfg.instrument} could not be read ({why}); a contract's "
+            "round trip is not priced without it"
+        )
+        result.stopped_by = "cost: no funding rate"
+        announce(cfg.watch, "cost", REFUSED, "no funding rate to price the hold")
+        _finish(cfg, where, result)
+        return result
     try:
         costs = cost_brief(
             snapshot,
@@ -1213,6 +1226,14 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         if result.risk is None or result.risk.risk_bps is None
         else str(result.risk.risk_bps),
         "loss_at_stop_bps": _loss_at_stop(costs.cost.mid, exits, costs.cost.round_trip_bps),
+        # What the trade was priced at, so the finished trade can be set against it.
+        "priced_round_trip_bps": str(costs.cost.round_trip_bps.quantize(Decimal("0.0001"))),
+        "priced_fee_bps": str(
+            sum(
+                (c.bps for c in costs.cost.components if c.name == "fee_round_trip"),
+                Decimal(0),
+            ).quantize(Decimal("0.0001"))
+        ),
         "horizon_bars": analyst.horizon_bars,
         "confidence": analyst.confidence,
         "reason": analyst.reason,
