@@ -35,6 +35,7 @@ All notable changes to this project are recorded here. The format follows
 
 ### Fixed
 
+- The lock takes certifi 2026.10.19 (PYSEC-2026-4320) until ccxt moves its exact pin.
 - Order books quoted in contracts (OKX, Gate) are read in the base before they are walked; the
   impact on those venues was priced on depth 100 to 10,000 times the real one for Bitcoin, and a
   contract larger than one coin was priced on too little.

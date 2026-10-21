@@ -86,7 +86,7 @@ def test_the_cap_waits_for_a_record_and_refuses_one_with_no_edge() -> None:
 
 
 def test_only_finished_trades_that_know_their_planned_loss_are_counted() -> None:
-    rows = [
+    rows: list[dict[str, Any]] = [
         {"net": "1.2", "r": "0.8"},
         {"note": "the venue returned no exit fills"},
         {"net": "-2", "r": None},

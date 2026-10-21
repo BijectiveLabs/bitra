@@ -28,6 +28,8 @@ class FakeCcxt:
         self.answers = answers
         self.seen: list[tuple[str, tuple[Any, ...]]] = []
         self.markets_by_id: dict[str, Any] = answers.get("markets_by_id", {})
+        self.markets: dict[str, Any] = {}
+        self.has: dict[str, Any] = {}
         self.loaded = 0
 
     def load_markets(self) -> None:

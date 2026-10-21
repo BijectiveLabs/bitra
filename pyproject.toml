@@ -85,10 +85,13 @@ dev = [
 ]
 
 [tool.uv]
-# ccxt pins multidict exactly to a release with a published advisory; the lock (CI and every
-# developer environment) takes the fixed release until ccxt moves its pin. Installs from PyPI follow
-# ccxt's own pin, which is ccxt's to change.
-override-dependencies = ["multidict>=6.9.1,<7"]  # aiohttp needs it below 7
+# ccxt pins multidict and certifi exactly, to releases with published advisories; the lock (CI and
+# every developer environment) takes the fixed releases until ccxt moves its pins. Installs from PyPI
+# follow ccxt's own pins, which are ccxt's to change.
+override-dependencies = [
+    "multidict>=6.9.1,<7",  # aiohttp needs it below 7
+    "certifi>=2026.10.19",  # PYSEC-2026-4320
+]
 
 [tool.hatch.metadata.hooks.fancy-pypi-readme]
 content-type = "text/markdown"
