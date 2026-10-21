@@ -158,7 +158,7 @@ trade on its own word.
 | File | One line per | Carries |
 |---|---|---|
 | `runs/cycles/positions.jsonl` | close, flatten, or venue exit | instrument, event, the entry's order id and cycle, the close order's id, the reason |
-| `runs/cycles/round_trips.jsonl` | finished trade | entry, exit, size, gross, fees, net, funding, how it closed |
+| `runs/cycles/round_trips.jsonl` | finished trade | entry, exit, size, gross, fees, net, funding, how it closed, the stop and target, `loss_at_stop_bps`, `r` and the excursion ([Sizing from the record](/opensource/sizing)) |
 | `runs/cycles/equity.jsonl` | UTC day | the first equity reading of the day |
 | `runs/cycles/<id>/placed.json` | order | what was sent, what filled, and the account figures at the time |
 
@@ -170,7 +170,9 @@ appear after a close; the keeper waits a little, and a trip written before its e
 finished on a later pass, as one more line and never a copy.
 
 The quant auditor reads `round_trips.jsonl`. It is the only place a desk's results are measured
-from what actually filled rather than from what was intended.
+from what actually filled rather than from what was intended. Each finished trade also carries its
+result in planned losses (`r`) and how far it went for and against the position, from the venue's
+own candles over the hold, so neither the auditors nor `[sizing]` have to reconstruct either.
 
 ## Limits worth knowing
 

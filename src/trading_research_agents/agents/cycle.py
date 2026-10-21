@@ -84,6 +84,7 @@ from trading_research_agents.execution.conviction import (
     stake_for,
 )
 from trading_research_agents.execution.desk import Desk, DeskVerdict, Open, within_desk
+from trading_research_agents.execution.kelly import SizingRule, by_record
 from trading_research_agents.execution.mandate import MODES as MANDATE_MODES
 from trading_research_agents.execution.outcome import BPS, OutcomeError, outcome_edge
 from trading_research_agents.execution.pretrade import PreTradeVerdict, admit
@@ -114,6 +115,7 @@ from trading_research_agents.records import (
     build_index,
     has_index,
     index_row,
+    read_lines,
     recent,
     sha256_of,
     write_gzip_json,
@@ -135,6 +137,7 @@ from trading_research_agents.trading.capital import (
     sizing_equity,
 )
 from trading_research_agents.trading.market import Market
+from trading_research_agents.trading.positions import ROUND_TRIPS
 
 # The third mode sends orders, and it only exists when the caller hands the cycle something to
 # send them with. That hand is built by the CLI, and only after the mandate has cleared.
@@ -228,6 +231,8 @@ class CycleConfig:
     # the kill switch file is written, and the next pass flattens and stops the run.
     max_drawdown_bps: Decimal | None = None
     drawdown_kill: Path | None = None
+    # [sizing]: the desk's own round trips may lower the risk per trade, never raise it.
+    sizing: SizingRule = field(default_factory=SizingRule)
     # What the models have already cost since this desk last wrote an intent. A day of refusals is
     # paid for by whatever trade the day produces, so the caller carries the figure across cycles.
     carried_spend: Decimal = Decimal(0)
@@ -1026,8 +1031,31 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
             return result
         size = stake.size
 
+    allowed = cfg.max_risk_per_trade_bps
+    if not cfg.sizing.idle:
+        sized = by_record(
+            cfg.sizing,
+            read_lines(cfg.root / ROUND_TRIPS),
+            room_bps=_drawdown_room(cfg, result),
+        )
+        result.briefs["sizing"] = sized.record()
+        if sized.refuses:
+            result.refusals.append(f"sizing: {sized.reason}")
+            announce(cfg.watch, "sizing", REFUSED, "the record supports no new entry")
+            _finish(cfg, where, result)
+            return result
+        if sized.cap_bps is not None:
+            allowed = sized.cap_bps if allowed is None else min(allowed, sized.cap_bps)
+        announce(
+            cfg.watch,
+            "sizing",
+            DONE,
+            "declared risk stands"
+            if sized.cap_bps is None
+            else f"at most {allowed} bps at the stop",
+        )
     stop_at = exits.get("stop_price")
-    if cfg.max_risk_per_trade_bps is not None and stop_at is None:
+    if allowed is not None and stop_at is None:
         # A declared risk limit that cannot be computed is not a limit. Fail closed and say which
         # declaration is missing rather than sending a size nothing checked.
         result.refusals.append(
@@ -1037,13 +1065,16 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         announce(cfg.watch, "risk", REFUSED, "no stop to size from")
         _finish(cfg, where, result)
         return result
+    # Priced at the base size, which is the larger: impact only falls as the size is cut, so the
+    # loss at the stop is never understated by the cut it leads to.
     capped = within_risk(
         size=size,
         entry=costs.cost.mid,
         stop=None if stop_at is None else Decimal(stop_at),
         equity=equity,
-        allowed_bps=cfg.max_risk_per_trade_bps,
+        allowed_bps=allowed,
         step=cfg.size_step,
+        cost_bps=max(costs.cost.round_trip_bps, Decimal(0)),
     )
     result.risk = capped
     for reason in capped.reasons:
@@ -1160,6 +1191,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         "risk_bps": None
         if result.risk is None or result.risk.risk_bps is None
         else str(result.risk.risk_bps),
+        "loss_at_stop_bps": _loss_at_stop(costs.cost.mid, exits, costs.cost.round_trip_bps),
         "horizon_bars": analyst.horizon_bars,
         "confidence": analyst.confidence,
         "reason": analyst.reason,
@@ -2037,6 +2069,27 @@ def _break_even(exits: Mapping[str, Any], round_trip_bps: Decimal) -> str | None
     if gain <= 0 or loss <= 0:
         return None
     return str(((loss + round_trip_bps) / (gain + loss)).quantize(Decimal("0.001")))
+
+
+def _drawdown_room(cfg: CycleConfig, result: CycleResult) -> Decimal | None:
+    """What is left under [controls].max_drawdown_bps after the drawdown already taken."""
+    if cfg.max_drawdown_bps is None:
+        return None
+    taken = (result.briefs.get("equity") or {}).get("drawdown_bps")
+    return cfg.max_drawdown_bps - (Decimal(str(taken)) if taken is not None else Decimal(0))
+
+
+def _loss_at_stop(mid: Decimal, exits: Mapping[str, Any], round_trip_bps: Decimal) -> str | None:
+    """What a stop hit loses, in bps of the notional: the distance and the round trip paid on it.
+
+    Written on the intent so a finished trade can be read as a multiple of what it planned to lose,
+    which is the unit the sizing measures a desk's record in.
+    """
+    stop = exits.get("stop_price")
+    if stop is None or mid <= 0:
+        return None
+    distance = abs(Decimal(stop) - mid) / mid * 10_000
+    return str((distance + max(round_trip_bps, Decimal(0))).quantize(Decimal("0.01")))
 
 
 def _exit_view(mid: Decimal, target: str, exits: Mapping[str, str]) -> dict[str, str]:

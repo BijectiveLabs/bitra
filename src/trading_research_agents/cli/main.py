@@ -104,7 +104,7 @@ from trading_research_agents.llm.providers import (
     providers,
 )
 from trading_research_agents.llm.providers.anthropic import DEFAULT_MODEL
-from trading_research_agents.records import append_line, write_json
+from trading_research_agents.records import append_line, read_lines, write_json
 from trading_research_agents.strategy import ExitError
 from trading_research_agents.trading import (
     ConfigError,
@@ -628,6 +628,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     hindsight_cmd.add_argument("--days", type=int, default=None, help="only the last N days")
     hindsight_cmd.add_argument("--json", action="store_true")
+
+    sizing_cmd = top.add_parser(
+        "sizing",
+        help="what the desk's own round trips support: Kelly, the drawdown ahead, the excursions",
+    )
+    sizing_cmd.set_defaults(command="sizing")
+    sizing_cmd.add_argument("--config", type=Path, default=Path("strategy.toml"))
+    sizing_cmd.add_argument("--runs", type=Path, default=Path("runs") / "cycles")
+    sizing_cmd.add_argument(
+        "--fraction",
+        type=Decimal,
+        default=None,
+        help="the Kelly fraction to show when [sizing] is not declared (default: 0.25)",
+    )
+    sizing_cmd.add_argument("--json", action="store_true")
 
     universe_cmd = top.add_parser(
         "universe", help="what discovery finds on the venue now, and what each filter took out"
@@ -1879,7 +1894,6 @@ def held_back_by(cfg: Any, out: Path, now: datetime) -> str:
 def losing_streak_today(path: Path, midnight: datetime) -> int:
     """Losing round trips in a row, newest first, closed since `midnight`. A trip with no result is
     passed over; a winner ends the count."""
-    from trading_research_agents.records import read_lines
 
     streak = 0
     for trip in reversed(read_lines(path) if path.is_file() else []):
@@ -1984,6 +1998,91 @@ def hindsight_command(args: argparse.Namespace) -> int:
     write_json(args.runs / "hindsight.json", payload)
     emit(payload, args.json, _hindsight_lines(payload))
     return CLEARED
+
+
+def sizing_command(args: argparse.Namespace) -> int:
+    """What the round trips on record support, computed the way a cycle computes it. Read-only."""
+    from dataclasses import replace
+
+    from trading_research_agents.execution.excursion import summarise
+    from trading_research_agents.execution.kelly import by_record
+
+    cfg = load_strategy_config(args.config)
+    rule, declared = cfg.sizing, not cfg.sizing.idle
+    if not declared:
+        rule = replace(rule, kelly_fraction=args.fraction or Decimal("0.25"))
+    rows = read_lines(args.runs / "round_trips.jsonl")
+    room = cfg.limits.max_drawdown_bps
+    sized = by_record(rule, rows, room_bps=room)
+    excursions = [r["excursion"] for r in rows if isinstance(r.get("excursion"), dict)]
+    payload = {
+        "declared": declared,
+        "round_trips": sum(1 for r in rows if "net" in r),
+        "sizing": sized.record(),
+        "room_bps": None if room is None else str(room),
+        "declared_risk_bps": (
+            None
+            if cfg.limits.max_risk_per_trade_bps is None
+            else str(cfg.limits.max_risk_per_trade_bps)
+        ),
+        "excursions": summarise(excursions) if excursions else {"measured": 0},
+    }
+    emit(payload, args.json, _sizing_lines(payload))
+    return CLEARED
+
+
+def _sizing_lines(payload: dict[str, Any]) -> list[str]:
+    sizing = payload["sizing"]
+    kelly = sizing["kelly"]
+    measured = kelly.get("measured")
+    lines = [
+        f"sizing: {payload['round_trips']} finished round trip(s) on record"
+        + (
+            ""
+            if payload["declared"]
+            else f"; [sizing] is not declared, shown at {kelly['fraction']}"
+        )
+    ]
+    if measured:
+        lines.append(
+            f"  {measured['wins']} won, {measured['losses']} lost of {measured['trades']}: "
+            f"win rate {measured['win_rate']} (at least {measured['win_rate_low_95']} at 95%), "
+            "average win "
+            f"{measured['avg_win_r']}R, average loss {measured['avg_loss_r']}R"
+        )
+    lines.append(f"  {sizing['reason']}")
+    declared, cap = payload["declared_risk_bps"], sizing["cap_bps"]
+    if declared is not None and cap is not None:
+        lower = Decimal(declared) <= Decimal(cap)
+        lines.append(
+            f"  a cycle risks at most {declared if lower else cap} bps at the stop: "
+            + (
+                f"[controls].max_risk_per_trade_bps {declared} is the lower"
+                if lower
+                else f"the record's {cap} is below the declared {declared}"
+            )
+        )
+    simulation = sizing.get("simulation")
+    if simulation:
+        reach = simulation.get("reach_share")
+        lines.append(
+            f"  {simulation['paths']} paths of {simulation['trades']} trades at "
+            f"{simulation['risk_bps']} bps, seed {simulation['seed']}: drawdown median "
+            f"{simulation['drawdown_median_bps']} bps, 95th {simulation['drawdown_p95_bps']} bps"
+            + ("" if reach is None else f"; {reach} of paths reach the drawdown limit")
+        )
+        if payload["room_bps"] is not None:
+            lines.append(
+                f"  room is the whole [controls].max_drawdown_bps {payload['room_bps']}; a cycle "
+                "takes the drawdown already on the account off it first"
+            )
+    seen = payload["excursions"]
+    if seen.get("measured"):
+        lines.append(
+            f"  excursions over {seen['measured']} trade(s): best median {seen['mfe_median_bps']} "
+            f"bps, worst median {seen['mae_median_bps']} bps, worst {seen['mae_worst_bps']} bps"
+        )
+    return lines
 
 
 def _hindsight_lines(payload: dict[str, Any]) -> list[str]:
@@ -3566,6 +3665,7 @@ def run_cycle_command(args: argparse.Namespace) -> int:
         wait_while_open=mode == "venue" and not cfg.execution.adopt_open_position,
         daily_loss_limit_bps=cfg.limits.daily_loss_limit_bps if mode == "venue" else None,
         max_drawdown_bps=cfg.limits.max_drawdown_bps if mode == "venue" else None,
+        sizing=cfg.sizing,
         # Flattening is the kill switch's job; the cycle only arms it.
         drawdown_kill=cfg.kill_switch if cfg.limits.on_drawdown == "flatten" else None,
         trigger=cfg.trigger,
@@ -6242,6 +6342,7 @@ HANDLERS = {
     ("models", "models"): show_models,
     ("audit", "audit"): run_audit_command,
     ("hindsight", "hindsight"): hindsight_command,
+    ("sizing", "sizing"): sizing_command,
     ("pause", "pause"): pause_command,
     ("kill", "kill"): kill_command,
     ("keys", "keys"): show_keys,

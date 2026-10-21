@@ -21,9 +21,28 @@ All notable changes to this project are recorded here. The format follows
 - An auditor's proposed change has to name a setting its table accepts; one the software does not
   have is discarded with the reason. An answer that states a desk rule no role was told is recorded
   beside it for every role, the technical analyst included, and the prompts say no role states one.
+- `[sizing]`: the desk's own round trips lower the risk per trade, never raise it. The Kelly fraction
+  from the record (win share, average win and loss in planned losses), a declared fraction of it,
+  then a seeded Monte Carlo that cuts it until the chance of using up the room left under
+  `[controls].max_drawdown_bps` within the next trades is inside the declared tolerance. Below
+  `min_round_trips` the declared risk stands; a record with no edge refuses new entries. Off until
+  `kelly_fraction` is declared.
+- Every intent carries `loss_at_stop_bps`, and every finished round trip its result in those planned
+  losses (`r`), its stop and target, and its excursion (MFE, MAE, when each happened, and each as a
+  share of the stop and target distance) read from the venue's candles over the hold. The run-time
+  risk manager reads the excursions of the last 20 trades.
+- `tra sizing`: the same calculation a cycle makes, from the records, without changing anything.
 
 ### Fixed
 
+- Order books quoted in contracts (OKX, Gate) are read in the base before they are walked; the
+  impact on those venues was priced on depth 100 to 10,000 times the real one for Bitcoin, and a
+  contract larger than one coin was priced on too little.
+- Funding is counted at each instrument's own settlement interval, from the venue, instead of eight
+  hours everywhere; 40 to 58 percent of perpetuals on the venues run here settle every four hours.
+- A funding payment the position would receive at the standing rate is no longer taken off the cost.
+- Risk per trade counts the round trip a stopped-out position pays, not only the distance to the
+  stop, so `[controls].max_risk_per_trade_bps` is the loss it says.
 - With keys set, fees are read through the client orders go through, and the standard tier comes
   from the market list of the environment orders go to; a venue's slow public list no longer stops
   the read (Gate's timed out while its testnet answered). A key that cannot read fees but can trade
@@ -31,6 +50,7 @@ All notable changes to this project are recorded here. The format follows
 
 ### Documentation
 
+- Sizing from the record: Kelly, the drawdown simulation and the excursions, with the arithmetic.
 - Why it is built this way: the documented failures the design answers (language models trading
   real money, overtrading, wrong numbers in financial answers, instructions hidden in data, agents
   with authority over funds, automation without pre-trade controls, regulators' expectations), each

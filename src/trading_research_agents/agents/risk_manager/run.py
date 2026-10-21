@@ -16,6 +16,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
+from trading_research_agents.execution.excursion import summarise
 from trading_research_agents.llm.form import (
     FormError,
     _enum,
@@ -231,6 +232,10 @@ def brief(
             "per_instrument_last_20": {
                 k: {**v, "net": str(v["net"])} for k, v in sorted(per.items())
             },
+            # How far the same trades went for and against them, read from the venue's candles.
+            "excursions_last_20": summarise(
+                [t["excursion"] for t in trips[-20:] if isinstance(t.get("excursion"), dict)]
+            ),
         },
         "at": now.astimezone(UTC).isoformat(),
     }

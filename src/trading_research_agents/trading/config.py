@@ -18,6 +18,7 @@ from trading_research_agents.execution.confluence import STANCES, ConfluenceErro
 from trading_research_agents.execution.conviction import Conviction, ConvictionError, Tier
 from trading_research_agents.execution.cost import CostError, FundingSchedule
 from trading_research_agents.execution.desk import Desk, DeskError
+from trading_research_agents.execution.kelly import KellyError, SizingRule
 from trading_research_agents.execution.mandate import DEFAULT_MARKETS, Mandate, MandateError
 from trading_research_agents.execution.regime import REGIME_KEYS, RegimeError, RegimeRule
 from trading_research_agents.execution.stops import MODES, StopError, VolatilityExit
@@ -285,6 +286,8 @@ class StrategyConfig:
     execution: Mandate = field(default_factory=Mandate)
     # Where trending and ranging begin, and whether a setup has to fit the regime measured.
     regime: RegimeRule = field(default_factory=RegimeRule)
+    # How far the desk's own record may lower the declared risk per trade.
+    sizing: SizingRule = field(default_factory=SizingRule)
 
 
 def load_strategy_config(path: Path) -> StrategyConfig:
@@ -415,6 +418,7 @@ def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> S
         regime=_regime(raw),
         conviction=_conviction(raw),
         execution=_mandate(raw, run.venue_key),
+        sizing=_sizing(raw),
     )
 
 
@@ -979,6 +983,46 @@ def _targets(raw: dict[str, Any], exit_rule: ExitRule) -> Targets:
         raise ConfigError(str(exc)) from exc
 
 
+SIZING_KEYS = (
+    "kelly_fraction",
+    "min_round_trips",
+    "lookback_round_trips",
+    "simulate_trades",
+    "simulate_paths",
+    "seed",
+    "max_drawdown_probability",
+)
+
+
+def _sizing(raw: dict[str, Any]) -> SizingRule:
+    """[sizing]: the Kelly ceiling from the desk's own round trips, off until declared."""
+    table = raw.get("sizing")
+    if table is None:
+        return SizingRule()
+    if not isinstance(table, dict):
+        raise ConfigError("[sizing] must be a table")
+    unknown = sorted(set(table) - set(SIZING_KEYS))
+    if unknown:
+        raise ConfigError(f"[sizing]: unknown {unknown}; have {list(SIZING_KEYS)}")
+    if "kelly_fraction" not in table:
+        raise ConfigError("[sizing] is declared without kelly_fraction, which is what turns it on")
+    plain = SizingRule()
+    try:
+        return SizingRule(
+            kelly_fraction=_dec(table, "kelly_fraction"),
+            min_round_trips=_or_int(table, "min_round_trips", plain.min_round_trips),
+            lookback_round_trips=_or_int(table, "lookback_round_trips", plain.lookback_round_trips),
+            simulate_trades=_or_int(table, "simulate_trades", plain.simulate_trades),
+            simulate_paths=_or_int(table, "simulate_paths", plain.simulate_paths),
+            seed=_or_int(table, "seed", plain.seed),
+            max_drawdown_probability=_or_dec(
+                table, "max_drawdown_probability", str(plain.max_drawdown_probability)
+            ),
+        )
+    except KellyError as exc:
+        raise ConfigError(str(exc)) from exc
+
+
 def _desk(raw: dict[str, Any]) -> Desk:
     """[desk]: what this desk may be carrying across every instrument at once."""
     table = raw.get("desk")
@@ -1462,6 +1506,7 @@ SETTINGS: dict[str, tuple[str, ...]] = {
     "exit": EXIT_KEYS + VOLATILITY_KEYS + ANALYST_KEYS,
     "live": LIVE_KEYS,
     "regime": REGIME_KEYS,
+    "sizing": SIZING_KEYS,
     "targets": TARGET_KEYS,
     "trigger": TRIGGER_KEYS,
     "universe": UNIVERSE_KEYS,

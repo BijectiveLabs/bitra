@@ -222,8 +222,9 @@ figures, on every trading screen, not settings of yours.
 Two different jobs share the word, and keeping them apart is deliberate.
 
 **The step.** How much this trade may lose, and the size that follows, is arithmetic over the
-operator's own declarations: the distance to the stop times the size, against equity, against
-`[controls].max_risk_per_trade_bps`. It runs inside every cycle, between the conviction ladder and
+operator's own declarations: the distance to the stop plus the round trip, times the size, against
+equity, against `[controls].max_risk_per_trade_bps`, lowered by the desk's own record when `[sizing]`
+is declared ([Sizing from the record](/opensource/sizing)). It runs inside every cycle, between the conviction ladder and
 the cost gate, and it cuts the size to fit or refuses. No model is asked, because a model asked how
 much to risk answers differently on Tuesday than on Monday from the same figures, and a size that
 depends on which sentence was written last cannot be backtested or audited. See [The cycle](/opensource/cycle).

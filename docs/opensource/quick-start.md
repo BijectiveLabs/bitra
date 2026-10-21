@@ -129,7 +129,7 @@ will do in your project, defaults included.
 | `[targets].max_break_even_win_rate` | `0.5` | refuse a trade that would need more than half its kind to win to cover the stops and the costs |
 | `[exit].timeout_bars` | four hours of bars: `240` at 1m, `16` at 15m | a position closes by time after this many bars; a measured stop is sized over the same span |
 | `[run].bar_interval_s` | `60`; `tra init --agent` writes `900` with 1h and 4h as context | the decision timeframe; the round trip costs the same on any of them, so a longer one leaves more of the move |
-| `[run].settlement_interval_s` | `28800` | the venue's funding clock |
+| `[run].settlement_interval_s` | `28800` | the funding clock used only when the venue does not report an instrument's own |
 | `[execution].environment` | `demo` | where orders go: `demo`, `testnet` or `mainnet` |
 
 A scripted strategy (`[strategy].file`) is research, so it declares its own exit and cost figures:

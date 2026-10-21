@@ -110,7 +110,10 @@ the universe (system: one data pull each, the trigger per instrument, ordered by
   -> validators          (when configured: pro and contra apart, then neutral judges both)
   -> confluence matrix   (system: declared states and votes)   -> whether to trade at all
   -> conviction          (system: the same voices, weighted)    -> how much the desk wants on
-  -> risk per trade      (system: the loss at the stop, against equity) -> how much it can afford
+  -> sizing              (system, when [sizing] is declared: Kelly from the desk's own round trips,
+                          cut for the drawdown ahead) -> how much the record supports
+  -> risk per trade      (system: the loss at the stop, round trip included, against equity)
+                                                                -> how much it can afford
   -> the desk            (system: what the whole book is already carrying) -> whether it fits
   -> cost gate           (system: the claim against the cost)
   -> targets             (system: net bps, the edge over the cost, reward-to-risk, research, count)
@@ -726,8 +729,10 @@ manager is paid to ask: with the stop where it is, what does this position lose 
 max_risk_per_trade_bps = 50      # of [run].equity, at the stop from [exit]
 ```
 
-The arithmetic is the distance to the stop times the size, against the equity, in basis points. If
-it is over the allowance, **the size is cut until it fits** - never the stop moved, because moving a
+The arithmetic is what a stopped-out position loses: the distance to the stop plus the round trip it
+pays on the way in and out, times the size, against the equity, in basis points. The round trip is
+priced at the base size, the larger, so the cut it leads to never understates it. If it is over the
+allowance, **the size is cut until it fits** - never the stop moved, because moving a
 stop to make a trade fit is how a desk learns the wrong lesson from a loss. If the size that would
 fit is below one step of the venue, the cycle refuses. The cut and the figures behind it go into the
 record and into the intent, so `risk_bps` is there beside the size for every trade the desk took.
@@ -736,6 +741,11 @@ This is a fixed calculation, not a role. A model asked how much to risk answers 
 on Monday from the same figures, and the session runtime has always enforced this limit - a cycle
 that can send its own orders has to enforce it too. `tra check` refuses the combination that cannot
 be applied: a declared risk limit with no stop, or with no equity to measure against.
+
+With `[sizing]` declared, the desk's own finished trades can lower that allowance: the Kelly fraction
+the record supports, a fraction of it, and a seeded Monte Carlo of the drawdown the next trades could
+take the account through. It never raises it, and a record that shows no edge refuses new entries.
+[Sizing from the record](/opensource/sizing) has the arithmetic.
 
 ## The desk: what the whole book may carry
 
@@ -982,8 +992,8 @@ component says how much we actually know:
 |---|---|---|
 | `fee_round_trip` | declared | the channel's schedule in `envelope.toml` |
 | `spread_cost` | measured | half the spread of this snapshot's book, both legs |
-| `impact` | computed | walking the visible levels at the declared size; the exit leg is assumed symmetric |
-| `funding_accrual` | declared | the settlements a horizon spans, at the rate that stands now |
+| `impact` | computed | walking the visible levels at the declared size, in the base; the exit leg is assumed symmetric |
+| `funding_accrual` | declared | the settlements a horizon spans at the venue's own interval for that instrument, at the rate that stands now; only what the position pays |
 | `latency_slippage` | estimated | `[run].slippage_bps`, an operator's bound, not a measurement |
 
 The gate is one comparison: the claimed edge must be at least the total plus the margin the
@@ -1015,6 +1025,20 @@ intent: long 0.01 (sandbox)
 Read the fee line again: eleven of the thirteen and a half basis points are the venue's own
 schedule. That is the number most agent frameworks never show, and it is usually the number that
 decides whether the whole idea is worth running.
+
+Three details decide whether these figures are right on every venue, and each was checked against
+the venues on 2026-10-21:
+
+- **Depth is read in the base.** OKX and Gate quote a perpetual's book in contracts (0.01 and 0.0001
+  of a Bitcoin), every size here is in the base, so the book is converted with the market's contract
+  size before it is walked. A contract with no published size is refused rather than guessed.
+- **Funding settles on each instrument's own clock.** On Binance, Bybit, OKX, Gate, Bitget and BingX,
+  40 to 58 percent of the perpetuals settle every four hours, and every Hyperliquid perpetual every
+  hour, not every eight. The interval comes
+  from the venue with the rate, or from its own interval endpoint, and `[run].settlement_interval_s`
+  is only the fallback. The cost line says which one it used.
+- **A receipt is not a discount.** When the standing rate would pay the position, nothing is taken off
+  the cost: the rate can turn before the settlement comes. The cost line says how much was left out.
 
 ## Watching a desk you are not running
 
