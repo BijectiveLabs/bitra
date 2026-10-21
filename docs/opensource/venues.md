@@ -121,12 +121,13 @@ practice environment first.
 What kind of market a desk may send to is one setting, `[execution].markets`. Every market, on
 every venue, is read into one shape from what ccxt reports (see
 [Architecture](/opensource/architecture#adoption-rules)), and the order path decides from that
-shape what applies: contracts, margin, leverage, where the exits go. Two types are built,
-`linear perpetual` and `spot`. The list defaults to perpetuals only, a desk adds spot by naming it
-(`markets = ["linear perpetual", "spot"]`), and a symbol of a type not listed, or not built, is
-refused by name before anything is sent. Tokenized stocks and prediction markets join as each is
-built and run end to end on a demo or testnet API; the venue and the symbol stay where they are, in
-the same settings.
+shape what applies: contracts, margin, leverage, where the exits go. Three types are built:
+`linear perpetual` (stock perpetuals among them), `spot` (tokenized stocks among them) and
+`prediction`. The list defaults to perpetuals only, a desk adds the others by naming them
+(`markets = ["linear perpetual", "spot"]`), and a symbol of a type not listed, or not built yet
+(an inverse perpetual, a dated future, an option), is refused by name before anything is sent. A
+bare name such as `BTCUSDT` resolves to the perpetual; a spot pair is named by its unified symbol,
+`SOL/USDT`, in `[data].symbols`.
 
 What the same order path does when the market is spot:
 

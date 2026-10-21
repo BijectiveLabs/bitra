@@ -460,7 +460,7 @@ def cost_brief(
     if not isinstance(book, OrderBook):
         raise BriefError(f"{snapshot.instrument}: the book in the snapshot is not a book")
     funding = snapshot.get("funding").value if "funding" in snapshot.values else None
-    interval_source = "[run].settlement_interval_s"
+    interval_source = "[run].settlement_interval_s; the venue reported no interval"
     if funding is not None:
         # The venue's own interval for this instrument wins over the declared default: 40 to 58% of
         # the perpetuals on six venues settled every four hours on 2026-10-21, and one venue hourly.

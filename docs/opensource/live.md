@@ -17,6 +17,9 @@ differences: the venue sends orders, and every stop, take-profit and timeout is 
 it as a reduce-only order instead of being settled against the bar. No language model is
 anywhere on this path.
 
+The live tier trades linear perpetuals. Spot pairs, stocks and prediction outcomes are traded by an
+agent desk in venue mode (`tra run`), which has its own checks ([Venues](/opensource/venues)).
+
 The venue is any exchange ccxt knows, named in `[live].venue`, and it is reached the same way
 venue mode reaches it: the same client built from the environment, the same switch to the demo
 or testnet, the same market type and contract size, the same position read. There is no second

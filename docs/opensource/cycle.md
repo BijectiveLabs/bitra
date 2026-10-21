@@ -731,7 +731,9 @@ max_risk_per_trade_bps = 50      # of [run].equity, at the stop from [exit]
 
 The arithmetic is what a stopped-out position loses: the distance to the stop plus the round trip it
 pays on the way in and out, times the size, against the equity, in basis points. The round trip is
-priced at the base size, the larger, so the cut it leads to never understates it. If it is over the
+priced at the size being checked or the base, whichever is larger, so neither a conviction rung
+above 1x nor the cut that follows understates it, and the cap is decided on the exact figure, not
+the one rounded for the record. If it is over the
 allowance, **the size is cut until it fits** - never the stop moved, because moving a
 stop to make a trade fit is how a desk learns the wrong lesson from a loss. If the size that would
 fit is below one step of the venue, the cycle refuses. The cut and the figures behind it go into the

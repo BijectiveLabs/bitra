@@ -65,8 +65,16 @@ def risk_bps_of(
         raise RiskError("equity is positive when risk per trade is declared")
     if size <= 0 or entry <= 0:
         raise RiskError("size and entry are positive")
+    return _exact_bps(size=size, entry=entry, stop=stop, equity=equity, cost_bps=cost_bps).quantize(
+        Decimal("0.01")
+    )
+
+
+def _exact_bps(
+    *, size: Decimal, entry: Decimal, stop: Decimal, equity: Decimal, cost_bps: Decimal
+) -> Decimal:
     distance = loss_per_unit(entry=entry, stop=stop, cost_bps=cost_bps)
-    return ((distance * size) / equity * BPS).quantize(Decimal("0.01"))
+    return (distance * size) / equity * BPS
 
 
 def size_for_risk(
@@ -110,7 +118,9 @@ def within_risk(
         raise RiskError("[controls].max_risk_per_trade_bps is positive")
 
     at_risk = risk_bps_of(size=size, entry=entry, stop=stop, equity=equity, cost_bps=cost_bps)
-    if at_risk <= allowed_bps:
+    # The unrounded figure decides: 50.004 bps is over a 50 bps cap even though it prints as 50.00.
+    exact = _exact_bps(size=size, entry=entry, stop=stop, equity=equity, cost_bps=cost_bps)
+    if exact <= allowed_bps:
         return RiskVerdict(admitted=True, size=size, risk_bps=at_risk, allowed_bps=allowed_bps)
 
     cut = size_for_risk(

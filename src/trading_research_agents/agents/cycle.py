@@ -390,6 +390,8 @@ class CycleResult:
             "context": self.context,
             "confluence": None if self.confluence is None else self.confluence.record(),
             "conviction": None if self.stake is None else self.stake.record(),
+            # [sizing] only: what the desk's own round trips allowed, and the arithmetic behind it.
+            "sizing": self.briefs.get("sizing"),
             "risk": None if self.risk is None else self.risk.record(),
             "desk": None if self.book is None else self.book.record(),
             "cost": None if self.verdict is None else self.verdict.record(),
@@ -1065,8 +1067,27 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         announce(cfg.watch, "risk", REFUSED, "no stop to size from")
         _finish(cfg, where, result)
         return result
-    # Priced at the base size, which is the larger: impact only falls as the size is cut, so the
-    # loss at the stop is never understated by the cut it leads to.
+    # Priced at the size about to be checked, or the base when that is larger: impact only falls
+    # as a size is cut, so the loss at the stop is never understated by the cut it leads to. A
+    # conviction rung above 1x is priced at its own size, since its impact is larger.
+    risk_costs = costs
+    if size > base:
+        try:
+            risk_costs = cost_brief(
+                snapshot,
+                channel=_channel(cfg),
+                size=size,
+                direction=direction,
+                horizon_bars=_held_bars(cfg, analyst.horizon_bars),
+                bar_interval_s=cfg.bar_interval_s,
+                settlement_interval_s=cfg.settlement_interval_s,
+                latency_slippage_bps=cfg.latency_slippage_bps,
+            )
+        except BriefError as exc:
+            result.refusals.append(f"cost at {size}: {exc}")
+            result.stopped_by = f"cost at {size}: {exc}"
+            _finish(cfg, where, result)
+            return result
     capped = within_risk(
         size=size,
         entry=costs.cost.mid,
@@ -1074,7 +1095,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         equity=equity,
         allowed_bps=allowed,
         step=cfg.size_step,
-        cost_bps=max(costs.cost.round_trip_bps, Decimal(0)),
+        cost_bps=max(risk_costs.cost.round_trip_bps, Decimal(0)),
     )
     result.risk = capped
     for reason in capped.reasons:

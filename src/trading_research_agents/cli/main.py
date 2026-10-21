@@ -638,7 +638,7 @@ def build_parser() -> argparse.ArgumentParser:
     sizing_cmd.add_argument("--runs", type=Path, default=Path("runs") / "cycles")
     sizing_cmd.add_argument(
         "--fraction",
-        type=Decimal,
+        type=_kelly_fraction,
         default=None,
         help="the Kelly fraction to show when [sizing] is not declared (default: 0.25)",
     )
@@ -1998,6 +1998,16 @@ def hindsight_command(args: argparse.Namespace) -> int:
     write_json(args.runs / "hindsight.json", payload)
     emit(payload, args.json, _hindsight_lines(payload))
     return CLEARED
+
+
+def _kelly_fraction(text: str) -> Decimal:
+    try:
+        value = Decimal(text)
+    except ArithmeticError:
+        raise argparse.ArgumentTypeError(f"{text!r} is not a number") from None
+    if not value.is_finite() or not Decimal(0) < value <= 1:
+        raise argparse.ArgumentTypeError("the Kelly fraction is above 0 and at most 1")
+    return value
 
 
 def sizing_command(args: argparse.Namespace) -> int:
@@ -4873,9 +4883,10 @@ def _market_facts(
     """Whether the instrument is spot on the venue orders go to, and what its underlying is.
 
     In venue mode the hand that will send says so. Elsewhere the venue's market list is asked,
-    keyless, and only by a desk that could trade something other than crypto perpetuals; a list
-    that cannot be read leaves the cycle as it always was, since nothing is sent outside venue
-    mode. An instrument named in [execution].equities is an equity whatever the venue says.
+    keyless, and only by a desk that lists spot or prediction, or whose universe admits more than
+    crypto; a list that cannot be read leaves the cycle as it always was, since nothing is sent
+    outside venue mode. An instrument named in [execution].equities is an equity whatever the
+    venue says.
     """
     from trading_research_agents.data.sources.ccxt_client import market_of
     from trading_research_agents.trading.market import Market
@@ -4949,8 +4960,7 @@ def _on_the_execution_venue(cfg: Any, name: str) -> str:
 
     The same string can be a perpetual on one venue, spot on another and nothing on a third, so it
     is read against the execution venue's own market list. When that list cannot be read the name
-    is returned as it was, and the venue hand still refuses anything that is not a linear
-    perpetual.
+    is returned as it was, and the venue hand still refuses any market type the desk did not list.
     """
     from trading_research_agents.data.sources.resolve import ResolveError, resolve
 

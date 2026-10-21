@@ -18,8 +18,8 @@ It is off until you turn it on, and once on it can only lower the risk you decla
 kelly_fraction = 0.25            # a quarter of the Kelly fraction; turning this on is what enables it
 # min_round_trips = 30           # finished trades before the record decides anything
 # lookback_round_trips = 100     # only the newest trades count
-# simulate_trades = 100          # how far ahead the drawdown is simulated
-# simulate_paths = 2000
+# simulate_trades = 100          # how far ahead the drawdown is simulated, 10 to 300
+# simulate_paths = 2000          # 100 to 5000, so a cycle waits seconds at most
 # seed = 20261021                # the same seed gives the same figures on any machine
 # max_drawdown_probability = 0.05
 ```
@@ -31,6 +31,9 @@ stop plus the round trip it pays, in basis points of the notional. That is what 
 stop is hit as priced. When the trade finishes, its net result is divided by that figure and written
 on the round trip as `r`. A stop hit as priced is about -1. A target twice as far as the stop is
 about +2 less the cost. A time exit lands wherever it lands.
+
+`r` is price and fees, like `net`; funding is recorded beside it as the venue reports it, because
+venues sign it differently.
 
 Reading results in planned losses makes trades of different sizes, instruments and stop distances
 comparable, and it is the unit the risk limit is already in: risking 50 bps at the stop and getting
@@ -76,7 +79,7 @@ the Kelly figures came from, compounds them at the risk being tested, and repeat
 reports. If the Kelly ceiling keeps that chance within `max_drawdown_probability`, it stands;
 otherwise the risk is lowered, by bisection to a hundredth of a basis point, to the largest value that
 does. The room is your limit minus the drawdown the account already has from its highest equity,
-read at the start of the cycle.
+read at the start of the cycle, in whole basis points rounded down.
 
 It is repeatable to the digit:
 
@@ -117,7 +120,7 @@ they no longer have to infer the shape of a trade from its result.
 
 | Where | What |
 |---|---|
-| the cycle record, `briefs.sizing` | the rule, the measured figures, f*, the ceiling, the simulation and why |
+| the cycle record, `sizing` in `cycle.json` | the rule, the measured figures, f*, the ceiling, the simulation and why |
 | `intents.jsonl` | `loss_at_stop_bps` on every intent |
 | `round_trips.jsonl` | `loss_at_stop_bps`, `r`, `stop`, `take` and `excursion` on every finished trade |
 | `tra sizing` | the same calculation the cycle makes, from the records, without changing anything |

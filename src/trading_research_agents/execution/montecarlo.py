@@ -71,7 +71,7 @@ def nearest_rank(ordered: Sequence[float], percent: int) -> float:
     return ordered[rank - 1]
 
 
-@lru_cache(maxsize=4)
+@lru_cache(maxsize=2)
 def _draws(size: int, paths: int, trades: int, seed: int) -> tuple[tuple[int, ...], ...]:
     """The resampled positions, one tuple per path. Integer draws from the generator's own floats,
     so nothing depends on how a Python version implements `choices`."""

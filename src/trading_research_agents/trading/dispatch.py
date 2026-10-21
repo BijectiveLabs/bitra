@@ -331,7 +331,7 @@ class VenueHand:
                 "sent": False,
                 "refused": (
                     f"{self.symbol} is a {kind} market; venue mode trades "
-                    f"{' and '.join(MARKETS)} markets today, and other market types are not "
+                    f"{', '.join(MARKETS)} markets today, and other market types are not "
                     "built yet"
                 ),
             }

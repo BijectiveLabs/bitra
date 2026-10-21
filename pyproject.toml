@@ -12,7 +12,8 @@ license = "MIT"
 license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "Bijective Labs" }]
 keywords = [
-    "quant", "crypto", "trading", "agents", "llm", "perpetuals", "autonomous", "backtest", "risk",
+    "quant", "crypto", "trading", "agents", "llm", "perpetuals", "spot", "prediction-markets",
+    "autonomous", "backtest", "risk",
     "algorithmic-trading", "trading-bot", "ai-agents", "llm-agents", "ccxt", "risk-management",
     "mcp", "openai", "anthropic", "gemini", "groq", "ollama", "trading-agents", "deterministic",
     "execution", "trading-system",

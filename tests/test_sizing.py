@@ -73,7 +73,7 @@ def test_the_cap_waits_for_a_record_and_refuses_one_with_no_edge() -> None:
 
     cap = kelly_cap(rs(("2", 20), ("-1", 20)), fraction=D("0.25"), min_trades=30)
     # A quarter of 0.25 of equity at the stop is 625 bps.
-    assert cap.cap_bps == D("625.0000") and not cap.refuses
+    assert cap.cap_bps == D("625.00") and not cap.refuses
 
     losing = kelly_cap(rs(("1", 10), ("-1", 25)), fraction=D("0.5"), min_trades=30)
     assert losing.refuses and losing.cap_bps is None and "no edge" in losing.reason
@@ -160,7 +160,7 @@ def test_the_record_lowers_the_declared_risk_and_never_raises_it() -> None:
 
     # Without a drawdown limit the simulation is reported and the Kelly ceiling stands.
     free = by_record(rule, trips(rs(("2", 20), ("-1", 20))))
-    assert free.cap_bps == D("625.0000") and free.simulation is not None
+    assert free.cap_bps == D("625.00") and free.simulation is not None
 
     # Only the newest lookback_round_trips count: an old losing run is forgotten.
     recent = SizingRule(kelly_fraction=D("0.25"), lookback_round_trips=40, simulate_paths=500)
@@ -227,7 +227,9 @@ def test_a_cycle_risks_no_more_than_the_record_supports(tmp_path: Path, envelope
     )
     write_trips(cfg.root, rs(("2", 20), ("-1", 20)))
     result = run_cycle(cfg)
-    assert result.risk is not None and result.risk.allowed_bps == D("25.0000")
+    assert result.risk is not None and result.risk.allowed_bps == D("25.00")
+    # The same figures are in the record a person reads later, not only in memory.
+    assert result.record()["sizing"]["cap_bps"] == "25.00"
     assert result.risk.risk_bps is not None and result.risk.risk_bps <= D("25")
     assert result.intent is not None and result.intent["loss_at_stop_bps"] is not None
 
@@ -262,3 +264,65 @@ def test_tra_sizing_reports_what_a_cycle_would_compute(
     rule = SizingRule(kelly_fraction=D("0.25"))
     room = D(payload["room_bps"])
     assert payload["sizing"] == by_record(rule, rows, room_bps=room).record()
+
+
+def test_a_rung_above_one_is_priced_at_its_own_size_before_the_risk_check(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    from trading_research_agents.execution.conviction import Conviction, Tier
+    from trading_research_agents.execution.risk import risk_bps_of
+
+    cfg, _, _ = cycle_config(
+        tmp_path,
+        envelope,
+        {"technical_analyst": analyst_answer()},
+        equity=D("10000"),
+        stop_frac=D("0.01"),
+        take_frac=D("0.02"),
+        size_step=D("0.001"),
+        max_risk_per_trade_bps=D("500"),
+        max_position=D("20"),
+        conviction=Conviction(ladder=(Tier(at_least=D(0), size_multiple=D(2)),)),
+    )
+    result = run_cycle(cfg)
+    assert result.stake is not None and result.risk is not None and result.verdict is not None
+    assert result.risk.size > cfg.size
+    # Twice the base walks deeper into the book; the loss at the stop is priced on that walk.
+    deeper = result.verdict.cost.round_trip_bps
+    stop = D(result.exits["stop_price"])
+    mid = result.verdict.cost.mid
+    expected = risk_bps_of(
+        size=result.risk.size, entry=mid, stop=stop, equity=D("10000"), cost_bps=deeper
+    )
+    assert result.risk.risk_bps == expected
+
+
+def test_the_cap_is_decided_on_the_exact_figure_not_the_printed_one() -> None:
+    from trading_research_agents.execution.risk import within_risk
+
+    # 5.0004 units one price point from the stop on 10000 of equity: 5.0004 bps, printed 5.00.
+    over = within_risk(
+        size=D("5.0004"),
+        entry=D("100"),
+        stop=D("99"),
+        equity=D("10000"),
+        allowed_bps=D("5"),
+        step=D("0.0001"),
+    )
+    assert over.size == D("5.0000") and over.reasons
+
+
+def test_sizing_figures_that_are_not_numbers_are_refused_as_configuration() -> None:
+    with pytest.raises(ConfigError, match="finite"):
+        parse_strategy_config(agent_raw(sizing={"kelly_fraction": "nan"}))
+    with pytest.raises(ConfigError, match="between 100 and 5000"):
+        parse_strategy_config(agent_raw(sizing={"kelly_fraction": "0.25", "simulate_paths": 20000}))
+
+
+def test_tra_sizing_refuses_a_fraction_that_is_not_one(tmp_path: Path) -> None:
+    from trading_research_agents.cli.main import main
+
+    with pytest.raises(SystemExit):
+        main(["sizing", "--fraction", "abc"])
+    with pytest.raises(SystemExit):
+        main(["sizing", "--fraction", "1.5"])

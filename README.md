@@ -43,8 +43,9 @@ down or sends one order with the stop attached. Every decision and every refusal
 with its reason, so you can check afterwards what happened and why.
 
 It's an early release, so expect settings to change between versions. What works
-today: a universe of perpetuals found and measured by the system, a screener that picks where to
-look, the full autonomous cycle on live data, four analysts and up to three validators, stops and
+today: linear perpetuals, spot pairs (stock perpetuals and tokenized stocks among them) and
+prediction market outcomes through one order path, a universe of perpetuals found and measured by
+the system, a screener that picks where to look, the full autonomous cycle on live data, four analysts and up to three validators, stops and
 targets the analyst names inside bounds you set, the gates that decide, sizing from your own rules,
 real orders on a venue's practice environment behind a mandate you sign, a risk manager that can
 only make the desk more careful, and two auditors that read the records.
@@ -402,14 +403,21 @@ your own is about thirty lines ([Model providers](https://docs.bijectivelabs.dev
 
 ## Toward real orders
 
-What it trades today: **linear perpetual futures** (USDT- or USDC-margined swaps) on any venue
-ccxt reaches, long and short, with the leverage and margin mode you declare. That is where the
-project started, not where it stops. Spot is built too, long only and paid in full, for a desk
-that lists it in `[execution].markets`; [Venues](https://docs.bijectivelabs.dev/opensource/venues#where-an-order-goes-and-what-an-instrument-is)
-says how to set one up. Stock perpetuals and tokenized stocks on the same venues go through the
-same path, with the underlying exchange's hours respected, and so do prediction market outcomes,
-decided on a probability by their own analyst. Dated futures, inverse contracts and options are on
-the way, each with its own cost model, exit rules and tests. Until a market type has those, venue
+What it trades today, through one order path and the same gates:
+
+- **Linear perpetuals** (USDT- or USDC-margined swaps) on any venue ccxt reaches, long and short,
+  with the leverage and margin mode you declare. The default, run end to end on six exchanges.
+- **Spot pairs**, long only and paid in full, for a desk that lists `spot` in `[execution].markets`.
+- **Stock perpetuals and tokenized stocks**, which are a perpetual and a spot pair to the venue,
+  with the underlying exchange's hours respected.
+- **Prediction market outcomes**, for a desk that lists `prediction`, decided on a probability by
+  their own analyst and priced to resolution.
+
+That is where the project started, not where it stops. For spot, [Venues](https://docs.bijectivelabs.dev/opensource/venues#where-an-order-goes-and-what-an-instrument-is)
+says how to set a desk up. Spot, a stock perpetual and a tokenized stock have been run on the Bybit
+and OKX demos; prediction outcomes have run in sandbox on live data, and their order path is tested
+against ccxt's shapes until a practice venue is run. Dated futures, inverse contracts and options are
+on the way, each with its own cost model, exit rules and tests. Until a market type has those, venue
 mode checks the type on every order and refuses it, because a market the system cannot yet price
 and protect is not one it should send to. [Boundaries](https://docs.bijectivelabs.dev/opensource/boundaries) says what each one takes.
 

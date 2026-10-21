@@ -16,8 +16,9 @@ down or sends one order with the stop attached. Every decision and every refusal
 with its reason, so you can check afterwards what happened and why.
 
 It is an early release, so expect settings to change between versions. What works
-today: a universe of perpetuals found and measured by the system, a screener that picks where to
-look, the full autonomous cycle on live data, four analysts and up to three validators, stops and
+today: linear perpetuals, spot pairs (stock perpetuals and tokenized stocks among them) and
+prediction market outcomes through one order path, a universe of perpetuals found and measured by
+the system, a screener that picks where to look, the full autonomous cycle on live data, four analysts and up to three validators, stops and
 targets the analyst names inside bounds you set, the gates that decide, sizing from your own rules,
 real orders on a venue's practice environment behind a mandate you sign, a risk manager that can
 only make the desk more careful, and two auditors that read the records.
@@ -91,15 +92,22 @@ has the full table of what an agent can reach, and [The cycle](/opensource/cycle
 
 ## What it trades
 
-Today: **linear perpetual futures** (USDT- or USDC-margined swaps) on any venue ccxt reaches, long
-and short, with the leverage and margin mode you declare. Every exchange ccxt supports is already
-integrated through the same order path and gates; Bybit, OKX, Bitget, BingX, Binance and Gate have
-been run end to end, and any other can have that run on its demo or testnet API at any time
-([Venues](/opensource/venues), [Exchange accounts and keys](/opensource/exchange-keys)).
+Today, through one order path and the same gates:
 
-That is where the project started, not where it stops. Spot, dated futures, inverse contracts and
-options are on the way, each with its own cost model, exit rules and tests. Until a market type has
-those, venue mode checks the type on every order and refuses it, because a market the system cannot
+| Market | How | Run |
+|---|---|---|
+| Linear perpetuals (USDT- or USDC-margined swaps) | long and short, with the leverage and margin mode you declare; the default | end to end on the demo or testnet APIs of Bybit, OKX, Bitget, BingX, Binance and Gate |
+| Spot pairs | long only, paid in full; list `spot` in `[execution].markets` | the order path and a desk cycle on the Bybit and OKX demos |
+| Stock perpetuals and tokenized stocks | a perpetual and a spot pair to the venue, entered only while the underlying's session trades | a stock perpetual on the OKX demo, a tokenized stock on the Bybit demo |
+| Prediction market outcomes | long only, decided on a probability by the event analyst and priced to resolution; list `prediction` | sandbox cycles on live data; the order path is tested against ccxt's shapes |
+
+Every exchange ccxt supports is reached through that same path, and any other can have its run on
+its demo or testnet API at any time ([Venues](/opensource/venues),
+[Exchange accounts and keys](/opensource/exchange-keys)).
+
+That is where the project started, not where it stops. Dated futures, inverse contracts and options
+are on the way, each with its own cost model, exit rules and tests. Until a market type has those,
+venue mode checks the type on every order and refuses it, because a market the system cannot
 yet price and protect is not one it should send to. [Boundaries](/opensource/boundaries) lists what
 is guaranteed, what is not built yet, and what adding each piece would take.
 

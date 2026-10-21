@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_DOWN, ROUND_FLOOR, Decimal, InvalidOperation
 from typing import Any
 
 from trading_research_agents.execution.montecarlo import largest_within, simulate
@@ -192,7 +192,7 @@ def kelly_cap(results: Sequence[Decimal], *, fraction: Decimal, min_trades: int)
             f"{full.quantize(QUANTUM)}: no edge to bet on; no new entry until a person reviews "
             "the desk",
         )
-    cap = full * fraction * BPS
+    cap = (full * fraction * BPS).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
     return KellyCap(
         measured,
         full,
@@ -220,16 +220,21 @@ class SizingRule:
     max_drawdown_probability: Decimal = Decimal("0.05")
 
     def __post_init__(self) -> None:
+        for name in ("kelly_fraction", "max_drawdown_probability"):
+            value = getattr(self, name)
+            if value is not None and (not isinstance(value, Decimal) or not value.is_finite()):
+                raise KellyError(f"[sizing].{name} is a finite number")
         if self.kelly_fraction is not None and not Decimal(0) < self.kelly_fraction <= 1:
             raise KellyError("[sizing].kelly_fraction is above 0 and at most 1")
         if self.min_round_trips < 10:
             raise KellyError("[sizing].min_round_trips is at least 10; fewer measure nothing")
         if self.lookback_round_trips < self.min_round_trips:
             raise KellyError("[sizing].lookback_round_trips is at least min_round_trips")
-        if not 10 <= self.simulate_trades <= 1000:
-            raise KellyError("[sizing].simulate_trades is between 10 and 1000")
-        if not 100 <= self.simulate_paths <= 20_000:
-            raise KellyError("[sizing].simulate_paths is between 100 and 20000")
+        # Bounded so a cycle never waits more than a few seconds between pricing and sending.
+        if not 10 <= self.simulate_trades <= 300:
+            raise KellyError("[sizing].simulate_trades is between 10 and 300")
+        if not 100 <= self.simulate_paths <= 5000:
+            raise KellyError("[sizing].simulate_paths is between 100 and 5000")
         if self.seed < 0:
             raise KellyError("[sizing].seed is a non-negative integer")
         if not Decimal(0) < self.max_drawdown_probability < Decimal("0.5"):
@@ -296,6 +301,9 @@ def by_record(
             seed=rule.seed,
         )
         return Sized(rule, cap, cap.cap_bps, False, cap.reason, seen.record())
+    # Whole basis points of room, rounded down: never more room than there is, and the same
+    # question from one cycle to the next is answered from memory rather than simulated again.
+    room_bps = room_bps.to_integral_value(rounding=ROUND_FLOOR)
     applied, seen = largest_within(
         results,
         cap.cap_bps,

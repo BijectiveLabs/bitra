@@ -35,6 +35,9 @@ All notable changes to this project are recorded here. The format follows
 
 ### Fixed
 
+- A conviction rung above 1x has its loss at the stop priced at its own size, and the risk cap is
+  decided on the exact figure rather than the one rounded to a hundredth for the record.
+- `sizing` is written into `cycle.json` with the rest of the cycle.
 - The lock takes certifi 2026.10.19 (PYSEC-2026-4320) until ccxt moves its exact pin.
 - Order books quoted in contracts (OKX, Gate) are read in the base before they are walked; the
   impact on those venues was priced on depth 100 to 10,000 times the real one for Bitcoin, and a
@@ -51,6 +54,9 @@ All notable changes to this project are recorded here. The format follows
 
 ### Documentation
 
+- What it trades, stated the same everywhere: linear perpetuals, spot pairs, stock perpetuals and
+  tokenized stocks, and prediction outcomes, each with what has been run; the live tier stays on
+  linear perpetuals.
 - Sizing from the record: Kelly, the drawdown simulation and the excursions, with the arithmetic.
 - Why it is built this way: the documented failures the design answers (language models trading
   real money, overtrading, wrong numbers in financial answers, instructions hidden in data, agents
