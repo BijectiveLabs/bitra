@@ -16,8 +16,8 @@ const summary =
   'deterministic execution. ' +
   'Language model agents read the market and propose a trade; fixed, tested rules compute every ' +
   'figure, price the round trip, size the position and decide whether an order goes out. It runs ' +
-  'in a sandbox by default, trades linear perpetuals today on any exchange ccxt supports, with more ' +
-  'market types on the way, and works with Anthropic, OpenAI, ' +
+  'in a sandbox by default, trades linear perpetuals, spot pairs, stock perpetuals, tokenized stocks ' +
+  'and prediction market outcomes on the exchanges ccxt supports, and works with Anthropic, OpenAI, ' +
   'Google Gemini, Groq, DeepSeek, OpenRouter, Ollama and other model providers. MIT licensed.'
 const socialImage = { url: `${host}/images/console.png`, width: '1199', height: '630' }
 
