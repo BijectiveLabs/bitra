@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-21
+
 ### Added
 
 - `tra init --venue` writes a complete `[execution]` block for that exchange: its demo or testnet
