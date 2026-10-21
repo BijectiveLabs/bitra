@@ -56,7 +56,8 @@ there; where the two meet, the guarantee wins and the feature finds another shap
   never told, that is recorded as a crossing beside its answer and changes nothing
   (`agents/scope.py`).
 - An auditor's proposed change has to name a setting the configuration accepts, and the loader
-  refuses an unknown key, so a rule a model made up cannot take effect.
+  refuses a setting it does not know in every table it reads, so a rule a model made up cannot
+  take effect.
 
 ## Safety and responsibility
 

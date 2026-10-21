@@ -128,8 +128,9 @@ code that runs after the model has answered, and no model is in that path.
   can cut size below 1x, pause instruments or halt, each for a capped number of hours, and never
   add size.
 - No model can change the configuration, send an order or reach a key. An auditor's proposed change
-  has to name a setting the configuration accepts, and the loader refuses an unknown key, so a rule
-  a model made up cannot take effect even if someone copied it in.
+  has to name a setting the configuration accepts, and the loader refuses a setting it does not know
+  in every table it reads, so a rule a model made up cannot take effect even if someone copied it
+  in.
 - No role is told the desk's rules, every prompt says so, and an answer that states one anyway is
   recorded beside it as made up. Run over the 832 answers our demo desks had recorded, that check
   found none.
