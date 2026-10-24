@@ -13,7 +13,8 @@ All notable changes to this project are recorded here. The format follows
   at the same version, with the same extras, and the `trading-research-agents` command stays as an
   alias for now. The Python package, `trading_research_agents`, and the plugin entry point groups
   are unchanged, so imports and plugins keep working. The MCP Registry name is
-  `io.github.BijectiveLabs/bitra`.
+  `io.github.BijectiveLabs/bitra`. The repository is now github.com/BijectiveLabs/bitra; the old
+  address redirects.
 - strategy.toml refuses a table it does not read, with the closest name: a misspelt `[sizng]` was
   ignored and left sizing off without a word.
 

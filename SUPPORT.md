@@ -1,7 +1,7 @@
 # Getting help
 
 - **A question, an idea, or "how do I"**: start a thread in
-  [Discussions](https://github.com/BijectiveLabs/trading-research-agents/discussions). Others
+  [Discussions](https://github.com/BijectiveLabs/bitra/discussions). Others
   will have the same question, and the answer stays findable.
 - **Something is broken**: open an issue with the Bug form. The form asks for `tra --version`,
   the command and its output; `--plain` output pastes cleanly and never contains a key.

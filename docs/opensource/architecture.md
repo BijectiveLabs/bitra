@@ -48,7 +48,7 @@ Rules, each enforced by a test in `tests/test_boundaries.py`:
    statistics and have no path to a model.
 4. Source files are ASCII.
 5. No class in the package implements `Strategy` or `FittedCore`. Decision cores live in
-   [`examples/strategies/`](https://github.com/BijectiveLabs/trading-research-agents/blob/master/examples/strategies/) or in the operator's own package, and the package never imports
+   [`examples/strategies/`](https://github.com/BijectiveLabs/bitra/blob/master/examples/strategies/) or in the operator's own package, and the package never imports
    an example.
 6. No module outside `data/venues/`, `trading/feeds/` and `trading/venues/` names a venue.
 7. `mcp` reaches everything except `agent`, and its tools only read.
@@ -62,7 +62,7 @@ software can be adopted without inheriting the particular strategies, venues or 
 the research it descends from.
 
 1. **No strategy in the core.** The package ships the mechanism (the protocol, the exits, the
-   walk-forward harness) and no strategy. What [`examples/strategies/`](https://github.com/BijectiveLabs/trading-research-agents/blob/master/examples/strategies/) holds is an example of
+   walk-forward harness) and no strategy. What [`examples/strategies/`](https://github.com/BijectiveLabs/bitra/blob/master/examples/strategies/) holds is an example of
    the mechanism, not a recommendation, and a run points at it by file like it would at any
    other core. Rule 5 above enforces it.
 2. **Venues are plugins.** Archive layouts and live feeds are found through a registry and
@@ -70,7 +70,7 @@ the research it descends from.
    chain, the runtime and the agent do not know which venue a run is on. Rule 6 enforces it;
    [Venues](/opensource/venues) says how to add one.
 3. **The data gate takes any data.** A venue archive through its plugin, or any CSV through a
-   declared column map ([`examples/mapping.toml`](https://github.com/BijectiveLabs/trading-research-agents/blob/master/examples/mapping.toml)), ends in the same audit, the same manifest
+   declared column map ([`examples/mapping.toml`](https://github.com/BijectiveLabs/bitra/blob/master/examples/mapping.toml)), ends in the same audit, the same manifest
    and the same Parquet. Nothing about where a row came from changes what the gate demands
    of it.
 4. **Agents are a surface, with full access.** The roles and the MCP tools call the gates;
@@ -171,12 +171,12 @@ confident about it.
 | `manifest.json` | JSON | schema version, venue, instrument, UTC range, source files with SHA-256, normaliser version, audit verdict, creation time |
 | `preregistration.json` | JSON, sealed by content hash | mechanism, claim, metric, horizon, universe, era, cost model, power, kill criteria; amendments are separate dated files referencing the original hash and may never loosen a threshold or move a horizon |
 | `ledger.jsonl` | JSON Lines, append-only | one row per entry; nothing is rewritten; a retraction is a new `WITHDRAWN` row naming the row it retracts |
-| `envelope.toml` | TOML | one `[[channel]]` per venue and execution channel; see [`examples/envelope.toml`](https://github.com/BijectiveLabs/trading-research-agents/blob/master/examples/envelope.toml) |
+| `envelope.toml` | TOML | one `[[channel]]` per venue and execution channel; see [`examples/envelope.toml`](https://github.com/BijectiveLabs/bitra/blob/master/examples/envelope.toml) |
 | `trades.jsonl` | JSON Lines | layer 5 input: `instrument`, `entry_ts_ns`, `exit_ts_ns`, `direction`, `weight`, `gross_return_bps`, numbers as decimal strings |
 | `validation.json` | JSON | layer 5 output: interval, null report, subperiods, power, metrics, the decision with every fired criterion, the registration seal and the trades hash |
 | `seal.json` | JSON, written once | era, opened_at, specification hash, gates |
-| `strategy.toml` | TOML | a run of the trading agent: the core by file or import, exit rule, run settings, controls; see [`examples/strategy.toml`](https://github.com/BijectiveLabs/trading-research-agents/blob/master/examples/strategy.toml) |
-| `mapping.toml` | TOML | a column map that takes any CSV through the data gate; see [`examples/mapping.toml`](https://github.com/BijectiveLabs/trading-research-agents/blob/master/examples/mapping.toml) |
+| `strategy.toml` | TOML | a run of the trading agent: the core by file or import, exit rule, run settings, controls; see [`examples/strategy.toml`](https://github.com/BijectiveLabs/bitra/blob/master/examples/strategy.toml) |
+| `mapping.toml` | TOML | a column map that takes any CSV through the data gate; see [`examples/mapping.toml`](https://github.com/BijectiveLabs/bitra/blob/master/examples/mapping.toml) |
 | `intents.jsonl`, `fills.jsonl` | JSON Lines | every intent with its admission decision; every simulated fill |
 | `ladder.json` | JSON | current tier and the history of promotions (with evidence and signature) and demotions (with reason) |
 | `funding.json` | JSON | settlement timestamps (epoch ns) to rates as fractions, the measured interval, the venue and the range; written by `tra data funding`, read by `[run].funding` |

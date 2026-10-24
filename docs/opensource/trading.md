@@ -59,7 +59,7 @@ class = "MyCore"
 lookback = 60
 ```
 
-[`examples/strategies/`](https://github.com/BijectiveLabs/trading-research-agents/blob/master/examples/strategies/) holds two cores so the runtime and the harness can be exercised end
+[`examples/strategies/`](https://github.com/BijectiveLabs/bitra/blob/master/examples/strategies/) holds two cores so the runtime and the harness can be exercised end
 to end: `trailing_zscore.py` for the runtime and `pair_reversion.py` for the walk-forward
 harness. They come from the research record this project descends from, where both were
 measured and closed. They are examples of the mechanism, not recommendations, and nothing

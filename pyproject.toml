@@ -51,9 +51,9 @@ trading-research-agents = "trading_research_agents.cli:main"
 [project.urls]
 Homepage = "https://www.bijectivelabs.dev/open-source"
 Documentation = "https://docs.bijectivelabs.dev"
-Repository = "https://github.com/BijectiveLabs/trading-research-agents"
-Issues = "https://github.com/BijectiveLabs/trading-research-agents/issues"
-Changelog = "https://github.com/BijectiveLabs/trading-research-agents/blob/master/CHANGELOG.md"
+Repository = "https://github.com/BijectiveLabs/bitra"
+Issues = "https://github.com/BijectiveLabs/bitra/issues"
+Changelog = "https://github.com/BijectiveLabs/bitra/blob/master/CHANGELOG.md"
 
 [project.optional-dependencies]
 anthropic = [
@@ -107,7 +107,7 @@ path = "README.md"
 # keeps an old version's page intact when a later one renames a picture.
 [[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
 pattern = '(src="|\]\()assets/'
-replacement = '\1https://raw.githubusercontent.com/BijectiveLabs/trading-research-agents/v$HFPR_VERSION/assets/'
+replacement = '\1https://raw.githubusercontent.com/BijectiveLabs/bitra/v$HFPR_VERSION/assets/'
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/trading_research_agents"]

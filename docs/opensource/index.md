@@ -130,7 +130,7 @@ The project is in active development, and these pages describe where it stands t
 come from `master`. The `develop` branch is where the next release is built: it moves often, a
 commit there is not a release, and it can carry work that is unfinished or changed again before it
 ships. A set of changes becomes a release when it is merged into `master`, tagged and published; the
-[changelog](https://github.com/BijectiveLabs/trading-research-agents/blob/master/CHANGELOG.md) says
+[changelog](https://github.com/BijectiveLabs/bitra/blob/master/CHANGELOG.md) says
 what each one brought.
 
 ## Where to go next

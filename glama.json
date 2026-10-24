@@ -6,7 +6,7 @@
   "description": "Read-only research gates of autonomous trading agents with deterministic execution: whether a claimed edge clears the full round-trip cost, an audit of a trade dataset, a sealed pre-registration, a validation verdict, the kill ledger and run reports. No tool places an order.",
   "repository": {
     "type": "git",
-    "url": "https://github.com/BijectiveLabs/trading-research-agents"
+    "url": "https://github.com/BijectiveLabs/bitra"
   },
   "homepage": "https://docs.bijectivelabs.dev/opensource/mcp",
   "transport": "stdio"

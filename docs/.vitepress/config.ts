@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path'
 import { defineConfig, type HeadConfig, type SiteConfig } from 'vitepress'
 import { withMermaid } from 'vitepress-plugin-mermaid'
 
-const repo = 'https://github.com/BijectiveLabs/trading-research-agents'
+const repo = 'https://github.com/BijectiveLabs/bitra'
 const host = 'https://docs.bijectivelabs.dev'
 const pypi = 'https://pypi.org/project/bitra/'
 const website = 'https://www.bijectivelabs.dev/open-source'

@@ -1,10 +1,10 @@
 blank_issues_enabled: false
 contact_links:
   - name: Question or idea
-    url: https://github.com/BijectiveLabs/trading-research-agents/discussions
+    url: https://github.com/BijectiveLabs/bitra/discussions
     about: How do I, why does it, would it be possible to. Discussions, so issues stay for defects.
   - name: Security problem
-    url: https://github.com/BijectiveLabs/trading-research-agents/security/advisories/new
+    url: https://github.com/BijectiveLabs/bitra/security/advisories/new
     about: Report it privately. Never open a public issue for a security problem.
   - name: Documentation
     url: https://docs.bijectivelabs.dev

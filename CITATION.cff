@@ -9,7 +9,7 @@ abstract: >-
 authors:
   - name: "Bijective Labs"
     website: "https://www.bijectivelabs.dev"
-repository-code: "https://github.com/BijectiveLabs/trading-research-agents"
+repository-code: "https://github.com/BijectiveLabs/bitra"
 url: "https://www.bijectivelabs.dev/open-source"
 license: MIT
 keywords:
