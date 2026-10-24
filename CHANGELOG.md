@@ -32,6 +32,7 @@ All notable changes to this project are recorded here. The format follows
 - A perpetual whose funding rate could not be read is refused before it is priced, instead of being
   priced without the funding term.
 - The docs summary that crawlers and language models read names every market built.
+- The lock takes opentelemetry-api 1.45.1 (GHSA-xcq7-p3pf-p88h).
 
 ## [0.10.0] - 2026-10-21
 
