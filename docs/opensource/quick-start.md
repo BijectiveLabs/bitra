@@ -36,6 +36,11 @@ uv tool install 'bitra[ccxt,openai,anthropic,google,data]'
 If an upgrade to 0.10.1 left you without `tra` (the old name was published then as a package that
 only depended on `bitra`, and `uv` removed the tool), the second line is all you need.
 
+In a virtual environment the same holds: `pip uninstall trading-research-agents`, then
+`pip install 'bitra[ccxt,openai,anthropic,google,data]'`. The two names hold the same files, so
+removing one after installing the other takes those files with it; if that has happened,
+`pip install --force-reinstall bitra` puts them back.
+
 **2. Make a desk.** A desk is a folder holding your settings and everything the agents decide. Name
 the provider you have a key for:
 
