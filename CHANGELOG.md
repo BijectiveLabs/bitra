@@ -6,6 +6,17 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The package is published as `bitra` and the project is called TRA (trading research agents); the
+  command is still `tra`. `trading-research-agents` on PyPI becomes a package that installs `bitra`
+  at the same version, with the same extras, and the `trading-research-agents` command stays as an
+  alias for now. The Python package, `trading_research_agents`, and the plugin entry point groups
+  are unchanged, so imports and plugins keep working. The MCP Registry name is
+  `io.github.BijectiveLabs/bitra`.
+- strategy.toml refuses a table it does not read, with the closest name: a misspelt `[sizng]` was
+  ignored and left sizing off without a word.
+
 ### Added
 
 - `tra hindsight` says whether the analyst's confidence and the conviction score separate good
@@ -15,11 +26,6 @@ All notable changes to this project are recorded here. The format follows
   slippage against the touch it was priced at; `tra sizing` gives the medians.
 - `tra check` says when a conviction rung above 1x lets agreement add size beyond the base.
 - Docs: what the checks do not prove, and where each gap is measured instead.
-
-### Changed
-
-- strategy.toml refuses a table it does not read, with the closest name: a misspelt `[sizng]` was
-  ignored and left sizing off without a word.
 
 ### Fixed
 

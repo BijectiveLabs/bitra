@@ -1,5 +1,5 @@
 ---
-description: One cycle of trading-research-agents, from market data to an order intent or a refusal with a reason, and how to run it on a schedule with tra run.
+description: One cycle of TRA, from market data to an order intent or a refusal with a reason, and how to run it on a schedule with tra run.
 ---
 
 # The cycle

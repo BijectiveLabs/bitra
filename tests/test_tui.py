@@ -81,7 +81,7 @@ def test_tra_alone_is_the_console_in_both_faces(
     monkeypatch.chdir(tmp_path)
     assert main([]) == 0
     text = recorded.export_text()
-    assert "trading-research-agents" in text and "by Bijective" in text
+    assert "TRA" in text and "by Bijective" in text
     assert "todo" in text and "next: tra init my-desk --profile autonomous" in text
     assert main(["--plain"]) == 0
     out = capsys.readouterr().out

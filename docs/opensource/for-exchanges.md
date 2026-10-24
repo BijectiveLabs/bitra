@@ -1,5 +1,5 @@
 ---
-description: "For exchanges: how trading-research-agents reaches a venue, what is verified before a venue is listed as run end to end, how orders identify themselves, and how to reach Bijective about integration."
+description: "For exchanges: how TRA reaches a venue, what is verified before a venue is listed as run end to end, how orders identify themselves, and how to reach Bijective about integration."
 ---
 
 # For exchanges

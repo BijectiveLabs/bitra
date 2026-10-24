@@ -21,7 +21,7 @@ from trading_research_agents.surface.confine import confined, roots_of
 
 P = ParamSpec("P")
 R = TypeVar("R")
-SERVER_NAME = "trading-research-agents"
+SERVER_NAME = "bitra"
 INSTRUCTIONS = (
     "These tools read the gates of a trading research record: the cost floor, a sealed "
     "pre-registration, a dataset audit, a layer-5 validation, the kill ledger, the promotion "

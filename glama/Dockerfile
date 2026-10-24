@@ -26,4 +26,4 @@ RUN useradd --create-home --uid 1000 tra
 COPY --from=builder --chown=tra:tra /app/.venv /app/.venv
 USER tra
 WORKDIR /work
-CMD ["trading-research-agents", "mcp", "serve"]
+CMD ["tra", "mcp", "serve"]

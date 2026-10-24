@@ -1,5 +1,5 @@
 ---
-description: "Bringing your own data to trading-research-agents: trade history, dated series and live feeds from a vendor, in CSV, JSON or Parquet, normalised and checked before any agent reads it."
+description: "Bringing your own data to TRA: trade history, dated series and live feeds from a vendor, in CSV, JSON or Parquet, normalised and checked before any agent reads it."
 ---
 
 # Your own data
@@ -104,7 +104,7 @@ meaning requires and then goes through the same map as a CSV:
 | float | the shortest text that reads back as the same float | |
 | null | an empty cell; a row that needs it is rejected | |
 
-Reading Parquet needs the `data` extra (`pip install 'trading-research-agents[data]'`).
+Reading Parquet needs the `data` extra (`pip install 'bitra[data]'`).
 
 ## Dated series
 

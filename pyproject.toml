@@ -3,7 +3,7 @@ requires = ["hatchling>=1.27", "hatch-fancy-pypi-readme>=24"]
 build-backend = "hatchling.build"
 
 [project]
-name = "trading-research-agents"
+name = "bitra"
 version = "0.10.0"
 description = "Autonomous trading agents with deterministic execution. The agents propose; the system decides."
 dynamic = ["readme"]
@@ -43,7 +43,9 @@ dependencies = [
 
 [project.scripts]
 tra = "trading_research_agents.cli:main"
-# The same command under the package's own name, which is what `uvx trading-research-agents` runs.
+# The same command under the package's own name, which is what `uvx bitra` runs.
+bitra = "trading_research_agents.cli:main"
+# The command of releases before 0.10.1, kept while instructions and MCP hosts still name it.
 trading-research-agents = "trading_research_agents.cli:main"
 
 [project.urls]

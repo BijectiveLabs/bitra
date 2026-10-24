@@ -1,5 +1,5 @@
 ---
-description: "The agent roster in trading-research-agents: what each role reads, the closed schema it answers in, and why no agent can loosen a limit, size a trade or send an order."
+description: "The agent roster in TRA: what each role reads, the closed schema it answers in, and why no agent can loosen a limit, size a trade or send an order."
 ---
 
 # Agents

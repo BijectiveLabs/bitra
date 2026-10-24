@@ -243,7 +243,7 @@ def request(
 ) -> bytes:
     """The answer at `how["url"]`, with the key from the environment where the vendor wants it."""
     held = os.environ if env is None else env
-    url, headers = str(how["url"]), {"User-Agent": "trading-research-agents", "Accept": "*/*"}
+    url, headers = str(how["url"]), {"User-Agent": "bitra", "Accept": "*/*"}
     secret = ""
     if how.get("key_env"):
         secret = held.get(str(how["key_env"]), "")

@@ -324,6 +324,71 @@ wheels = [
 ]
 
 [[package]]
+name = "bitra"
+version = "0.10.0"
+source = { editable = "." }
+dependencies = [
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "prompt-toolkit" },
+    { name = "rich" },
+    { name = "tzdata", marker = "sys_platform == 'win32'" },
+]
+
+[package.optional-dependencies]
+anthropic = [
+    { name = "anthropic" },
+]
+ccxt = [
+    { name = "ccxt" },
+]
+data = [
+    { name = "pyarrow" },
+]
+google = [
+    { name = "google-genai" },
+]
+mcp = [
+    { name = "mcp" },
+]
+openai = [
+    { name = "openai" },
+]
+shadow = [
+    { name = "ccxt" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=1" },
+    { name = "ccxt", marker = "extra == 'ccxt'", specifier = ">=4.5" },
+    { name = "ccxt", marker = "extra == 'shadow'", specifier = ">=4.5" },
+    { name = "google-genai", marker = "extra == 'google'", specifier = ">=1" },
+    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=2,<3" },
+    { name = "numpy", specifier = ">=1.26" },
+    { name = "openai", marker = "extra == 'openai'", specifier = ">=1" },
+    { name = "prompt-toolkit", specifier = ">=3.0" },
+    { name = "pyarrow", marker = "extra == 'data'", specifier = ">=18" },
+    { name = "rich", specifier = ">=13" },
+    { name = "tzdata", marker = "sys_platform == 'win32'", specifier = ">=2024.1" },
+]
+provides-extras = ["anthropic", "ccxt", "data", "google", "mcp", "openai", "shadow"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy", specifier = ">=1.14" },
+    { name = "pytest", specifier = ">=8.3" },
+    { name = "ruff", specifier = ">=0.9" },
+]
+
+[[package]]
 name = "ccxt"
 version = "4.5.85"
 source = { registry = "https://pypi.org/simple" }
@@ -2336,71 +2401,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/47/c6/ee486fd809e357697ee8a44d3d69222b344920433d3b6666ccd9b374630c/tenacity-9.1.4.tar.gz", hash = "sha256:adb31d4c263f2bd041081ab33b498309a57c77f9acf2db65aadf0898179cf93a", size = 49413, upload-time = "2026-02-07T10:45:33.841Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d7/c1/eb8f9debc45d3b7918a32ab756658a0904732f75e555402972246b0b8e71/tenacity-9.1.4-py3-none-any.whl", hash = "sha256:6095a360c919085f28c6527de529e76a06ad89b23659fa881ae0649b867a9d55", size = 28926, upload-time = "2026-02-07T10:45:32.24Z" },
-]
-
-[[package]]
-name = "trading-research-agents"
-version = "0.10.0"
-source = { editable = "." }
-dependencies = [
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-    { name = "prompt-toolkit" },
-    { name = "rich" },
-    { name = "tzdata", marker = "sys_platform == 'win32'" },
-]
-
-[package.optional-dependencies]
-anthropic = [
-    { name = "anthropic" },
-]
-ccxt = [
-    { name = "ccxt" },
-]
-data = [
-    { name = "pyarrow" },
-]
-google = [
-    { name = "google-genai" },
-]
-mcp = [
-    { name = "mcp" },
-]
-openai = [
-    { name = "openai" },
-]
-shadow = [
-    { name = "ccxt" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "mypy" },
-    { name = "pytest" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=1" },
-    { name = "ccxt", marker = "extra == 'ccxt'", specifier = ">=4.5" },
-    { name = "ccxt", marker = "extra == 'shadow'", specifier = ">=4.5" },
-    { name = "google-genai", marker = "extra == 'google'", specifier = ">=1" },
-    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=2,<3" },
-    { name = "numpy", specifier = ">=1.26" },
-    { name = "openai", marker = "extra == 'openai'", specifier = ">=1" },
-    { name = "prompt-toolkit", specifier = ">=3.0" },
-    { name = "pyarrow", marker = "extra == 'data'", specifier = ">=18" },
-    { name = "rich", specifier = ">=13" },
-    { name = "tzdata", marker = "sys_platform == 'win32'", specifier = ">=2024.1" },
-]
-provides-extras = ["anthropic", "ccxt", "data", "google", "mcp", "openai", "shadow"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "mypy", specifier = ">=1.14" },
-    { name = "pytest", specifier = ">=8.3" },
-    { name = "ruff", specifier = ">=0.9" },
 ]
 
 [[package]]

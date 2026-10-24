@@ -2,16 +2,16 @@
   <a href="https://www.bijectivelabs.dev"><img src="assets/bijective_banner.png" alt="Bijective Labs"></a>
 </p>
 
-<h1 align="center">trading-research-agents</h1>
+<h1 align="center">TRA</h1>
 
 <p align="center"><strong>Autonomous trading agents with deterministic execution. The agents propose; the system decides.</strong></p>
 
-<!-- mcp-name: io.github.BijectiveLabs/trading-research-agents -->
+<!-- mcp-name: io.github.BijectiveLabs/bitra -->
 
 <p align="center">
   <a href="https://github.com/BijectiveLabs/trading-research-agents/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/BijectiveLabs/trading-research-agents/actions/workflows/ci.yml/badge.svg?branch=master"></a>
-  <a href="https://pypi.org/project/trading-research-agents/"><img alt="PyPI" src="https://img.shields.io/pypi/v/trading-research-agents?style=flat-square&logo=pypi&logoColor=white&label=PyPI&cacheSeconds=1800"></a>
-  <a href="https://pypi.org/project/trading-research-agents/"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/trading-research-agents?style=flat-square&logo=python&logoColor=white&label=python&cacheSeconds=1800"></a>
+  <a href="https://pypi.org/project/bitra/"><img alt="PyPI" src="https://img.shields.io/pypi/v/bitra?style=flat-square&logo=pypi&logoColor=white&label=PyPI&cacheSeconds=1800"></a>
+  <a href="https://pypi.org/project/bitra/"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/bitra?style=flat-square&logo=python&logoColor=white&label=python&cacheSeconds=1800"></a>
   <a href="https://github.com/BijectiveLabs/trading-research-agents/blob/master/LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square"></a>
   <img alt="Status: alpha" src="https://img.shields.io/badge/status-alpha-orange?style=flat-square">
 </p>
@@ -33,6 +33,9 @@
 </p>
 
 <br>
+
+TRA (trading research agents) is published as `bitra` on PyPI and runs as `tra`. Before
+0.10.1 the package was called `trading-research-agents`; that name still installs it.
 
 Language models are good at reading a market and saying what they think. They are bad at
 arithmetic, they don't know what a trade costs, and they will happily overrule a limit you set.
@@ -91,15 +94,15 @@ change anything; the table under step 6 says what those defaults are.
 **1. Install.** You need Python 3.11 or newer. [uv](https://docs.astral.sh/uv/) is the quickest way:
 
 ```bash
-uv tool install 'trading-research-agents[ccxt,openai,anthropic,google,data]'
+uv tool install 'bitra[ccxt,openai,anthropic,google,data]'
 ```
 
 That brings every model provider and every exchange in. Without uv, run
-`pip install 'trading-research-agents[ccxt,openai,anthropic,google,data]'` inside a virtual
+`pip install 'bitra[ccxt,openai,anthropic,google,data]'` inside a virtual
 environment. To move to the newest release later:
 
 ```bash
-uv tool upgrade trading-research-agents      # or: pip install -U 'trading-research-agents[ccxt,openai,anthropic,google,data]'
+uv tool upgrade bitra      # or: pip install -U 'bitra[ccxt,openai,anthropic,google,data]'
 tra --version
 ```
 

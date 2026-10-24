@@ -1,4 +1,4 @@
-"""Anthropic adapter, on the official SDK (`pip install 'trading-research-agents[anthropic]'`).
+"""Anthropic adapter, on the official SDK (`pip install 'bitra[anthropic]'`).
 
 The system prompt is the frozen doctrine, so it is marked for prompt caching; the user turn
 carries the idea and the feedback and is never cached. Structured output is requested with

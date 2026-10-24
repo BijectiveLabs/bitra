@@ -1,5 +1,5 @@
 ---
-description: Package layout, dependency direction and the file formats that form the contract of trading-research-agents.
+description: Package layout, dependency direction and the file formats that form the contract of TRA.
 ---
 
 # Architecture

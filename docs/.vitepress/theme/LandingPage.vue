@@ -59,7 +59,7 @@
       </section>
 
       <section class="landing-about" aria-labelledby="landing-about-title">
-        <h2 id="landing-about-title" class="about-title">trading-research-agents</h2>
+        <h2 id="landing-about-title" class="about-title">TRA</h2>
         <p class="about-text">
           An open-source Python package and command line (<code>tra</code>): autonomous trading
           agents with deterministic execution. Language model agents read the market and propose a
@@ -78,7 +78,7 @@
           <a href="/opensource/commands">Command line</a>
           <a href="https://www.bijectivelabs.dev/open-source">Website</a>
           <a href="https://github.com/BijectiveLabs/trading-research-agents">GitHub</a>
-          <a href="https://pypi.org/project/trading-research-agents/">PyPI</a>
+          <a href="https://pypi.org/project/bitra/">PyPI</a>
         </nav>
       </section>
     </main>

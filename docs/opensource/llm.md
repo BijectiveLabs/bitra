@@ -1,5 +1,5 @@
 ---
-description: "How trading-research-agents works with language models without an orchestration framework: schemas, retries, caching, budgets and provider failover."
+description: "How TRA works with language models without an orchestration framework: schemas, retries, caching, budgets and provider failover."
 ---
 
 # Working with language models

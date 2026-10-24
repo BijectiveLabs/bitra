@@ -1,5 +1,5 @@
 ---
-description: Which exchanges work with trading-research-agents today through ccxt, how to add one, and the plugin contract for archived data, live feeds and orders.
+description: Which exchanges work with TRA today through ccxt, how to add one, and the plugin contract for archived data, live feeds and orders.
 ---
 
 # Venues
@@ -616,7 +616,7 @@ number and reason. The audit counts them; it does not forgive them.
 Register it one of two ways.
 
 In your own package, as an entry point in `pyproject.toml`; installed next to
-`trading-research-agents`, it is found on first use:
+`bitra`, it is found on first use:
 
 ```toml
 [project.entry-points."trading_research_agents.venues"]

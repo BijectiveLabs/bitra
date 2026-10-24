@@ -5,10 +5,10 @@ import { withMermaid } from 'vitepress-plugin-mermaid'
 
 const repo = 'https://github.com/BijectiveLabs/trading-research-agents'
 const host = 'https://docs.bijectivelabs.dev'
-const pypi = 'https://pypi.org/project/trading-research-agents/'
+const pypi = 'https://pypi.org/project/bitra/'
 const website = 'https://www.bijectivelabs.dev/open-source'
 const description =
-  'Documentation for trading-research-agents, open-source autonomous trading agents with deterministic ' +
+  'Documentation for TRA, open-source autonomous trading agents with deterministic ' +
   'execution by ' +
   'Bijective Labs: install, the decision cycle, agents, model providers, venues and controls.'
 const summary =
@@ -99,7 +99,7 @@ function structuredData(): HeadConfig {
   const data = {
     '@context': 'https://schema.org',
     '@type': 'SoftwareSourceCode',
-    name: 'trading-research-agents',
+    name: 'TRA',
     description: summary,
     url: website,
     codeRepository: repo,
@@ -136,10 +136,10 @@ function writeTextCopies(siteConfig: SiteConfig) {
     }
   }
 
-  const heading = `# trading-research-agents\n\n> ${summary}\n`
+  const heading = `# TRA\n\n> ${summary}\n`
   const facts = [
     version ? `Current release: ${version}.` : '',
-    "Install: uv tool install 'trading-research-agents[ccxt,openai,anthropic,google,data]'",
+    "Install: uv tool install 'bitra[ccxt,openai,anthropic,google,data]'",
     'Command: tra. Python 3.11 or newer.',
     `Website: ${website}`,
     `Source: ${repo}`,
@@ -199,7 +199,7 @@ export default withMermaid(
     ],
     transformPageData(pageData) {
       if (pageData.relativePath.startsWith('opensource/') && pageData.titleTemplate === undefined) {
-        pageData.titleTemplate = ':title | trading-research-agents'
+        pageData.titleTemplate = ':title | TRA'
       }
     },
     transformHead({ pageData, siteData, title }) {

@@ -1,5 +1,5 @@
 ---
-description: "How to open an exchange's practice environment and make an API key for trading-research-agents, venue by venue, for demo, testnet and live trading, with the settings each exchange needs."
+description: "How to open an exchange's practice environment and make an API key for TRA, venue by venue, for demo, testnet and live trading, with the settings each exchange needs."
 ---
 
 # Exchange accounts and keys
