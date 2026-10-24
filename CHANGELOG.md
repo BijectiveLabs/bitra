@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-10-24
+
 ### Changed
 
 - The package is published as `bitra` and the project is called TRA (trading research agents); the

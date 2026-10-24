@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bitra"
-version = "0.10.0"
+version = "0.10.1"
 description = "Autonomous trading agents with deterministic execution. The agents propose; the system decides."
 dynamic = ["readme"]
 requires-python = ">=3.11"

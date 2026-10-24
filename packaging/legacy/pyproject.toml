@@ -7,22 +7,22 @@ build-backend = "hatchling.build"
 
 [project]
 name = "trading-research-agents"
-version = "0.10.0"
+version = "0.10.1"
 description = "Renamed to bitra (TRA). This package installs bitra; the command is still tra."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 authors = [{ name = "Bijective Labs" }]
-dependencies = ["bitra==0.10.0"]
+dependencies = ["bitra==0.10.1"]
 
 [project.optional-dependencies]
-anthropic = ["bitra[anthropic]==0.10.0"]
-ccxt = ["bitra[ccxt]==0.10.0"]
-data = ["bitra[data]==0.10.0"]
-google = ["bitra[google]==0.10.0"]
-mcp = ["bitra[mcp]==0.10.0"]
-openai = ["bitra[openai]==0.10.0"]
-shadow = ["bitra[shadow]==0.10.0"]
+anthropic = ["bitra[anthropic]==0.10.1"]
+ccxt = ["bitra[ccxt]==0.10.1"]
+data = ["bitra[data]==0.10.1"]
+google = ["bitra[google]==0.10.1"]
+mcp = ["bitra[mcp]==0.10.1"]
+openai = ["bitra[openai]==0.10.1"]
+shadow = ["bitra[shadow]==0.10.1"]
 
 [project.urls]
 Homepage = "https://www.bijectivelabs.dev/open-source"
