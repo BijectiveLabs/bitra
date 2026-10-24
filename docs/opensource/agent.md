@@ -75,9 +75,9 @@ model providers both share.
 ## Providers
 
 ```
-pip install 'trading-research-agents[anthropic]'   # ANTHROPIC_API_KEY, default model claude-opus-5-5
-pip install 'trading-research-agents[openai]'      # OPENAI_API_KEY, --model required
-pip install 'trading-research-agents[google]'      # GEMINI_API_KEY
+pip install 'bitra[anthropic]'   # ANTHROPIC_API_KEY, default model claude-opus-5-5
+pip install 'bitra[openai]'      # OPENAI_API_KEY, --model required
+pip install 'bitra[google]'      # GEMINI_API_KEY
 ```
 
 Any server that speaks the OpenAI API (a local model server, a relay, another vendor's

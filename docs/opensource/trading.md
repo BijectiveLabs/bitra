@@ -59,7 +59,7 @@ class = "MyCore"
 lookback = 60
 ```
 
-[`examples/strategies/`](https://github.com/BijectiveLabs/trading-research-agents/blob/master/examples/strategies/) holds two cores so the runtime and the harness can be exercised end
+[`examples/strategies/`](https://github.com/BijectiveLabs/bitra/blob/master/examples/strategies/) holds two cores so the runtime and the harness can be exercised end
 to end: `trailing_zscore.py` for the runtime and `pair_reversion.py` for the walk-forward
 harness. They come from the research record this project descends from, where both were
 measured and closed. They are examples of the mechanism, not recommendations, and nothing
@@ -155,7 +155,7 @@ tra check                          # what is ready, what is missing, in plain wo
 tra backtest                       # newest dataset in data/, funding beside it, out under runs/
 tra chain validate --registration runs/<id>/preregistration.json \
     --trades runs/backtest-<time>/trades.jsonl --cost-bps 15 --block-length 7
-pip install 'trading-research-agents[shadow]'
+pip install 'bitra[shadow]'
 tra paper                          # live public trades; touch KILL to flatten and stop
 ```
 

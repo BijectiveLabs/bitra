@@ -57,7 +57,7 @@ jobs:
       - name: Build
         run: uv build
 
-      # No extras, no dev tools: what `pip install trading-research-agents` gives a client.
+      # No extras, no dev tools: what `pip install bitra` gives a client.
       # Catches a runtime import that only works because a dev extra happened to be present.
       - name: Install into an empty environment and run the command
         run: |
@@ -78,7 +78,7 @@ jobs:
         run: |
           uv venv /tmp/quick
           wheel=$(ls dist/*.whl)
-          uv pip install --python /tmp/quick/bin/python "trading-research-agents[ccxt,openai,data] @ file://$PWD/$wheel"
+          uv pip install --python /tmp/quick/bin/python "bitra[ccxt,openai,data] @ file://$PWD/$wheel"
           python scripts/client_smoke.py /tmp/quick/bin/tra /tmp/smoke-quick
 
   audit:

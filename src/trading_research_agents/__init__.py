@@ -1,4 +1,4 @@
-"""trading-research-agents: a research agent that refuses to claim what its gates have not measured.
+"""TRA: a research agent that refuses to claim what its gates have not measured.
 
 The package is organised as a chain of gates. A claim about a strategy has to pass the data
 gate, the falsification chain, and the execution gate before the agent is allowed to say it.
@@ -9,4 +9,4 @@ Recommended import style::
     import trading_research_agents as tra
 """
 
-__version__ = "0.10.0"
+__version__ = "0.10.1"

@@ -20,7 +20,7 @@ from urllib.parse import urlsplit
 from trading_research_agents import __version__
 from trading_research_agents.data.manifest import Source
 
-USER_AGENT = f"trading-research-agents/{__version__}"
+USER_AGENT = f"bitra/{__version__}"
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
 
 

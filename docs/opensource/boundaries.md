@@ -1,5 +1,5 @@
 ---
-description: What trading-research-agents guarantees and the tests that hold it, and what is not built yet and how a contribution could add it.
+description: What TRA guarantees and the tests that hold it, and what is not built yet and how a contribution could add it.
 ---
 
 # What it guarantees, and what is not built yet
@@ -26,6 +26,20 @@ This page separates two things that are easy to confuse.
 | Keys live in your environment or the `.env` beside `strategy.toml`, never in a config file, a brief, a prompt or a record, and are blanked out of errors | `cli/credentials.py`, `llm/completer.py`, `data/pull.py` |
 | Sandbox is the default, and there is no production tier | `execution/mandate.py`, the ladder |
 | The research chain does not select among variants: a claim that only survives after many tries has not survived | `chain/`; the walk-forward harness ships, an optimiser that feeds the chain does not |
+
+## What the checks do not prove
+
+The guarantees above keep a model from inventing a figure, sending an order or loosening a limit.
+They do not make its reasoning right, and they do not make a strategy profitable. What is left, and
+where the software measures it instead of assuming it:
+
+| What is not proven | Why | Where it is measured |
+|---|---|---|
+| A cited figure supports the claim made with it | the citation check confirms the figure was given and its value is right; whether it means what the claim says is a judgement, and a deterministic rule here would misread a reversion thesis as a contradiction | the judged validators argue for and against apart and a neutral judge weighs both; `tra hindsight` replays every decision against its reverse |
+| A high confidence or conviction means a better trade | neither is a calibrated probability | `tra hindsight`: rank correlation and confidence bands against outcomes |
+| The claimed edge is the expected move | it is the analyst's own target, held inside your bounds; the break-even win rate is the probability check on it | `[sizing]`: Kelly from the desk's own finished trades refuses entries when the record shows no edge |
+| The thresholds you chose hold out of sample | regime lines, weights, exit bounds and targets are parameters and can be fitted to the past | the research chain's walk-forward harness for scripted cores; a sensitivity sweep for agent desks is not built yet |
+| The prices the gate used match the fills | the gate prices on the book at the decision | `tra sizing`: entry slippage against the priced touch and fees against the priced schedule, per finished trade |
 
 ## Not built yet
 
@@ -56,7 +70,8 @@ there; where the two meet, the guarantee wins and the feature finds another shap
   never told, that is recorded as a crossing beside its answer and changes nothing
   (`agents/scope.py`).
 - An auditor's proposed change has to name a setting the configuration accepts, and the loader
-  refuses an unknown key, so a rule a model made up cannot take effect.
+  refuses a setting it does not know in every table it reads, so a rule a model made up cannot
+  take effect.
 
 ## Safety and responsibility
 

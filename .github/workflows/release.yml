@@ -30,7 +30,10 @@ jobs:
           uv run pytest
 
       - name: Build
-        run: uv build
+        run: |
+          uv build
+          # The old name, which installs bitra at the same version: old instructions keep working.
+          uv build packaging/legacy --out-dir dist
 
       - name: Tag matches the package version
         run: |
@@ -100,10 +103,10 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           for _ in $(seq 1 30); do
-            curl -sSf "https://pypi.org/pypi/trading-research-agents/${version}/json" >/dev/null && exit 0
+            curl -sSf "https://pypi.org/pypi/bitra/${version}/json" >/dev/null && exit 0
             sleep 10
           done
-          echo "trading-research-agents ${version} is not on PyPI after five minutes"
+          echo "bitra ${version} is not on PyPI after five minutes"
           exit 1
 
       - name: Publish

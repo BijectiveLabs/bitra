@@ -21,6 +21,7 @@ from trading_research_agents.execution.hindsight import (
     ADMITTED,
     Decision,
     Outcome,
+    calibration_check,
     decision_of,
     gate_of,
     levels_check,
@@ -29,6 +30,7 @@ from trading_research_agents.execution.hindsight import (
     replay,
     report,
     side_check,
+    spearman,
 )
 
 AT = datetime(2026, 10, 10, 12, 0, tzinfo=UTC)
@@ -252,6 +254,39 @@ def test_a_model_whose_reverse_wins_day_after_day_is_told_so() -> None:
     side = side_check(found)
     assert side["days"] == 6 and side["verdict"].startswith("the reverse of the model's side")
     assert side["model_side"]["mean_net_bps"] == "-39.0"
+
+
+def scored(net: float, day: int, n: int, confidence: float, conviction: str) -> Outcome:
+    d = decision(
+        cycle=f"s{day}{n}",
+        at=AT + timedelta(days=day, minutes=n),
+        confidence=confidence,
+        conviction=Decimal(conviction),
+    )
+    return Outcome(d, Decimal(str(net)) + 10, "hold", Decimal(10), Decimal(10))
+
+
+def test_confidence_that_tracks_the_outcome_and_conviction_that_does_not_are_told_apart() -> None:
+    found = []
+    for day in range(6):
+        for n in range(3):
+            confidence = 0.55 + 0.05 * (day * 3 + n) / 2
+            # Outcome rises with confidence; the conviction score runs the other way.
+            found.append(
+                scored(
+                    -30 + 4 * (day * 3 + n), day, n, confidence, f"{0.9 - 0.04 * (day * 3 + n):.2f}"
+                )
+            )
+    checked = calibration_check(found)
+    assert checked["confidence"]["verdict"] == "higher came with better outcomes"
+    assert checked["conviction"]["verdict"].startswith("higher came with worse outcomes")
+    assert float(checked["confidence"]["rank_correlation"]) == 1.0
+    bands = {b["from"]: b["decisions"] for b in checked["confidence"]["bands"]}
+    assert sum(bands.values()) == 18
+    # The same record twice gives the same figures: the shuffles are seeded.
+    assert calibration_check(found) == checked
+    assert calibration_check(found[:4])["confidence"]["verdict"] == "too few to tell"
+    assert spearman([1, 2, 2, 3], [4, 4, 4, 4]) == 0.0
 
 
 # -- the quant auditor reads what the venue closed ----------------------------------------------

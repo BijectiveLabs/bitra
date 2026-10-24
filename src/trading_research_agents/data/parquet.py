@@ -4,7 +4,7 @@ Price and quantity are stored as `decimal128(38, s)` with the scale declared by 
 never as floats. A trade whose value cannot be represented exactly at the declared scale is
 refused rather than rounded, because a rounded price is a wrong number that looks right.
 
-`pyarrow` is an optional dependency (`pip install trading-research-agents[data]`); importing
+`pyarrow` is an optional dependency (`pip install bitra[data]`); importing
 this module without it raises at call time with that instruction.
 """
 
@@ -146,7 +146,7 @@ def read_scales(path: Path) -> tuple[int, int]:
         price_scale = int(stamp("price_scale"))
         qty_scale = int(stamp("qty_scale"))
     except (KeyError, ValueError) as exc:
-        raise ParquetError(f"{path.name}: not a trading-research-agents dataset") from exc
+        raise ParquetError(f"{path.name}: not a TRA dataset") from exc
     if version != SCHEMA_VERSION:
         raise ParquetError(f"{path.name}: dataset schema {version!r} is not {SCHEMA_VERSION!r}")
     return price_scale, qty_scale

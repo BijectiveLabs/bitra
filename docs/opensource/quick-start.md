@@ -1,6 +1,6 @@
 ---
 title: Quick start
-description: Install trading-research-agents, make a desk and run a first cycle.
+description: Install TRA, make a desk and run a first cycle.
 ---
 
 # Quick start
@@ -11,16 +11,24 @@ change anything; the table under step 6 says what those defaults are.
 **1. Install.** You need Python 3.11 or newer. [uv](https://docs.astral.sh/uv/) is the quickest way:
 
 ```bash
-uv tool install 'trading-research-agents[ccxt,openai,anthropic,google,data]'
+uv tool install 'bitra[ccxt,openai,anthropic,google,data]'
 ```
 
 That brings every model provider and every exchange in. Without uv, run
-`pip install 'trading-research-agents[ccxt,openai,anthropic,google,data]'` inside a virtual
+`pip install 'bitra[ccxt,openai,anthropic,google,data]'` inside a virtual
 environment. To move to the newest release later:
 
 ```bash
-uv tool upgrade trading-research-agents      # or: pip install -U 'trading-research-agents[ccxt,openai,anthropic,google,data]'
+uv tool upgrade bitra      # or: pip install -U 'bitra[ccxt,openai,anthropic,google,data]'
 tra --version
+```
+
+Installed before 0.10.1 under the old name? Move the tool over once; desks and settings stay as
+they are:
+
+```bash
+uv tool uninstall trading-research-agents
+uv tool install 'bitra[ccxt,openai,anthropic,google,data]'
 ```
 
 **2. Make a desk.** A desk is a folder holding your settings and everything the agents decide. Name

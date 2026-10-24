@@ -53,6 +53,10 @@ class Decision:
     # The levels the analyst named, before code held them to the operator's bounds.
     own_stop_bps: Decimal | None = None
     own_take_bps: Decimal | None = None
+    # What the analyst said its confidence was, and the conviction score code built from the
+    # voices, so whether either one actually separates good decisions from bad can be measured.
+    confidence: float | None = None
+    conviction: Decimal | None = None
 
     @property
     def day(self) -> str:
@@ -153,6 +157,8 @@ def decision_of(
     )
     verdict = record.get("cost") or {}
     priced = (verdict.get("cost") or {}).get("round_trip_bps") or (cost or {}).get("round_trip_bps")
+    stake = (record.get("conviction") or {}).get("score") or {}
+    confidence = analyst.get("confidence")
     return Decision(
         cycle=str(record.get("cycle_id")),
         instrument=str(record.get("instrument")),
@@ -164,6 +170,8 @@ def decision_of(
         round_trip_bps=_number(priced),
         own_stop_bps=own_stop_bps,
         own_take_bps=own_take_bps,
+        confidence=float(confidence) if isinstance(confidence, int | float) else None,
+        conviction=_number(stake.get("score")),
     )
 
 
@@ -478,4 +486,78 @@ def report(
         "all_refused": {**_summary(refused), "verdict": overall, "p_admitted_better": p_overall},
         "side": side_check(found),
         "levels": levels_check(found),
+        "calibration": calibration_check(found),
+    }
+
+
+# Confidence as the analyst states it, in bands an operator can read a floor against.
+CONFIDENCE_BANDS = ((0.0, 0.6), (0.6, 0.7), (0.7, 0.8), (0.8, 1.01))
+
+
+def _ranks(values: Sequence[float]) -> np.ndarray:
+    """Ranks with ties sharing their average rank, so a tie never orders itself."""
+    data = np.asarray(values, dtype=float)
+    order = np.argsort(data, kind="mergesort")
+    ranks = np.empty(len(data))
+    ranks[order] = np.arange(1, len(data) + 1)
+    for value in np.unique(data):
+        tied = data == value
+        ranks[tied] = ranks[tied].mean()
+    return ranks
+
+
+def spearman(xs: Sequence[float], ys: Sequence[float]) -> float:
+    """Rank correlation; 0 when either side does not vary."""
+    rx, ry = _ranks(xs), _ranks(ys)
+    if rx.std() == 0 or ry.std() == 0:
+        return 0.0
+    return float(np.corrcoef(rx, ry)[0, 1])
+
+
+def _separates(pairs: Sequence[tuple[float, float, str]], seed: int) -> dict[str, Any]:
+    """Whether a higher figure came with a better outcome, tested against shuffles of the same
+    outcomes. The decisions are not independent within a day, so this is a check, not a proof."""
+    days = {day for _, _, day in pairs}
+    result: dict[str, Any] = {"decisions": len(pairs), "days": len(days)}
+    if len(days) < MIN_DAYS or len(pairs) < MIN_EACH:
+        result["verdict"] = "too few to tell"
+        return result
+    xs = [x for x, _, _ in pairs]
+    ys = [y for _, y, _ in pairs]
+    rho = spearman(xs, ys)
+    rng = np.random.default_rng(seed)
+    shuffled = [spearman(xs, list(rng.permutation(ys))) for _ in range(RESAMPLES // 4)]
+    above = (1 + sum(1 for r in shuffled if r >= rho)) / (1 + len(shuffled))
+    below = (1 + sum(1 for r in shuffled if r <= rho)) / (1 + len(shuffled))
+    result["rank_correlation"] = f"{rho:.3f}"
+    result["p_higher_better"] = f"{above:.3f}"
+    if above < 0.05:
+        result["verdict"] = "higher came with better outcomes"
+    elif below < 0.05:
+        result["verdict"] = "higher came with worse outcomes; it should not size a trade"
+    else:
+        result["verdict"] = "it does not separate outcomes yet"
+    return result
+
+
+def calibration_check(found: Sequence[Outcome], seed: int = SEED) -> dict[str, Any]:
+    """Does the analyst's confidence, or the conviction score, say anything about the outcome?
+
+    Both are numbers a desk can act on (a floor, a size). Neither is a probability, and this is
+    where the record says whether either has earned its place.
+    """
+    stated = [(o.decision.confidence, float(o.net_bps), o.decision.day) for o in found]
+    confidence = [(float(c), n, d) for c, n, d in stated if c is not None]
+    bands = []
+    for low, high in CONFIDENCE_BANDS:
+        nets = [n for c, n, _ in confidence if low <= c < high]
+        bands.append({"from": f"{low:.1f}", "below": f"{min(high, 1.0):.1f}", **_summary(nets)})
+    scored = [
+        (float(o.decision.conviction), float(o.net_bps), o.decision.day)
+        for o in found
+        if o.decision.conviction is not None
+    ]
+    return {
+        "confidence": {**_separates(confidence, seed), "bands": bands},
+        "conviction": _separates(scored, seed),
     }

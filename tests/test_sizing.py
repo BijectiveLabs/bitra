@@ -183,6 +183,9 @@ def test_the_sizing_table_is_checked_like_every_other() -> None:
     with pytest.raises(ConfigError, match="at least 10"):
         parsed({"kelly_fraction": "0.25", "min_round_trips": 3})
     assert SizingRule().idle
+    # A misspelt table used to be ignored, which left sizing off without a word.
+    with pytest.raises(ConfigError, match=r"\[sizng\] \(did you mean \[sizing\]\?\)"):
+        parse_strategy_config({**agent_raw(), "sizng": {"kelly_fraction": "0.25"}})
 
 
 def write_trips(root: Path, results: list[Decimal]) -> None:
@@ -326,3 +329,24 @@ def test_tra_sizing_refuses_a_fraction_that_is_not_one(tmp_path: Path) -> None:
         main(["sizing", "--fraction", "abc"])
     with pytest.raises(SystemExit):
         main(["sizing", "--fraction", "1.5"])
+
+
+def test_fills_are_set_against_what_they_were_priced_at() -> None:
+    from trading_research_agents.execution.reconcile import reconcile
+
+    rows = [
+        {"net": "1", "entry_slippage_bps": "0.40", "fees_bps": "11.20", "priced_fee_bps": "11.00"},
+        {
+            "net": "-1",
+            "entry_slippage_bps": "-0.10",
+            "fees_bps": "11.00",
+            "priced_fee_bps": "11.00",
+        },
+        {"net": "2", "entry_slippage_bps": "1.30", "fees_bps": "12.00", "priced_fee_bps": "11.00"},
+        {"note": "the venue returned no exit fills for this position"},
+    ]
+    found = reconcile(rows)
+    assert found["round_trips"] == 3
+    assert found["entry_slippage"] == {"measured": 3, "median_bps": "0.40", "worse_than_priced": 2}
+    assert found["fees"] == {"measured": 3, "median_bps": "11.20", "priced_median_bps": "11.00"}
+    assert reconcile([])["entry_slippage"]["median_bps"] is None

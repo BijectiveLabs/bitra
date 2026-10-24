@@ -1,4 +1,4 @@
-"""Google adapter, on the official SDK (`pip install 'trading-research-agents[google]'`).
+"""Google adapter, on the official SDK (`pip install 'bitra[google]'`).
 
 Read from the `google-genai` README and `types.py` on 2026-09-13: `genai.Client()` takes the
 key from `GEMINI_API_KEY` or `GOOGLE_API_KEY`; JSON output is requested with

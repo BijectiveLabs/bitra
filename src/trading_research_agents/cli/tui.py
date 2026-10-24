@@ -39,7 +39,7 @@ BANNER = r"""
 
 # The home screen's colour, and the colour of every line that separates one answer from the next.
 ACCENT = "cyan"
-NAME = "trading-research-agents"
+NAME = "TRA"
 TAGLINE = (
     "autonomous trading agents with deterministic execution; the agents propose, the system decides"
 )

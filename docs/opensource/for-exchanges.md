@@ -1,5 +1,5 @@
 ---
-description: "For exchanges: how trading-research-agents reaches a venue, what is verified before a venue is listed as run end to end, how orders identify themselves, and how to reach Bijective about integration."
+description: "For exchanges: how TRA reaches a venue, what is verified before a venue is listed as run end to end, how orders identify themselves, and how to reach Bijective about integration."
 ---
 
 # For exchanges
@@ -66,5 +66,5 @@ The venue is named on this page first, and only after the agreement is in place.
 
 Integration and partnership questions: [bijectivelabs.dev/contact](https://www.bijectivelabs.dev/contact).
 Technical issues with a venue are best opened on
-[GitHub](https://github.com/BijectiveLabs/trading-research-agents/issues), where users can follow
+[GitHub](https://github.com/BijectiveLabs/bitra/issues), where users can follow
 them.

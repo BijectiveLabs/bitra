@@ -98,7 +98,7 @@ without letting an agent near a vendor is to have the engine fetch it, stamp it,
 down. That is `data/sources/` and `tra data pull`.
 
 ```bash
-pip install 'trading-research-agents[ccxt]'
+pip install 'bitra[ccxt]'
 tra data pull BTCUSDT                       # chains from data.toml, snapshot into runs/pulls/
 ```
 
@@ -250,7 +250,7 @@ parse as this schema is refused, and a manifest is never written for a dataset w
 
 ## The dataset
 
-`pip install 'trading-research-agents[data]'` adds `pyarrow`, and with it the storage contract:
+`pip install 'bitra[data]'` adds `pyarrow`, and with it the storage contract:
 one Parquet file per archive, price and quantity as `decimal128(38, s)` with the scale the
 venue actually uses, timestamps as UTC nanoseconds, `zstd` compressed, the scales recorded in
 the file's own metadata.

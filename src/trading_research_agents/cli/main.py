@@ -2016,6 +2016,7 @@ def sizing_command(args: argparse.Namespace) -> int:
 
     from trading_research_agents.execution.excursion import summarise
     from trading_research_agents.execution.kelly import by_record
+    from trading_research_agents.execution.reconcile import reconcile
 
     cfg = load_strategy_config(args.config)
     rule, declared = cfg.sizing, not cfg.sizing.idle
@@ -2036,6 +2037,7 @@ def sizing_command(args: argparse.Namespace) -> int:
             else str(cfg.limits.max_risk_per_trade_bps)
         ),
         "excursions": summarise(excursions) if excursions else {"measured": 0},
+        "fills": reconcile(rows),
     }
     emit(payload, args.json, _sizing_lines(payload))
     return CLEARED
@@ -2086,6 +2088,14 @@ def _sizing_lines(payload: dict[str, Any]) -> list[str]:
                 f"  room is the whole [controls].max_drawdown_bps {payload['room_bps']}; a cycle "
                 "takes the drawdown already on the account off it first"
             )
+    fills = payload["fills"]
+    if fills["entry_slippage"]["measured"]:
+        slip = fills["entry_slippage"]
+        lines.append(
+            f"  fills: entry median {slip['median_bps']} bps against the touch it was priced at, "
+            f"worse in {slip['worse_than_priced']} of {slip['measured']}; fees median "
+            f"{fills['fees']['median_bps']} bps against {fills['fees']['priced_median_bps']} priced"
+        )
     seen = payload["excursions"]
     if seen.get("measured"):
         lines.append(
@@ -2128,6 +2138,15 @@ def _hindsight_lines(payload: dict[str, Any]) -> list[str]:
             f"  levels: code's {levels['applied']['mean_net_bps']} bps against the analyst's own "
             f"{levels['analyst_own']['mean_net_bps']}; {levels['verdict']}"
         )
+    for name, said in (payload.get("calibration") or {}).items():
+        if not said.get("decisions"):
+            continue
+        measured = (
+            f" (rank correlation {said['rank_correlation']} over {said['decisions']} decisions)"
+            if "rank_correlation" in said
+            else ""
+        )
+        lines.append(f"  {name}: {said['verdict']}{measured}")
     left = {k: v for k, v in payload["skipped"].items() if v}
     if left:
         lines.append("  not replayed: " + ", ".join(f"{v} {k}" for k, v in left.items()))
@@ -5184,6 +5203,13 @@ def _gate_lines(
             bad.append(
                 "[conviction] has no ladder, so no score can size a trade; "
                 "declare [[conviction.ladder]] rungs or drop the table"
+            )
+        above = [t for t in rule.ladder if t.size_multiple > 1]
+        if above:
+            good.append(
+                f"conviction: {len(above)} rung(s) above 1x let agreement add size beyond the "
+                "base; the risk per trade still caps the loss at the stop, and `tra hindsight` "
+                "says whether the score has separated good trades from bad before you rely on it"
             )
         unweighted = sorted(set(roster) - set(rule.weights))
         if unweighted:

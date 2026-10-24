@@ -363,6 +363,17 @@ def test_the_cost_counts_funding_at_the_venues_own_interval(envelope: Envelope) 
     assert hourly["bps"] == "6.0000" and "the venue's interval" in hourly["source"]
 
 
+def test_a_contract_with_no_funding_rate_is_refused_not_priced_cheap(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    cfg, _, _ = cycle_config(
+        tmp_path, envelope, [analyst_answer()], chains=chains(without="funding")
+    )
+    result = run_cycle(cfg)
+    assert not result.acted and result.stopped_by == "cost: no funding rate"
+    assert any("not priced without it" in r for r in result.refusals)
+
+
 def test_tasks_run_together_keep_their_order_and_survive_one_failure(tmp_path: Path) -> None:
     def ok(name: str) -> Any:
         return lambda: {"who": name}

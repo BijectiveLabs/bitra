@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import difflib
 import importlib
 import importlib.util
 import json
@@ -298,7 +299,42 @@ def load_strategy_config(path: Path) -> StrategyConfig:
     return parse_strategy_config(raw, base=path.resolve().parent)
 
 
+# Every table strategy.toml may hold. A name outside this list is a typo or a setting from another
+# file, and either way it would be ignored, so it is refused: [sizng] silently left sizing off.
+TABLES = (
+    "strategy",
+    "exit",
+    "controls",
+    "run",
+    "data",
+    "live",
+    "canary",
+    "agents",
+    "confluence",
+    "targets",
+    "trigger",
+    "audit",
+    "universe",
+    "desk",
+    "regime",
+    "conviction",
+    "execution",
+    "sizing",
+)
+
+
 def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> StrategyConfig:
+    unknown = sorted(set(raw) - set(TABLES))
+    if unknown:
+        hints = [
+            f"[{name}] (did you mean [{close[0]}]?)" if close else f"[{name}]"
+            for name in unknown
+            for close in [difflib.get_close_matches(name, TABLES, n=1)]
+        ]
+        raise ConfigError(
+            f"strategy.toml: {', '.join(hints)} is not a table this file reads; it has "
+            f"{', '.join(f'[{t}]' for t in TABLES)}"
+        )
     strategy_raw = _table(raw, "strategy")
     # [exit] and [controls] may be left out: both have standard defaults on an agent desk.
     exit_raw = dict(raw.get("exit") or {})

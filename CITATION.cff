@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: "If you use this software in research, please cite it as below."
 type: software
-title: "trading-research-agents"
+title: "TRA"
 abstract: >-
   An open-source Python package and command line (tra): autonomous trading agents with deterministic execution.
   Language model agents read the market and propose a trade; fixed, tested rules compute every
@@ -9,7 +9,7 @@ abstract: >-
 authors:
   - name: "Bijective Labs"
     website: "https://www.bijectivelabs.dev"
-repository-code: "https://github.com/BijectiveLabs/trading-research-agents"
+repository-code: "https://github.com/BijectiveLabs/bitra"
 url: "https://www.bijectivelabs.dev/open-source"
 license: MIT
 keywords:

@@ -1,5 +1,5 @@
 ---
-description: "The MCP server: read-only tools that let any agent host call the research gates of trading-research-agents over stdio."
+description: "The MCP server: read-only tools that let any agent host call the research gates of TRA over stdio."
 ---
 
 # The MCP server
@@ -11,7 +11,7 @@ is governed by the system that is tested and fails closed, not by a tool a model
 open to contributions.
 
 ```
-pip install 'trading-research-agents[mcp]'
+pip install 'bitra[mcp]'
 tra mcp serve                      # stdio; what desktop hosts launch
 uv run mcp dev -m trading_research_agents.mcp.server   # or point the Inspector at a file
 ```
@@ -19,7 +19,7 @@ uv run mcp dev -m trading_research_agents.mcp.server   # or point the Inspector 
 A host configuration names the command and nothing else:
 
 ```json
-{ "mcpServers": { "trading-research-agents": { "command": "tra", "args": ["mcp", "serve"] } } }
+{ "mcpServers": { "tra": { "command": "tra", "args": ["mcp", "serve"] } } }
 ```
 
 ## Use it from your own agent
@@ -31,9 +31,9 @@ it needs:
 ```json
 {
   "mcpServers": {
-    "trading-research-agents": {
+    "tra": {
       "command": "uvx",
-      "args": ["--with", "mcp>=2,<3", "trading-research-agents", "mcp", "serve"]
+      "args": ["--with", "mcp>=2,<3", "bitra", "mcp", "serve"]
     }
   }
 }
@@ -41,16 +41,16 @@ it needs:
 
 Any host that launches a stdio server takes this, desktop chat apps and coding agents alike. Add
 `"--root", "/path/to/project"` at the end to let the tools read a project other than the directory
-the host starts in. From 0.6.8 the package installs a `trading-research-agents` command next to
-`tra`, which is what `uvx` runs.
+the host starts in. The package installs a `bitra` command next to `tra`, which is what `uvx bitra` runs; the
+`TRA` command of earlier releases stays as an alias for now.
 
 What your agent gets is the same set of checks this package's own roles use, and nothing that
 trades: it can ask whether a claimed edge clears the round-trip cost, whether a dataset is fit to
 test on, and what a validation run decided. Every tool reads; none sends an order, writes a
 ledger row or moves the ladder. The entry for the MCP Registry is `server.json` at the root of the
-repository, under the name `io.github.BijectiveLabs/trading-research-agents`. Glama builds the
+repository, under the name `io.github.BijectiveLabs/bitra`. Glama builds the
 server from the build spec on its admin page (Python 3.12, `uv sync --locked --no-dev --extra mcp`,
-then `uv run --no-sync trading-research-agents mcp serve` behind its `mcp-proxy`), which
+then `uv run --no-sync TRA mcp serve` behind its `mcp-proxy`), which
 `glama/Dockerfile` records and reproduces, and CI checks on every change that both start and list
 their tools.
 

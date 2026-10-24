@@ -1,5 +1,5 @@
 ---
-description: One cycle of trading-research-agents, from market data to an order intent or a refusal with a reason, and how to run it on a schedule with tra run.
+description: One cycle of TRA, from market data to an order intent or a refusal with a reason, and how to run it on a schedule with tra run.
 ---
 
 # The cycle
@@ -1041,6 +1041,9 @@ the venues on 2026-10-21:
   is only the fallback. The cost line says which one it used.
 - **A receipt is not a discount.** When the standing rate would pay the position, nothing is taken off
   the cost: the rate can turn before the settlement comes. The cost line says how much was left out.
+- **No rate, no price.** A perpetual whose funding rate could not be read is refused before it is
+  priced, with the reason the data chain gave. Spot pairs and prediction outcomes settle no funding
+  and are not asked for it.
 
 ## Watching a desk you are not running
 
@@ -1292,6 +1295,15 @@ The verdicts are deliberately reluctant:
 The side check resamples whole days, because one day's tape moves every decision on it together.
 "Independent" counts decisions after dropping those on an instrument inside an earlier one's hold;
 the rest are the same bet asked again.
+
+Two more lines ask whether the numbers a desk acts on mean anything. The analyst's stated confidence
+sets a floor, and the conviction score sets a size; neither is a probability. `confidence` and
+`conviction` in the report each give the rank correlation between that figure and the decision's
+net over the replay, tested against 1,000 seeded shuffles of the same outcomes, and the confidence
+bands (below 0.6, 0.6 to 0.7, 0.7 to 0.8, 0.8 and up) with the outcomes in each. "Higher came with
+worse outcomes" is the one to act on: a score that runs backwards should not size a trade, and a
+ladder rung above 1x should come down. With fewer than 10 decisions or 5 days the answer is
+`too few to tell`.
 
 The candles come from the desk's own ohlcv chain, the venue first. A path is kept under
 `runs/cycles/hindsight/` once its hold is over, so a second run asks the venue for nothing it already

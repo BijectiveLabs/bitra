@@ -300,7 +300,7 @@ def test_a_finished_trade_carries_its_excursion_and_its_result_in_planned_losses
     entry_cycle(tmp_path, "2026-10-04T17-55-13Z-BTCUSDT")
     intents = tmp_path / "2026-10-04T17-55-13Z-BTCUSDT" / "intents.jsonl"
     row = json.loads(intents.read_text("utf-8"))
-    planned = {**row, "loss_at_stop_bps": "112.50"}
+    planned = {**row, "loss_at_stop_bps": "112.50", "priced_fee_bps": "11.0000", "ask": "85299.5"}
     intents.write_text(json.dumps(planned) + "\n", encoding="utf-8")
     opened = int(datetime(2026, 10, 4, 17, 55, 13, tzinfo=UTC).timestamp() * 1000)
     minute = opened - opened % 60_000
@@ -336,6 +336,9 @@ def test_a_finished_trade_carries_its_excursion_and_its_result_in_planned_losses
 
     assert trip["net_bps"] == "192.4" and trip["loss_at_stop_bps"] == "112.50"
     assert trip["r"] == "1.710" and trip["stop"] == "84446.3"
+    # Filled 0.6 below the ask it was priced at, and charged 7.62 bps against 11 priced.
+    assert trip["entry_slippage_bps"] == "-0.07" and trip["fees_bps"] == "7.62"
+    assert trip["priced_entry"] == "85299.5" and trip["priced_fee_bps"] == "11.0000"
     seen = trip["excursion"]
     assert seen["timeframe"] == "1m" and seen["bars"] == 5 and seen["complete"] is True
     assert seen["mfe_bps"] == "211.15" and seen["mae_bps"] == "-35.04"

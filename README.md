@@ -2,17 +2,17 @@
   <a href="https://www.bijectivelabs.dev"><img src="assets/bijective_banner.png" alt="Bijective Labs"></a>
 </p>
 
-<h1 align="center">trading-research-agents</h1>
+<h1 align="center">TRA</h1>
 
 <p align="center"><strong>Autonomous trading agents with deterministic execution. The agents propose; the system decides.</strong></p>
 
-<!-- mcp-name: io.github.BijectiveLabs/trading-research-agents -->
+<!-- mcp-name: io.github.BijectiveLabs/bitra -->
 
 <p align="center">
-  <a href="https://github.com/BijectiveLabs/trading-research-agents/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/BijectiveLabs/trading-research-agents/actions/workflows/ci.yml/badge.svg?branch=master"></a>
-  <a href="https://pypi.org/project/trading-research-agents/"><img alt="PyPI" src="https://img.shields.io/pypi/v/trading-research-agents?style=flat-square&logo=pypi&logoColor=white&label=PyPI&cacheSeconds=1800"></a>
-  <a href="https://pypi.org/project/trading-research-agents/"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/trading-research-agents?style=flat-square&logo=python&logoColor=white&label=python&cacheSeconds=1800"></a>
-  <a href="https://github.com/BijectiveLabs/trading-research-agents/blob/master/LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square"></a>
+  <a href="https://github.com/BijectiveLabs/bitra/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/BijectiveLabs/bitra/actions/workflows/ci.yml/badge.svg?branch=master"></a>
+  <a href="https://pypi.org/project/bitra/"><img alt="PyPI" src="https://img.shields.io/pypi/v/bitra?style=flat-square&logo=pypi&logoColor=white&label=PyPI&cacheSeconds=1800"></a>
+  <a href="https://pypi.org/project/bitra/"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/bitra?style=flat-square&logo=python&logoColor=white&label=python&cacheSeconds=1800"></a>
+  <a href="https://github.com/BijectiveLabs/bitra/blob/master/LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square"></a>
   <img alt="Status: alpha" src="https://img.shields.io/badge/status-alpha-orange?style=flat-square">
 </p>
 
@@ -28,11 +28,14 @@
   <a href="https://www.bijectivelabs.dev/open-source"><img alt="Website" src="https://img.shields.io/badge/web-bijectivelabs.dev%2Fopen--source-1d2a3d?style=flat-square"></a>
   <a href="https://docs.bijectivelabs.dev"><img alt="Documentation" src="https://img.shields.io/badge/docs-docs.bijectivelabs.dev-1f6feb?style=flat-square"></a>
   <a href="https://www.bijectivelabs.dev/insights"><img alt="Insights" src="https://img.shields.io/badge/insights-bijectivelabs.dev%2Finsights-6f42c1?style=flat-square"></a>
-  <a href="https://github.com/BijectiveLabs/trading-research-agents/blob/master/CHANGELOG.md"><img alt="Changelog" src="https://img.shields.io/badge/changelog-CHANGELOG.md-E05735?style=flat-square"></a>
-  <a href="https://github.com/BijectiveLabs/trading-research-agents/blob/master/SECURITY.md"><img alt="Security policy" src="https://img.shields.io/badge/security-policy-2ea44f?style=flat-square"></a>
+  <a href="https://github.com/BijectiveLabs/bitra/blob/master/CHANGELOG.md"><img alt="Changelog" src="https://img.shields.io/badge/changelog-CHANGELOG.md-E05735?style=flat-square"></a>
+  <a href="https://github.com/BijectiveLabs/bitra/blob/master/SECURITY.md"><img alt="Security policy" src="https://img.shields.io/badge/security-policy-2ea44f?style=flat-square"></a>
 </p>
 
 <br>
+
+TRA (trading research agents) is published as `bitra` on PyPI and runs as `tra`. Before
+0.10.1 the package was called `trading-research-agents`; that name still installs it.
 
 Language models are good at reading a market and saying what they think. They are bad at
 arithmetic, they don't know what a trade costs, and they will happily overrule a limit you set.
@@ -91,15 +94,15 @@ change anything; the table under step 6 says what those defaults are.
 **1. Install.** You need Python 3.11 or newer. [uv](https://docs.astral.sh/uv/) is the quickest way:
 
 ```bash
-uv tool install 'trading-research-agents[ccxt,openai,anthropic,google,data]'
+uv tool install 'bitra[ccxt,openai,anthropic,google,data]'
 ```
 
 That brings every model provider and every exchange in. Without uv, run
-`pip install 'trading-research-agents[ccxt,openai,anthropic,google,data]'` inside a virtual
+`pip install 'bitra[ccxt,openai,anthropic,google,data]'` inside a virtual
 environment. To move to the newest release later:
 
 ```bash
-uv tool upgrade trading-research-agents      # or: pip install -U 'trading-research-agents[ccxt,openai,anthropic,google,data]'
+uv tool upgrade bitra      # or: pip install -U 'bitra[ccxt,openai,anthropic,google,data]'
 tra --version
 ```
 
@@ -335,7 +338,7 @@ it has been tested, the last:
 | **BingX** | everything | demo (VST, ccxt's testnet switch) | **yes**, on the demo API |
 | **Binance**, **Gate** | orders, with the stop and take profit placed right after the fill (`exits = "separate"`) | demo (Binance), testnet (Gate) | **yes**, on their practice APIs |
 | WEEX, BloFin, WOO X | everything | testnet | ready for its run |
-| Hyperliquid, Pacifica, WOOFi Pro, ModeTrade (decentralised) | everything | testnet | ready for its run; [report wanted for Hyperliquid](https://github.com/BijectiveLabs/trading-research-agents/issues/7) |
+| Hyperliquid, Pacifica, WOOFi Pro, ModeTrade (decentralised) | everything | testnet | ready for its run; [report wanted for Hyperliquid](https://github.com/BijectiveLabs/bitra/issues/7) |
 | KuCoin Futures, Deepcoin | everything | none | integrated; no practice environment |
 | dYdX, Paradex, Extended, Lighter (decentralised); Deribit, Crypto.com, Coinbase International | orders, but no exits at the venue through ccxt, and some cannot set leverage | testnet | not for a desk that needs its exits at the venue |
 | Kraken, Kraken Futures, Phemex | data for now: ccxt does not report their positions, and no order is sent into a position nobody can see | | |
@@ -603,7 +606,7 @@ where it stops.
 Releases come from `master`. The `develop` branch is where the next release is built: it moves
 often, a commit there is not a release, and it can carry work that is unfinished or changed again
 before it ships. A set of changes becomes a release when it is merged into `master`, tagged and
-published, and [CHANGELOG.md](https://github.com/BijectiveLabs/trading-research-agents/blob/master/CHANGELOG.md) says what each one brought.
+published, and [CHANGELOG.md](https://github.com/BijectiveLabs/bitra/blob/master/CHANGELOG.md) says what each one brought.
 
 ## Documentation
 
@@ -631,14 +634,14 @@ The full documentation is at [docs.bijectivelabs.dev](https://docs.bijectivelabs
 ## Development
 
 ```bash
-git clone https://github.com/BijectiveLabs/trading-research-agents && cd trading-research-agents
+git clone https://github.com/BijectiveLabs/bitra && cd bitra
 uv sync --all-extras
 uv run ruff check . && uv run ruff format --check .
 uv run mypy
 uv run pytest
 ```
 
-[CONTRIBUTING.md](https://github.com/BijectiveLabs/trading-research-agents/blob/master/CONTRIBUTING.md) has the branch flow and the standards the code is held to.
+[CONTRIBUTING.md](https://github.com/BijectiveLabs/bitra/blob/master/CONTRIBUTING.md) has the branch flow and the standards the code is held to.
 
 ## Where it comes from
 
@@ -651,6 +654,6 @@ of those gates, which is why they can propose but never size, price or send.
 
 ## License
 
-MIT. See [LICENSE](https://github.com/BijectiveLabs/trading-research-agents/blob/master/LICENSE); [NOTICE](https://github.com/BijectiveLabs/trading-research-agents/blob/master/NOTICE) lists the third-party software this package builds on.
+MIT. See [LICENSE](https://github.com/BijectiveLabs/bitra/blob/master/LICENSE); [NOTICE](https://github.com/BijectiveLabs/bitra/blob/master/NOTICE) lists the third-party software this package builds on.
 
 Built by [Bijective Labs](https://github.com/BijectiveLabs).

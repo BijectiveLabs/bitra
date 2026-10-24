@@ -54,6 +54,10 @@ class Entry:
     take_price: str | None = None
     # What the cycle planned to lose at the stop, in bps of the entry notional, round trip included.
     loss_at_stop_bps: str | None = None
+    # The price the entry was priced at (the touch it would cross) and the fees the cost gate
+    # counted, so what the venue charged can be set against what the trade expected.
+    priced_entry: str | None = None
+    priced_fee_bps: str | None = None
     # False when the venue never reported a fill: such an entry is looked after only while the
     # venue actually shows a position, and never written up as a finished trade on its own.
     confirmed: bool = True
@@ -125,6 +129,8 @@ def filled_entries(root: Path) -> dict[str, Entry]:
             stop_price=placed.get("stop_price") or intent.get("stop_price"),
             take_price=placed.get("take_price") or intent.get("take_price"),
             loss_at_stop_bps=intent.get("loss_at_stop_bps"),
+            priced_entry=_touch_of(intent),
+            priced_fee_bps=intent.get("priced_fee_bps"),
             confirmed=placed.get("filled") not in (None, ""),
         )
     return found
@@ -257,6 +263,8 @@ class Keeper:
                 stop_price=row.get("stop"),
                 take_price=row.get("take"),
                 loss_at_stop_bps=row.get("loss_at_stop_bps"),
+                priced_entry=row.get("priced_entry"),
+                priced_fee_bps=row.get("priced_fee_bps"),
             )
             try:
                 trip = self._round_trip(
@@ -314,6 +322,8 @@ class Keeper:
                     ("stop", entry.stop_price),
                     ("take", entry.take_price),
                     ("loss_at_stop_bps", entry.loss_at_stop_bps),
+                    ("priced_entry", entry.priced_entry),
+                    ("priced_fee_bps", entry.priced_fee_bps),
                 )
                 if value is not None
             },
@@ -391,6 +401,14 @@ class Keeper:
                 }
             )
             net_bps = (gross - fees) / notional * 10_000
+            trip["fees_bps"] = str((fees / notional * 10_000).quantize(Decimal("0.01")))
+            priced = _positive(entry.priced_entry)
+            if priced is not None:
+                # Positive is worse than priced: a long that filled above the ask it was priced
+                # at, a short below the bid.
+                trip["entry_slippage_bps"] = str(
+                    (sign * (entry.price - priced) / priced * 10_000).quantize(Decimal("0.01"))
+                )
             planned = _positive(entry.loss_at_stop_bps)
             if planned is not None:
                 # The result in units of the loss the cycle planned at the stop: -1 is a stop hit
@@ -433,6 +451,13 @@ def _up_to(fills: Any, size: Decimal) -> list[Mapping[str, Any]]:
         kept.append(fill)
         total += Decimal(str(fill.get("amount") or 0))
     return kept
+
+
+def _touch_of(intent: Mapping[str, Any]) -> str | None:
+    """The side of the book an entry crosses: the ask for a long, the bid for a short."""
+    side = intent.get("ask") if intent.get("target") == "long" else intent.get("bid")
+    found = side if side not in (None, "") else intent.get("mid")
+    return None if found in (None, "") else str(found)
 
 
 def _positive(value: Any) -> Decimal | None:

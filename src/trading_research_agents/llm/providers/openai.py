@@ -1,4 +1,4 @@
-"""OpenAI adapter, on the official SDK (`pip install 'trading-research-agents[openai]'`).
+"""OpenAI adapter, on the official SDK (`pip install 'bitra[openai]'`).
 
 No default model: the operator names one. Structured output is requested as a strict JSON
 schema, and the result is still validated by the caller. Any server that speaks the same API

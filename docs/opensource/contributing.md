@@ -11,7 +11,7 @@ that a contribution is judged against a standard rather than a mood.
 ## Setup
 
 ```bash
-git clone https://github.com/BijectiveLabs/trading-research-agents && cd trading-research-agents
+git clone https://github.com/BijectiveLabs/bitra && cd bitra
 uv sync --all-extras
 uv run pytest
 ```

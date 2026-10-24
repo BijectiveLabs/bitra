@@ -158,7 +158,7 @@ trade on its own word.
 | File | One line per | Carries |
 |---|---|---|
 | `runs/cycles/positions.jsonl` | close, flatten, or venue exit | instrument, event, the entry's order id and cycle, the close order's id, the reason |
-| `runs/cycles/round_trips.jsonl` | finished trade | entry, exit, size, gross, fees, net, funding, how it closed, the stop and target, `loss_at_stop_bps`, `r` and the excursion ([Sizing from the record](/opensource/sizing)) |
+| `runs/cycles/round_trips.jsonl` | finished trade | entry, exit, size, gross, fees, net, funding, how it closed, the stop and target, `loss_at_stop_bps`, `r` and the excursion ([Sizing from the record](/opensource/sizing)); the fees in bps beside the fees the gate priced, and the entry's slippage against the touch it was priced at |
 | `runs/cycles/equity.jsonl` | UTC day | the first equity reading of the day |
 | `runs/cycles/<id>/placed.json` | order | what was sent, what filled, and the account figures at the time |
 

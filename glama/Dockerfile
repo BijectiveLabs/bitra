@@ -2,7 +2,7 @@
 # served over stdio by a non-root user. The tools read under /work and never trade.
 #
 # Glama does not read this file; it builds from the spec on the server's admin page
-# (glama.ai/mcp/servers/BijectiveLabs/trading-research-agents/admin/dockerfile). That spec is:
+# (glama.ai/mcp/servers/BijectiveLabs/bitra/admin/dockerfile). That spec is:
 #   Python version  3.12
 #   Build steps     ["uv sync --locked --no-dev --extra mcp"]
 #   CMD arguments   ["mcp-proxy", "--", "uv", "run", "--no-sync", "trading-research-agents",
@@ -26,4 +26,4 @@ RUN useradd --create-home --uid 1000 tra
 COPY --from=builder --chown=tra:tra /app/.venv /app/.venv
 USER tra
 WORKDIR /work
-CMD ["trading-research-agents", "mcp", "serve"]
+CMD ["tra", "mcp", "serve"]

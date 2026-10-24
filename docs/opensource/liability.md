@@ -1,5 +1,5 @@
 ---
-description: "Where responsibility sits when you run trading-research-agents: the sandbox default, the keys and mandate you supply, and the MIT License terms."
+description: "Where responsibility sits when you run TRA: the sandbox default, the keys and mandate you supply, and the MIT License terms."
 ---
 
 # Where the responsibility sits

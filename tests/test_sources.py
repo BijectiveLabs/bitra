@@ -351,7 +351,7 @@ def test_a_dataset_written_under_the_old_package_name_still_reads(tmp_path: Path
 
     bare = tmp_path / "bare.parquet"
     pq.write_table(table, bare)
-    with pytest.raises(ParquetError, match="not a trading-research-agents dataset"):
+    with pytest.raises(ParquetError, match="not a TRA dataset"):
         read_scales(bare)
 
 
