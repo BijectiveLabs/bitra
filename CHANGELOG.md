@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-10-24
+
 ### Fixed
 
 - `trading-research-agents` is published again as the full package, built from the same source as
