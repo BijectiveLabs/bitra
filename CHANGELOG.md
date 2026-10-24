@@ -6,6 +6,14 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `trading-research-agents` is published again as the full package, built from the same source as
+  `bitra`, so a tool or environment installed under the old name upgrades in place with its
+  commands. In 0.10.1 the old name was a package that only depended on `bitra`; `uv tool upgrade`
+  found no command of its own in it and removed the tool. CI now upgrades a tool installed under the
+  old name and runs `tra` before anything is released.
+
 ## [0.10.1] - 2026-10-24
 
 ### Changed

@@ -55,14 +55,31 @@ jobs:
           python-version: "3.12"
 
       - name: Build
-        run: uv build
+        run: |
+          uv build
+          bash scripts/build_old_name.sh
+
+      # A tool installed under the old name, as clients have it, moved to this build: it has to
+      # keep its commands. 0.10.1 published the old name as a package that only depended on bitra,
+      # and uv removed the tool on upgrade because it brought no command of its own.
+      - name: Upgrade a tool installed under the old name
+        env:
+          UV_TOOL_DIR: /tmp/tools
+          UV_TOOL_BIN_DIR: /tmp/toolbin
+        run: |
+          uv tool install trading-research-agents==0.10.0
+          uv tool install --force "trading-research-agents @ file://$(ls $PWD/dist/trading_research_agents-*.whl)"
+          /tmp/toolbin/tra --version
+          uv tool uninstall trading-research-agents
+          uv tool install "bitra @ file://$(ls $PWD/dist/bitra-*.whl)"
+          /tmp/toolbin/tra --version
 
       # No extras, no dev tools: what `pip install bitra` gives a client.
       # Catches a runtime import that only works because a dev extra happened to be present.
       - name: Install into an empty environment and run the command
         run: |
           uv venv /tmp/bare
-          uv pip install --python /tmp/bare/bin/python dist/*.whl
+          uv pip install --python /tmp/bare/bin/python dist/bitra-*.whl
           /tmp/bare/bin/tra --version
           /tmp/bare/bin/tra --plain
           /tmp/bare/bin/tra init /tmp/proj
@@ -77,7 +94,7 @@ jobs:
       - name: Client commands, quick start install
         run: |
           uv venv /tmp/quick
-          wheel=$(ls dist/*.whl)
+          wheel=$(ls dist/bitra-*.whl)
           uv pip install --python /tmp/quick/bin/python "bitra[ccxt,openai,data] @ file://$PWD/$wheel"
           python scripts/client_smoke.py /tmp/quick/bin/tra /tmp/smoke-quick
 

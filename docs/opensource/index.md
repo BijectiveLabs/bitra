@@ -8,7 +8,8 @@ description: "What TRA is: autonomous trading agents with deterministic executio
 **Autonomous trading agents with deterministic execution. The agents propose; the system decides.**
 
 TRA (trading research agents) is published as `bitra` on PyPI and runs as `tra`. Before
-0.10.1 the package was called `trading-research-agents`; that name still installs it.
+0.10.1 the package was called `trading-research-agents`, and the same package is still
+published under that name.
 
 Language models are good at reading a market and saying what they think. They are bad at
 arithmetic, they don't know what a trade costs, and they will happily overrule a limit you set.
