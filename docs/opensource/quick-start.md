@@ -23,13 +23,23 @@ uv tool upgrade bitra      # or: pip install -U 'bitra[ccxt,openai,anthropic,goo
 tra --version
 ```
 
-Installed before 0.10.1 under the old name? Move the tool over once; desks and settings stay as
+Installed under the old name, `trading-research-agents`? The same package is still published
+under it, so `uv tool upgrade trading-research-agents` keeps it current. To move to the new name,
+take the old tool out first, because both provide the `tra` command; desks and settings stay as
 they are:
 
 ```bash
 uv tool uninstall trading-research-agents
 uv tool install 'bitra[ccxt,openai,anthropic,google,data]'
 ```
+
+If an upgrade to 0.10.1 left you without `tra` (the old name was published then as a package that
+only depended on `bitra`, and `uv` removed the tool), the second line is all you need.
+
+In a virtual environment the same holds: `pip uninstall trading-research-agents`, then
+`pip install 'bitra[ccxt,openai,anthropic,google,data]'`. The two names hold the same files, so
+removing one after installing the other takes those files with it; if that has happened,
+`pip install --force-reinstall bitra` puts them back.
 
 **2. Make a desk.** A desk is a folder holding your settings and everything the agents decide. Name
 the provider you have a key for:
