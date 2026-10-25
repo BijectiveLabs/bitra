@@ -8,25 +8,32 @@ import pytest
 
 from trading_research_agents.data.schema import Side, Trade
 from trading_research_agents.market_data.archive import (
+    DERIV,
     FLOW,
     ArchiveError,
     DayManifest,
     SourceFile,
     day_file,
     manifest_file,
+    read_deriv_day,
+    read_deriv_range,
     read_flow_day,
     read_flow_range,
     verify_archive,
+    write_deriv_day,
     write_flow_day,
 )
 from trading_research_agents.market_data.bars import FlowBar, GapState
 from trading_research_agents.market_data.builder import FlowBarBuilder
 from trading_research_agents.market_data.days import DAY_NS, NS_PER_S, midnight_ns
+from trading_research_agents.market_data.deriv import DerivPoint, Series, detail_of
+from trading_research_agents.market_data.gaps import GapMark, read_gaps, record_gap
 
 pytest.importorskip("pyarrow")
 
 DAY = date(2025, 7, 1)
 SOURCE = (SourceFile("BTCUSDT-2025-07-01.parquet", "ab" * 32),)
+API = (SourceFile("ccxt:bybit", None),)
 
 
 def day_bars(day: date = DAY) -> list[FlowBar]:
@@ -125,3 +132,63 @@ def test_verify_names_a_file_without_a_manifest(tmp_path: Path) -> None:
     check = verify_archive(tmp_path)
     assert any("no manifest" in p for p in check.problems)
     assert verify_archive(tmp_path / "empty").problems == ()
+
+
+def deriv_points(day: date = DAY) -> list[DerivPoint]:
+    start = midnight_ns(day)
+    return [
+        DerivPoint(
+            Series.FUNDING,
+            start + 8 * 3600 * NS_PER_S,
+            start,
+            Decimal("-0.00012345"),
+            detail_of(settled="true"),
+        ),
+        DerivPoint(
+            Series.OPEN_INTEREST,
+            start + 300 * NS_PER_S,
+            start,
+            Decimal("51234.567"),
+            detail_of(measured="amount", timeframe="5m"),
+        ),
+        DerivPoint(Series.MARK, start + 60 * NS_PER_S, start, Decimal("93530.5")),
+    ]
+
+
+def test_derivatives_round_trip_exactly_and_in_order(tmp_path: Path) -> None:
+    manifest = write_deriv_day(
+        deriv_points(), tmp_path, venue="bybit", instrument="BTCUSDT", day=DAY, sources=API
+    )
+    assert manifest.stream == DERIV and manifest.rows == 3
+    back = read_deriv_day(tmp_path, "bybit", "BTCUSDT", DAY)
+    assert back == sorted(deriv_points(), key=lambda p: (p.series.value, p.as_of_ns))
+    assert str(back[0].value) == "-0.00012345"
+
+
+def test_a_point_outside_the_day_is_refused(tmp_path: Path) -> None:
+    late = DerivPoint(Series.MARK, midnight_ns(date(2025, 7, 2)), 0, Decimal("1"))
+    with pytest.raises(ArchiveError, match="outside"):
+        write_deriv_day([late], tmp_path, venue="bybit", instrument="BTCUSDT", day=DAY, sources=API)
+
+
+def test_an_absent_derivatives_day_reads_empty(tmp_path: Path) -> None:
+    assert read_deriv_day(tmp_path, "bybit", "BTCUSDT", DAY) == []
+    write_deriv_day(
+        deriv_points(), tmp_path, venue="bybit", instrument="BTCUSDT", day=DAY, sources=API
+    )
+    assert len(read_deriv_range(tmp_path, "bybit", "BTCUSDT", DAY, date(2025, 7, 3))) == 3
+
+
+def test_gap_marks_are_kept_and_read_back(tmp_path: Path) -> None:
+    mark = GapMark(
+        "bybit",
+        "BTCUSDT",
+        FLOW,
+        midnight_ns(DAY),
+        midnight_ns(DAY) + DAY_NS,
+        "archive unavailable: HTTP 404",
+    )
+    record_gap(tmp_path, mark)
+    assert read_gaps(tmp_path, "bybit", "BTCUSDT") == [mark]
+    with pytest.raises(ValueError, match="reason"):
+        GapMark("bybit", "BTCUSDT", FLOW, 1, 2, " ")

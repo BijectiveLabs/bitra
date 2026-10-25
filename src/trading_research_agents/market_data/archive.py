@@ -26,7 +26,8 @@ from trading_research_agents.market_data.bars import (
     MarketDataError,
     quiet_bar,
 )
-from trading_research_agents.market_data.days import DAY_NS, NS_PER_MINUTE, midnight_ns
+from trading_research_agents.market_data.days import DAY_NS, NS_PER_MINUTE, day_of, midnight_ns
+from trading_research_agents.market_data.deriv import DerivPoint, Series
 from trading_research_agents.records import sha256_of, write_json
 
 try:
@@ -372,3 +373,95 @@ def _write_table(table: Any, path: Path) -> None:
         part.unlink(missing_ok=True)
         raise
     os.replace(part, path)
+
+
+def write_deriv_day(
+    points: Sequence[DerivPoint],
+    root: Path,
+    *,
+    venue: str,
+    instrument: str,
+    day: date,
+    sources: Sequence[SourceFile],
+) -> DayManifest:
+    """One UTC day of derivatives points, sorted; an empty day is written, since asking and
+    hearing nothing is itself a fact.
+
+    Values are stored as their exact decimal text: a funding rate, an open interest and a mark
+    price have scales no single decimal column fits without rounding one of them.
+    """
+    outside = [p for p in points if day_of(p.as_of_ns) != day]
+    if outside:
+        raise ArchiveError(f"{len(outside)} point(s) fall outside {day}")
+    arrow, _ = _arrow()
+    ordered = sorted(points, key=lambda p: (p.series.value, p.as_of_ns, p.received_ns))
+    stamp = arrow.timestamp("ns", tz="UTC")
+    schema = arrow.schema(
+        [
+            arrow.field("series", arrow.string(), nullable=False),
+            arrow.field("as_of", stamp, nullable=False),
+            arrow.field("received", stamp, nullable=False),
+            arrow.field("value", arrow.string(), nullable=False),
+            arrow.field("detail", arrow.string(), nullable=False),
+        ],
+        metadata={META + "schema": SCHEMA_VERSION, META + "stream": DERIV},
+    )
+    columns = {
+        "series": [p.series.value for p in ordered],
+        "as_of": [p.as_of_ns for p in ordered],
+        "received": [p.received_ns for p in ordered],
+        "value": [str(p.value) for p in ordered],
+        "detail": [
+            json.dumps(dict(p.detail), sort_keys=True, separators=(",", ":")) for p in ordered
+        ],
+    }
+    path = day_file(root, venue, instrument, DERIV, day)
+    _write_table(arrow.table(columns, schema=schema), path)
+    manifest = DayManifest(
+        stream=DERIV,
+        venue=venue,
+        instrument=instrument,
+        day=day,
+        rows=len(ordered),
+        sha256=sha256_of(path),
+        partial_minutes=0,
+        missing_minutes=0,
+        sources=tuple(sources),
+    )
+    write_json(manifest_file(path), manifest.record())
+    return manifest
+
+
+def read_deriv_day(root: Path, venue: str, instrument: str, day: date) -> list[DerivPoint]:
+    path = day_file(root, venue, instrument, DERIV, day)
+    if not path.is_file():
+        return []
+    verified(path)
+    arrow, parquet = _arrow()
+    table = parquet.read_table(path)
+    as_of = table.column("as_of").cast(arrow.int64()).to_pylist()
+    received = table.column("received").cast(arrow.int64()).to_pylist()
+    series = table.column("series").to_pylist()
+    values = table.column("value").to_pylist()
+    details = table.column("detail").to_pylist()
+    return [
+        DerivPoint(
+            Series(series[i]),
+            as_of[i],
+            received[i],
+            Decimal(values[i]),
+            tuple(sorted(json.loads(details[i]).items())),
+        )
+        for i in range(len(as_of))
+    ]
+
+
+def read_deriv_range(
+    root: Path, venue: str, instrument: str, start: date, end: date
+) -> list[DerivPoint]:
+    out: list[DerivPoint] = []
+    day = start
+    while day <= end:
+        out.extend(read_deriv_day(root, venue, instrument, day))
+        day += timedelta(days=1)
+    return out

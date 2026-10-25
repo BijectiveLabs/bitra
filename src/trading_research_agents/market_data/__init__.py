@@ -31,6 +31,7 @@ from trading_research_agents.market_data.deriv import (
     Unknown,
     detail_of,
 )
+from trading_research_agents.market_data.gaps import GapMark
 from trading_research_agents.market_data.resample import resample
 
 __all__ = [
@@ -42,6 +43,7 @@ __all__ = [
     "DerivPoint",
     "FlowBar",
     "FlowBarBuilder",
+    "GapMark",
     "GapState",
     "Known",
     "MarketDataError",
