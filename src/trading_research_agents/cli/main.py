@@ -59,6 +59,7 @@ from trading_research_agents.chain.validation import to_entry as validation_entr
 from trading_research_agents.chain.validation import to_record as validation_record
 from trading_research_agents.cli import console, shutdown
 from trading_research_agents.cli.console import HISTORY_FILE
+from trading_research_agents.cli.market import add_bars_command, data_bars, verify_market
 from trading_research_agents.data import (
     NORMALISER_VERSION,
     ArchiveError,
@@ -205,6 +206,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-gap", type=parse_duration, default=None, help="default: [data].max_gap or 5m"
     )
     get_cmd.add_argument("--json", action="store_true")
+    add_bars_command(data, venues)
 
     pull_cmd = data.add_parser(
         "pull", help="one snapshot of live data through the chains in data.toml"
@@ -658,6 +660,12 @@ def build_parser() -> argparse.ArgumentParser:
         "verify", help="every cycle: files against their hashes, briefs against their inputs"
     )
     verify_cmd.add_argument("--days", type=int, default=None, help="only the last N days")
+    verify_cmd.add_argument(
+        "--market",
+        type=Path,
+        default=None,
+        help="check the market archive under this data directory instead",
+    )
     prune_cmd = runs.add_parser(
         "prune", help="remove cycle directories older than --keep; the index and logs stay"
     )
@@ -2440,6 +2448,10 @@ def show_universe(args: argparse.Namespace) -> int:
 
 def runs_verify(args: argparse.Namespace) -> int:
     """Whether the desk's records are what it wrote, and its briefs what its inputs give."""
+    if args.market is not None:
+        payload, lines, code = verify_market(args.market)
+        emit(payload, args.json, lines)
+        return code
     from trading_research_agents.agents.verify import verify_runs
 
     found = verify_runs(args.out or Path("runs") / "cycles", days=args.days)
@@ -5932,6 +5944,13 @@ def data_get(args: argparse.Namespace) -> int:
     return CLEARED
 
 
+def data_bars_command(args: argparse.Namespace) -> int:
+    """Flow bars and derivatives history for a range of days, into the market archive."""
+    payload, lines, code = data_bars(args, fetch=data_get)
+    emit(payload, args.json, lines)
+    return code
+
+
 def data_pull(args: argparse.Namespace) -> int:
     """One snapshot: walk each declared chain once, write what answered and what did not."""
     from trading_research_agents.data.sources import load_data_config
@@ -6365,6 +6384,7 @@ HANDLERS = {
     ("data", "audit"): data_audit,
     ("data", "funding"): data_funding,
     ("data", "get"): data_get,
+    ("data", "bars"): data_bars_command,
     ("data", "pull"): data_pull,
     ("check", "check"): check_project,
     ("mandate", "mandate"): show_mandate,

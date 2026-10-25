@@ -52,6 +52,7 @@ PLUGIN_DIRS = {
     SRC / "data" / "sources",
     SRC / "trading" / "feeds",
     SRC / "trading" / "venues",
+    SRC / "market_data" / "venues",
 }
 TEMPLATES = SRC / "templates"
 EXAMPLES = SRC.parent.parent / "examples"
