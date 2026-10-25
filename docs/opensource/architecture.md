@@ -21,8 +21,6 @@ trading_research_agents/
   envelope/    operator parameters: fees per channel, latency, venue access     depends on nothing
   data/        any trade data to Parquet, dataset audit, manifest; venue
                archive plugins in data/venues, column maps for the rest      -> ledger, envelope
-  market_data/ one-minute flow bars from archives, derivatives history, gap
-               marks, the verified day archive; ccxt only in market_data/venues -> data
   chain/       falsification chain, layers 0 to 5                               -> ledger, envelope, data
   execution/   cost identity, fills after latency, trade-through matching,
                fill probability, markout                                        -> ledger, envelope, data, chain
@@ -31,13 +29,20 @@ trading_research_agents/
   trading/     the live feed through ccxt in trading/feeds, simulated venue, the
                live venue through ccxt in trading/venues, controls, canary caps,
                ladder, the runtime                                                     -> everything above
-  llm/         language-model providers, fallback chains, usage ledger        depends on nothing
+  llm/         language-model providers, fallback chains, usage ledger, response
+               cache                                                            depends on nothing
   store/       snapshots and cycle directories                                  -> everything above, llm
   surface/     the gates as callable tools, read tools and tightening actions
                (listed on the MCP page); shared by mcp and agents                -> everything above
   agents/      the research roles at layers 0, 2 and 3; the session roles; the
                cycle and its analysts, validators and screener                  -> everything above, llm, store, surface
   mcp/         the gates as MCP tools                                            -> everything except agent
+  market_data/ one-minute flow bars from archives, derivatives history, gap
+               marks, the verified day archive; ccxt only in market_data/venues -> data
+  features/    figures computed at a bar's close from what was known then:
+               price, path, order flow, derivatives, cross-asset                -> market_data, execution
+  evaluation/  views, triple-barrier settlement with the desk's costs,
+               baselines, the arena and its records                             -> features, market_data, data, envelope, execution
   cli/         the `tra` command                                                 -> everything
 ```
 

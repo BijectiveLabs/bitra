@@ -13,6 +13,16 @@ All notable changes to this project are recorded here. The format follows
   (funding, open interest, mark, index, long/short) beside them, in a day archive under
   `data/market/` where every file is checked against its manifest.
 - `tra runs verify --market`: every market day file against its manifest.
+- `tra arena`: rows replayed over the market archive with one clock, entered at the next minute's
+  open, settled on one-minute bars by take, stop or time limit, net of the channel's fees, declared
+  spread and slippage, and the funding measured over each hold; reported beside `buy_hold`,
+  `momentum`, `fade` and a seeded `random` null, with day-resampled intervals, coverage, and a
+  byte-stable `arena.json`.
+- A feature library (`features/`): returns, volatility, ATR, the v1 path figures with identical
+  numbers, order flow, funding, basis, open interest and cross-asset figures, each absent with its
+  reason when its inputs are missing or stale.
+- A language-model response cache (`llm.cache`) with record, replay and off; replay never calls a
+  model.
 
 ### Fixed
 

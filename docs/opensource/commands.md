@@ -36,6 +36,7 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | `tra pause`, `tra pause --off` | hold every new entry while open positions keep their exits; lift the hold |
 | `tra kill`, `tra kill --off` | flatten and stop a running desk at its next pass; disarm |
 | `tra hindsight` | what the trades each gate refused would have done, beside the ones it let through |
+| `tra arena --instruments BTCUSDT,ETHUSDT --from 2025-07-01 --to 2025-09-30 --spread-bps 1 --slippage-bps 0` | every row replayed over the market archive and settled the same way ([The arena](/opensource/arena)) |
 | `tra sizing` | what the desk's own round trips support: the Kelly ceiling, the drawdown ahead, the excursions; changes nothing |
 | `tra backtest`, `tra paper`, `tra live` | replay, shadow, canary |
 
