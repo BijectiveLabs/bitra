@@ -13,6 +13,7 @@ from trading_research_agents.market_data.bars import (
     quiet_bar,
     worst,
 )
+from trading_research_agents.market_data.builder import FlowBarBuilder
 from trading_research_agents.market_data.days import (
     DAY_NS,
     NS_PER_MINUTE,
@@ -26,6 +27,7 @@ __all__ = [
     "NS_PER_MINUTE",
     "NS_PER_S",
     "FlowBar",
+    "FlowBarBuilder",
     "GapState",
     "MarketDataError",
     "day_of",
