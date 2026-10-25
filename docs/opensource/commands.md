@@ -44,6 +44,8 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | Command | What it does |
 |---|---|
 | `tra data get BTCUSDT 2025-01-01` | download a day, verify its checksum, audit it, write Parquet and funding |
+| `tra data bars BTCUSDT 2025-07-01 --to 2025-07-31` | one-minute flow bars from the venue archive and the market's derivatives history, into `data/market/` ([Market data](/opensource/market-data)) |
+| `tra runs verify --market data` | every market day file against its manifest |
 | `tra data audit export.csv --mapping mapping.toml` | your own CSV or Parquet, through the same audit ([Your own data](/opensource/your-data)) |
 | `tra data pull BTCUSDT` | one live snapshot through the chains in `data.toml` |
 | `tra sources show`, `tra sources pull` | where the reading analysts' series come from and how old they are; refresh them now |
