@@ -29,6 +29,8 @@ _ALLOWED: dict[str, set[str]] = {
     "data": {"ledger", "envelope"},
     # Bars are built from the trades the data layer reads, and nothing above them reaches down.
     "market_data": {"data"},
+    # Features read bars and derivatives, and the regime rule and ATR the execution gate owns.
+    "features": {"market_data", "execution"},
     "chain": {"ledger", "envelope", "data"},
     "execution": {"ledger", "envelope", "data", "chain"},
     "strategy": {"ledger", "envelope", "data", "chain", "execution"},
@@ -37,7 +39,7 @@ _ALLOWED: dict[str, set[str]] = {
     "surface": GATES,
     "agents": GATES | {"llm", "store", "surface"},
     "mcp": GATES | {"surface"},
-    "cli": GATES | {"llm", "store", "surface", "agents", "mcp", "market_data"},
+    "cli": GATES | {"llm", "store", "surface", "agents", "mcp", "market_data", "features"},
 }
 # `extras` is one function that words a missing optional dependency; it imports nothing either.
 BENEATH = {"records", "extras"}
