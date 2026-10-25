@@ -21,17 +21,35 @@ from trading_research_agents.market_data.days import (
     day_of,
     midnight_ns,
 )
+from trading_research_agents.market_data.deriv import (
+    LEVELS,
+    MAX_AGE_S,
+    DerivPoint,
+    Known,
+    Series,
+    Timeline,
+    Unknown,
+    detail_of,
+)
 from trading_research_agents.market_data.resample import resample
 
 __all__ = [
     "DAY_NS",
+    "LEVELS",
+    "MAX_AGE_S",
     "NS_PER_MINUTE",
     "NS_PER_S",
+    "DerivPoint",
     "FlowBar",
     "FlowBarBuilder",
     "GapState",
+    "Known",
     "MarketDataError",
+    "Series",
+    "Timeline",
+    "Unknown",
     "day_of",
+    "detail_of",
     "midnight_ns",
     "quiet_bar",
     "resample",
