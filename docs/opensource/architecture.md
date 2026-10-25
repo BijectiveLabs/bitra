@@ -21,6 +21,8 @@ trading_research_agents/
   envelope/    operator parameters: fees per channel, latency, venue access     depends on nothing
   data/        any trade data to Parquet, dataset audit, manifest; venue
                archive plugins in data/venues, column maps for the rest      -> ledger, envelope
+  market_data/ one-minute flow bars from archives, derivatives history, gap
+               marks, the verified day archive; ccxt only in market_data/venues -> data
   chain/       falsification chain, layers 0 to 5                               -> ledger, envelope, data
   execution/   cost identity, fills after latency, trade-through matching,
                fill probability, markout                                        -> ledger, envelope, data, chain
@@ -50,7 +52,8 @@ Rules, each enforced by a test in `tests/test_boundaries.py`:
 5. No class in the package implements `Strategy` or `FittedCore`. Decision cores live in
    [`examples/strategies/`](https://github.com/BijectiveLabs/bitra/blob/master/examples/strategies/) or in the operator's own package, and the package never imports
    an example.
-6. No module outside `data/venues/`, `trading/feeds/` and `trading/venues/` names a venue.
+6. No module outside `data/venues/`, `data/sources/`, `market_data/venues/`, `trading/feeds/` and
+   `trading/venues/` names a venue.
 7. `mcp` reaches everything except `agent`, and its tools only read.
 8. The only actions on `surface` tighten a limit, step the ladder down, or arm the kill
    switch. A role holding the surface holds nothing that loosens.

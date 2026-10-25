@@ -5,6 +5,10 @@ Layout read from the venue's own archive on 2026-09-12::
     timestamp,symbol,side,size,price,tickDirection,trdMatchID,grossValue,homeNotional,foreignNotional
     1735689600.0974,BTCUSDT,Sell,0.003,93530.00,ZeroMinusTick,e807b277-...,2.8059e+10,0.003,280.59
 
+The venue later republished its files with an eleventh column, `RPI`, which marks a trade
+against a Retail Price Improvement order (read from the file for 2025-07-01 on 2026-10-25). It is
+still a trade on the book, so both layouts are read and normalise the same way.
+
 The header is checked on every file. A venue that changes a column stops the pipeline here,
 with the header it actually sent, rather than producing a dataset that looks right.
 
@@ -43,6 +47,7 @@ HEADER = (
     "homeNotional",
     "foreignNotional",
 )
+LAYOUTS = (HEADER, (*HEADER, "RPI"))
 SIDES = {"Buy": Side.BUY, "Sell": Side.SELL}
 
 
@@ -110,12 +115,12 @@ class Bybit:
             header = tuple(h.strip() for h in next(reader))
         except StopIteration:
             raise ArchiveFormatError("bybit archive is empty; expected a header row") from None
-        if header != HEADER:
+        if header not in LAYOUTS:
             raise ArchiveFormatError(f"bybit header changed: got {header}")
         for number, row in enumerate(reader, start=2):
             raw = ",".join(row)
-            if len(row) != len(HEADER):
-                yield Rejection(number, f"expected {len(HEADER)} columns, got {len(row)}", raw)
+            if len(row) != len(header):
+                yield Rejection(number, f"expected {len(header)} columns, got {len(row)}", raw)
                 continue
             ts_text, symbol, side_text, size, price, _tick, match_id = row[:7]
             if symbol != instrument:

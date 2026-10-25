@@ -6,6 +6,20 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `tra data bars`: one-minute flow bars from a venue's trade archive, with the taker's side of
+  every trade, trade counts, large-trade volume and gap marks, and the market's derivatives history
+  (funding, open interest, mark, index, long/short) beside them, in a day archive under
+  `data/market/` where every file is checked against its manifest.
+- `tra runs verify --market`: every market day file against its manifest.
+
+### Fixed
+
+- `tra data get` on Bybit: the venue republished its trade archives with an eleventh column,
+  `RPI`, and every day was refused as a changed header. Both layouts are now read and give the
+  same trades.
+
 ## [0.10.2] - 2026-10-24
 
 ### Fixed
