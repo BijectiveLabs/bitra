@@ -53,7 +53,10 @@ the same whether it was resampled or built directly from the trades.
 A day's derivatives file holds every value that became known during that UTC day, so the candle
 of 23:59 belongs to the next day, the moment it closes. A value older than its limit is unknown,
 with the reason; it is never carried forward. A series a venue does not offer is reported as
-unsupported. Open interest is kept as ccxt reports it, with the unit it was measured in; what
+unsupported. If a series the venue does offer cannot be fetched, no derivatives day is written
+and the command exits 1, so a day missing one series never reads as a day the venue had nothing
+for. A day asked for after it ended is kept on the next run; one asked for while it was still
+running is asked again. Open interest is kept as ccxt reports it, with the unit it was measured in; what
 reads it uses changes, which do not depend on the unit.
 
 Derivatives history is backfilled for Bybit perpetuals. Binance's public archive is spot, which

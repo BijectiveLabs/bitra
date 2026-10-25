@@ -136,3 +136,38 @@ def test_verify_market_names_an_edited_day(tmp_path: Path) -> None:
     path.write_bytes(path.read_bytes() + b"x")
     payload, lines, code = market.verify_market(tmp_path)
     assert code == 1 and any("differs" in line for line in lines)
+
+
+class Refusing(Venue):
+    def fetch_funding_rate_history(
+        self, symbol: str, since: int | None = None, limit: int | None = None
+    ) -> list[dict[str, Any]]:
+        raise ConnectionError("reset by peer")
+
+
+def test_a_failed_series_writes_no_derivatives_day(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(market, "build", lambda venue, config: Refusing())
+    payload, lines, code = market.data_bars(args_for(tmp_path), fetch=fake_fetch(tmp_path))
+    assert code == 1 and payload["derivatives"]["funding"].startswith("failed")
+    assert not day_file(tmp_path, "bybit", "BTCUSDT", DERIV, date(2025, 7, 1)).exists()
+    assert any("reset by peer" in line for line in lines)
+
+
+def test_a_rerun_keeps_a_complete_derivatives_day(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    asked: list[str] = []
+
+    def counted(venue: str, config: Any) -> Venue:
+        asked.append(venue)
+        return Venue()
+
+    monkeypatch.setattr(market, "build", counted)
+    market.data_bars(args_for(tmp_path), fetch=fake_fetch(tmp_path))
+    path = day_file(tmp_path, "bybit", "BTCUSDT", DERIV, date(2025, 7, 1))
+    first = path.read_bytes()
+    payload, _, code = market.data_bars(args_for(tmp_path), fetch=fake_fetch(tmp_path))
+    assert code == 0 and path.read_bytes() == first and len(asked) == 1
+    assert payload["derivatives"] == {"kept": "1 day(s) already complete"}

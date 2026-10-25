@@ -29,6 +29,7 @@ from trading_research_agents.market_data.archive import (
     ArchiveError,
     SourceFile,
     day_file,
+    read_deriv_day,
     verified,
     verify_archive,
     write_deriv_day,
@@ -247,28 +248,49 @@ def _backfill(args: argparse.Namespace, venue: str, days: list[date]) -> dict[st
     ccxt_id = DERIV_VENUES.get(venue)
     if ccxt_id is None:
         return {"skipped": f"the {venue} archive is not a perpetual market; nothing to backfill"}
+    wanted = [d for d in days if not _deriv_complete(args, venue, d)]
+    kept = len(days) - len(wanted)
+    report = {"kept": f"{kept} day(s) already complete"} if kept else {}
+    if not wanted:
+        return report
     # Public data only: no key, and ccxt's own limiter under this process's budget.
     client = build(ccxt_id, {"enableRateLimit": True})
     if client is None:
         why = f"ccxt is not installed or has no venue named {ccxt_id!r}; {install_hint('ccxt')}"
-        return {"skipped": why}
+        return {**report, "skipped": why}
     try:
         symbol = _symbol(client, args.instrument)
     except (ResolveError, MarketDataError) as exc:
-        return {"skipped": str(exc)}
+        return {**report, "skipped": str(exc)}
     filler = CcxtBackfill(client, budget=budget_for(client))
-    start_ms = midnight_ns(days[0]) // 1_000_000
-    end_ms = (midnight_ns(days[-1]) + DAY_NS) // 1_000_000 - 1
-    by_day: dict[date, list[DerivPoint]] = {d: [] for d in days}
-    report: dict[str, str] = {}
+    start_ms = midnight_ns(wanted[0]) // 1_000_000
+    end_ms = (midnight_ns(wanted[-1]) + DAY_NS) // 1_000_000 - 1
+    by_day: dict[date, list[DerivPoint]] = {d: [] for d in wanted}
     for series in LEVELS:
         report[series.value] = _one_series(filler, series, symbol, start_ms, end_ms, by_day)
+    if any(said.startswith("failed") for said in report.values()):
+        # A day without one of its series would read as a day the venue had nothing for.
+        return report
     sources = (SourceFile(f"ccxt:{ccxt_id}", None),)
     for day, points in by_day.items():
         write_deriv_day(
             points, args.out, venue=venue, instrument=args.instrument, day=day, sources=sources
         )
     return report
+
+
+def _deriv_complete(args: argparse.Namespace, venue: str, day: date) -> bool:
+    """Whether the day's derivatives were asked for, verified, after the day had ended.
+
+    A day asked for while it was still running holds only its first hours, and a day the venue
+    answered with nothing is cheap to ask again; either is asked again.
+    """
+    try:
+        points = read_deriv_day(args.out, venue, args.instrument, day)
+    except ArchiveError:
+        return False
+    end = midnight_ns(day) + DAY_NS
+    return bool(points) and min(p.received_ns for p in points) >= end
 
 
 def _one_series(
