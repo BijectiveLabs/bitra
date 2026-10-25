@@ -27,6 +27,8 @@ _ALLOWED: dict[str, set[str]] = {
     # The model layer sits beside the gates, not above them: it knows nothing about markets.
     "llm": set(),
     "data": {"ledger", "envelope"},
+    # Bars are built from the trades the data layer reads, and nothing above them reaches down.
+    "market_data": {"data"},
     "chain": {"ledger", "envelope", "data"},
     "execution": {"ledger", "envelope", "data", "chain"},
     "strategy": {"ledger", "envelope", "data", "chain", "execution"},
@@ -35,7 +37,7 @@ _ALLOWED: dict[str, set[str]] = {
     "surface": GATES,
     "agents": GATES | {"llm", "store", "surface"},
     "mcp": GATES | {"surface"},
-    "cli": GATES | {"llm", "store", "surface", "agents", "mcp"},
+    "cli": GATES | {"llm", "store", "surface", "agents", "mcp", "market_data"},
 }
 # `extras` is one function that words a missing optional dependency; it imports nothing either.
 BENEATH = {"records", "extras"}
