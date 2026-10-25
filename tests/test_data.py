@@ -70,6 +70,19 @@ def test_bybit_rows_normalise_to_exact_decimals_and_nanoseconds() -> None:
     assert first.seq is None
 
 
+def test_bybit_reads_the_layout_with_the_rpi_column() -> None:
+    # The venue republished its archive with an RPI column, read from the file for 2025-07-01
+    # on 2026-10-25; a row carries one more field and normalises to the same trade.
+    header = BYBIT_HEADER + ",RPI"
+    rows = [row + ",0" for row in BYBIT_ROWS]
+    out = list(bybit_trades([header, *rows], instrument="BTCUSDT"))
+    assert trades(out) == trades(
+        list(bybit_trades([BYBIT_HEADER, *BYBIT_ROWS], instrument="BTCUSDT"))
+    )
+    short = list(bybit_trades([header, BYBIT_ROWS[0]], instrument="BTCUSDT"))
+    assert isinstance(short[0], Rejection) and "expected 11 columns" in short[0].reason
+
+
 def test_bybit_header_drift_stops_the_file_not_the_row() -> None:
     changed = BYBIT_HEADER.replace("trdMatchID", "matchId")
     with pytest.raises(ArchiveFormatError, match="header changed"):
