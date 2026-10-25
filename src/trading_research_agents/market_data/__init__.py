@@ -21,6 +21,7 @@ from trading_research_agents.market_data.days import (
     day_of,
     midnight_ns,
 )
+from trading_research_agents.market_data.resample import resample
 
 __all__ = [
     "DAY_NS",
@@ -33,5 +34,6 @@ __all__ = [
     "day_of",
     "midnight_ns",
     "quiet_bar",
+    "resample",
     "worst",
 ]
