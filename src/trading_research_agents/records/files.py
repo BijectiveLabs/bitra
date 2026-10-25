@@ -6,7 +6,7 @@ import gzip
 import hashlib
 import json
 import os
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -61,6 +61,14 @@ def write_json(path: Path, payload: Any, *, durable: bool = False) -> Path:
     """The whole file or none of it: written beside, then renamed over the old one."""
     text = json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n"
     return _replace(path, text.encode("utf-8"), durable=durable)
+
+
+def write_lines(path: Path, rows: Iterable[Mapping[str, Any]], *, durable: bool = False) -> Path:
+    """A whole JSON-lines file, written beside and renamed over the old one."""
+    body = b"".join(
+        json.dumps(dict(row), sort_keys=True, default=str).encode("utf-8") + b"\n" for row in rows
+    )
+    return _replace(path, body, durable=durable)
 
 
 def write_gzip_json(path: Path, payload: Any) -> Path:

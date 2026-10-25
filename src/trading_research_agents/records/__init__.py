@@ -8,6 +8,7 @@ from trading_research_agents.records.files import (
     sha256_of,
     write_gzip_json,
     write_json,
+    write_lines,
 )
 from trading_research_agents.records.index import (
     INDEX_DIR,
@@ -32,4 +33,5 @@ __all__ = [
     "sha256_of",
     "write_gzip_json",
     "write_json",
+    "write_lines",
 ]
