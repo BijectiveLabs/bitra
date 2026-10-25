@@ -5,6 +5,11 @@ A figure whose inputs are missing, stale or unseen is `Absent` with the reason.
 
 from __future__ import annotations
 
+from trading_research_agents.features.catalog import (
+    DEFAULT_FEATURES,
+    MAX_WINDOW_BARS,
+    compute_features,
+)
 from trading_research_agents.features.core import (
     Absent,
     Feature,
@@ -16,6 +21,8 @@ from trading_research_agents.features.core import (
 )
 
 __all__ = [
+    "DEFAULT_FEATURES",
+    "MAX_WINDOW_BARS",
     "Absent",
     "Feature",
     "FeatureSpec",
@@ -23,4 +30,5 @@ __all__ = [
     "FeatureVector",
     "Inputs",
     "LookAheadError",
+    "compute_features",
 ]
