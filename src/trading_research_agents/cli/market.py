@@ -89,7 +89,7 @@ class _Run:
 
 def data_bars(args: argparse.Namespace, *, fetch: Fetch) -> Report:
     """Build every requested day that is not already in the archive as it would be built now."""
-    venue_name = args.venue or _venue_from(args.config)
+    venue_name = args.venue or venue_from(args.config)
     days = _days(args.start, args.end or args.start)
     venue = archive_venue(venue_name)
     run = _Run()
@@ -123,7 +123,7 @@ def verify_market(root: Path) -> Report:
     return payload, lines, 1 if check.problems else 0
 
 
-def _venue_from(config: Path) -> str:
+def venue_from(config: Path) -> str:
     if config.is_file():
         raw = tomllib.loads(config.read_text(encoding="utf-8"))
         named = str(raw.get("run", {}).get("venue_key", "")).partition("/")[0]
