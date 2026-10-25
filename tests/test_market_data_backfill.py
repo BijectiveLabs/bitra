@@ -34,11 +34,18 @@ class RateLimitExceeded(Exception):  # noqa: N818
 
 
 class FakeVenue:
-    """Answers from fixed rows the way a venue does: from `since`, at most `limit` of them."""
+    """Answers from fixed rows the way a venue does: from `since`, at most `limit` of them.
 
-    def __init__(self, rows: list[dict[str, Any]], *, ignore_since: bool = False) -> None:
+    Some venues read `since` as "after": Bybit's funding and open interest history do, its mark
+    candles do not (asked through ccxt 4.5.85 on 2026-10-25).
+    """
+
+    def __init__(
+        self, rows: list[dict[str, Any]], *, ignore_since: bool = False, exclusive: bool = False
+    ) -> None:
         self.rows = rows
         self.ignore_since = ignore_since
+        self.exclusive = exclusive
         self.calls: list[int | None] = []
         self.fail_first: Exception | None = None
         self.has = {
@@ -55,11 +62,8 @@ class FakeVenue:
         if self.fail_first is not None:
             failure, self.fail_first = self.fail_first, None
             raise failure
-        rows = (
-            self.rows
-            if self.ignore_since
-            else [r for r in self.rows if r["timestamp"] >= (since or 0)]
-        )
+        floor = (since or 0) + (1 if self.exclusive else 0)
+        rows = self.rows if self.ignore_since else [r for r in self.rows if r["timestamp"] >= floor]
         return rows[: limit or len(rows)]
 
     def fetch_funding_rate_history(
@@ -95,7 +99,7 @@ def test_funding_is_paged_forward_and_exact() -> None:
     assert [p.value for p in found.points] == [Decimal(str(0.0001 * (i + 1))) for i in range(5)]
     assert found.pages >= 3 and found.supported
     forward = [since or 0 for since in venue.calls]
-    assert venue.calls[0] == 0 and all(b > a for a, b in pairwise(forward))
+    assert venue.calls[0] == -1 and all(b > a for a, b in pairwise(forward))
 
 
 def test_open_interest_is_known_at_the_end_of_its_bucket() -> None:
@@ -111,6 +115,26 @@ def test_a_mark_candle_is_known_at_its_close() -> None:
     got, _ = filler(venue)
     (point,) = got.history(Series.MARK, "X", 0, 2 * H).points
     assert point.as_of_ns == (H + 60_000) * 1_000_000 and point.value == Decimal("93530.5")
+
+
+def test_a_window_holds_what_became_known_inside_it() -> None:
+    # The candle of the minute before the window closes at the window's first instant, and the
+    # window's last candle closes after it; a day file keyed by known time needs the first only.
+    minute = 60_000
+    venue = FakeVenue(
+        [{"timestamp": 10 * H - minute, "close": 1}, {"timestamp": 11 * H - minute, "close": 2}]
+    )
+    got, _ = filler(venue, page=10)
+    found = got.history(Series.MARK, "X", 10 * H, 11 * H - 1)
+    assert [p.as_of_ns for p in found.points] == [10 * H * 1_000_000]
+    assert venue.calls[0] == 10 * H - minute - 1
+
+
+def test_a_venue_that_reads_since_as_after_still_gives_the_first_instant() -> None:
+    venue = FakeVenue(funding_rows(3), exclusive=True)
+    got, _ = filler(venue)
+    found = got.history(Series.FUNDING, "X", H, 100 * H)
+    assert found.points[0].as_of_ns == H * 1_000_000 and len(found.points) == 3
 
 
 def test_a_venue_that_ignores_since_does_not_loop() -> None:

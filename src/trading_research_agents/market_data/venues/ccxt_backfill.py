@@ -31,6 +31,9 @@ SUPPORT: Mapping[Series, str] = {
     Series.INDEX: "fetchIndexOHLCV",
     Series.LONG_SHORT: "fetchLongShortRatioHistory",
 }
+# The archive venues whose trades are a perpetual's, and the ccxt name of that market's venue.
+# Binance's public archive is spot, which has no funding or open interest to backfill.
+DERIV_VENUES: Mapping[str, str] = {"bybit": "bybit"}
 TIMEFRAME_MS = {"5m": 300_000, "15m": 900_000, "30m": 1_800_000, "1h": 3_600_000, "1d": 86_400_000}
 
 # One row as the pages read it: the venue's row time, the time the value was known, the value or
@@ -77,13 +80,20 @@ class CcxtBackfill:
     def history(
         self, series: Series, symbol: str, start_ms: int, end_ms: int, *, timeframe: str = "5m"
     ) -> Backfilled:
-        """Every point of `series` whose row time lies in [start_ms, end_ms], oldest first."""
+        """Every point of `series` that became known in [start_ms, end_ms], oldest first.
+
+        A bucket is known at its end, so the window is asked from one bucket before its start:
+        otherwise the bucket that closes on the first instant would belong to no window at all.
+        It is asked from one millisecond earlier still, because some venues read `since` as
+        "after"; anything extra that arrives is outside the window and left out.
+        """
         if end_ms < start_ms:
             raise MarketDataError("the end is before the start")
         if not supported_series(self.client).get(series, False):
             return Backfilled(series, (), 0, 0, supported=False)
         fetch = self._fetcher(series, symbol, timeframe)
-        rows, pages, dropped = self._pages(fetch, start_ms, end_ms)
+        lead_ms = _lead_ms(series, timeframe)
+        rows, pages, dropped = self._pages(fetch, start_ms - lead_ms - 1, start_ms, end_ms)
         received = self.clock()
         points = tuple(
             DerivPoint(series, as_of * NS_PER_MS, received, value, detail)
@@ -115,15 +125,17 @@ class CcxtBackfill:
             for r in c.fetch_long_short_ratio_history(symbol, timeframe, since, n)
         ]
 
-    def _pages(self, fetch: Fetch, start_ms: int, end_ms: int) -> tuple[list[Row], int, int]:
+    def _pages(
+        self, fetch: Fetch, since_ms: int, start_ms: int, end_ms: int
+    ) -> tuple[list[Row], int, int]:
         found: dict[int, Row] = {}
         dropped = 0
-        cursor = start_ms
+        cursor = since_ms
         for pages in range(1, MAX_PAGES + 1):
             rows = self._call(fetch, cursor)
             stamps = [row[0] for row in rows]
             for row in rows:
-                if not start_ms <= row[0] <= end_ms:
+                if not start_ms <= row[1] <= end_ms:
                     continue
                 if row[2] is None:
                     dropped += 1
@@ -149,6 +161,15 @@ class CcxtBackfill:
                     continue
                 break
         raise MarketDataError(f"{failure.__class__.__name__}: {failure}") from failure
+
+
+def _lead_ms(series: Series, timeframe: str) -> int:
+    """How long after its row time a value of `series` becomes known."""
+    if series is Series.FUNDING:
+        return 0
+    if series in (Series.MARK, Series.INDEX):
+        return CANDLE_MS
+    return TIMEFRAME_MS[timeframe]
 
 
 def _rate_limited(exc: Exception) -> bool:
