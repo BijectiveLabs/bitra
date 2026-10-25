@@ -7,6 +7,15 @@ the roles that use them. This package imports no other part of the package; the 
 always downward.
 """
 
+from trading_research_agents.llm.cache import (
+    CachedCompleter,
+    CacheError,
+    CacheMissError,
+    CacheMode,
+    CallIdentity,
+    ResponseCache,
+    Sampling,
+)
 from trading_research_agents.llm.completer import Completer, Completion, FakeCompleter
 from trading_research_agents.llm.form import FormError, parse_object
 from trading_research_agents.llm.providers import (
@@ -38,6 +47,11 @@ __all__ = [
     "AnthropicCompleter",
     "BudgetLimits",
     "BudgetSpentError",
+    "CacheError",
+    "CacheMissError",
+    "CacheMode",
+    "CachedCompleter",
+    "CallIdentity",
     "CallOptions",
     "Completer",
     "Completion",
@@ -50,6 +64,8 @@ __all__ = [
     "Pricing",
     "Provider",
     "ProviderError",
+    "ResponseCache",
+    "Sampling",
     "UnknownProviderError",
     "UsageLedger",
     "UsageRecord",

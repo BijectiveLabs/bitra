@@ -73,6 +73,7 @@ const sidebar = [
     items: [
       { text: 'The data gate', link: '/opensource/data' },
       { text: 'Market data', link: '/opensource/market-data' },
+      { text: 'The arena', link: '/opensource/arena' },
       { text: 'The trading agent', link: '/opensource/trading' },
       { text: 'The live tier', link: '/opensource/live' },
       { text: 'The falsification chain', link: '/opensource/chain' },

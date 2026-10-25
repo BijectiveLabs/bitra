@@ -58,6 +58,7 @@ from trading_research_agents.chain.requirements import to_entry as requirements_
 from trading_research_agents.chain.validation import to_entry as validation_entry
 from trading_research_agents.chain.validation import to_record as validation_record
 from trading_research_agents.cli import console, shutdown
+from trading_research_agents.cli.arena import add_arena_command, arena_report
 from trading_research_agents.cli.console import HISTORY_FILE
 from trading_research_agents.cli.market import add_bars_command, data_bars, verify_market
 from trading_research_agents.data import (
@@ -630,6 +631,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     hindsight_cmd.add_argument("--days", type=int, default=None, help="only the last N days")
     hindsight_cmd.add_argument("--json", action="store_true")
+    add_arena_command(top)
 
     sizing_cmd = top.add_parser(
         "sizing",
@@ -1962,6 +1964,13 @@ def _switch(args: argparse.Namespace, switch: Path, name: str, effect: str) -> i
         [f"{name}: set ({switch}); {effect}", f"lift it with `tra {args.command} --off`"],
     )
     return CLEARED
+
+
+def arena_command(args: argparse.Namespace) -> int:
+    """Every row replayed over the market archive, settled the same way, side by side."""
+    payload, lines, code = arena_report(args)
+    emit(payload, args.json, lines)
+    return code
 
 
 def hindsight_command(args: argparse.Namespace) -> int:
@@ -6398,6 +6407,7 @@ HANDLERS = {
     ("models", "models"): show_models,
     ("audit", "audit"): run_audit_command,
     ("hindsight", "hindsight"): hindsight_command,
+    ("arena", "arena"): arena_command,
     ("sizing", "sizing"): sizing_command,
     ("pause", "pause"): pause_command,
     ("kill", "kill"): kill_command,
