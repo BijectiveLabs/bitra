@@ -188,3 +188,15 @@ def test_splits_report_each_test_window(archive: Path) -> None:
         "fade",
         "random",
     }
+
+
+def test_a_different_archive_is_a_different_run(archive: Path, tmp_path: Path) -> None:
+    root = tmp_path / "archive"
+    shutil.copytree(archive, root)
+    gone = day_file(root, "bybit", "BTCUSDT", FLOW, date(2025, 7, 10))
+    gone.unlink()
+    manifest_file(gone).unlink()
+    first = write_arena(run_arena(config(), root=archive), tmp_path / "out")
+    second = write_arena(run_arena(config(), root=root), tmp_path / "out")
+    assert first != second
+    assert (first / "arena.json").is_file() and (second / "arena.json").is_file()

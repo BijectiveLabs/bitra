@@ -101,7 +101,8 @@ runs/arena/<id>/ideas.jsonl   every idea, its settlement and each cost component
 runs/arena/<id>/run.json      when it ran
 ```
 
-`<id>` is a hash of the configuration. The same archive, configuration and seed give the same
+`<id>` is a hash of the configuration and of the archive files read, so a run on a changed
+archive never overwrites an earlier one. The same archive, configuration and seed give the same
 `arena.json`, byte for byte; the time lives in `run.json` only. `--fit-days` and `--test-days` add
 walk-forward test windows, each after an embargo of the longest hold, to the report.
 
