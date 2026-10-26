@@ -110,6 +110,7 @@ class FlowTrack:
         large_trade_quote: Decimal | None,
         grace_ns: int,
         close_after_ns: int,
+        hold_ns: int,
         start_ns: int,
     ) -> None:
         self.root = root
@@ -119,7 +120,9 @@ class FlowTrack:
         self.large_trade_quote = large_trade_quote
         self.grace_ns = grace_ns
         self.close_after_ns = close_after_ns
+        self.hold_ns = hold_ns
         self.started_ns = start_ns
+        self.stopped_ns: int | None = None
         self.builder = FlowBarBuilder(
             venue=venue,
             instrument=instrument,
@@ -143,22 +146,22 @@ class FlowTrack:
 
     def finish(self, now_ns: int) -> None:
         """Close every minute up to the one `now_ns` falls in, that one as partial."""
-        self._keep(self.builder.finish(now_ns - now_ns % M + M, gap=GapState.NONE), now_ns)
+        self.stopped_ns = now_ns
+        self._keep(self.builder.finish(now_ns - now_ns % M + M, gap=GapState.NONE))
         self._apply_late()
 
     def due(self, now_ns: int, *, everything: bool = False) -> list[int]:
-        return [
-            h
-            for h in sorted(self.hours)
-            if everything or h + HOUR_NS + self.close_after_ns <= now_ns
-        ]
+        return [h for h in sorted(self.hours) if everything or h + HOUR_NS + self.hold_ns <= now_ns]
 
     def write(self, hour_start: int) -> None:
         held = self.hours.pop(hour_start)
         bars = []
         for minute in range(hour_start, hour_start + HOUR_NS, M):
             bar = held.get(minute)
-            bars.append(bar or missing_minutes(self.venue, self.instrument, minute, 1)[0])
+            if bar is None:
+                bars.append(missing_minutes(self.venue, self.instrument, minute, 1)[0])
+            else:
+                bars.append(self._marked(bar))
         day, hour = hour_of(hour_start)
         path = part_file(self.root, self.venue, self.instrument, FLOW, day, hour)
         if path.is_file():
@@ -173,15 +176,15 @@ class FlowTrack:
             large_trade_quote=self.large_trade_quote,
         )
 
-    def _keep(self, closed: Sequence[FlowBar], stopped_ns: int | None = None) -> None:
+    def _keep(self, closed: Sequence[FlowBar]) -> None:
+        # Coverage is judged when the hour is written, not here: a silence can be noticed late.
         for bar in closed:
-            if bar.end_ns <= self.started_ns:
-                continue
-            marked = self._marked(bar, stopped_ns)
-            self.hours.setdefault(_hour_start(bar.start_ns), {})[bar.start_ns] = marked
+            if bar.end_ns > self.started_ns:
+                self.hours.setdefault(_hour_start(bar.start_ns), {})[bar.start_ns] = bar
 
-    def _marked(self, bar: FlowBar, stopped_ns: int | None) -> FlowBar:
+    def _marked(self, bar: FlowBar) -> FlowBar:
         seen = self.outages.cover(bar.start_ns, bar.end_ns)
+        stopped_ns = self.stopped_ns
         if bar.start_ns < self.started_ns or (stopped_ns is not None and bar.end_ns > stopped_ns):
             seen = worst((seen, GapState.PARTIAL))
         if seen is GapState.MISSING and bar.empty:
@@ -211,12 +214,20 @@ class BookTrack:
     """Book samples of one market into one-minute book bars and hour parts."""
 
     def __init__(
-        self, root: Path, venue: str, instrument: str, *, scales: Scales, start_ns: int
+        self,
+        root: Path,
+        venue: str,
+        instrument: str,
+        *,
+        scales: Scales,
+        hold_ns: int,
+        start_ns: int,
     ) -> None:
         self.root = root
         self.venue = venue
         self.instrument = instrument
         self.scales = scales
+        self.hold_ns = hold_ns
         self.started_ns = start_ns
         self.builder = BookBarBuilder(
             venue=venue, instrument=instrument, start_ns=start_ns - start_ns % M
@@ -234,12 +245,14 @@ class BookTrack:
         self._keep(self.builder.finish(now_ns - now_ns % M + M, gap=GapState.PARTIAL))
 
     def due(self, now_ns: int, *, everything: bool = False) -> list[int]:
-        return [h for h in sorted(self.hours) if everything or h + HOUR_NS <= now_ns]
+        return [h for h in sorted(self.hours) if everything or h + HOUR_NS + self.hold_ns <= now_ns]
 
     def write(self, hour_start: int) -> None:
         held = self.hours.pop(hour_start)
         bars = [
-            held.get(m) or missing_book(self.venue, self.instrument, m, 1)[0]
+            self._marked(held[m])
+            if m in held
+            else missing_book(self.venue, self.instrument, m, 1)[0]
             for m in range(hour_start, hour_start + HOUR_NS, M)
         ]
         day, hour = hour_of(hour_start)
@@ -251,15 +264,16 @@ class BookTrack:
 
     def _keep(self, closed: Sequence[BookBar]) -> None:
         for bar in closed:
-            if bar.end_ns <= self.started_ns:
-                continue
-            seen = self.outages.cover(bar.start_ns, bar.end_ns)
-            if bar.start_ns < self.started_ns:
-                seen = worst((seen, GapState.PARTIAL))
-            if seen is GapState.MISSING and bar.samples:
-                seen = GapState.PARTIAL
-            bar = replace(bar, gap=worst((bar.gap, seen)))
-            self.hours.setdefault(_hour_start(bar.start_ns), {})[bar.start_ns] = bar
+            if bar.end_ns > self.started_ns:
+                self.hours.setdefault(_hour_start(bar.start_ns), {})[bar.start_ns] = bar
+
+    def _marked(self, bar: BookBar) -> BookBar:
+        seen = self.outages.cover(bar.start_ns, bar.end_ns)
+        if bar.start_ns < self.started_ns:
+            seen = worst((seen, GapState.PARTIAL))
+        if seen is GapState.MISSING and bar.samples:
+            seen = GapState.PARTIAL
+        return replace(bar, gap=worst((bar.gap, seen)))
 
 
 class PointTrack:

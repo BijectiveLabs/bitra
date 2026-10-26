@@ -43,9 +43,13 @@ SKEW_MS = 1000
 # Derivatives points and headlines are kept open this long past their hour: a venue publishes an
 # open-interest bucket after it closes, and a poll can be late.
 POINT_GRACE_NS = 5 * 60 * NS_PER_S
+# Minutes are held this long past their hour before they are written: a connection that goes
+# silent is noticed only when its keepalive gives up (ccxt: up to 90 seconds), and the minutes it
+# missed are marked from where the silence began.
+HOLD_NS = 3 * 60 * NS_PER_S
 NS_PER_MS = 1_000_000
 
-__all__ = ["Recorder", "Scales"]
+__all__ = ["HOLD_NS", "Recorder", "Scales"]
 
 
 class Recorder:
@@ -75,13 +79,16 @@ class Recorder:
                 large_trade_quote=config.large_trade_quote.get(name),
                 grace_ns=grace,
                 close_after_ns=close_after,
+                hold_ns=HOLD_NS,
                 start_ns=now_ns,
             )
             for name in markets
             if "trades" in config.streams
         }
         self.books = {
-            name: BookTrack(root, self.venue, name, scales=scales[name], start_ns=now_ns)
+            name: BookTrack(
+                root, self.venue, name, scales=scales[name], hold_ns=HOLD_NS, start_ns=now_ns
+            )
             for name in markets
             if "book" in config.streams
         }
@@ -123,11 +130,23 @@ class Recorder:
         if log is not None:
             self.texts[feed].push(log.observe(events, now_ns=now_ns))
 
-    def on_disconnect(self, instrument: str, stream: str, at_ns: int, reason: str) -> None:
+    def on_disconnect(
+        self,
+        instrument: str,
+        stream: str,
+        since_ns: int,
+        reason: str,
+        *,
+        noticed_ns: int | None = None,
+    ) -> None:
+        """The stream is unseen from `since_ns`, its last message, though noticed only now."""
         for track in self._tracks_of(instrument, stream):
-            track.outages.open(at_ns)
+            track.outages.open(since_ns)
         self.outage_reasons[(instrument, stream)] = reason
-        self._event(at_ns, "disconnected", instrument=instrument, stream=stream, reason=reason)
+        fields: dict[str, Any] = {"instrument": instrument, "stream": stream, "reason": reason}
+        if noticed_ns is not None and noticed_ns != since_ns:
+            fields["silent_since"] = _iso(since_ns)
+        self._event(since_ns if noticed_ns is None else noticed_ns, "disconnected", **fields)
 
     def on_reconnect(self, instrument: str, stream: str, at_ns: int) -> None:
         started = None
@@ -275,6 +294,9 @@ class Recorder:
         return [(name, "trades") for name in self.flows] + [(name, "book") for name in self.books]
 
     def _event(self, at_ns: int, event: str, **fields: Any) -> None:
-        when = datetime.fromtimestamp(at_ns / NS_PER_S, tz=UTC).isoformat()
-        row = {"at": when, "at_ns": at_ns, "event": event, "venue": self.venue, **fields}
+        row = {"at": _iso(at_ns), "at_ns": at_ns, "event": event, "venue": self.venue, **fields}
         append_line(self.root / "market" / EVENTS, row)
+
+
+def _iso(at_ns: int) -> str:
+    return datetime.fromtimestamp(at_ns / NS_PER_S, tz=UTC).isoformat()

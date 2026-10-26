@@ -27,6 +27,7 @@ class Sink:
         self.samples: list[BookSample] = []
         self.points: list[DerivPoint] = []
         self.calls: list[tuple[str, str, str]] = []
+        self.dropped_at: list[int] = []
         self.stopped = False
 
     def on_trades(self, instrument: str, trades: Iterable[Trade], received_ns: int) -> None:
@@ -41,8 +42,17 @@ class Sink:
     def on_text(self, feed: str, events: Iterable[Event], now_ns: int) -> None:
         return None
 
-    def on_disconnect(self, instrument: str, stream: str, at_ns: int, reason: str) -> None:
+    def on_disconnect(
+        self,
+        instrument: str,
+        stream: str,
+        since_ns: int,
+        reason: str,
+        *,
+        noticed_ns: int | None = None,
+    ) -> None:
         self.calls.append(("disconnect", stream, reason))
+        self.dropped_at.append(since_ns)
 
     def on_reconnect(self, instrument: str, stream: str, at_ns: int) -> None:
         self.calls.append(("reconnect", stream, ""))
@@ -164,6 +174,80 @@ def test_a_dropped_stream_reconnects_with_backoff_and_is_marked() -> None:
         ("reconnect", "trades", ""),
     ]
     assert 1.0 in clock.slept and 2.0 in clock.slept and len(sink.trades) == 1
+
+
+class KeepaliveError(Exception):
+    """What a keepalive raises once a connection has been silent past its limit."""
+
+
+def test_a_silent_connection_is_unseen_from_its_last_message_not_from_when_it_was_noticed() -> None:
+    client = FakePro()
+    clock = Clock()
+    client.clock = clock
+    sink = Sink()
+    stalls = 0
+    heard: list[int] = []
+
+    async def watch_trades(symbol: str) -> Any:
+        nonlocal stalls
+        await asyncio.sleep(0)
+        if not heard:
+            heard.append(clock.now)
+            return [row(1)]
+        if stalls == 0:
+            stalls += 1
+            # The connection says nothing for 45 seconds before the keepalive gives up on it.
+            clock.now += 45 * NS
+            raise KeepaliveError("ping-pong keepalive missing")
+        return []
+
+    client.watch_trades = watch_trades  # type: ignore[method-assign]
+    config = RecordConfig.from_table(
+        {"venue": "bybit", "instruments": ["BTCUSDT"], "streams": ["trades"]}
+    )
+    link = Link(
+        venue="bybit",
+        client=client,
+        recorder=sink,
+        config=config,
+        clock=clock,
+        sleep=clock.sleep,
+        jitter=lambda: 0.0,
+        stop_at_ns=START + 60 * NS,
+    )
+    asyncio.run(run_streams(link, [market_of(client, "BTCUSDT")]))
+    assert sink.dropped_at == heard
+
+
+def test_a_stream_that_never_answered_is_unseen_from_when_it_was_asked() -> None:
+    client = FakePro()
+    clock = Clock()
+    client.clock = clock
+    asked: list[int] = []
+
+    async def watch_trades(symbol: str) -> Any:
+        await asyncio.sleep(0)
+        asked.append(clock.now)
+        clock.now += 30 * NS
+        raise KeepaliveError("no answer")
+
+    client.watch_trades = watch_trades  # type: ignore[method-assign]
+    sink = Sink()
+    config = RecordConfig.from_table(
+        {"venue": "bybit", "instruments": ["BTCUSDT"], "streams": ["trades"]}
+    )
+    link = Link(
+        venue="bybit",
+        client=client,
+        recorder=sink,
+        config=config,
+        clock=clock,
+        sleep=clock.sleep,
+        jitter=lambda: 0.0,
+        stop_at_ns=START + 40 * NS,
+    )
+    asyncio.run(run_streams(link, [market_of(client, "BTCUSDT")]))
+    assert sink.dropped_at == asked[:1]
 
 
 def test_liquidations_are_asked_only_where_the_venue_streams_them() -> None:

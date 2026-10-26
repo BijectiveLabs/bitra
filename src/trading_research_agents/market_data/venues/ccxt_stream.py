@@ -53,7 +53,15 @@ class RecorderSink(Protocol):
     def on_book(self, instrument: str, sample: BookSample) -> None: ...
     def on_points(self, instrument: str, points: Iterable[DerivPoint]) -> None: ...
     def on_text(self, feed: str, events: Iterable[Event], now_ns: int) -> None: ...
-    def on_disconnect(self, instrument: str, stream: str, at_ns: int, reason: str) -> None: ...
+    def on_disconnect(
+        self,
+        instrument: str,
+        stream: str,
+        since_ns: int,
+        reason: str,
+        *,
+        noticed_ns: int | None = None,
+    ) -> None: ...
     def on_reconnect(self, instrument: str, stream: str, at_ns: int) -> None: ...
     def tick(self, now_ns: int) -> None: ...
     def stop(self, now_ns: int) -> None: ...
@@ -166,6 +174,9 @@ async def _watched(
     """One stream of one market: messages handed on, drops reported, reconnects backed off."""
     down = False
     wait = BACKOFF_START_S
+    # A connection that goes silent is noticed only when its keepalive gives up, up to a minute
+    # later; what was not heard after the last message was not seen, so the drop starts there.
+    heard = link.clock()
     while not link.stopping():
         try:
             message = await watch()
@@ -174,12 +185,13 @@ async def _watched(
         except Exception as exc:
             if not down:
                 why = f"{exc.__class__.__name__}: {exc}"
-                link.recorder.on_disconnect(instrument, stream, link.clock(), why)
+                link.recorder.on_disconnect(instrument, stream, heard, why, noticed_ns=link.clock())
                 down = True
             await link.sleep(wait + link.jitter())
             wait = min(wait * 2, BACKOFF_MAX_S)
             continue
         now = link.clock()
+        heard = now
         if down:
             link.recorder.on_reconnect(instrument, stream, now)
             down, wait = False, BACKOFF_START_S
