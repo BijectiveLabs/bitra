@@ -67,11 +67,36 @@ carries each component and its certainty.
 | `momentum` | long when `mom_z_24` is at least 1, short when it is at most -1; stop 1.5 ATR, take 3 ATR, held 24 bars |
 | `fade` | the opposite side of `momentum`, on the same triggers and exits |
 | `random` | a seeded side at the times `momentum` fires, with its exits: the null every row is compared with |
+| `forecast` | the expected-value decision: a calibrated probability of the take before the stop, fitted walk-forward on the archive ([below](#the-forecast-row)) |
 | `v1_record` | the decisions the desk sent, from `runs/cycles`, held for `--v1-hold`; a live record, not a replay |
 
 The baselines are fixed and versioned, not tuned; changing one would change every comparison, so
 the version is written into every result. A package adds its own row by registering a callable
 that returns a policy under the `trading_research_agents.policies` entry point group.
+
+## The forecast row
+
+`forecast` is the decision being built to replace the vetoes of the live cycle: a probability that
+the take is reached before the stop, calibrated on outcomes, and one expected value net of the
+round trip. It runs only in the arena until the arena shows it is better.
+
+| Step | What it does |
+|---|---|
+| label | every past decision, each side, settled with the baselines' exits (stop 1.5 ATR, take 3 ATR, 24 bars): 1 when the take came first, 0 for a stop or for time running out |
+| fit | every 7 days, on the decisions of the last 60 days whose ideas had settled by then: one logistic model per side, on the older 70 % |
+| features | from a fixed, versioned list of price, path and order-flow figures, those present in at least 95 % of the settled decisions |
+| calibrate | on the newer 30 %: Platt or isotonic, whichever scored better on held-out halves |
+| decide | `p x take - (1 - p) x stop - round trip` for each side; the better side if it is above zero |
+
+A decision is never fitted on an outcome it could not have known: an idea that had not settled by
+the refit is left out, whatever the archive says happened later. Until 200 settled decisions per
+side exist, the row looks again each day and makes no idea. An idea that runs out of time counts
+as a stop, so the value it reads is conservative. The row's version is written into every result.
+
+On BTCUSDT and ETHUSDT, Bybit, 2025-07-05 to 2025-07-13, it first fitted on 2025-07-10, on 462
+settled decisions, and made 14 ideas at a mean of +87 bps net: a sample far too small to say
+anything, which is the verdict the arena gives. What it shows is the pipeline end to end on real
+data.
 
 ## Reading the table
 
