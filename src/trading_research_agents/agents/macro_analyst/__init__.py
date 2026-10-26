@@ -1,10 +1,10 @@
-"""Macro analyst: external series through data plugins and column maps (scheduled events,
-cross-venue funding, sentiment).
+"""Macro reading: external series through data plugins and column maps (rates, scheduled events,
+cross-venue funding), read by code against the operator's declared thresholds.
 
-Writes: nothing.
-One call, one schema, one typed object out; the pipeline records it. See `role.py`.
+Writes: nothing. Asks no model: until 0.11 a model labelled the same brief, and no gate ever read
+that label. The brief builder is in `tools.py`; the declared state in `agents.briefs`.
 """
 
-from trading_research_agents.agents.macro_analyst.role import ROLE, SCHEMA, MacroAnalyst, parse
+ROLE = "macro_analyst"
 
-__all__ = ["ROLE", "SCHEMA", "MacroAnalyst", "parse"]
+__all__ = ["ROLE"]

@@ -388,13 +388,6 @@ def test_a_session_hands_the_roles_measured_briefs(tmp_path: Path, envelope: Env
         "kept": [{"instrument": "AAAUSDT", "regime": "ranging", "reason": "as proposed"}],
         "excluded": [],
     }
-    macro = {
-        "regime": "neutral",
-        "events": [{"when": "1970-01-01T00:05:00Z", "what": "release", "expected_impact": "none"}],
-        "reason": "declared bullish, n small",
-        "figures_used": [],
-        "data_as_of": "1970-01-01T00:00:00Z",
-    }
     analyst = {
         "target": "flat",
         "setup": "no_setup",
@@ -412,7 +405,7 @@ def test_a_session_hands_the_roles_measured_briefs(tmp_path: Path, envelope: Env
         "answer": {"findings": [], "verdict": "sound", "summary": "ok"},
         "thought": "done",
     }
-    fake = FakeCompleter([screener, macro, *([analyst] * 6), risk, alloc, audit])
+    fake = FakeCompleter([screener, *([analyst] * 6), risk, alloc, audit])
     usage = UsageLedger(tmp_path / "out" / "usage.jsonl")
     limits = BudgetLimits(token_budget=500000, max_calls_per_hour=1000, min_interval_s=0)
     metered: dict[str, MeteredCompleter] = {}
@@ -439,7 +432,10 @@ def test_a_session_hands_the_roles_measured_briefs(tmp_path: Path, envelope: Env
             screen=ScreenSettings(**cfg.agents.screen),
         )
     )
-    assert result.macro is not None and result.macro["regime"] == "neutral"
+    # The macro role is read by code: its declared state, and no model asked for it.
+    assert result.macro is not None and result.macro["read_by"] == "code"
+    assert result.macro["declared_state"]["declared"] == "bullish"
+    assert not any("macro" in call.system[:200].lower() for call in fake.calls)
     figures = json.loads((tmp_path / "out" / "figures.json").read_text("utf-8"))[0]
     assert (
         figures["proposed_regime"] in ("ranging", "trending", "illiquid", "volatile")

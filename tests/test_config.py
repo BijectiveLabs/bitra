@@ -228,13 +228,13 @@ def test_effort_is_declared_once_and_overridden_per_role() -> None:
             agents={
                 **AGENTS,
                 "effort": "high",
-                "roles": {"sentiment_analyst": {"effort": "low"}},
+                "roles": {"validator": {"effort": "low"}},
             }
         )
     )
     assert cfg.agents is not None
     assert cfg.agents.for_role("technical_analyst").effort == "high"
-    assert cfg.agents.for_role("sentiment_analyst").effort == "low"
+    assert cfg.agents.for_role("validator").effort == "low"
     plain = parse_strategy_config(agent_raw()).agents
     assert plain is not None and plain.for_role("technical_analyst").effort is None
     with pytest.raises(ConfigError, match="effort is one of"):
@@ -380,3 +380,14 @@ def test_the_exit_fractions_read_under_their_names_and_the_old_ones(tmp_path: Pa
     old = parse_strategy_config(config, base=tmp_path)
     assert old.exit_rule.stop_frac == Decimal("0.01")
     assert old.exit_rule.take_profit_frac == Decimal("0.02")
+
+
+def test_a_retired_reading_setting_is_refused_with_its_reason() -> None:
+    with pytest.raises(ConfigError, match="read by code"):
+        parse_strategy_config(
+            agent_raw(agents={**AGENTS, "roles": {"macro_analyst": {"model": "m"}}})
+        )
+    with pytest.raises(ConfigError, match="nothing is asked, so nothing is reused"):
+        parse_strategy_config(agent_raw(agents={**AGENTS, "reuse_reading_for": "1h"}))
+    with pytest.raises(ConfigError, match="no longer gives a label"):
+        parse_strategy_config(agent_raw(conviction={"reader_labels": Decimal("0.5")}))

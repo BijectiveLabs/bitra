@@ -14,9 +14,7 @@ from trading_research_agents.agents import (
     RoleError,
     auditor,
     executor,
-    macro_analyst,
     market_screener,
-    onchain_analyst,
     risk_manager,
     technical_analyst,
 )
@@ -43,8 +41,6 @@ from trading_research_agents.llm.usage import (
 ROLES = (
     market_screener,
     technical_analyst,
-    macro_analyst,
-    onchain_analyst,
     risk_manager,
     executor,
     auditor,
@@ -236,41 +232,6 @@ def test_every_role_has_a_prompt_a_schema_and_a_parser() -> None:
             {"kept": [{"instrument": "X", "regime": "ranging", "reason": "r"}], "excluded": []},
             {"kept": "X", "excluded": []},
             "kept must be a list",
-        ),
-        (
-            macro_analyst,
-            {
-                "regime": "neutral",
-                "events": [],
-                "reason": "r",
-                "figures_used": [],
-                "data_as_of": "2026-09-13T00:00:00Z",
-            },
-            {
-                "regime": "neutral",
-                "events": [],
-                "reason": "",
-                "figures_used": [],
-                "data_as_of": "x",
-            },
-            "reason must be a non-empty",
-        ),
-        (
-            onchain_analyst,
-            {
-                "signal": "neutral",
-                "reason": "no series",
-                "figures_used": [],
-                "data_as_of": "2026-09-13T00:00:00Z",
-            },
-            {
-                "signal": "neutral",
-                "reason": "r",
-                "figures_used": [],
-                "data_as_of": "x",
-                "extra": 1,
-            },
-            "outside the schema",
         ),
     ],
 )

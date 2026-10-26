@@ -98,8 +98,9 @@ kill_switch = "KILL"               # `tra kill` sets it: flatten and stop; `tra 
 # fallback = ["google:gemini-flash-latest", "anthropic:claude-opus-5-5"]
 #
 # The roster, when you want to say it outright. Left out, a cycle asks the technical analyst and
-# whichever reading analysts have something declared on the shelf: sources/macro.toml,
-# sources/onchain.toml, sources/derivatives.toml, sources/sentiment.toml, sources/news.toml.
+# reads whichever reading roles have something declared on the shelf: sources/macro.toml,
+# sources/onchain.toml, sources/derivatives.toml, sources/sentiment.toml, sources/news.toml. The
+# reading roles are read by code against your thresholds; they ask no model.
 # analysts = ["technical_analyst", "macro_analyst", "sentiment_analyst"]
 #
 # The stances that argue about a proposal once there is one. Each stance is one more call, so this
@@ -110,19 +111,10 @@ kill_switch = "KILL"               # `tra kill` sets it: flatten and stop; `tra 
 # on_missing_validator = "refuse" # a declared stance no model answered refuses the trade;
 #                                  # "continue" trades on the votes that did come back
 # max_retry_wait_s = 15           # wait once for a provider that says "try again in N s"
-# reuse_reading_for = "1h"        # reuse a reading analyst's answer while its figures are
-#                                  # unchanged; new data always asks again; "off" asks every cycle
 #
-# A role that only reads and labels does not need the model that reasons over sixty bars, and the
-# difference is most of a token bill. Anything a role does not override it inherits from [agents],
-# so one line per role is usually all it takes. No vendor is assumed anywhere: provider, model and
-# effort are yours on every row.
-# [agents.roles.sentiment_analyst]
-# provider = "groq"
-# model = "a-cheaper-model"
-# effort = "low"                  # it labels a series; it does not need to think about it
-#
-# A whole cycle is several calls inside a minute. On a tier that limits tokens per minute, put the
+# A role can run on its own model. Anything it does not override it inherits from [agents], so one
+# line per role is usually all it takes. No vendor is assumed anywhere: provider, model and effort
+# are yours on every row. A whole cycle is several calls inside a minute. On a tier that limits tokens per minute, put the
 # validators on a second vendor so the calls split across two limits:
 # [agents.roles.validator]
 # provider = "google"
@@ -151,7 +143,7 @@ kill_switch = "KILL"               # `tra kill` sets it: flatten and stop; `tra 
 # max_opposition = 0               # validators that may oppose it; 0 is the strictest there is
 #
 # How much goes behind the idea. Every voice counts as strong as it is: the deciding analyst by its
-# confidence, each reading analyst by how far its series sit past the lines you drew in sources/
+# confidence, each reading role by how far its series sit past the lines you drew in sources/
 # (-1 to 1), each validator for or against. The score is their net over the weight they expressed:
 # agreement lifts it, opposition lowers it in proportion, and only opposition that outweighs the
 # case refuses the trade. docs.bijectivelabs.dev/opensource/cycle works four cases through. Nothing here can make a trade
@@ -161,7 +153,6 @@ kill_switch = "KILL"               # `tra kill` sets it: flatten and stop; `tra 
 # validator_weight = 1.0
 # min_score = 0.4                  # below this the desk does not trade, whatever the matrix said
 # max_leverage = 3.0               # notional against [run].equity; a ceiling, never a target
-# reader_labels = 0.5             # a reading analyst's own label counts where nothing is declared
 #
 # The ladder from score to size. Written top down or bottom up, it is read from the top.
 # [[conviction.ladder]]

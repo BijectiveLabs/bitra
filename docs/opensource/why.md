@@ -71,9 +71,9 @@ defences gave only limited protection once that stored context was corrupted. OW
 injection first among the risks of LLM applications (LLM01:2025).
 
 **What the software does.** The role that proposes a direction reads numbers computed by code, not
-text from outside. Headlines and notes reach only the reading analysts, whose labels do not decide
-anything, and every prompt says that text inside a brief is material to read, never an instruction
-to follow. There is no memory a model writes for itself: what a role sees is built by code for each
+text from outside. Headlines and notes reach no model at all: the reading roles that hold them are
+read by code against the operator's thresholds, and every prompt says that text inside a brief is
+material to read, never an instruction to follow. There is no memory a model writes for itself: what a role sees is built by code for each
 call and recorded. And whatever a model says, it cannot send, cancel or change an order, or reach a
 key.
 

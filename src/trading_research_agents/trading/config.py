@@ -193,9 +193,6 @@ class AgentSettings:
     on_missing_validator: str = "refuse"
     # How long a role waits for a provider that said "try again in N seconds" before the next link.
     max_retry_wait_s: float = 15.0
-    # A reading analyst's answer is reused while its brief's figures are unchanged, for at most
-    # this long. New data always asks again. Zero turns reuse off.
-    reuse_reading_s: float = 3600.0
 
     def for_role(self, role: str) -> RoleModel:
         """What this role is asked with: its own model where declared, otherwise the default."""
@@ -226,22 +223,12 @@ class AgentSettings:
 # Roles whose brief is a table of figures code already computed.
 TABLE_READERS = (
     "market_screener",
-    "macro_analyst",
-    "onchain_analyst",
-    "sentiment_analyst",
     "validator",
 )
+# The reading roles: code reads their series against the operator's thresholds. They asked a model
+# until 0.11; every gate already read the declared state, never the model's label.
+READ_BY_CODE = ("macro_analyst", "onchain_analyst", "sentiment_analyst")
 LOW_EFFORT = "low"
-
-
-def _reuse_window(raw: Any) -> float:
-    """[agents].reuse_reading_for: a duration such as "1h", or 0 / "off" for no reuse."""
-    if raw in (0, "0", "off", False):
-        return 0.0
-    try:
-        return parse_duration(str(raw))
-    except DataConfigError as exc:
-        raise ConfigError(f"[agents].reuse_reading_for: {exc}") from exc
 
 
 @dataclass(frozen=True)
@@ -508,9 +495,6 @@ def _placeholder(settings: AgentSettings) -> Strategy:
 KNOWN_ROLES = (
     "market_screener",
     "technical_analyst",
-    "macro_analyst",
-    "onchain_analyst",
-    "sentiment_analyst",
     "risk_manager",
     "executor",
     "auditor",
@@ -571,6 +555,11 @@ def _roles(raw: Any) -> dict[str, dict[str, Any]]:
         raise ConfigError("[agents.roles] holds one table per role")
     out: dict[str, dict[str, Any]] = {}
     for role, table in raw.items():
+        if role in READ_BY_CODE:
+            raise ConfigError(
+                f"[agents.roles.{role}]: the reading roles are read by code since 0.11 and ask "
+                "no model; remove this table"
+            )
         if role not in KNOWN_ROLES:
             raise ConfigError(f"[agents.roles.{role}] is not a role; have {list(KNOWN_ROLES)}")
         if not isinstance(table, dict):
@@ -628,7 +617,6 @@ AGENTS_KEYS = (
     "analysts",
     "validators",
     "on_missing_validator",
-    "reuse_reading_for",
     "fallback",
 )
 
@@ -644,6 +632,11 @@ def _agents(raw: dict[str, Any], strategy_raw: dict[str, Any]) -> AgentSettings 
     table = raw.get("agents")
     if not isinstance(table, dict):
         raise ConfigError("[agents] is required when [strategy].agent is set")
+    if "reuse_reading_for" in table:
+        raise ConfigError(
+            "[agents].reuse_reading_for: the reading roles are read by code since 0.11; nothing "
+            "is asked, so nothing is reused. Remove the key"
+        )
     # A misspelt budget is a budget that is not there; it is refused rather than ignored.
     unknown = sorted(set(table) - set(AGENTS_KEYS))
     _no_secrets(unknown, "[agents]")
@@ -699,7 +692,6 @@ def _agents(raw: dict[str, Any], strategy_raw: dict[str, Any]) -> AgentSettings 
             table, "on_missing_validator", ("refuse", "continue"), "refuse", "[agents]"
         ),
         max_retry_wait_s=float(table.get("max_retry_wait_s", 15.0)),
-        reuse_reading_s=_reuse_window(table.get("reuse_reading_for", "1h")),
         fallback=_fallback(table.get("fallback")),
     )
 
@@ -870,7 +862,6 @@ CONVICTION_KEYS = (
     "min_score",
     "max_leverage",
     "ladder",
-    "reader_labels",
 )
 
 
@@ -881,6 +872,11 @@ def _conviction(raw: dict[str, Any]) -> Conviction:
         return Conviction()
     if not isinstance(table, dict):
         raise ConfigError("[conviction] must be a table")
+    if "reader_labels" in table:
+        raise ConfigError(
+            "[conviction].reader_labels: a reading role no longer gives a label of its own since "
+            "0.11; typed text events from the judge take its place in 0.12. Remove the key"
+        )
     unknown = sorted(set(table) - set(CONVICTION_KEYS))
     if unknown:
         raise ConfigError(f"[conviction]: unknown {unknown}; have {list(CONVICTION_KEYS)}")
@@ -909,9 +905,6 @@ def _conviction(raw: dict[str, Any]) -> Conviction:
             min_score=_dec(table, "min_score") if "min_score" in table else Decimal(0),
             ladder=tuple(rungs),
             max_leverage=_dec(table, "max_leverage") if "max_leverage" in table else None,
-            reader_labels=(
-                _dec(table, "reader_labels") if "reader_labels" in table else Decimal(0)
-            ),
         )
     except ConvictionError as exc:
         raise ConfigError(str(exc)) from exc

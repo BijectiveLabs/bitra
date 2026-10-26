@@ -15,9 +15,6 @@ AGENTS = (
     # session, one live snapshot per instrument in a cycle - so it carries a prompt for each.
     "market_screener_live",
     "technical_analyst",
-    "macro_analyst",
-    "onchain_analyst",
-    "sentiment_analyst",
     "risk_manager",
     "executor",
     "auditor",

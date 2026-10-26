@@ -393,7 +393,7 @@ effort = "medium"                    # minimal | low | medium | high | xhigh | m
                                      # vendor takes it; left out, the vendor's default applies
 fallback = ["google:gemini-flash-latest", "anthropic:claude-opus-5-5"]
 
-[agents.roles.sentiment_analyst]     # a role that only labels can run on a cheaper model
+[agents.roles.validator]             # a role can run on its own model
 model = "a-cheaper-model"
 effort = "low"
 ```

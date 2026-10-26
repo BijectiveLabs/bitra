@@ -191,33 +191,25 @@ A headline is stored as one plain line: markup and entities resolved, control ch
 at most 280 characters. A feed that declares a document type is refused, so no entity is ever
 expanded. Fetch only what the service's terms allow you to fetch.
 
-A reading analyst whose series declare nothing, which is what a file of headlines is, has no
-declared state for conviction to read; its label is recorded and counts for nothing. To let it
-count, give it a strength:
-
-```toml
-[conviction]
-reader_labels = 0.5     # 0 (the default) keeps labels out; 1 counts a label like a full reading
-```
-
-The label counts only when the analyst cited what it read; an answer that points at nothing is
-still nothing.
+A reading role whose series declare nothing, which is what a file of headlines is, has no declared
+state for conviction to read. Headlines are kept and shown; turning dated text into typed events a
+decision can weigh is the job of the judge planned for 0.12, not of a model's free label.
 
 ## Derivatives positioning
 
 Series in `sources/derivatives.toml` (long/short ratios, taker volume, open interest history,
-liquidations) are read by the on-chain analyst beside the chain figures, and your thresholds on
+liquidations) are read by the on-chain role beside the chain figures, and your thresholds on
 them reach confluence and conviction like any other series. The technical analyst does not see
 them: it reads its own market's candles, book, funding and open interest, so its reading does not
-lean on another analyst's data.
+lean on another role's data.
 
-## When an analyst is not asked
+## When a reading role is not read
 
-A reading analyst with nothing declared for it is not paid to say it saw nothing. It still has a
+A reading role with nothing declared for it is not read. It still has a
 row in the cycle table, marked `not asked`, with the reason: nothing declared in
 `sources/onchain.toml` or `sources/derivatives.toml`, not in `[agents].analysts`, every series past
 its `max_age`, or every file unreadable. A role asked but missing from `[conviction].weights` is
-flagged by `tra check`: it answers, and its answer moves nothing.
+flagged by `tra check`: it is read, and its state moves nothing.
 
 On-chain figures for Bitcoin are read as market-wide context for every instrument a desk trades,
 the way a yield is. A desk that wants a chain per instrument declares one series per asset.
