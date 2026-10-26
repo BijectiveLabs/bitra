@@ -45,15 +45,16 @@ All notable changes to this project are recorded here. The format follows
 - The readings are named by their new names everywhere a desk names them: `[agents].readings`
   (in place of `[agents].analysts`, since the technical analyst is always asked),
   `[confluence].required`, `[conviction].weights`, the rows of the live table, `briefs/macro.json`,
-  and `not_read` in `cycle.json`. An old analyst name is refused with the reading that replaced it.
+  and `not_read` in `cycle.json`. A desk written before 0.11 runs unchanged: `[agents].analysts`
+  and the old analyst names are read as the readings they became, a role table or
+  `reuse_reading_for` for a reading is read and does nothing, and `tra check` names what to write
+  now. A record written before 0.11 still shows in `tra watch`.
 
 ### Removed
 
-- `[conviction].reader_labels`, `[agents].reuse_reading_for` and `[agents.roles.macro_analyst]`,
-  `[agents.roles.onchain_analyst]`, `[agents.roles.sentiment_analyst]` are refused with the reason:
-  nothing asks those models any more. Remove the keys; nothing else in a desk's configuration
-  changes. Typed events from dated text come back through the judge planned for 0.12.
-- `[agents].analysts` is refused with the key that replaced it, `[agents].readings`.
+- `[conviction].reader_labels` is refused with the reason: it weighed a label no model writes any
+  more, so reading on would size differently than the desk declared. Remove the key. Typed events
+  from dated text come back through the judge planned for 0.12.
 
 ### Fixed
 

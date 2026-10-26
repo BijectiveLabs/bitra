@@ -191,3 +191,25 @@ def test_a_cycle_that_ended_early_says_which_panels_it_never_reached() -> None:
     text = shown(cycle_view(record))
     assert "not reached" in text and "risk per trade, desk, cost gate, targets, intent" in text
     assert "the cycle ended at conviction" in text
+
+
+def test_a_record_written_before_the_readings_still_shows_what_was_not_read() -> None:
+    record = {
+        "series": [
+            {
+                "role": "macro_analyst",
+                "series": "us10y",
+                "value": "4.4",
+                "observed_at": "2026-09-27T00:00:00+00:00",
+                "age_h": 30,
+                "state": "bearish",
+                "origin": "file",
+                "source": "operator export",
+            }
+        ],
+        "agents": {"agents": [{"agent": "technical", "ok": True, "seconds": 2.0}]},
+        "not_asked": {"onchain_analyst": "nothing declared in sources/onchain.toml, so not asked"},
+    }
+    text = shown(cycle_view(record))
+    assert "macro" in text and "us10y" in text and "macro_analyst" not in text
+    assert "onchain_analyst" in text and "not read: nothing declared" in text

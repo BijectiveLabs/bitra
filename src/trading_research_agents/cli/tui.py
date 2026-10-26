@@ -917,7 +917,8 @@ def cycle_view(record: Mapping[str, Any]) -> Group:
         for row in record["series"]:
             state = str(row.get("state"))
             read.add_row(
-                str(row.get("reading", "")),
+                # A record written before 0.11 named the analyst role the reading replaced.
+                str(row.get("reading") or str(row.get("role", "")).removesuffix("_analyst")),
                 str(row.get("series")),
                 str(row.get("value")),
                 str(row.get("observed_at") or "")[:16],
@@ -1063,7 +1064,7 @@ def cycle_view(record: Mapping[str, Any]) -> Group:
                 state = "unreadable"
             style = {"ok": "green", "failed": "red", "reused": "dim", "unreadable": "red"}[state]
             who.add_row(str(row.get("agent")), Text(state, style=style), str(row.get("seconds")))
-        for name, why in sorted((record.get("not_read") or {}).items()):
+        for name, why in sorted((record.get("not_read") or record.get("not_asked") or {}).items()):
             who.add_row(name, Text(f"not read: {why}", style="yellow"), "")
         parts.append(who)
     return Group(*parts)

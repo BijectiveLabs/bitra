@@ -229,7 +229,8 @@ TABLE_READERS = (
 # package owns these names; they are repeated here because the gates never import it.
 READINGS = ("macro", "onchain", "sentiment")
 # What the readings were called until 0.11, when each was an analyst role asking a model whose
-# label no gate read. A project that still writes the old name is told the new one.
+# label no gate read. A desk written before then runs unchanged: the old name is read as the
+# reading it became, and `tra check` names the new one.
 RETIRED_READERS = {
     "macro_analyst": "macro",
     "onchain_analyst": "onchain",
@@ -530,30 +531,58 @@ ROLE_KEYS = (
 
 
 def _known(names: Any, allowed: tuple[str, ...], where: str) -> tuple[str, ...]:
-    """Names from `allowed`; an analyst name retired in 0.11 is refused with its reading's name."""
-    named = tuple(str(name) for name in names)
-    for name in named:
-        if name in RETIRED_READERS:
-            raise ConfigError(
-                f"{where}: {name} is the {RETIRED_READERS[name]} reading since 0.11, read by code; "
-                f"write {RETIRED_READERS[name]}"
-            )
+    """Names from `allowed`, an analyst name retired in 0.11 read as the reading it became."""
+    named = tuple(RETIRED_READERS.get(str(name), str(name)) for name in names)
     unknown = sorted(set(named) - set(allowed))
     if unknown:
         raise ConfigError(f"{where}: {unknown} is not one of {list(allowed)}")
+    for name in named:
+        if named.count(name) > 1:
+            raise ConfigError(f"{where} names {name} twice")
     return named
 
 
-def _readings(raw: Any) -> tuple[str, ...]:
-    """`[agents].readings`, when the operator names them instead of letting sources decide."""
+def _readings(table: Mapping[str, Any]) -> tuple[str, ...]:
+    """`[agents].readings`, or the `[agents].analysts` a desk wrote before 0.11, when named."""
+    if "analysts" in table and "readings" in table:
+        raise ConfigError("[agents] names the readings in readings or in analysts, one of the two")
+    raw = table.get("readings", table.get("analysts"))
     if raw is None:
         return ()
     if not isinstance(raw, list) or not all(isinstance(name, str) for name in raw):
         raise ConfigError("[agents].readings is a list of reading names")
-    names = _known(raw, READINGS, "[agents].readings")
-    if len(set(names)) != len(names):
-        raise ConfigError("[agents].readings names a reading twice")
-    return names
+    # The roster before 0.11 also named the analyst that is now always asked.
+    named = [name for name in raw if name != "technical_analyst"]
+    return _known(named, READINGS, "[agents].readings")
+
+
+def renamed_in(raw: Mapping[str, Any]) -> tuple[str, ...]:
+    """What a desk written before 0.11 still says, and what to write instead; empty when current."""
+    agents: dict[str, Any] = raw["agents"] if isinstance(raw.get("agents"), dict) else {}
+    notes: list[str] = []
+    if "analysts" in agents:
+        notes.append("[agents].analysts is [agents].readings since 0.11")
+    if "reuse_reading_for" in agents:
+        notes.append("[agents].reuse_reading_for does nothing since 0.11: no reading asks a model")
+    roles: dict[str, Any] = agents["roles"] if isinstance(agents.get("roles"), dict) else {}
+    notes.extend(
+        f"[agents.roles.{role}] does nothing since 0.11: the {RETIRED_READERS[role]} reading asks "
+        "no model"
+        for role in roles
+        if role in RETIRED_READERS
+    )
+    named: list[tuple[str, Any]] = [
+        ("[agents].readings", agents.get("readings") or agents.get("analysts")),
+        ("[confluence].required", (raw.get("confluence") or {}).get("required")),
+        ("[conviction].weights", (raw.get("conviction") or {}).get("weights")),
+    ]
+    for where, names in named:
+        notes.extend(
+            f"{where}: {name} is {RETIRED_READERS[name]} since 0.11"
+            for name in names or ()
+            if name in RETIRED_READERS
+        )
+    return tuple(notes)
 
 
 def _roles(raw: Any) -> dict[str, dict[str, Any]]:
@@ -565,10 +594,8 @@ def _roles(raw: Any) -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
     for role, table in raw.items():
         if role in RETIRED_READERS:
-            raise ConfigError(
-                f"[agents.roles.{role}]: the {RETIRED_READERS[role]} reading is read by code since "
-                "0.11 and asks no model; remove this table"
-            )
+            # The reading asks no model, so the table configures nothing; `tra check` says so.
+            continue
         if role not in KNOWN_ROLES:
             raise ConfigError(f"[agents.roles.{role}] is not a role; have {list(KNOWN_ROLES)}")
         if not isinstance(table, dict):
@@ -624,6 +651,9 @@ AGENTS_KEYS = (
     "screen",
     "roles",
     "readings",
+    # What a desk wrote before 0.11; read, and named by `tra check`.
+    "analysts",
+    "reuse_reading_for",
     "validators",
     "on_missing_validator",
     "fallback",
@@ -641,16 +671,6 @@ def _agents(raw: dict[str, Any], strategy_raw: dict[str, Any]) -> AgentSettings 
     table = raw.get("agents")
     if not isinstance(table, dict):
         raise ConfigError("[agents] is required when [strategy].agent is set")
-    if "analysts" in table:
-        raise ConfigError(
-            "[agents].analysts: since 0.11 the technical analyst is always asked and the readings "
-            f"are read by code; name the readings in [agents].readings, from {list(READINGS)}"
-        )
-    if "reuse_reading_for" in table:
-        raise ConfigError(
-            "[agents].reuse_reading_for: the readings are read by code since 0.11; nothing "
-            "is asked, so nothing is reused. Remove the key"
-        )
     # A misspelt budget is a budget that is not there; it is refused rather than ignored.
     unknown = sorted(set(table) - set(AGENTS_KEYS))
     _no_secrets(unknown, "[agents]")
@@ -700,7 +720,7 @@ def _agents(raw: dict[str, Any], strategy_raw: dict[str, Any]) -> AgentSettings 
         magnitude_bps=_dec(table, "magnitude_bps") if "magnitude_bps" in table else None,
         screen=_screen(table.get("screen")),
         roles=_roles(table.get("roles")),
-        readings=_readings(table.get("readings")),
+        readings=_readings(table),
         validators=_validators(table.get("validators")),
         on_missing_validator=_choice(
             table, "on_missing_validator", ("refuse", "continue"), "refuse", "[agents]"
@@ -897,8 +917,9 @@ def _conviction(raw: dict[str, Any]) -> Conviction:
     weights_raw = table.get("weights") or {}
     if not isinstance(weights_raw, dict):
         raise ConfigError("[conviction].weights is a table of voice to weight")
-    _known(weights_raw, VOICES, "[conviction].weights")
-    weights = {voice: _dec(weights_raw, voice) for voice in weights_raw}
+    voices = _known(weights_raw, VOICES, "[conviction].weights")
+    pairs = zip(voices, weights_raw, strict=True)
+    weights = {voice: _dec(weights_raw, key) for voice, key in pairs}
     rungs = []
     for entry in table.get("ladder") or ():
         if not isinstance(entry, dict) or set(entry) != {"at_least", "size_multiple"}:

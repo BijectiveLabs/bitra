@@ -4661,6 +4661,13 @@ def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], l
     return payload, lines
 
 
+def _renamed(path: Path) -> tuple[str, ...]:
+    """What the desk's file still calls by a name from before 0.11, and the name to write now."""
+    from trading_research_agents.trading.config import renamed_in
+
+    return renamed_in(tomllib.loads(path.read_text(encoding="utf-8"), parse_float=Decimal))
+
+
 def check_project(args: argparse.Namespace) -> int:
     """What a first run needs, checked in the order it would fail, said in plain words."""
     good, bad, next_command = _check(args)
@@ -4686,6 +4693,7 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
         good.append(
             f"{args.config}: valid; core {cfg.strategy.name!r}; instrument {cfg.run.instrument}"
         )
+        good.extend(f"written before 0.11, still read: {note}" for note in _renamed(args.config))
     except FileNotFoundError:
         bad.append(f"{args.config}: not here, so this folder is not a desk; {NOT_A_DESK}")
     except (ConfigError, OSError, ValueError) as exc:

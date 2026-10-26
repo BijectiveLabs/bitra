@@ -154,8 +154,11 @@ def test_a_declared_matrix_carries_the_readings_and_the_policy() -> None:
 def test_a_matrix_that_names_something_that_reads_nothing_is_refused() -> None:
     with pytest.raises(ConfigError, match="is not one of"):
         parse_strategy_config(agent_raw(confluence={"required": ["technical_analyst"]}))
-    with pytest.raises(ConfigError, match=r"is the macro reading since 0\.11"):
-        parse_strategy_config(agent_raw(confluence={"required": ["macro_analyst"]}))
+    # A desk written before 0.11 runs unchanged: the old name is read as the reading it became.
+    old = parse_strategy_config(agent_raw(confluence={"required": ["macro_analyst"]}))
+    assert old.confluence.required == ("macro",)
+    with pytest.raises(ConfigError, match="names macro twice"):
+        parse_strategy_config(agent_raw(confluence={"required": ["macro", "macro_analyst"]}))
     with pytest.raises(ConfigError, match="unknown"):
         parse_strategy_config(agent_raw(confluence={"requires": ["macro"]}))
     with pytest.raises(ConfigError, match="on_missing"):
@@ -283,8 +286,14 @@ def test_conviction_is_absent_until_declared_and_reads_its_ladder_from_the_top()
 def test_a_conviction_rule_that_cannot_be_applied_is_refused() -> None:
     with pytest.raises(ConfigError, match="is not one of"):
         parse_strategy_config(agent_raw(conviction={"weights": {"portfolio_manager": Decimal(1)}}))
-    with pytest.raises(ConfigError, match=r"is the onchain reading since 0\.11"):
-        parse_strategy_config(agent_raw(conviction={"weights": {"onchain_analyst": Decimal(1)}}))
+    old = parse_strategy_config(agent_raw(conviction={"weights": {"onchain_analyst": Decimal(1)}}))
+    assert old.conviction.weights == {"onchain": Decimal(1)}
+    with pytest.raises(ConfigError, match="names onchain twice"):
+        parse_strategy_config(
+            agent_raw(
+                conviction={"weights": {"onchain": Decimal(1), "onchain_analyst": Decimal(2)}}
+            )
+        )
     with pytest.raises(ConfigError, match="unknown"):
         parse_strategy_config(agent_raw(conviction={"floor": Decimal("0.4")}))
     with pytest.raises(ConfigError, match="at_least and size_multiple"):
@@ -386,12 +395,31 @@ def test_the_exit_fractions_read_under_their_names_and_the_old_ones(tmp_path: Pa
     assert old.exit_rule.take_profit_frac == Decimal("0.02")
 
 
-def test_a_retired_reading_setting_is_refused_with_its_reason() -> None:
-    with pytest.raises(ConfigError, match="read by code"):
-        parse_strategy_config(
-            agent_raw(agents={**AGENTS, "roles": {"macro_analyst": {"model": "m"}}})
-        )
-    with pytest.raises(ConfigError, match="nothing is asked, so nothing is reused"):
-        parse_strategy_config(agent_raw(agents={**AGENTS, "reuse_reading_for": "1h"}))
+def test_a_setting_that_no_longer_does_anything_is_read_and_named_by_check() -> None:
+    from trading_research_agents.trading.config import renamed_in
+
+    desk = agent_raw(
+        agents={
+            **AGENTS,
+            "analysts": ["technical_analyst", "sentiment_analyst"],
+            "reuse_reading_for": "1h",
+            "roles": {"macro_analyst": {"model": "m"}, "validator": {"model": "v"}},
+        },
+        confluence={"required": ["onchain_analyst"]},
+    )
+    cfg = parse_strategy_config(desk)
+    assert cfg.agents is not None and cfg.agents.readings == ("sentiment",)
+    assert set(cfg.agents.roles) == {"validator"}
+    notes = renamed_in(desk)
+    assert any("[agents].analysts is [agents].readings" in n for n in notes)
+    assert any("[agents.roles.macro_analyst]" in n and "asks no model" in n for n in notes)
+    assert any("reuse_reading_for" in n for n in notes)
+    assert any("onchain_analyst is onchain" in n for n in notes)
+    assert renamed_in(agent_raw()) == ()
+
+    # A label weight changed the size; with no label left, reading on would size differently.
     with pytest.raises(ConfigError, match="no longer gives a label"):
         parse_strategy_config(agent_raw(conviction={"reader_labels": Decimal("0.5")}))
+    both = agent_raw(agents={**AGENTS, "analysts": ["technical_analyst"], "readings": []})
+    with pytest.raises(ConfigError, match="one of the two"):
+        parse_strategy_config(both)

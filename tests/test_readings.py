@@ -206,12 +206,17 @@ def test_the_readings_can_be_named_in_the_config(tmp_path: Path) -> None:
     path.write_text(base, "utf-8")
     assert load_strategy_config(path).agents.readings == ()  # type: ignore[union-attr]
 
+    # The names a desk wrote before 0.11 are read as the readings they became.
+    path.write_text(base + 'readings = ["sentiment_analyst"]\n', "utf-8")
+    assert load_strategy_config(path).agents.readings == ("sentiment",)  # type: ignore[union-attr]
+    path.write_text(base + 'analysts = ["technical_analyst", "macro_analyst"]\n', "utf-8")
+    assert load_strategy_config(path).agents.readings == ("macro",)  # type: ignore[union-attr]
+
     for body, message in (
-        ('readings = ["sentiment_analyst"]\n', r"is the sentiment reading since 0\.11"),
         ('readings = ["poet"]\n', "is not one of"),
         ('readings = "macro"\n', "a list of reading names"),
-        ('readings = ["macro", "macro"]\n', "names a reading twice"),
-        ('analysts = ["technical_analyst", "macro_analyst"]\n', "name the readings in"),
+        ('readings = ["macro", "macro_analyst"]\n', "names macro twice"),
+        ('analysts = ["technical_analyst", "poet"]\n', "is not one of"),
     ):
         path.write_text(base + body, "utf-8")
         with pytest.raises(ConfigError, match=message):

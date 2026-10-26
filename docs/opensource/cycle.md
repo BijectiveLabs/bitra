@@ -393,7 +393,8 @@ The readings ask no model. Until 0.11 each was an analyst whose model also label
 every gate already read the declared state rather than the label, measured on the demo desks the
 labels added nothing a decision could use, and they cost about a quarter of a cycle's tokens.
 `[confluence].required`, `[conviction].weights` and `[agents].readings` name them `macro`,
-`onchain` and `sentiment`; the old analyst names are refused with the new one.
+`onchain` and `sentiment`; a desk that still writes the old analyst names runs unchanged, and
+`tra check` names the new one.
 
 ### The shelf
 

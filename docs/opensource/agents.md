@@ -45,9 +45,9 @@ same answer every time it is given the same figures.
 | `sentiment` | `sources/sentiment.toml`, and the same dated text as notes | the declared state (positive, negative, mixed, undeclared) and its graded score | every cycle in `tra run` with something declared; nothing is scraped |
 
 Until 0.11 each of these was an analyst whose model labelled the same figures; no gate ever read the
-label, and the calls were about a quarter of a cycle's tokens. The old names
-(`macro_analyst`, `onchain_analyst`, `sentiment_analyst`) are refused in the configuration with the
-reading that replaced them. Text that needs judgement, a headline about a hack or a listing, is
+label, and the calls were about a quarter of a cycle's tokens. A desk written before then runs
+unchanged: the old names (`macro_analyst`, `onchain_analyst`, `sentiment_analyst`) are read as the
+readings they became, and `tra check` names the new name to write. Text that needs judgement, a headline about a hack or a listing, is
 the typed judge's job from 0.12, behind its own port and measured in the arena before it counts.
 
 ## A session
