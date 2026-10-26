@@ -49,6 +49,7 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | `tra runs verify --market data` | every market day file and hour part against its manifest |
 | `tra record`, `tra record --once 30m` | order flow, the book, liquidations, derivatives and news kept while they happen, per `[record]` in `data.toml` ([Market data](/opensource/market-data#the-recorder)) |
 | `tra record status` | coverage, gaps and latency of the recording over the last day |
+| `tra text judge --from 2026-10-25` | the archived headlines of a range of days, read by the typed judge in `[judge]` ([The typed judge](/opensource/llm#the-typed-judge)) |
 | `tra data audit export.csv --mapping mapping.toml` | your own CSV or Parquet, through the same audit ([Your own data](/opensource/your-data)) |
 | `tra data pull BTCUSDT` | one live snapshot through the chains in `data.toml` |
 | `tra sources show`, `tra sources pull` | where the readings' series come from and how old they are; refresh them now |

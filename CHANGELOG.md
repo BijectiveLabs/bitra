@@ -32,6 +32,15 @@ All notable changes to this project are recorded here. The format follows
 - Book bars (`book_1m`), liquidations and dated text (`text`, kept at first sight) in the archive,
   and the features that read them: `spread_bps`, `book_imbalance`, `depth_ratio_10bps`,
   `liq_imbalance_24`.
+- A typed judge behind a vendor-neutral port (`llm/judge.py`): closed questions in, a probability
+  per answer out, the versioned model on every verdict, and a cache that lets a replay ask nothing.
+  The TypeSafe adapter speaks the vendor's HTTP API with the standard library, refuses a model
+  alias that moves, retries only 429 and 529 inside a six-second deadline, and sends nothing but a
+  headline and its publisher. `[judge]` in `data.toml` declares it; `tra check` names it.
+- Text features: `text_count_24` and, per kind of event (listing, delisting, hack, outage,
+  regulatory, macro), the strongest report concerning the asset in the last 24 bars, from the
+  archived headlines read by the judge (`perception/`). Absent with the reason when no judge is
+  declared. `tra text judge` reads a range of days and prints what the features would read.
 - Bybit's long/short ratio history, asked by the venue's own period names and windows; it was
   unreachable through ccxt's unified call.
 

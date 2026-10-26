@@ -33,6 +33,8 @@ _ALLOWED: dict[str, set[str]] = {
     "readings": {"data"},
     # Features read bars and derivatives, and the regime rule and ATR the execution gate owns.
     "features": {"market_data", "execution"},
+    # The one place a typed judge meets market data: archived text in, typed events out.
+    "perception": {"llm", "market_data", "features"},
     # The harness replays features over the archive and prices ideas with the desk's own costs.
     "evaluation": {"features", "market_data", "data", "envelope", "execution"},
     "chain": {"ledger", "envelope", "data"},
@@ -54,13 +56,14 @@ _ALLOWED: dict[str, set[str]] = {
         "features",
         "evaluation",
         "readings",
+        "perception",
     },
 }
 # `extras` is one function that words a missing optional dependency; it imports nothing either.
 BENEATH = {"records", "extras"}
 ALLOWED = {name: deps | (BENEATH - {name}) for name, deps in _ALLOWED.items()}
 
-LLM_CLIENTS = {"anthropic", "openai", "langchain", "langgraph", "litellm", "ollama"}
+LLM_CLIENTS = {"anthropic", "openai", "langchain", "langgraph", "litellm", "ollama", "typesafe"}
 
 # Plugin directories are the only places a venue may be named in the package. Templates are
 # copies of examples/ that `tra init` writes into a project; they are never imported.

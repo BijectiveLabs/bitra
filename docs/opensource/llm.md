@@ -233,15 +233,59 @@ role is sent an effort at all, for the reason above.
 
 ## Not paying twice for the same reading
 
-The macro, on-chain and sentiment roles ask no model. Their briefs are read by code against the
-thresholds you declared, and that declared state is what confluence and conviction read; until 0.11
-a model also labelled each brief, and no decision ever rested on the label, so the calls were
-retired.
+The macro, on-chain and sentiment readings ask no model. Their figures are read by code against
+the thresholds you declared, and that declared state is what confluence and conviction read; until
+0.11 a model also labelled each of them, and no decision ever rested on the label, so the calls
+were retired.
 
 Two more things keep calls from being wasted. The validators are not asked when the system is certain to
 refuse whatever they say: the desk with nothing added, the day's round trips, the declared reward to
 risk, or an edge that fails against the part of the round trip that does not grow with size. And
 briefs are sent as JSON without spaces, which are tokens that carry nothing.
+
+## The typed judge
+
+A reasoning model writes sentences. A typed judge answers closed questions about a piece of text
+with a probability for each answer it was offered, and writes nothing else. TRA uses one for the
+narrow job it is built for: reading the headlines the recorder archived into typed events the
+features can weigh. It never decides a direction from numbers, sizes a trade or reaches an order.
+
+```toml
+# data.toml
+[judge]
+provider = "typesafe"           # TypeSafe's Jev, over its HTTP API
+model = "jev-1.14.0"            # a version; an alias that moves is refused
+key_env = "TYPESAFE_API_KEY"    # the key comes from the environment
+min_confidence = 0.5            # below this the kind of event is absent, not a guess
+cache = "record"                # record | replay | off
+```
+
+Each headline is asked four things in one request: which kind of event it reports (a listing, a
+delisting, a hack or exploit, an outage, a regulatory action, a macro release, or none of these),
+whether it concerns each asset the desk records, whether it concerns the market as a whole, and
+whether it carries instructions to a machine rather than news. A headline that speaks to a machine
+is dropped and counted. Only the headline and its publisher are sent: never a position, a balance,
+an order or a key, and any credential that appears in the text is replaced before it leaves.
+
+| Failure | What it means | What happens |
+|---|---|---|
+| no answer in time (3 s per read, 6 s in all) | nothing was answered | that headline is absent, with the reason |
+| 429 or 529 | the vendor asks to slow down | waited for, honouring `Retry-After`, inside the same 6 s; then absent |
+| 400 or 422 | the request was wrong | absent with the vendor's message; never retried |
+| 401 or 403, or no key | the key is missing or refused | the run stops; `tra check` names the variable |
+| a confidence below `min_confidence` | the judge does not know | the kind is absent, not "none" |
+| a replay with no recorded verdict | the run would not be the one it claims to replay | the run stops |
+
+Every verdict carries the versioned model that gave it and goes through a cache under
+`data/judge/`, keyed by the model, the headline and the questions. `cache = "replay"` answers from
+the cache alone and needs no key, which is how a published result is reproduced without an
+account. The vendor's own page of known weaknesses is the one to read before trusting it with
+more: it is not a calculator, it compares dates and times unreliably, and adversarial text can move
+its answer. So no number and no date is asked of it, its probabilities enter as features rather
+than as decisions, and the arena measures them before anything leans on them.
+
+`tra text judge --from 2026-10-25` reads the archived headlines of a range of days and prints what
+the features would read; `tra check` names the judge, its pinned model and a missing key.
 
 ## Choosing a model per role
 
