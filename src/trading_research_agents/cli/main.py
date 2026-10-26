@@ -5745,9 +5745,6 @@ def _spend_notes(cfg: Any) -> list[str]:
     else:
         roles = (
             "technical_analyst",
-            "macro_analyst",
-            "onchain_analyst",
-            "sentiment_analyst",
             "validator",
             "market_screener",
         )

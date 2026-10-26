@@ -1,15 +1,10 @@
-"""Sentiment analyst: dated scores and dated text the operator mapped in, and nothing else.
+"""Sentiment reading: dated scores and dated text the operator mapped in, read by code against the
+operator's declared thresholds. With no declared source it says so rather than guessing.
 
-Writes: nothing. Scrapes: nothing. With no declared source it says so rather than guessing.
-One call, one schema, one typed object out; the cycle records it. See `role.py`.
+Writes: nothing. Scrapes: nothing. Asks no model: until 0.11 a model labelled the same brief, and
+no gate ever read that label. The brief builder is in `tools.py`.
 """
 
-from trading_research_agents.agents.sentiment_analyst.role import (
-    ROLE,
-    SCHEMA,
-    STATES,
-    SentimentAnalyst,
-    parse,
-)
+ROLE = "sentiment_analyst"
 
-__all__ = ["ROLE", "SCHEMA", "STATES", "SentimentAnalyst", "parse"]
+__all__ = ["ROLE"]

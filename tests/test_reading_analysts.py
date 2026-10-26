@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -16,7 +15,6 @@ from trading_research_agents.agents.sentiment_analyst.tools import sentiment_bri
 from trading_research_agents.data.schema import Candle
 from trading_research_agents.data.series import load_all, read_events
 from trading_research_agents.data.sources import Fetched
-from trading_research_agents.llm.form import FormError
 from trading_research_agents.store.snapshot import Snapshot
 
 NOW = 1_800_000_000.0
@@ -143,43 +141,6 @@ def test_a_context_brief_is_built_for_each_reading_role(tmp_path: Path) -> None:
         context_brief("technical_analyst", snap)
     with pytest.raises(BriefError, match="snapshot is empty"):
         context_brief(macro_analyst.ROLE, Snapshot(cycle="c", instrument="BTCUSDT"))
-
-
-def test_the_sentiment_role_keeps_not_declared_apart_from_neutral() -> None:
-    answered = sentiment_analyst.parse(
-        json.dumps(
-            {
-                "state": "not declared",
-                "reason": "the brief carried no series and no notes",
-                "figures_used": [],
-                "data_as_of": "2026-09-27T10:00:00+00:00",
-            }
-        )
-    )
-    assert answered.state == "not declared" and not answered.declared
-    positive = sentiment_analyst.parse(
-        json.dumps(
-            {
-                "state": "positive",
-                "reason": "fear_greed at 70 is above the declared 60",
-                "figures_used": [{"figure": "fear_greed", "value": "70"}],
-                "data_as_of": "2026-09-27T10:00:00+00:00",
-            }
-        )
-    )
-    assert positive.declared
-    assert [f.record() for f in positive.figures_used] == [{"figure": "fear_greed", "value": "70"}]
-    with pytest.raises(FormError, match="state"):
-        sentiment_analyst.parse(
-            json.dumps(
-                {
-                    "state": "bullish",
-                    "reason": "r",
-                    "figures_used": [],
-                    "data_as_of": "t",
-                }
-            )
-        )
 
 
 def test_a_role_may_run_on_its_own_model(tmp_path: Path) -> None:

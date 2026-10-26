@@ -1,10 +1,10 @@
-"""On-chain analyst: on-chain series through data plugins and column maps, when the operator
-has any.
+"""On-chain reading: on-chain and positioning series through data plugins and column maps, read by
+code against the operator's declared thresholds.
 
-Writes: nothing.
-One call, one schema, one typed object out; the pipeline records it. See `role.py`.
+Writes: nothing. Asks no model: until 0.11 a model labelled the same brief, and no gate ever read
+that label. The brief builder is in `tools.py`; the declared state in `agents.briefs`.
 """
 
-from trading_research_agents.agents.onchain_analyst.role import ROLE, SCHEMA, OnchainAnalyst, parse
+ROLE = "onchain_analyst"
 
-__all__ = ["ROLE", "SCHEMA", "OnchainAnalyst", "parse"]
+__all__ = ["ROLE"]

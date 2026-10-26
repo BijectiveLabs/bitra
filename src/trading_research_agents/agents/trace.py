@@ -190,10 +190,6 @@ def _answer_line(role: str, response: Any) -> str:
         return f"size {answer.get('size')}; " + ", ".join(parts)
     if role == "auditor":
         return f"{answer.get('verdict')}: {answer.get('summary', '')}"
-    if role == "macro_analyst":
-        return f"{answer.get('regime')}: {answer.get('reason', '')}"
-    if role == "onchain_analyst":
-        return f"{answer.get('signal')}: {answer.get('reason', '')}"
     return json.dumps(answer, sort_keys=True)[:160]
 
 
