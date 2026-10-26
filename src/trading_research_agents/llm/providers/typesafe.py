@@ -110,7 +110,7 @@ class TypeSafeJudge:
         started = self.clock()
         wait = BACKOFF_START_S
         why = ""
-        for _ in range(self.max_retries + 1):
+        for attempt in range(self.max_retries + 1):
             try:
                 status, replied, raw = self.post(self.url, body, headers, self.timeout_s)
             except (TimeoutError, OSError) as exc:
@@ -120,7 +120,8 @@ class TypeSafeJudge:
                     return status, _json(raw)
                 why = f"HTTP {status}"
                 wait = max(wait, _retry_after(replied))
-            if self.clock() - started + wait > self.deadline_s:
+            last = attempt == self.max_retries
+            if last or self.clock() - started + wait > self.deadline_s:
                 break
             self.sleep(wait)
             wait *= 2

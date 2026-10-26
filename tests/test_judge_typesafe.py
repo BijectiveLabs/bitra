@@ -149,9 +149,11 @@ def test_slow_down_past_the_deadline_is_unavailable_not_a_no() -> None:
 
 def test_a_timeout_is_retried_and_then_unavailable() -> None:
     wire = Wire(*[TimeoutError("read timed out")] * 3)
+    clock = Clock()
     with pytest.raises(JudgeUnavailableError, match="timed out"):
-        judge(wire, max_retries=2).evaluate("text", QUESTIONS)
-    assert len(wire.sent) == 3
+        judge(wire, clock, max_retries=2).evaluate("text", QUESTIONS)
+    # Two waits between three attempts, and none after the last.
+    assert len(wire.sent) == 3 and clock.slept == [0.5, 1.0]
 
 
 def test_a_request_the_vendor_refuses_is_never_retried() -> None:
