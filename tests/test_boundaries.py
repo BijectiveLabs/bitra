@@ -35,8 +35,10 @@ _ALLOWED: dict[str, set[str]] = {
     "features": {"market_data", "execution"},
     # The one place a typed judge meets market data: archived text in, typed events out.
     "perception": {"llm", "market_data", "features"},
+    # Plain numerics: a logistic fit, its calibration and the expected value of a side.
+    "forecast": set(),
     # The harness replays features over the archive and prices ideas with the desk's own costs.
-    "evaluation": {"features", "market_data", "data", "envelope", "execution"},
+    "evaluation": {"features", "market_data", "data", "envelope", "execution", "forecast"},
     "chain": {"ledger", "envelope", "data"},
     "execution": {"ledger", "envelope", "data", "chain"},
     "strategy": {"ledger", "envelope", "data", "chain", "execution"},
