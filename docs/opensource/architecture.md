@@ -178,6 +178,7 @@ What each failure means, and what the plane does about it:
 | Failure | What it means | What the plane does |
 |---|---|---|
 | a stream drops | coverage is lost from the last message | the minute it dropped in is partial, the minutes after it are missing until a message arrives, the span goes to `gaps.jsonl`, and the stream reconnects after 1 s doubling to 60 s, with jitter |
+| a connection goes silent | its keepalive notices up to 90 s later | the stream is unseen from its last message; hours are held three minutes so minutes already closed are marked too |
 | a trade arrives after its minute closed | the venue or the network was late | counted on the minute while its hour is open; counted in the events log once the hour is written; never added to a closed minute |
 | the same trade arrives twice | a reconnect replayed it | dropped by its trade id |
 | a trade carries a venue timestamp before the bar being built | the stream reordered it | placed by venue time inside the grace, so the archive and the stream build the same bar |

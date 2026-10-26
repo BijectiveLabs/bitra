@@ -83,10 +83,14 @@ What it does while it runs:
   is kept once, at the moment the recorder first saw it. Its publisher's time is kept beside it and
   never used to decide what was known, because a headline can be dated earlier than anyone could
   read it.
-- **Hours** are written as parts once they can no longer change: five seconds after the hour for
-  flow, at the hour for the book, five minutes after it for derivatives and text, since a venue
-  publishes a bucket after it closes. A closed day is compacted into one file once every stream
-  has written its last hour of it.
+- **Hours** are written as parts once they can no longer change: three minutes after the hour for
+  flow and the book, five minutes after it for derivatives and text, since a venue publishes a
+  bucket after it closes. A closed day is compacted into one file once every stream has written
+  its last hour of it.
+- **A silent connection** is noticed only when its keepalive gives up, up to a minute and a half
+  later with ccxt. What it did not deliver was not seen, so the recorder marks the stream unseen
+  from its last message, not from the moment the silence was noticed; holding each hour for three
+  minutes is what lets it mark minutes that had already closed.
 
 Every disconnect, reconnect, compaction and minute of latency goes to `data/market/events.jsonl`,
 one structured line each; `tra record status` reads it.
@@ -146,6 +150,7 @@ and by windows of one page each, because the venue ignores `since` on that endpo
 | What happened | What the archive says |
 |---|---|
 | a stream dropped | the minute it dropped in is partial, the minutes after it are missing until a message arrives, and the span is in `gaps.jsonl` with the error |
+| a connection went silent before its keepalive noticed | the same, counted from the last message it delivered; the `disconnected` event carries `silent_since` |
 | the recorder was not running | the minutes before it started and after it stopped are missing, with a gap mark each |
 | a later run covers the same hour | it fills only the minutes the earlier run missed; what was seen stays |
 | a day's archive could not be fetched | nothing is written; the day reads as missing and `gaps.jsonl` records why; running again fills it |
