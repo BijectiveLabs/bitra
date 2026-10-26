@@ -37,8 +37,9 @@ trading_research_agents/
   agents/      the research roles at layers 0, 2 and 3; the session roles; the
                cycle and its analysts, validators and screener                  -> everything above, llm, store, surface
   mcp/         the gates as MCP tools                                            -> everything except agent
-  market_data/ one-minute flow bars from archives, derivatives history, gap
-               marks, the verified day archive; ccxt only in market_data/venues -> data
+  market_data/ one-minute flow and book bars, derivatives and liquidations, dated
+               text, gap marks; the verified archive in day files and hour parts,
+               compaction, the recorder; ccxt only in market_data/venues        -> data
   features/    figures computed at a bar's close from what was known then:
                price, path, order flow, derivatives, cross-asset                -> market_data, execution
   evaluation/  views, triple-barrier settlement with the desk's costs,
@@ -94,7 +95,8 @@ the research it descends from.
 
 Not every package exists yet. The list is the plan; a package is added when its first gate
 lands with tests. Today: `ledger`, `envelope`, `data`, `chain`, `execution`, `strategy`,
-`trading`, `llm`, `store`, `agents`, `mcp`, `cli` (with `cli/tui.py`, the console face on `rich`, which reads reports and decides nothing). Outside the package: `examples/` (an envelope, a run
+`trading`, `llm`, `store`, `agents`, `mcp`, `market_data`, `features`, `evaluation`, `cli` (with
+`cli/tui.py`, the console face on `rich`, which reads reports and decides nothing). Outside the package: `examples/` (an envelope, a run
 config, a column map, two example cores), never imported by it; `templates/` inside the
 package is a copy of those examples that `tra init` writes into a new project, and is never
 imported either.
@@ -125,6 +127,95 @@ mode, so the order path is one path whichever command sends, and the public trad
 not unify: the historical trade archives in `data/venues/`, and the account checks in
 `trading/venues/accounts.py`.
 
+## The market data plane
+
+Everything a decision or a replay reads about a market comes through one plane, and the plane is
+code: no model touches it. The same bar builder makes a minute whether it is fed by the venue's
+daily archive or by its live stream, so a replay and a live decision read the same object.
+
+```mermaid
+flowchart TB
+    subgraph venue["one venue, through ccxt (market_data/venues only)"]
+        ws["streams<br/>watch_trades, watch_order_book, watch_liquidations"]
+        hist["REST history<br/>funding, open interest, mark, index, long/short"]
+        daily["daily trade archive"]
+        news["news feeds declared in sources/news.toml"]
+    end
+    subgraph recorder["tra record: one process, the only writer of what it records"]
+        flow["flow track<br/>FlowBarBuilder: venue time, a grace for reordering,<br/>duplicates dropped, late trades counted"]
+        book["book track<br/>one sample a second into BookBar"]
+        points["points track<br/>levels by five-minute history backfill,<br/>liquidations as they stream"]
+        text["text track<br/>each headline once, at first sight"]
+        hours["hour parts<br/>written when the hour can no longer change"]
+    end
+    subgraph backfill["tra data bars"]
+        audit["the data gate audits the archive"]
+        builder["the same FlowBarBuilder"]
+    end
+    archive[("data/market<br/>day files and hour parts,<br/>a manifest with sha256 beside each")]
+    compact["compaction<br/>a closed day joined, verified, parts removed;<br/>unseen hours written as missing"]
+    readers["readers and the BarFeed port<br/>a file whose bytes changed is refused"]
+    features["features<br/>34 figures known at the bar's close"]
+    arena["the arena<br/>replay, settlement, statistics"]
+    ws --> flow
+    ws --> book
+    ws --> points
+    hist --> points
+    news --> text
+    flow --> hours
+    book --> hours
+    points --> hours
+    text --> hours
+    hours --> archive
+    daily --> audit --> builder --> archive
+    hist --> archive
+    archive --> compact --> archive
+    archive --> readers --> features --> arena
+```
+
+What each failure means, and what the plane does about it:
+
+| Failure | What it means | What the plane does |
+|---|---|---|
+| a stream drops | coverage is lost from the last message | the minute it dropped in is partial, the minutes after it are missing until a message arrives, the span goes to `gaps.jsonl`, and the stream reconnects after 1 s doubling to 60 s, with jitter |
+| a trade arrives after its minute closed | the venue or the network was late | counted on the minute while its hour is open; counted in the events log once the hour is written; never added to a closed minute |
+| the same trade arrives twice | a reconnect replayed it | dropped by its trade id |
+| a trade carries a venue timestamp before the bar being built | the stream reordered it | placed by venue time inside the grace, so the archive and the stream build the same bar |
+| a level is published after its hour was written | an open-interest bucket closes late | the hour is written again, merged, until its day is compacted |
+| the recorder stops or starts mid-hour | nobody watched part of the hour | the unwatched minutes are missing, marked in `gaps.jsonl`; a later run in the same hour fills only the minutes the earlier one missed |
+| a file is edited after it was written | its bytes no longer match its manifest | every reader refuses it and `tra runs verify --market` names it; it is never repaired |
+| a venue publishes no history for a series | nothing to keep | recorded as unsupported, and every feature that needs it is absent with that reason |
+
+State lives in files, not in a shared store: one writer per file, hour parts read only once
+written, and the rate limit split by a declared `requests_per_minute`. The `BudgetStore` and
+`BarFeed` protocols in `market_data/ports.py` are where a platform running many desks would put a
+shared store; nothing in the package needs one.
+
+## How a decision is made, now and next
+
+```mermaid
+flowchart LR
+    subgraph now["the cycle today"]
+        direction TB
+        f1["features and briefs, by code"] --> r1["reading roles, by code"]
+        r1 --> m1["technical analyst<br/>the one model call"]
+        m1 --> g1["gates: cost, exits,<br/>confluence, conviction"]
+    end
+    subgraph next["the decision being built (0.12 and 0.13)"]
+        direction TB
+        f2["features, by code"] --> fc["forecast and calibrator<br/>a probability fitted on outcomes"]
+        j2["typed judge<br/>dated text into events,<br/>claims checked"] -.-> fc
+        s2["reasoning model<br/>woken only when worth it"] -.-> fc
+        fc --> ev["one expected-value decision<br/>p x take - (1 - p) x stop - cost"]
+    end
+    g1 --> gate["risk gate, by code"]
+    ev --> gate
+    gate --> ex["execution: one order, exits attached"]
+```
+
+Both paths end in the same risk controls and the same order path, and the arena replays both over
+the same archive before the new one replaces the old.
+
 ## The session, as it runs
 
 ```mermaid
@@ -151,8 +242,9 @@ sequenceDiagram
     U-->>C: verdict, findings
 ```
 
-The macro and on-chain analysts, when series are declared, are asked between the screener
-and the runs; their briefs are measured by the system and carry no action.
+The macro and on-chain roles, when series are declared, are read between the screener and the
+runs: their briefs are measured by the system, read against the operator's thresholds by code, and
+ask no model.
 
 ## The chain
 
@@ -194,6 +286,13 @@ confident about it.
 | `inputs.json.gz` | gzip JSON, schema 1 | a cycle's raw inputs as fetched (candles per timeframe, book levels, funding, open interest) and the settings its briefs used |
 | `index/<day>.jsonl` | JSON Lines | one line per cycle: id, instrument, mid, held, intent, placement, open interest, and the sha256 of `cycle.json`; the last line for a cycle wins |
 | `session.json`, `audit.json` | JSON | a session of the seven roles: what was kept and why, the runs, the risk decision and the limits after it, the allocation, the auditor's verdict |
+| `market/<venue>/<instrument>/<stream>/<day>.parquet` | Parquet, zstd; prices and sizes `DECIMAL(38, s)` | one stream of one market for one UTC day: `flow_1m`, `book_1m`, `deriv`; dated text under `market/text/<feed>/text/` |
+| `.../<stream>/<day>/part-<HH>.parquet` | the same schema | one hour of an open day, until compaction |
+| `<file>.manifest.json` | JSON | stream, venue, instrument, day and hour, rows, sha256, partial and missing minutes, sources, scales, schema and builder versions |
+| `market/<venue>/<instrument>/gaps.jsonl` | JSON Lines | every span a stream or an archive did not cover, with the reason |
+| `market/events.jsonl` | JSON Lines | the recorder's events: started, connected, disconnected, gap_closed, latency, skew, late_trades, late_points, compacted, stopped |
+| `runs/arena/<id>/arena.json`, `ideas.jsonl`, `run.json` | JSON, JSON Lines | an arena run: configuration, archive hashes, rows and coverage, byte-stable; every idea with its settlement; when it ran |
+| `cache/llm/<key[:2]>/<key>.json` | JSON | one model call keyed by role, model, prompt version, brief, sampling and sample index |
 
 ## Numbers
 

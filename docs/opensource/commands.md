@@ -46,10 +46,12 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 |---|---|
 | `tra data get BTCUSDT 2025-01-01` | download a day, verify its checksum, audit it, write Parquet and funding |
 | `tra data bars BTCUSDT 2025-07-01 --to 2025-07-31` | one-minute flow bars from the venue archive and the market's derivatives history, into `data/market/` ([Market data](/opensource/market-data)) |
-| `tra runs verify --market data` | every market day file against its manifest |
+| `tra runs verify --market data` | every market day file and hour part against its manifest |
+| `tra record`, `tra record --once 30m` | order flow, the book, liquidations, derivatives and news kept while they happen, per `[record]` in `data.toml` ([Market data](/opensource/market-data#the-recorder)) |
+| `tra record status` | coverage, gaps and latency of the recording over the last day |
 | `tra data audit export.csv --mapping mapping.toml` | your own CSV or Parquet, through the same audit ([Your own data](/opensource/your-data)) |
 | `tra data pull BTCUSDT` | one live snapshot through the chains in `data.toml` |
-| `tra sources show`, `tra sources pull` | where the reading analysts' series come from and how old they are; refresh them now |
+| `tra sources show`, `tra sources pull` | where the reading roles' series come from and how old they are; refresh them now |
 | `tra sources add macro us10y --from fred --id DGS10 --high bearish` | a series onto the shelf in one step: pulled now, its lines drawn from its own history |
 | `tra universe` | which perpetuals discovery finds on the venue now, and what each filter took out |
 | `tra runs verify` | every cycle's files against their hashes, and its briefs against its raw inputs |

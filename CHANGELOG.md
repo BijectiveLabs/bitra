@@ -23,6 +23,16 @@ All notable changes to this project are recorded here. The format follows
   reason when its inputs are missing or stale.
 - A language-model response cache (`llm.cache`) with record, replay and off; replay never calls a
   model.
+- `tra record`: a venue's trades, sampled order book, liquidations, derivatives levels and the news
+  feeds you declare, kept while they happen through the same bar builder as the archive path, in
+  hour parts compacted into verified day files once the day closes. A dropped stream, a late
+  trade, a restart and an unwatched hour are each marked, never written as a quiet market.
+  `[record]` in `data.toml` says what to keep; `tra record status` reads coverage, gaps and latency.
+- Book bars (`book_1m`), liquidations and dated text (`text`, kept at first sight) in the archive,
+  and the features that read them: `spread_bps`, `book_imbalance`, `depth_ratio_10bps`,
+  `liq_imbalance_24`.
+- Bybit's long/short ratio history, asked by the venue's own period names and windows; it was
+  unreachable through ccxt's unified call.
 
 ### Changed
 
