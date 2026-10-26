@@ -34,6 +34,9 @@ SUPPORT: Mapping[Series, str] = {
 # The archive venues whose trades are a perpetual's, and the ccxt name of that market's venue.
 # Binance's public archive is spot, which has no funding or open interest to backfill.
 DERIV_VENUES: Mapping[str, str] = {"bybit": "bybit"}
+# Bybit's names for the account-ratio periods; ccxt passes a timeframe through unchanged, and Bybit
+# answers "5m" with nothing (verified through ccxt 4.5.85 on 2026-10-26).
+BYBIT_PERIODS = {"5m": "5min", "15m": "15min", "30m": "30min", "1h": "1h", "4h": "4h", "1d": "1d"}
 TIMEFRAME_MS = {"5m": 300_000, "15m": 900_000, "30m": 1_800_000, "1h": 3_600_000, "1d": 86_400_000}
 
 # One row as the pages read it: the venue's row time, the time the value was known, the value or
@@ -120,6 +123,16 @@ class CcxtBackfill:
                 _interest(r, span, timeframe)
                 for r in c.fetch_open_interest_history(symbol, timeframe, since, n)
             ]
+        period = BYBIT_PERIODS.get(timeframe) if getattr(c, "id", "") == "bybit" else None
+        if period is not None:
+            # Bybit ignores `since` and answers a window with its newest buckets, so each request
+            # is a window of exactly one page, which keeps forward paging exact.
+            def windowed(since: int) -> list[Row]:
+                window = {"startTime": since, "endTime": since + n * span - 1}
+                rows = c.fetch_long_short_ratio_history(symbol, period, None, n, window)
+                return [_ratio(r, span, timeframe) for r in rows]
+
+            return windowed
         return lambda since: [
             _ratio(r, span, timeframe)
             for r in c.fetch_long_short_ratio_history(symbol, timeframe, since, n)
