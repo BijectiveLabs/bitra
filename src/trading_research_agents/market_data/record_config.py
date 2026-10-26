@@ -2,7 +2,7 @@
 
 ```toml
 [record]
-venue = "bybit"
+venue = "<the venue ccxt names>"
 instruments = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
 streams = ["trades", "book", "liquidations"]   # where the venue supports them
 book_sample_ms = 1000
