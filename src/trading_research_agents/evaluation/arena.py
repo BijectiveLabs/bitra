@@ -19,6 +19,7 @@ from typing import Any
 
 from trading_research_agents import __version__
 from trading_research_agents.evaluation.baselines import BASELINES_VERSION, HOLD_BARS
+from trading_research_agents.evaluation.forecast import FORECAST_VERSION, FitContext
 from trading_research_agents.evaluation.history import MarketHistory, Views, load_history
 from trading_research_agents.evaluation.policy import DecisionView, Policy, Scored, TradeIdea
 from trading_research_agents.evaluation.rows import RANDOM, V1_RECORD, make_policy
@@ -111,6 +112,7 @@ class ArenaResult:
         return {
             "config": self.config.record(),
             "baselines_version": BASELINES_VERSION,
+            "forecast_version": FORECAST_VERSION,
             "package_version": __version__,
             "manifests": self.manifests,
             "rows": list(self.rows),
@@ -132,7 +134,11 @@ class _Run:
     """The state of one run: the markets, the rows, and when each row's market is free again."""
 
     def __init__(
-        self, config: ArenaConfig, histories: dict[str, MarketHistory], window: Window
+        self,
+        config: ArenaConfig,
+        histories: dict[str, MarketHistory],
+        window: Window,
+        views: Views,
     ) -> None:
         self.config = config
         self.histories = histories
@@ -142,9 +148,22 @@ class _Run:
             name: None if config.funding == "none" else funding_schedule(histories[name].points)
             for name in config.instruments
         }
+        fit = FitContext(
+            views=views,
+            histories=histories,
+            instruments=config.instruments,
+            costs=config.costs,
+            funding=self.funding,
+            interval_ns=config.interval_ns,
+            first_ns=midnight_ns(config.start - timedelta(days=WARMUP_DAYS)),
+        )
         self.policies: dict[str, Policy] = {
             name: make_policy(
-                name, seed=config.seed, end_ns=window.end_ns, interval_ns=config.interval_ns
+                name,
+                seed=config.seed,
+                end_ns=window.end_ns,
+                interval_ns=config.interval_ns,
+                fit=fit,
             )
             for name in config.rows
             if name != V1_RECORD
@@ -222,7 +241,7 @@ def run_arena(config: ArenaConfig, *, root: Path, cycles: Path | None = None) ->
         context_ns=config.context_interval_s * NS_PER_S,
         context=config.context,
     )
-    run = _Run(config, histories, window)
+    run = _Run(config, histories, window, views)
     run.replay(views)
     if V1_RECORD in run.rows and cycles is not None:
         run.recorded(cycles)

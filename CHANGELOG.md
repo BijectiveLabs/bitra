@@ -41,6 +41,9 @@ All notable changes to this project are recorded here. The format follows
   regulatory, macro), the strongest report concerning the asset in the last 24 bars, from the
   archived headlines read by the judge (`perception/`). Absent with the reason when no judge is
   declared. `tra text judge` reads a range of days and prints what the features would read.
+- The `forecast` arena row: a logistic model per side fitted walk-forward on settled outcomes only,
+  calibrated (Platt or isotonic, chosen on held-out halves), and one expected-value decision net of
+  the round trip. In the arena only, beside the baselines, until it is shown to be better.
 - Bybit's long/short ratio history, asked by the venue's own period names and windows; it was
   unreachable through ccxt's unified call.
 

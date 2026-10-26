@@ -45,8 +45,10 @@ trading_research_agents/
   features/    figures computed at a bar's close from what was known then:
                price, path, order flow, derivatives, cross-asset                -> market_data, execution
   perception/  archived headlines read by the typed judge into text events     -> llm, market_data, features
+  forecast/    a logistic fit, Platt and isotonic calibration, the expected value
+               of a side; numerics only                                         depends on nothing
   evaluation/  views, triple-barrier settlement with the desk's costs,
-               baselines, the arena and its records                             -> features, market_data, data, envelope, execution
+               baselines, the forecast row, the arena and its records           -> features, market_data, data, envelope, execution, forecast
   cli/         the `tra` command                                                 -> everything
 ```
 
@@ -207,7 +209,7 @@ flowchart LR
         r1 --> m1["technical analyst<br/>the one model call"]
         m1 --> g1["gates: cost, exits,<br/>confluence, conviction"]
     end
-    subgraph next["the decision being built (0.12 and 0.13)"]
+    subgraph next["the decision being built: in the arena today, live in 0.13"]
         direction TB
         f2["features, by code"] --> fc["forecast and calibrator<br/>a probability fitted on outcomes"]
         j2["typed judge<br/>text events today,<br/>claims checked from 0.13"] -.-> fc
