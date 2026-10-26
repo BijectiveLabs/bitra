@@ -67,9 +67,6 @@ class Conviction:
     min_score: Decimal = Decimal(0)
     ladder: tuple[Tier, ...] = ()
     max_leverage: Decimal | None = None
-    # How strongly a reading analyst's own label counts when nothing it read carries a declared
-    # threshold, such as a file of headlines: 0 keeps every label out, as a recorded opinion only.
-    reader_labels: Decimal = Decimal(0)
 
     def __post_init__(self) -> None:
         for role, weight in self.weights.items():
@@ -81,8 +78,6 @@ class Conviction:
             raise ConvictionError("[conviction].min_score sits between 0 and 1")
         if self.max_leverage is not None and self.max_leverage <= 0:
             raise ConvictionError("[conviction].max_leverage is positive")
-        if not Decimal(0) <= self.reader_labels <= Decimal(1):
-            raise ConvictionError("[conviction].reader_labels sits between 0 and 1")
         rungs = sorted(self.ladder, key=lambda t: t.at_least, reverse=True)
         if list(rungs) != list(self.ladder):
             object.__setattr__(self, "ladder", tuple(rungs))
@@ -105,7 +100,6 @@ class Conviction:
             "min_score": str(self.min_score),
             "ladder": [t.record() for t in self.ladder],
             "max_leverage": None if self.max_leverage is None else str(self.max_leverage),
-            "reader_labels": str(self.reader_labels),
         }
 
 

@@ -3704,7 +3704,6 @@ def run_cycle_command(args: argparse.Namespace) -> int:
         size_step=cfg.run.step_for(instrument),
         validators=a.validators,
         on_missing_validator=a.on_missing_validator,
-        reuse_reading_s=a.reuse_reading_s,
         context_intervals=cfg.run.context_intervals,
         hold_limit=cfg.execution.hold_limit,
         timeout_bars=cfg.exit_rule.timeout_bars,
@@ -5490,7 +5489,10 @@ def _span_s(seconds: float) -> str:
 
 def _load_notes(a: Any, roster: tuple[str, ...], screener: bool = False) -> list[str]:
     """How a cycle's calls land on providers, and what happens when one of them says no."""
-    asked = list(a.analysts or roster or ("technical_analyst",))
+    named = list(a.analysts or roster or ("technical_analyst",))
+    # The reading roles are read by code; only the deciding role asks a model.
+    asked = [role for role in named if role == "technical_analyst"]
+    reading = [role for role in named if role != "technical_analyst"]
     roles = [
         *asked,
         *(["validator"] if a.validators else []),
@@ -5498,7 +5500,6 @@ def _load_notes(a: Any, roster: tuple[str, ...], screener: bool = False) -> list
     ]
     calls = len(asked) + len(a.validators) + (1 if screener else 0)
     on = sorted({a.for_role(role).provider for role in roles})
-    reading = [r for r in asked if r != "technical_analyst"]
     said = [
         f"models: a full pass makes at most {calls} call(s) within a minute"
         + (" (the screener, then the cycle)" if screener else "")
@@ -5508,14 +5509,8 @@ def _load_notes(a: Any, roster: tuple[str, ...], screener: bool = False) -> list
     ]
     if reading:
         said.append(
-            "models: "
-            + (
-                f"{', '.join(reading)} reuse their last answer for up to "
-                f"{_span_s(a.reuse_reading_s)} while their figures are unchanged; new data asks "
-                "again at once"
-                if a.reuse_reading_s > 0
-                else f"{', '.join(reading)} are asked every cycle; reuse_reading_for is off"
-            )
+            f"readers: {', '.join(reading)} are read by code against your thresholds and ask no "
+            "model"
         )
     # Vendors meter per model, so two models on one provider are two sets of limits.
     pairs = sorted({f"{a.for_role(r).provider}:{a.for_role(r).model}" for r in roles})

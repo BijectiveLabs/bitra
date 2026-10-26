@@ -619,37 +619,6 @@ def test_the_cli_runs_one_cycle(
     assert "does not serve orderbook" in capsys.readouterr().err
 
 
-def reading_answer(role: str) -> str:
-    """What each reading analyst answers, in its own schema."""
-    if role == "macro_analyst":
-        return json.dumps(
-            {
-                "regime": "risk-off",
-                "events": [],
-                "reason": "us10y at 4.4 is above the operator's declared 4.25",
-                "figures_used": [],
-                "data_as_of": "2026-09-27T10:00:00+00:00",
-            }
-        )
-    if role == "onchain_analyst":
-        return json.dumps(
-            {
-                "signal": "distribution",
-                "reason": "net flow to venues over the window is positive",
-                "figures_used": [],
-                "data_as_of": "2026-09-27T10:00:00+00:00",
-            }
-        )
-    return json.dumps(
-        {
-            "state": "not declared",
-            "reason": "the brief carried no series and no notes",
-            "figures_used": [],
-            "data_as_of": "2026-09-27T10:00:00+00:00",
-        }
-    )
-
-
 def series_for(tmp_path: Path, name: str, value: str, threshold: str = "") -> Path:
     csv = tmp_path / f"{name}.csv"
     csv.write_text(f"date,value\n2026-09-20,{value}\n2026-09-25,{value}\n", encoding="utf-8")
@@ -673,21 +642,17 @@ def series_for(tmp_path: Path, name: str, value: str, threshold: str = "") -> Pa
     return path
 
 
-def test_four_analysts_run_together_and_every_answer_is_recorded(
+def test_the_reading_roles_are_read_by_code_and_ask_no_model(
     tmp_path: Path, envelope: Envelope
 ) -> None:
     macro = series_for(tmp_path, "us10y", "4.4", "{ bearish_above = 4.25 }")
     onchain = series_for(tmp_path, "venue_net_flow", "120")
-    answers = {
-        "technical_analyst": analyst_answer(),
-        "macro_analyst": reading_answer("macro_analyst"),
-        "onchain_analyst": reading_answer("onchain_analyst"),
-        "sentiment_analyst": reading_answer("sentiment_analyst"),
-    }
+    steps: list[tuple[str, str, str]] = []
     cfg, fake, usage = cycle_config(
         tmp_path,
         envelope,
-        answers,
+        {"technical_analyst": analyst_answer()},
+        watch=lambda step: steps.append((step.name, step.state, step.detail)),
         series={"macro_analyst": (macro,), "onchain_analyst": (onchain,)},
         analysts=(
             "technical_analyst",
@@ -698,23 +663,18 @@ def test_four_analysts_run_together_and_every_answer_is_recorded(
     )
     result = run_cycle(cfg)
     assert result.stopped_by is None and result.acted
-    # Four agents asked, in a fixed order in the record whoever answered first.
-    assert [o.name for o in result.fan.outcomes] == [
-        "macro_analyst",
-        "onchain_analyst",
-        "sentiment_analyst",
-        "technical",
-    ]
-    assert len(fake.calls) == 4 and usage.tokens > 0
-    assert result.context["macro_analyst"]["regime"] == "risk-off"
-    assert result.context["onchain_analyst"]["signal"] == "distribution"
-    # A sentiment analyst with no declared source says so, and is never recorded as neutral.
-    assert result.context["sentiment_analyst"]["state"] == "not declared"
+    # One model is asked, the one that decides; the readers cost nothing.
+    assert [o.name for o in result.fan.outcomes] == ["technical"]
+    assert len(fake.calls) == 1 and usage.tokens > 0
+    assert result.context["macro_analyst"]["declared_state"]["declared"] == "bearish"
+    assert result.context["onchain_analyst"]["declared_state"]["declared"] == "undeclared"
+    assert {said["read_by"] for said in result.context.values()} == {"code"}
+    assert ("macro_analyst", "done", "read by code: risk-off") in steps
 
     where = Path(str(result.path))
     for role in ("macro_analyst", "onchain_analyst", "sentiment_analyst"):
         assert (where / "briefs" / f"{role}.json").is_file()
-        assert (where / "answers" / f"{role}.json").is_file()
+        assert not (where / "answers" / f"{role}.json").exists()
     summary = json.loads((where / "cycle.json").read_text("utf-8"))
     assert set(summary["context"]) == {"macro_analyst", "onchain_analyst", "sentiment_analyst"}
     macro_brief_read = json.loads((where / "briefs" / "macro_analyst.json").read_text("utf-8"))
@@ -936,35 +896,6 @@ def test_a_stance_asked_twice_is_refused_when_the_cycle_is_configured(
         cycle_config(tmp_path, envelope, [analyst_answer()], validators=("pro", "pro"))
     with pytest.raises(CycleError, match="is not a stance"):
         cycle_config(tmp_path, envelope, [analyst_answer()], validators=("bullish",))
-
-
-def test_a_reading_analyst_reaching_into_a_later_step_is_recorded_and_ignored(
-    tmp_path: Path, envelope: Envelope
-) -> None:
-    cfg, _, _ = cycle_config(
-        tmp_path,
-        envelope,
-        {
-            "technical_analyst": analyst_answer(),
-            "macro_analyst": json.dumps(
-                {
-                    "regime": "neutral",
-                    "events": [],
-                    "reason": "nothing declared, but I would go long with a tight stop loss",
-                    "figures_used": [],
-                    "data_as_of": "2026-09-27T00:00:00+00:00",
-                }
-            ),
-        },
-        analysts=("technical_analyst", "macro_analyst"),
-    )
-    result = run_cycle(cfg)
-
-    said = result.context["macro_analyst"]
-    assert said["out_of_scope"] and any("an order" in f for f in said["out_of_scope"])
-    assert any("belongs to a later step" in r for r in result.refusals)
-    # It changed nothing: the cycle still priced the trade and wrote the intent.
-    assert result.acted
 
 
 def conviction_rule(**overrides: Any) -> Any:
@@ -1234,7 +1165,7 @@ def test_an_interrupt_at_the_venue_is_written_down_before_it_stops_the_run(
     assert summary["stopped_by"].startswith("interrupted at the venue")
 
 
-def test_a_reading_model_that_fails_still_leaves_its_declared_state(
+def test_a_reading_role_leaves_its_declared_state_without_a_model(
     tmp_path: Path, envelope: Envelope
 ) -> None:
     cfg, _, _ = cycle_config(
@@ -1245,8 +1176,8 @@ def test_a_reading_model_that_fails_still_leaves_its_declared_state(
     )
     result = run_cycle(cfg)
     said = result.context["macro_analyst"]
-    # The model never answered, and the code over the operator's thresholds still stands.
-    assert said["error"] == "the model did not answer"
+    # Nothing is asked, so nothing can fail: the code over the operator's thresholds stands.
+    assert said == {"declared_state": said["declared_state"], "read_by": "code"}
     assert said["declared_state"]["declared"] == "undeclared"
 
 
@@ -1423,8 +1354,6 @@ def test_each_analyst_reads_its_own_data_and_none_sees_another_analysts_reading(
     onchain = series_for(tmp_path, "venue_net_flow", "120", "{ bearish_above = 100 }")
     answers = {
         "technical_analyst": analyst_answer(),
-        "macro_analyst": reading_answer("macro_analyst"),
-        "onchain_analyst": reading_answer("onchain_analyst"),
     }
     cfg, _fake, _ = cycle_config(
         tmp_path,
@@ -1450,8 +1379,8 @@ def test_each_analyst_reads_its_own_data_and_none_sees_another_analysts_reading(
     }
     for role, words in others.items():
         assert [w for w in words if w in seen[role]] == [], role
-    # The readings are still weighed, once, by code.
-    assert result.context["macro_analyst"]["regime"] == "risk-off"
+    # The readings are weighed by code alone.
+    assert result.context["macro_analyst"]["declared_state"]["declared"] == "bearish"
 
 
 def judged_cycle(

@@ -200,14 +200,13 @@ def test_a_role_may_run_on_its_own_model(tmp_path: Path) -> None:
     )
     path = tmp_path / "strategy.toml"
     path.write_text(
-        base
-        + '\n[agents.roles.sentiment_analyst]\nmodel = "cheap-model"\nmax_output_tokens = 256\n',
+        base + '\n[agents.roles.validator]\nmodel = "cheap-model"\nmax_output_tokens = 256\n',
         "utf-8",
     )
     cfg = load_strategy_config(path)
     assert cfg.agents is not None
     strong = cfg.agents.for_role("technical_analyst")
-    cheap = cfg.agents.for_role("sentiment_analyst")
+    cheap = cfg.agents.for_role("validator")
     assert strong.model == "strong-model" and strong.max_output_tokens == 1024
     assert cheap.model == "cheap-model" and cheap.max_output_tokens == 256
     # Anything a role does not override it inherits, provider included.

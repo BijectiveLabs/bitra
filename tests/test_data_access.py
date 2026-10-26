@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +24,6 @@ from trading_research_agents.data.series import (
     Threshold,
     load_news_map,
 )
-from trading_research_agents.execution.conviction import Conviction, score_of
 
 NOW = datetime(2026, 10, 18, 3, 0, tzinfo=UTC)
 NOW_NS = int(NOW.timestamp() * 1_000_000_000)
@@ -219,19 +217,3 @@ def test_a_news_declaration_names_how_it_is_fetched(tmp_path: Path) -> None:
     )
     with pytest.raises(SeriesError, match="rss"):
         load_news_map(path)
-
-
-# -- a reading analyst's own label ----------------------------------------------------------------
-
-
-def test_a_label_counts_only_with_the_strength_the_operator_gave_it() -> None:
-    rule = Conviction(
-        weights={"technical_analyst": Decimal(2), "sentiment_analyst": Decimal(1)},
-        reader_labels=Decimal("0.5"),
-    )
-    label = {"declared": "bearish", "score": "-0.5", "from": "the role's own reading"}
-    against = score_of(rule, target="long", states={"sentiment_analyst": label}, confidence=0.7)
-    alone = score_of(rule, target="long", states={}, confidence=0.7)
-    assert against.score < alone.score and "sentiment_analyst" in against.against
-    with pytest.raises(ValueError, match="reader_labels"):
-        Conviction(reader_labels=Decimal("1.5"))

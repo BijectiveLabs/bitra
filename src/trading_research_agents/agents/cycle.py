@@ -37,7 +37,6 @@ from trading_research_agents.agents import (
 )
 from trading_research_agents.agents.alarms import DAILY_LOSS_MARK, DRAWDOWN_MARK
 from trading_research_agents.agents.briefs import (
-    DECLARED_AS,
     BriefError,
     context_brief,
     cost_brief,
@@ -122,7 +121,6 @@ from trading_research_agents.records import (
     write_json,
 )
 from trading_research_agents.store.cycles import SUMMARY, CycleDir
-from trading_research_agents.store.reuse import key_of, lookup, remember
 from trading_research_agents.store.snapshot import (
     INPUTS,
     Snapshot,
@@ -147,19 +145,15 @@ TARGETS = {"long": Direction.LONG, "short": Direction.SHORT}
 OPEN_INTEREST_LOOK_BACK = 12
 # Cycles looked through for the analyst's last reading; most of them were held by the trigger.
 PREVIOUS_LOOK_BACK = 96
-# The analysts that only read and label. They run beside the technical analyst, they never place
-# anything, and each one's answer is recorded whether or not the operator gave it a source.
-# The shelf files that feed each reading analyst, for saying where to declare one.
+# The reading roles: code reads their series against the operator's thresholds and records the
+# declared state. They asked a model until 0.11; no gate ever read the model's label.
+# The shelf files that feed each reading role, for saying where to declare one.
 CLASSES_OF: dict[str, tuple[str, ...]] = {
     macro_analyst.ROLE: ("macro",),
     onchain_analyst.ROLE: ("onchain", "derivatives"),
     sentiment_analyst.ROLE: ("sentiment",),
 }
-READING: dict[str, Any] = {
-    macro_analyst.ROLE: macro_analyst,
-    onchain_analyst.ROLE: onchain_analyst,
-    sentiment_analyst.ROLE: sentiment_analyst,
-}
+READING = (macro_analyst.ROLE, onchain_analyst.ROLE, sentiment_analyst.ROLE)
 
 
 # What a contract market has and a spot pair does not.
@@ -251,8 +245,6 @@ class CycleConfig:
     # refuse: a declared stance that no model answered stops the trade. continue: trade on the votes
     # that came back. A lost check never adds size either way.
     on_missing_validator: str = "refuse"
-    # How long a reading analyst's answer stands while its brief's figures are unchanged; 0 is off.
-    reuse_reading_s: float = 0.0
     # Higher timeframes read as context, in seconds; the decision stays on interval_s.
     context_intervals: tuple[int, ...] = ()
     # How long a position is kept: the analyst's horizon, or [exit].timeout_bars. The cost gate
@@ -405,8 +397,6 @@ class CycleResult:
             "series": self.briefs.get("series"),
             # Reading analysts this cycle did not ask, and why.
             "not_asked": self.briefs.get("not_asked"),
-            # Reading analysts whose answer was reused, and how old it was in seconds.
-            "reused": self.briefs.get("reused"),
             "exits": self.exits or None,
             # What the models cost this cycle, and which calls had no declared price.
             "spend": self.briefs.get("spend"),
@@ -745,42 +735,13 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
             path=where.answer("technical"),
         )
     ]
-    keys: dict[str, str] = {}
-    reused: dict[str, float] = {}
     for role, brief in reading_briefs.items():
         write_json(where.brief(role), brief)
-        module = READING[role]
-        keys[role] = key_of(brief)
-        earlier = lookup(cfg.root, role, keys[role], window_s=cfg.reuse_reading_s, now=cfg.clock())
-        if earlier is not None and earlier[0] is not None:
-            # The same figures were read and answered within the window; the answer is put where
-            # this cycle's own would go, and the task below finds it there instead of asking.
-            write_json(where.answer(role), earlier[0])
-            reused[role] = round(earlier[1])
-            announce(
-                cfg.watch, role, DONE, f"reused, {reused[role]}s old; its figures have not changed"
-            )
-        tasks.append(
-            Task(
-                name=role,
-                work=timed(cfg.watch, role, _reading_task(cfg, module, brief)),
-                path=where.answer(role),
-            )
-        )
-    if reused:
-        result.briefs["reused"] = reused
+        announce(cfg.watch, role, DONE, f"read by code: {states[role]['declared']}")
 
-    fan = run_tasks(tasks, max_workers=cfg.max_workers, resume=bool(reused))
+    fan = run_tasks(tasks, max_workers=cfg.max_workers)
     result.fan = fan
-    for role in reading_briefs:
-        if role in reused or role not in fan.answers:
-            continue
-        try:
-            READING[role].parse(str(fan.answers[role]))
-        except (RoleError, ValueError):
-            continue
-        remember(cfg.root, role, keys[role], fan.answers[role], now=cfg.clock())
-    result.context = _context_of(fan, reading_briefs, result)
+    result.context = _context_of(reading_briefs)
     for name, error in fan.failed.items():
         result.refusals.append(f"{name}: {error}")
         if "BudgetSpentError" in error:
@@ -1668,97 +1629,22 @@ def _reading_brief(
     return brief
 
 
-def _reading_task(cfg: CycleConfig, module: Any, brief: dict[str, Any]) -> Callable[[], str]:
-    def ask() -> str:
-        return _ask_readable(cfg, module.ROLE, brief, module.SCHEMA, module.parse)
-
-    return ask
-
-
 def _conviction_states(cfg: CycleConfig, result: CycleResult) -> dict[str, Mapping[str, Any]]:
-    """The declared state of each reading analyst, or its own label where nothing is declared.
-
-    A label stands in only when the operator asked for it with `[conviction].reader_labels`, the
-    role's series declare nothing (headlines, say), and the answer cited what it read: a sentence
-    pointing at no figure counts for nothing either way.
-    """
-    out: dict[str, Mapping[str, Any]] = {}
-    strength = cfg.conviction.reader_labels
-    for role, said in result.context.items():
-        declared = said.get("declared_state")
-        if not isinstance(declared, Mapping):
-            continue
-        out[role] = declared
-        if strength <= 0 or declared.get("declared") != "undeclared" or said.get("error"):
-            continue
-        if not said.get("figures_used"):
-            continue
-        label = said.get("regime") or said.get("signal") or said.get("state")
-        word = {v: k for k, v in DECLARED_AS.get(role, {}).items()}.get(str(label))
-        if word is None:
-            continue
-        signed = strength if word == "bullish" else -strength
-        out[role] = {"declared": word, "score": str(signed), "from": "the role's own reading"}
-    return out
+    """The declared state of each reading role, computed by code from the operator's thresholds."""
+    return {
+        role: said["declared_state"]
+        for role, said in result.context.items()
+        if isinstance(said.get("declared_state"), Mapping)
+    }
 
 
-def _context_of(
-    fan: FanOut, briefs: Mapping[str, dict[str, Any]], result: CycleResult
-) -> dict[str, Any]:
-    """What each reading analyst said, beside what the operator's own thresholds say.
-
-    The model's label explains; the declared state decides. Keeping both in the record is what makes
-    a disagreement visible instead of a matter of whose sentence was read last.
-    """
-    out: dict[str, Any] = {}
-    for role, module in READING.items():
-        if role not in briefs:
-            continue
-        # The declared state is code over the operator's thresholds, so it stands whether or not
-        # the model answered: a rate limit on the analyst must not erase what the figures say.
-        declared = declared_state(role, briefs.get(role, {}))
-        if role not in fan.answers:
-            out[role] = {"declared_state": declared, "error": "the model did not answer"}
-            continue
-        try:
-            said = vars(module.parse(str(fan.answers[role])))
-        except RoleError as exc:
-            out[role] = {"declared_state": declared, "error": str(exc)}
-            continue
-        label = said.get("regime") or said.get("signal") or said.get("state")
-        said["declared_state"] = declared
-        cited = said.get("figures_used")
-        if isinstance(cited, tuple):
-            kept, lost = survived(cited, figures_of(briefs.get(role, {})))
-            said["figures_used"] = [figure.record() for figure in kept]
-            if lost:
-                said["uncited"] = list(lost)
-                for gone in lost:
-                    result.refusals.append(f"{role}: discarded a citation, {gone}")
-            if not kept:
-                # The label still counts for nothing on its own - the gates read the operator's own
-                # declared state - but a sentence with no figure behind it should not sit in the
-                # record looking like evidence.
-                result.refusals.append(
-                    f"{role}: pointed at no figure in its own brief; the label is recorded and "
-                    "supports nothing"
-                )
-        reached = crossings(role, said)
-        if reached:
-            said["out_of_scope"] = list(reached)
-            for finding in reached:
-                result.refusals.append(
-                    f"{role}: {finding}; that belongs to a later step and changes nothing here"
-                )
-        expected = declared.get("as_role_says_it")
-        said["agrees_with_declared"] = None if expected is None else label == expected
-        if expected is not None and label != expected:
-            result.refusals.append(
-                f"{role}: said {label!r} while the operator's threshold says {expected!r}; "
-                "the declaration is what the next gate reads"
-            )
-        out[role] = said
-    return out
+def _context_of(briefs: Mapping[str, dict[str, Any]]) -> dict[str, Any]:
+    """What each reading role's series say against the operator's own thresholds."""
+    return {
+        role: {"declared_state": declared_state(role, briefs[role]), "read_by": "code"}
+        for role in READING
+        if role in briefs
+    }
 
 
 def _within_scope(role: str, brief: Mapping[str, Any], result: CycleResult) -> dict[str, Any]:
