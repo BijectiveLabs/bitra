@@ -22,9 +22,9 @@ from trading_research_agents.market_data.archive import (
     DayManifest,
     day_file,
     manifest_file,
-    read_deriv_range,
     read_flow_range,
 )
+from trading_research_agents.market_data.archive_deriv import read_deriv_range
 from trading_research_agents.market_data.bars import FlowBar, MarketDataError
 from trading_research_agents.market_data.days import NS_PER_MINUTE, NS_PER_S
 from trading_research_agents.market_data.deriv import LEVELS, DerivPoint, Series, Timeline
