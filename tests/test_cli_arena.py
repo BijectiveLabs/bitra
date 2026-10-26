@@ -11,7 +11,8 @@ import pytest
 from trading_research_agents.cli.arena import arena_report
 from trading_research_agents.cli.main import HANDLERS, build_parser
 from trading_research_agents.envelope.model import EnvelopeError
-from trading_research_agents.market_data.archive import SourceFile, write_deriv_day, write_flow_day
+from trading_research_agents.market_data.archive import SourceFile, write_flow_day
+from trading_research_agents.market_data.archive_deriv import write_deriv_day
 from trading_research_agents.market_data.bars import FlowBar, GapState
 from trading_research_agents.market_data.days import NS_PER_MINUTE, midnight_ns
 from trading_research_agents.market_data.deriv import DerivPoint, Series

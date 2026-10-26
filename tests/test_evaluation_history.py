@@ -129,3 +129,39 @@ def test_load_history_reads_the_archive_with_its_hashes(tmp_path: Path) -> None:
         "market/bybit/BTCUSDT/flow_1m/2025-07-01.parquet",
         "market/bybit/BTCUSDT/flow_1m/2025-07-02.parquet",
     ]
+
+
+def test_views_read_the_book_and_the_liquidations_when_recorded() -> None:
+    from trading_research_agents.market_data.book import BookBar
+    from trading_research_agents.market_data.deriv import DerivPoint, Series, detail_of
+
+    tape = minutes(DAY, 5)
+    book = [
+        BookBar(
+            venue="bybit",
+            instrument="BTCUSDT",
+            start_ns=m.start_ns,
+            end_ns=m.end_ns,
+            samples=60,
+            spread_bps_mean=1.25,
+            spread_bps_max=3.0,
+            imbalance_top10_mean=0.1,
+            depth_bid_10bps_sum_base=Decimal("120.000"),
+            depth_ask_10bps_sum_base=Decimal("60.000"),
+            mid_close=Decimal("100.005"),
+            gap=GapState.NONE,
+        )
+        for m in tape
+    ]
+    at = T0 + 4 * DAY_NS + 8 * HOUR
+    liquidations = [
+        DerivPoint(
+            Series.LIQUIDATION, at - HOUR, at - HOUR, Decimal("2"), detail_of(liquidated="long")
+        )
+    ]
+    history = MarketHistory("BTCUSDT", tape, liquidations, [HOUR, 4 * HOUR], book=book)
+    views = Views({"BTCUSDT": history}, primary_ns=HOUR, context_ns=4 * HOUR, context=())
+    view = views.view("BTCUSDT", at)
+    assert view.feature("spread_bps") == pytest.approx(1.25)
+    assert view.feature("depth_ratio_10bps") == pytest.approx(2.0)
+    assert view.feature("liq_imbalance_24") == pytest.approx(1.0)

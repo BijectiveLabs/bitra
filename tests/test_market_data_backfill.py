@@ -189,3 +189,48 @@ def test_the_budget_spaces_requests_and_starts_empty_after_a_pause() -> None:
     assert budget_for(FakeVenue([])).per_minute == 1500
     with pytest.raises(MarketDataError, match="positive"):
         RequestBudget(0)
+
+
+class BybitRatios:
+    """Bybit's account-ratio history as ccxt hands it over: the period is passed through as given,
+    `since` is ignored, and a window returns its newest `limit` buckets (read 2026-10-26)."""
+
+    id = "bybit"
+    rateLimit = 20  # noqa: N815
+    has = {"fetchLongShortRatioHistory": True}
+
+    def __init__(self, stamps: list[int]) -> None:
+        self.stamps = stamps
+        self.asked: list[tuple[str, int | None, dict[str, int]]] = []
+
+    def fetch_long_short_ratio_history(
+        self,
+        symbol: str,
+        timeframe: str,
+        since: int | None = None,
+        limit: int | None = None,
+        params: dict[str, int] | None = None,
+    ) -> list[dict[str, Any]]:
+        window = params or {}
+        self.asked.append((timeframe, since, dict(window)))
+        if timeframe != "5min":
+            return []
+        inside = [
+            t for t in self.stamps if window.get("startTime", 0) <= t <= window.get("endTime", t)
+        ]
+        newest = sorted(inside)[-(limit or len(inside)) :]
+        return [{"timestamp": t, "longShortRatio": 1.5} for t in newest]
+
+
+def test_bybit_long_short_is_asked_by_its_own_period_and_window() -> None:
+    five = 300_000
+    venue = BybitRatios([H + i * five for i in range(12)])
+    clock = Clock()
+    got = CcxtBackfill(
+        venue, budget=RequestBudget(60, clock=clock, sleep=clock.sleep), page=5
+    ).history(Series.LONG_SHORT, "BTC/USDT:USDT", H + five, H + 11 * five, timeframe="5m")
+    assert len(got.points) == 11 and got.supported
+    assert {timeframe for timeframe, _, _ in venue.asked} == {"5min"}
+    assert all(since is None for _, since, _ in venue.asked)
+    first = venue.asked[0][2]
+    assert first["endTime"] - first["startTime"] == 5 * five - 1

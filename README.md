@@ -49,16 +49,21 @@ with its reason, so you can check afterwards what happened and why.
 It's an early release, so expect settings to change between versions. What works
 today: linear perpetuals, spot pairs (stock perpetuals and tokenized stocks among them) and
 prediction market outcomes through one order path, a universe of perpetuals found and measured by
-the system, a screener that picks where to look, the full autonomous cycle on live data, four analysts and up to three validators, stops and
+the system, a screener that picks where to look, the full autonomous cycle on live data, one analyst that proposes, three reading roles read by
+code, up to three validators, stops and
 targets the analyst names inside bounds you set, the gates that decide, sizing from your own rules,
 real orders on a venue's practice environment behind a mandate you sign, a risk manager that can
-only make the desk more careful, and two auditors that read the records.
+only make the desk more careful, and two auditors that read the records. Under it, a market data
+plane records order flow, the order book, liquidations, derivatives and news minute by minute into a
+verified archive, and an arena replays any policy over that archive beside baselines built to be
+beaten, net of the desk's own costs.
 
 ---
 
 ## Contents
 
 - [What it solves](#what-it-solves)
+- [How it is built](#how-it-is-built)
 - [Get started](#get-started)
 - [What you see, in order](#what-you-see-in-order)
 - [How one cycle decides](#how-one-cycle-decides)
@@ -82,10 +87,69 @@ only make the desk more careful, and two auditors that read the records.
 | A model "decides" to ignore your settings | Your declared thresholds decide. A model's opinion is recorded beside them, never instead of them. |
 | Something went wrong and there is no trace | Each cycle keeps its snapshot, briefs, answers, the intent and what the venue said. Nothing is rewritten. |
 | A crash leaves a position with no stop | The stop and take profit go to the venue with the entry, or right after the fill where the venue takes them no other way, so they survive this process dying. |
-| Text from a feed tells the model what to do | The model that proposes a direction reads numbers code computed; outside text reaches only roles that decide nothing, and no model can send an order or reach a key. |
+| Text from a feed tells the model what to do | The model that proposes a direction reads numbers code computed; outside text reaches no model at all, and no model can send an order or reach a key. |
+| A strategy looks good on a lucky sample | The arena replays it over the recorded market beside buy-and-hold, momentum, its own fade and a seeded random null, net of costs, and says "sample too small" until the sample is not. |
 
 None of these is hypothetical. [Why it is built this way](https://docs.bijectivelabs.dev/opensource/why)
 lists the documented failures behind each one, with their sources.
+
+## How it is built
+
+Three kinds of work, kept apart because they fail differently.
+
+| | Does | Never does | Today |
+|---|---|---|---|
+| **Code** | records the market, computes every figure, prices the round trip, applies your limits, sizes, sends one order with its exits, settles every replayed idea | guess, or carry a stale value forward as current | everything around the model call |
+| **A reasoning model** | reads figures code computed and proposes a direction, a setup and its levels, citing the figures it used | compute a number, size a trade, touch an order or a key, loosen a limit | one call per cycle, the technical analyst; validators when you declare them |
+| **A fast typed judge** | turns dated text into typed events with probabilities, checks a model's claims against its brief, screens text for injected instructions | decide a direction from numbers, size, or reach an order | planned for 0.12 and 0.13, optional, behind a vendor-neutral port |
+
+```mermaid
+flowchart LR
+    subgraph venues["venues, through ccxt"]
+        direction TB
+        streams["live streams<br/>trades, order book, liquidations"]
+        rest["REST history<br/>funding, open interest, mark, index, long/short"]
+        archives["daily trade archives"]
+    end
+    subgraph plane["market data plane: code"]
+        direction TB
+        record["tra record<br/>one bar builder, hour parts, gap marks"]
+        bars["tra data bars<br/>the same builder over the archive"]
+        store[("verified archive<br/>Parquet, sha256 per file<br/>flow, book, derivatives, text")]
+    end
+    subgraph decide["decision: code around one model call"]
+        direction TB
+        features["features<br/>34 figures known at the bar's close"]
+        analyst["technical analyst<br/>proposes, cites figures"]
+        gates["gates<br/>cost, exits, confluence, conviction"]
+    end
+    subgraph act["risk and execution: code"]
+        direction TB
+        risk["controls<br/>risk at the stop, daily loss, drawdown, kill switch"]
+        order["one order<br/>stop and take profit attached"]
+    end
+    arena["tra arena<br/>policies replayed, settled net of costs,<br/>beside baselines and a random null"]
+    streams --> record --> store
+    archives --> bars --> store
+    rest --> record
+    rest --> bars
+    store --> features
+    features --> analyst --> gates --> risk --> order --> venues
+    store --> arena
+    features --> arena
+```
+
+The shipped cycle reads its own live snapshot; the archive feeds the arena today and the decision
+path as the work below lands. Where it is going, in the order it is being built:
+
+| Release | Adds |
+|---|---|
+| 0.11 | the market data plane (`tra data bars`, `tra record`), the feature library, the arena; the reading roles stop asking a model |
+| 0.12 | a forecast and a calibrator fitted on recorded outcomes, one expected-value decision in place of the vetoes, risk as its own gate; the typed judge for dated text |
+| 0.13 | the reasoning model woken only when the market gives it something to weigh, its claims checked by the judge; the v1 cycle retired once the arena shows the new one is better |
+
+Each step is measured in the arena before it is trusted, and the four guarantees at the end of this
+page hold through all of it.
 
 ## Get started
 
@@ -216,7 +280,7 @@ like it would have had to win just to break even:
 
 ![one cycle](assets/cycle.png)
 
-Then the data the cycle used and how old it was, the series the reading analysts read, the stop and
+Then the data the cycle used and how old it was, the series the reading roles read, the stop and
 take profit it would have placed, and which agents answered. A cycle that goes further adds what
 each validator argued, how conviction weighed the analysts, the risk at the stop and the targets:
 
@@ -226,16 +290,17 @@ each validator argued, how conviction weighed the analysts, the risk at the stop
 example `next pass at 14:30:00 UTC, in 10m 57s`, and counts down to it. An auditor woken by an alarm
 gets a spinner of its own.
 
-The same cycle as plain text (`--plain`, a pipe or a log), from a real run on live data, shortened:
+The same cycle as plain text (`--plain`, a pipe or a log), from a real run on live data, shortened;
+the two reading lines are printed as 0.11 prints them, where the run itself still carried a
+model's label:
 
 ```
 cycle 2026-09-29T02-59-16Z BTCUSDT: 5.344s of agents, 15.042s of validators
   funding        ccxt:bybit         age 4.267s
   ohlcv          ccxt:bybit         age 32.746s
   orderbook      ccxt:bybit         age 7.544s
-macro      risk-off: the operator declared a bullish state for US10Y; measured correlation is
-           neutral (0.0) on a modest sample, weak evidence that does not overturn the declaration
-sentiment  positive: declared state is bullish, and the measured figures both support it
+macro      read by code: bullish (risk-on)
+sentiment  read by code: bullish (positive)
 technical: long on range_reversion at 0.65 over 5 bars: the close is stretched low in the window
 read: zscore=-0.587, vwap_gap_bps=-3.99, ret_1_bps=1.59
 validator contra   oppose on 2 cited figure(s)
@@ -261,15 +326,9 @@ flowchart TD
     wake -- "yes" --> pick["the screener picks among what the system admitted<br/>citing each instrument's own figures"]
     pick -- "none taken" --> held
     pick -- "taken" --> briefs
-    briefs["the system writes the briefs<br/>each role sees only the figures its job needs"] --> round1
-    subgraph round1["asked at the same time"]
-        direction LR
-        tech["technical analyst<br/>a direction, a confidence, a horizon"]
-        macro["macro analyst"]
-        chain["on-chain analyst"]
-        mood["sentiment analyst"]
-    end
-    round1 --> price["the system prices the round trip<br/>fee, spread, impact, funding, slippage"]
+    briefs["the system writes the briefs<br/>each role sees only the figures its job needs"] --> readers
+    readers["reading roles, read by code<br/>macro, on-chain, sentiment against your lines"] --> tech
+    tech["technical analyst: the one model call<br/>a direction, a confidence, a horizon"] --> price["the system prices the round trip<br/>fee, spread, impact, funding, slippage"]
     price --> exits{"the stop and the target<br/>the analyst's levels, held inside your bounds<br/>does the trade break even at half its kind winning?"}
     exits -- "no" --> refused
     exits -- "yes" --> round2["validators, as many as you declare<br/>a claim that cites no figure is thrown away"]
@@ -288,16 +347,16 @@ Who does what:
 | Role | Reads | Answers | Can never |
 |---|---|---|---|
 | technical analyst | candles, spread, funding, book imbalance, open interest change, and the regime on its timeframe and the higher ones you declare | a direction, a setup from a fixed list, a confidence, a horizon, and where its stop and target sit | size the trade, place a level outside your `[exit]` bounds, run a trend setup in a range, or fade a market that is not a measured range |
-| macro analyst | dated rates and levels, dated text | risk-on, risk-off or neutral | propose a direction |
-| on-chain analyst | chain and derivatives figures | accumulation, distribution or neutral | propose a direction |
-| sentiment analyst | dated scores and notes you curate | negative, neutral, positive, or not declared | invent a mood no figure supports |
+| macro, on-chain and sentiment roles | dated rates and levels, chain and derivatives figures, scores and notes you curate | no answer: code reads each series against the lines you drew and gives a declared state | ask a model, or propose a direction |
 | market screener | what the system measured for each admitted instrument: move, spread, regime, volume, correlation to BTC | which instruments to take, in what order, citing their figures | add an instrument the system did not admit |
 | validators: pro and contra | the proposal and the figures behind it, each without the other's case | the strongest case for or against, as cited claims | see the other side's case, or cite a figure it wasn't given |
 | validator: neutral, as judge | the same, and both cases once code has checked every claim | support, oppose or abstain, the one verdict that counts | see the advocates' verdicts, or count claims instead of weighing them |
 | risk manager | what the run recorded: round trips, the losing streak, your limits, the alarm that woke it | continue, cut the size of new entries, pause instruments, or halt, each for a stated number of hours | loosen a limit you set, or add size |
 | technology and quant auditors | the cycles this desk recorded | findings and proposed changes | change anything |
 
-The macro, on-chain and sentiment analysts read dated series you declare under `sources/`. Each one
+The macro, on-chain and sentiment roles read dated series you declare under `sources/`, by code and
+without a model: until 0.11 a model also labelled each of them, and no decision ever rested on that
+label, so the calls were retired. Each series
 is either a file you keep or a feed the desk refreshes itself (FRED, the Crypto Fear & Greed Index,
 or any paid vendor that answers JSON over https). `tra sources show` lists every series with where it
 came from and how old its last value is, and a value older than its `max_age` is shown as stale and
@@ -307,7 +366,7 @@ Which validators run is yours to declare. A vote never decides on its own: it mo
 the weight you give it (`[conviction].validator_weight`), and a stance counts for what it says beyond
 its assignment, since a pro that supports is expected to.
 
-Analysts are allowed to disagree. Each one's view becomes a score between -1 and 1, computed from
+Voices are allowed to disagree. Each reading role's view becomes a score between -1 and 1, computed from
 its own figures against the lines you drew, so a macro reading barely past its line counts as a small
 voice and one far past it counts as a big one. Conviction adds them up: agreement grows the size,
 opposition shrinks it in proportion, and only opposition that outweighs the case stops the trade. A
@@ -545,6 +604,7 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | `tra run --now` | ask the roster even if the trigger would have held a quiet market |
 | `tra watch --every 5s` | a read-only view of a running desk |
 | `tra audit` | both auditors over the records; nothing is applied |
+| `tra arena --instruments BTCUSDT,ETHUSDT --from 2025-07-01 --to 2025-09-30 --spread-bps 1 --slippage-bps 0` | every policy replayed over the archive, settled net of costs, beside baselines and a random null |
 | `tra backtest`, `tra paper`, `tra live` | replay, shadow, canary |
 
 **Data**
@@ -554,7 +614,11 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | `tra data get BTCUSDT 2025-01-01` | download a day, verify its checksum, audit it, write Parquet and funding |
 | `tra data audit export.csv --mapping mapping.toml` | your own CSV or Parquet, through the same audit |
 | `tra data pull BTCUSDT` | one live snapshot through the chains in `data.toml` |
-| `tra sources show`, `tra sources pull` | where the reading analysts' series come from and how old they are; refresh them now |
+| `tra data bars BTCUSDT 2025-07-01 --to 2025-07-31` | one-minute flow bars from the venue archive and the market's derivatives history, into the verified archive |
+| `tra record`, `tra record --once 30m` | order flow, the book, liquidations, derivatives and news kept while they happen, per `[record]` in `data.toml` |
+| `tra record status` | coverage, gaps and latency of the recording over the last day |
+| `tra runs verify --market data` | every market day file and hour part against its manifest |
+| `tra sources show`, `tra sources pull` | where the reading roles' series come from and how old they are; refresh them now |
 | `tra sources add macro us10y --from fred --id DGS10 --high bearish` | a series onto the shelf in one step: pulled now, its lines drawn from its own history |
 | `tra universe` | which perpetuals discovery finds on the venue now, and what each filter took out |
 | `tra runs verify` | every cycle's files against their hashes, and its briefs against its raw inputs |
@@ -620,6 +684,7 @@ The full documentation is at [docs.bijectivelabs.dev](https://docs.bijectivelabs
 | [The cycle](https://docs.bijectivelabs.dev/opensource/cycle) | the cycle step by step, and every setting that shapes it |
 | [Agents](https://docs.bijectivelabs.dev/opensource/agents) | each role, what it reads, and what an agent can and cannot reach |
 | [Data sources](https://docs.bijectivelabs.dev/opensource/sources) | where the macro, on-chain and sentiment figures come from, fetching them, and freshness |
+| [Market data](https://docs.bijectivelabs.dev/opensource/market-data), [The arena](https://docs.bijectivelabs.dev/opensource/arena) | the recorded archive and the recorder; replaying policies over it, net of costs |
 | [Capital, orders and positions](https://docs.bijectivelabs.dev/opensource/capital) | equity, margin, leverage, liquidation, daily loss, time exits, the kill switch, and the records they leave |
 | [Venues](https://docs.bijectivelabs.dev/opensource/venues) | which venues work, and adding yours |
 | [Working with language models](https://docs.bijectivelabs.dev/opensource/llm), [Model providers](https://docs.bijectivelabs.dev/opensource/providers) | how models are used: fallback, spend, adding a provider |

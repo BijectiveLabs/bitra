@@ -61,6 +61,7 @@ from trading_research_agents.cli import console, shutdown
 from trading_research_agents.cli.arena import add_arena_command, arena_report
 from trading_research_agents.cli.console import HISTORY_FILE
 from trading_research_agents.cli.market import add_bars_command, data_bars, verify_market
+from trading_research_agents.cli.record import add_record_command, record_report, record_status
 from trading_research_agents.data import (
     NORMALISER_VERSION,
     ArchiveError,
@@ -632,6 +633,7 @@ def build_parser() -> argparse.ArgumentParser:
     hindsight_cmd.add_argument("--days", type=int, default=None, help="only the last N days")
     hindsight_cmd.add_argument("--json", action="store_true")
     add_arena_command(top)
+    add_record_command(top)
 
     sizing_cmd = top.add_parser(
         "sizing",
@@ -897,6 +899,9 @@ def typed_commands(parser: argparse.ArgumentParser) -> list[str]:
     for name, sub in sorted(_choices(parser).items()):
         children = _choices(sub)
         if children:
+            # A group that runs on its own as well, as `tra record` beside `tra record status`.
+            if sub.get_default("command") not in (None, *children):
+                out.append(name)
             out.extend(f"{name} {child}" for child in sorted(children))
         else:
             out.append(name)
@@ -1964,6 +1969,20 @@ def _switch(args: argparse.Namespace, switch: Path, name: str, effect: str) -> i
         [f"{name}: set ({switch}); {effect}", f"lift it with `tra {args.command} --off`"],
     )
     return CLEARED
+
+
+def record_command(args: argparse.Namespace) -> int:
+    """Keep a venue's markets in the archive while they happen."""
+    payload, lines, code = record_report(args)
+    emit(payload, args.json, lines)
+    return code
+
+
+def record_status_command(args: argparse.Namespace) -> int:
+    """What the records say about coverage, gaps and latency over the last day."""
+    payload, lines, code = record_status(args)
+    emit(payload, args.json, lines)
+    return code
 
 
 def arena_command(args: argparse.Namespace) -> int:
@@ -4506,8 +4525,11 @@ def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], l
     for role, said in sorted(result.context.items()):
         if role.startswith("validator"):
             continue
-        state = said.get("regime") or said.get("signal") or said.get("state") or said.get("error")
-        lines.append(f"{role.replace('_analyst', ''):<10} {state}: {said.get('reason', '')}")
+        declared = said.get("declared_state") or {}
+        word = declared.get("declared", "undeclared")
+        spoken = declared.get("as_role_says_it")
+        state = f"{word} ({spoken})" if spoken else word
+        lines.append(f"{role.replace('_analyst', ''):<10} read by code: {state}")
     if result.analyst is not None:
         lines.append(
             f"technical: {result.analyst.target} on {result.analyst.setup} at "
@@ -6400,6 +6422,8 @@ HANDLERS = {
     ("audit", "audit"): run_audit_command,
     ("hindsight", "hindsight"): hindsight_command,
     ("arena", "arena"): arena_command,
+    ("record", "run"): record_command,
+    ("record", "status"): record_status_command,
     ("sizing", "sizing"): sizing_command,
     ("pause", "pause"): pause_command,
     ("kill", "kill"): kill_command,

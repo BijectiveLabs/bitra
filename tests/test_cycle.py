@@ -670,6 +670,11 @@ def test_the_reading_roles_are_read_by_code_and_ask_no_model(
     assert result.context["onchain_analyst"]["declared_state"]["declared"] == "undeclared"
     assert {said["read_by"] for said in result.context.values()} == {"code"}
     assert ("macro_analyst", "done", "read by code: risk-off") in steps
+    from trading_research_agents.cli.main import _cycle_report
+
+    _, lines = _cycle_report(result, usage, "sandbox")
+    assert "macro      read by code: bearish (risk-off)" in lines
+    assert not any("None" in line for line in lines if line.startswith("macro"))
 
     where = Path(str(result.path))
     for role in ("macro_analyst", "onchain_analyst", "sentiment_analyst"):

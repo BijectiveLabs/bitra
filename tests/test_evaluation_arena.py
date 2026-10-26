@@ -20,9 +20,9 @@ from trading_research_agents.market_data.archive import (
     SourceFile,
     day_file,
     manifest_file,
-    write_deriv_day,
     write_flow_day,
 )
+from trading_research_agents.market_data.archive_deriv import write_deriv_day
 from trading_research_agents.market_data.bars import FlowBar, GapState
 from trading_research_agents.market_data.days import NS_PER_MINUTE, midnight_ns
 from trading_research_agents.market_data.deriv import DerivPoint, Series

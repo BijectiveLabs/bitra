@@ -57,16 +57,16 @@ spinner of its own.
 ## The same cycle as plain text
 
 `--plain`, a pipe or a log gives text instead of panels. This is from a real run on live data,
-shortened:
+shortened; the two reading lines are printed as 0.11 prints them, where the run itself still
+carried a model's label:
 
 ```
 cycle 2026-09-29T02-59-16Z BTCUSDT: 5.344s of agents, 15.042s of validators
   funding        ccxt:bybit         age 4.267s
   ohlcv          ccxt:bybit         age 32.746s
   orderbook      ccxt:bybit         age 7.544s
-macro      risk-off: the operator declared a bullish state for US10Y; measured correlation is
-           neutral (0.0) on a modest sample, weak evidence that does not overturn the declaration
-sentiment  positive: declared state is bullish, and the measured figures both support it
+macro      read by code: bullish (risk-on)
+sentiment  read by code: bullish (positive)
 technical: long on range_reversion at 0.65 over 5 bars: the close is stretched low in the window
 read: zscore=-0.587, vwap_gap_bps=-3.99, ret_1_bps=1.59
 validator contra   oppose on 2 cited figure(s)
