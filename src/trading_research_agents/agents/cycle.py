@@ -395,7 +395,7 @@ class CycleResult:
             "seen": self.seen,
             # Every series a reading analyst was handed: where from, the value, and how old.
             "series": self.briefs.get("series"),
-            # Reading analysts this cycle did not ask, and why.
+            # Reading roles this cycle did not read, and why.
             "not_asked": self.briefs.get("not_asked"),
             "exits": self.exits or None,
             # What the models cost this cycle, and which calls had no declared price.
@@ -983,7 +983,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
             score_of(
                 cfg.conviction,
                 target=analyst.target,
-                states=_conviction_states(cfg, result),
+                states=_conviction_states(result),
                 confidence=analyst.confidence,
                 votes=_informative_votes(result),
             ),
@@ -1629,7 +1629,7 @@ def _reading_brief(
     return brief
 
 
-def _conviction_states(cfg: CycleConfig, result: CycleResult) -> dict[str, Mapping[str, Any]]:
+def _conviction_states(result: CycleResult) -> dict[str, Mapping[str, Any]]:
     """The declared state of each reading role, computed by code from the operator's thresholds."""
     return {
         role: said["declared_state"]
