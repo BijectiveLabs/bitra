@@ -90,7 +90,7 @@ def test_the_live_cycle_view_names_who_is_working_and_for_how_long() -> None:
         SimpleNamespace(tokens=0, cost=Decimal(0)), ["data", "technical"], clock=lambda: now[0]
     )
     view.on_step(Step(name="technical", state="running"))
-    view.on_step(Step(name="macro_analyst", state="running"))
+    view.on_step(Step(name="macro", state="running"))
     now[0] = 104.0
     assert view.status() == "4s | working: technical, macro | 0 tokens"
     view.on_step(Step(name="technical", state="done", seconds=3.2))

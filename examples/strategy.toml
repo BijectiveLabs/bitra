@@ -97,11 +97,11 @@ kill_switch = "KILL"               # `tra kill` sets it: flatten and stop; `tra 
 # day you need it. A spent budget is not a reason to fall through - it stops the chain.
 # fallback = ["google:gemini-flash-latest", "anthropic:claude-opus-5-5"]
 #
-# The roster, when you want to say it outright. Left out, a cycle asks the technical analyst and
-# reads whichever reading roles have something declared on the shelf: sources/macro.toml,
-# sources/onchain.toml, sources/derivatives.toml, sources/sentiment.toml, sources/news.toml. The
-# reading roles are read by code against your thresholds; they ask no model.
-# analysts = ["technical_analyst", "macro_analyst", "sentiment_analyst"]
+# The readings, when you want to name them outright. Left out, a cycle reads whichever readings
+# have something declared on the shelf: sources/macro.toml, sources/onchain.toml,
+# sources/derivatives.toml, sources/sentiment.toml, sources/news.toml. A reading is code over your
+# series and your thresholds; it asks no model. The technical analyst is always asked.
+# readings = ["macro", "sentiment"]
 #
 # The stances that argue about a proposal once there is one. Each stance is one more call, so this
 # is off until you ask for it. Pro argues for, contra argues against, neutral weighs both. Every
@@ -131,25 +131,25 @@ kill_switch = "KILL"               # `tra kill` sets it: flatten and stop; `tra 
 # ---- the two gates you declare and the system applies. Both are off as shipped: uncomment to use them.
 #
 # Does the context agree with the direction? The states here are the ones your own thresholds
-# produced in sources/*.toml, not the words a model wrote. A required role that produced no state
-# has agreed to nothing, and the cycle refuses: that is what on_missing = "refuse" means. Set it to
-# "ignore" if you mean to run on one leg, and the record will say you did.
+# produced in sources/*.toml, not the words a model wrote. A required reading that produced no
+# state has agreed to nothing, and the cycle refuses: that is what on_missing = "refuse" means. Set
+# it to "ignore" if you mean to run on one leg, and the record will say you did.
 # [confluence]
-# required = ["macro_analyst", "onchain_analyst"]
-# long_states = ["bullish"]        # what a long needs from each required role
+# required = ["macro", "onchain"]
+# long_states = ["bullish"]        # what a long needs from each required reading
 # short_states = ["bearish"]
 # on_missing = "refuse"            # refuse | ignore
 # min_support = 1                  # validators that must support it (needs [agents].validators)
 # max_opposition = 0               # validators that may oppose it; 0 is the strictest there is
 #
 # How much goes behind the idea. Every voice counts as strong as it is: the deciding analyst by its
-# confidence, each reading role by how far its series sit past the lines you drew in sources/
+# confidence, each reading by how far its series sit past the lines you drew in sources/
 # (-1 to 1), each validator for or against. The score is their net over the weight they expressed:
 # agreement lifts it, opposition lowers it in proportion, and only opposition that outweighs the
 # case refuses the trade. docs.bijectivelabs.dev/opensource/cycle works four cases through. Nothing here can make a trade
 # larger than [controls] and [run].size already allow - it can only make it smaller.
 # [conviction]
-# weights = { technical_analyst = 2.0, onchain_analyst = 1.5, macro_analyst = 1.0, sentiment_analyst = 0.5 }
+# weights = { technical_analyst = 2.0, onchain = 1.5, macro = 1.0, sentiment = 0.5 }
 # validator_weight = 1.0
 # min_score = 0.4                  # below this the desk does not trade, whatever the matrix said
 # max_leverage = 3.0               # notional against [run].equity; a ceiling, never a target

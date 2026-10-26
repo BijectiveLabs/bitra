@@ -184,7 +184,7 @@ margin_mode = "isolated"         # isolated | cross
 hold_limit = "timeout"           # close by time after [exit].timeout_bars; or horizon, or none
 ```
 
-Who decides what, in one line each: **the analysts propose the direction and where the trade is
+Who decides what, in one line each: **the analyst proposes the direction and where the trade is
 wrong or done, your risk rule sets the size, you choose the leverage, and no model touches the
 last two.**
 

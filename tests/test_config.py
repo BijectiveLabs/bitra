@@ -133,11 +133,11 @@ def test_the_two_gates_are_absent_until_they_are_declared() -> None:
     assert cfg.agents is not None and cfg.agents.validators == ()
 
 
-def test_a_declared_matrix_carries_the_roles_and_the_policy() -> None:
+def test_a_declared_matrix_carries_the_readings_and_the_policy() -> None:
     cfg = parse_strategy_config(
         agent_raw(
             confluence={
-                "required": ["macro_analyst", "onchain_analyst"],
+                "required": ["macro", "onchain"],
                 "long_states": ["bullish"],
                 "on_missing": "ignore",
                 "min_support": 2,
@@ -146,16 +146,18 @@ def test_a_declared_matrix_carries_the_roles_and_the_policy() -> None:
         )
     )
     matrix = cfg.confluence
-    assert matrix.required == ("macro_analyst", "onchain_analyst")
+    assert matrix.required == ("macro", "onchain")
     assert matrix.on_missing == "ignore" and matrix.min_support == 2
     assert matrix.max_opposition == 0 and not matrix.idle
 
 
 def test_a_matrix_that_names_something_that_reads_nothing_is_refused() -> None:
-    with pytest.raises(ConfigError, match="does not read a context"):
+    with pytest.raises(ConfigError, match="is not one of"):
         parse_strategy_config(agent_raw(confluence={"required": ["technical_analyst"]}))
+    with pytest.raises(ConfigError, match=r"is the macro reading since 0\.11"):
+        parse_strategy_config(agent_raw(confluence={"required": ["macro_analyst"]}))
     with pytest.raises(ConfigError, match="unknown"):
-        parse_strategy_config(agent_raw(confluence={"requires": ["macro_analyst"]}))
+        parse_strategy_config(agent_raw(confluence={"requires": ["macro"]}))
     with pytest.raises(ConfigError, match="on_missing"):
         parse_strategy_config(agent_raw(confluence={"on_missing": "maybe"}))
     with pytest.raises(ConfigError, match="min_support is a non-negative integer"):
@@ -261,7 +263,7 @@ def test_conviction_is_absent_until_declared_and_reads_its_ladder_from_the_top()
     cfg = parse_strategy_config(
         agent_raw(
             conviction={
-                "weights": {"technical_analyst": Decimal(2), "macro_analyst": Decimal(1)},
+                "weights": {"technical_analyst": Decimal(2), "macro": Decimal(1)},
                 "validator_weight": Decimal(1),
                 "min_score": Decimal("0.4"),
                 "max_leverage": Decimal(3),
@@ -279,8 +281,10 @@ def test_conviction_is_absent_until_declared_and_reads_its_ladder_from_the_top()
 
 
 def test_a_conviction_rule_that_cannot_be_applied_is_refused() -> None:
-    with pytest.raises(ConfigError, match="is not a role that is asked"):
+    with pytest.raises(ConfigError, match="is not one of"):
         parse_strategy_config(agent_raw(conviction={"weights": {"portfolio_manager": Decimal(1)}}))
+    with pytest.raises(ConfigError, match=r"is the onchain reading since 0\.11"):
+        parse_strategy_config(agent_raw(conviction={"weights": {"onchain_analyst": Decimal(1)}}))
     with pytest.raises(ConfigError, match="unknown"):
         parse_strategy_config(agent_raw(conviction={"floor": Decimal("0.4")}))
     with pytest.raises(ConfigError, match="at_least and size_multiple"):

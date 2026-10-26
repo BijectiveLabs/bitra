@@ -37,10 +37,15 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
-- The macro, on-chain and sentiment roles ask no model. Their briefs are read by code against the
-  thresholds you declared, which is what confluence and conviction always read; no decision rested on
-  the label a model wrote beside it. The cycle makes one model call fewer per reading role, about a
-  quarter of a cycle's tokens on the demo desks. The research session reads them the same way.
+- The macro, on-chain and sentiment analysts are now readings, `macro`, `onchain` and `sentiment`,
+  in their own package (`readings/`): code over the series you declare, against the thresholds you
+  drew, which is what confluence and conviction always read; no decision rested on the label a
+  model wrote beside it. The cycle makes one model call fewer per reading, about a quarter of a
+  cycle's tokens on the demo desks. The research session reads them the same way.
+- The readings are named by their new names everywhere a desk names them: `[agents].readings`
+  (in place of `[agents].analysts`, since the technical analyst is always asked),
+  `[confluence].required`, `[conviction].weights`, the rows of the live table, `briefs/macro.json`,
+  and `not_read` in `cycle.json`. An old analyst name is refused with the reading that replaced it.
 
 ### Removed
 
@@ -48,6 +53,7 @@ All notable changes to this project are recorded here. The format follows
   `[agents.roles.onchain_analyst]`, `[agents.roles.sentiment_analyst]` are refused with the reason:
   nothing asks those models any more. Remove the keys; nothing else in a desk's configuration
   changes. Typed events from dated text come back through the judge planned for 0.12.
+- `[agents].analysts` is refused with the key that replaced it, `[agents].readings`.
 
 ### Fixed
 

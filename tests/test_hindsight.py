@@ -149,7 +149,7 @@ def record(**kw: Any) -> dict[str, Any]:
         ({"refusals": ["data funding: stale", "cost gate: net below zero"]}, "cost"),
         ({"refusals": ["validator_pro: no model answered"]}, "validators"),
         (
-            {"refusals": ["macro_analyst usd_broad: shown, not counted", "regime: fading a trend"]},
+            {"refusals": ["macro usd_broad: shown, not counted", "regime: fading a trend"]},
             "regime",
         ),
         ({}, "no reason recorded"),

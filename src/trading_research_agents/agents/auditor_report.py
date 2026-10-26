@@ -21,7 +21,7 @@ from typing import Any
 
 from trading_research_agents.agents.cited import cites
 from trading_research_agents.llm.form import _enum, _text, parse_object
-from trading_research_agents.trading.config import SETTINGS
+from trading_research_agents.trading.config import KNOWN_ROLES, SETTINGS
 
 KEY = re.compile(r"^\[(?P<table>[a-z_]+(?:\.[a-z_<>]+)*)\](?:\.(?P<field>[a-z_]+))?$")
 CONFIDENCE = ("low", "medium", "high")
@@ -205,6 +205,9 @@ def _key_problem(key: str, tables: Sequence[str]) -> str:
     if tables and table not in tables:
         return f"[{table}] is not a table in this project's configuration"
     field = match.group("field")
+    role = path.removeprefix("agents.roles.") if path.startswith("agents.roles.") else None
+    if role is not None and role not in KNOWN_ROLES:
+        return f"{role!r} is not a role that asks a model; [agents.roles.{role}] does not exist"
     # [agents.roles.<role>] is one table per role, all accepting the same settings.
     known = SETTINGS.get("agents.roles" if path.startswith("agents.roles.") else path)
     if field and known is not None and field not in known:

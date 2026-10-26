@@ -102,8 +102,8 @@ def test_each_conviction_voice_says_which_way_it_pulled() -> None:
             "multiple": "0.5",
             "score": {
                 "score": "0.563",
-                "weights": {"macro_analyst": "1.0", "sentiment_analyst": "0.5"},
-                "contributions": {"macro_analyst": "0.465", "sentiment_analyst": "-0.186"},
+                "weights": {"macro": "1.0", "sentiment": "0.5"},
+                "contributions": {"macro": "0.465", "sentiment": "-0.186"},
             },
         }
     }
@@ -171,7 +171,7 @@ def test_a_validator_counts_for_what_it_says_beyond_its_stance() -> None:
             "validator_pro": {"verdict": pro},
             "validator_contra": {"verdict": contra},
             "validator_neutral": {"verdict": neutral},
-            "macro_analyst": {"regime": "risk-off"},
+            "macro": {"declared_state": {"declared": "bearish"}, "read_by": "code"},
         }
         return _informative_votes(SimpleNamespace(context=context))  # type: ignore[arg-type]
 

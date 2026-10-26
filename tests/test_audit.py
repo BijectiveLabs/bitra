@@ -38,7 +38,7 @@ CYCLE = {
         "agents": [
             {"agent": "technical", "ok": True, "error": "", "seconds": 6.0, "reused": False},
             {
-                "agent": "macro_analyst",
+                "agent": "event",
                 "ok": False,
                 "error": "ProviderError: timed out",
                 "seconds": 12.0,
@@ -59,7 +59,7 @@ CYCLE = {
         "refused": {"open_interest": "stale"},
         "stale": ["funding"],
     },
-    "refusals": ["data open_interest: stale", "confluence: macro_analyst declares undeclared"],
+    "refusals": ["data open_interest: stale", "confluence: macro declares undeclared"],
     "cost": {"cost": {"round_trip_bps": "12.90"}},
     "conviction": {"admitted": True, "score": {"score": "0.670"}},
     "analyst": {"target": "long"},
@@ -124,8 +124,8 @@ def test_the_counts_are_arithmetic_an_operator_can_repeat(tmp_path: Path) -> Non
     health = agent_health(cycles)
     assert health["calls"] == 6 and health["failed"] == 2
     assert health["failure_rate"] == round(2 / 6, 4)
-    assert health["median_seconds"]["macro_analyst"] == 12.0
-    assert health["failures"] == {"macro_analyst: ProviderError": 2}
+    assert health["median_seconds"]["event"] == 12.0
+    assert health["failures"] == {"event: ProviderError": 2}
 
     data = data_health(cycles)
     assert data["refused"] == {"open_interest": 2} and data["used_stale"] == {"funding": 2}
@@ -220,11 +220,14 @@ def test_a_proposal_cannot_invent_a_setting() -> None:
     figures = {"agents.failed": "2"}
     made_up = checked(proposing("[targets].min_edge_multiple_strict"), figures=figures)
     assert made_up.findings == () and "there is no such rule" in made_up.discarded[0]
-    per_role = checked(proposing("[agents.roles.macro_analyst].veto_power"), figures=figures)
+    per_role = checked(proposing("[agents.roles.validator].veto_power"), figures=figures)
     assert per_role.findings == ()
+    # A role that asks no model has no table to change.
+    retired = checked(proposing("[agents.roles.macro_analyst].model"), figures=figures)
+    assert retired.findings == () and "is not a role that asks a model" in retired.discarded[0]
 
     assert checked(proposing("[agents].max_output_tokens"), figures=figures).findings
-    assert checked(proposing("[agents.roles.macro_analyst].model"), figures=figures).findings
+    assert checked(proposing("[agents.roles.validator].model"), figures=figures).findings
     # A table without a fixed list of settings is judged by the table check alone.
     assert checked(proposing("[sources.rates].file"), figures=figures).findings
 

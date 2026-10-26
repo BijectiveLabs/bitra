@@ -198,7 +198,7 @@ on a Sunday at a price nobody is making. So:
   `"any"` trades at every hour, deliberately.
 - **Holidays are yours to declare.** The package carries no exchange calendar; list the closed
   dates in `[execution].equity_closed`.
-- **On-chain figures do not bear on a share**, so the on-chain analyst is not asked.
+- **On-chain figures do not bear on a share**, so the on-chain reading is not read.
 - **Some accounts need a step first.** Bybit refuses a stock perpetual until the account has
   signed its agreement for them, in the app or on the website; the refusal names it.
 - **Prices stay inside the venue's band.** OKX refuses an order priced outside its current price
@@ -293,7 +293,7 @@ them:
 | Order book (spread, depth, the cost a trade is priced at) | the execution venue only | another venue's book is not the book the order meets |
 | Funding | the execution venue, or `file:data` | the funding a position pays is its own venue's |
 | Candles, open interest | the execution venue, or another venue on purpose | a signal can read a deeper market; it never prices the order |
-| The price an order is sent at | the execution venue's book, read again at the moment of sending | the snapshot is as old as the analysts were slow |
+| The price an order is sent at | the execution venue's book, read again at the moment of sending | the snapshot is as old as the analyst was slow |
 
 In venue mode the first two are enforced: a chain that reads the book or the funding from any
 venue other than the one orders go to is refused before anything is pulled, with the line that

@@ -642,9 +642,7 @@ def series_for(tmp_path: Path, name: str, value: str, threshold: str = "") -> Pa
     return path
 
 
-def test_the_reading_roles_are_read_by_code_and_ask_no_model(
-    tmp_path: Path, envelope: Envelope
-) -> None:
+def test_the_readings_are_read_by_code_and_ask_no_model(tmp_path: Path, envelope: Envelope) -> None:
     macro = series_for(tmp_path, "us10y", "4.4", "{ bearish_above = 4.25 }")
     onchain = series_for(tmp_path, "venue_net_flow", "120")
     steps: list[tuple[str, str, str]] = []
@@ -653,23 +651,18 @@ def test_the_reading_roles_are_read_by_code_and_ask_no_model(
         envelope,
         {"technical_analyst": analyst_answer()},
         watch=lambda step: steps.append((step.name, step.state, step.detail)),
-        series={"macro_analyst": (macro,), "onchain_analyst": (onchain,)},
-        analysts=(
-            "technical_analyst",
-            "macro_analyst",
-            "onchain_analyst",
-            "sentiment_analyst",
-        ),
+        series={"macro": (macro,), "onchain": (onchain,)},
+        readings=("macro", "onchain", "sentiment"),
     )
     result = run_cycle(cfg)
     assert result.stopped_by is None and result.acted
-    # One model is asked, the one that decides; the readers cost nothing.
+    # One model is asked, the one that proposes; the readings cost nothing.
     assert [o.name for o in result.fan.outcomes] == ["technical"]
     assert len(fake.calls) == 1 and usage.tokens > 0
-    assert result.context["macro_analyst"]["declared_state"]["declared"] == "bearish"
-    assert result.context["onchain_analyst"]["declared_state"]["declared"] == "undeclared"
+    assert result.context["macro"]["declared_state"]["declared"] == "bearish"
+    assert result.context["onchain"]["declared_state"]["declared"] == "undeclared"
     assert {said["read_by"] for said in result.context.values()} == {"code"}
-    assert ("macro_analyst", "done", "read by code: risk-off") in steps
+    assert ("macro", "done", "read by code: risk-off") in steps
     from trading_research_agents.cli.main import _cycle_report
 
     _, lines = _cycle_report(result, usage, "sandbox")
@@ -677,17 +670,17 @@ def test_the_reading_roles_are_read_by_code_and_ask_no_model(
     assert not any("None" in line for line in lines if line.startswith("macro"))
 
     where = Path(str(result.path))
-    for role in ("macro_analyst", "onchain_analyst", "sentiment_analyst"):
-        assert (where / "briefs" / f"{role}.json").is_file()
-        assert not (where / "answers" / f"{role}.json").exists()
+    for name in ("macro", "onchain", "sentiment"):
+        assert (where / "briefs" / f"{name}.json").is_file()
+        assert not (where / "answers" / f"{name}.json").exists()
     summary = json.loads((where / "cycle.json").read_text("utf-8"))
-    assert set(summary["context"]) == {"macro_analyst", "onchain_analyst", "sentiment_analyst"}
-    macro_brief_read = json.loads((where / "briefs" / "macro_analyst.json").read_text("utf-8"))
+    assert set(summary["context"]) == {"macro", "onchain", "sentiment"}
+    macro_brief_read = json.loads((where / "briefs" / "macro.json").read_text("utf-8"))
     assert macro_brief_read["declared_series"] == ["us10y"]
     assert macro_brief_read["series"][0]["state"] == "bearish"
 
 
-def test_a_reading_analyst_whose_series_cannot_be_read_is_refused_not_guessed(
+def test_a_reading_whose_series_cannot_be_read_is_refused_not_guessed(
     tmp_path: Path, envelope: Envelope
 ) -> None:
     missing = tmp_path / "nowhere.toml"
@@ -698,21 +691,19 @@ def test_a_reading_analyst_whose_series_cannot_be_read_is_refused_not_guessed(
         tmp_path,
         envelope,
         [analyst_answer()],
-        series={"onchain_analyst": (missing,)},
-        analysts=("technical_analyst", "onchain_analyst"),
+        series={"onchain": (missing,)},
+        readings=("onchain",),
     )
     result = run_cycle(cfg)
     assert result.acted and result.context == {}
-    assert any("onchain_analyst" in r and "does not exist" in r for r in result.refusals)
+    assert any(r.startswith("onchain") and "does not exist" in r for r in result.refusals)
     assert len(fake.calls) == 1
 
 
 def test_a_cycle_refuses_a_roster_it_cannot_run(tmp_path: Path, envelope: Envelope) -> None:
-    with pytest.raises(CycleError, match="it is the role that decides"):
-        cycle_config(tmp_path, envelope, [], analysts=("macro_analyst",))
-    with pytest.raises(CycleError, match="is not an analyst"):
-        cycle_config(tmp_path, envelope, [], analysts=("technical_analyst", "astrologer"))
-    with pytest.raises(CycleError, match="read nothing"):
+    with pytest.raises(CycleError, match="is not a reading"):
+        cycle_config(tmp_path, envelope, [], readings=("astrologer",))
+    with pytest.raises(CycleError, match="is not a reading"):
         cycle_config(tmp_path, envelope, [], series={"executor": (tmp_path / "x.toml",)})
 
 
@@ -724,31 +715,20 @@ def test_the_matrix_refuses_a_direction_the_declarations_do_not_support(
     cfg, _, _ = cycle_config(
         tmp_path,
         envelope,
-        {
-            "technical_analyst": analyst_answer(),
-            "macro_analyst": json.dumps(
-                {
-                    "regime": "risk-off",
-                    "events": [],
-                    "reason": "the declared threshold points the other way",
-                    "figures_used": [],
-                    "data_as_of": "2026-09-27T00:00:00+00:00",
-                }
-            ),
-        },
-        analysts=("technical_analyst", "macro_analyst"),
-        matrix=Matrix(required=("macro_analyst",)),
+        {"technical_analyst": analyst_answer()},
+        readings=("macro",),
+        matrix=Matrix(required=("macro",)),
     )
     result = run_cycle(cfg)
 
-    # Nothing was declared for the macro analyst in this fixture, so it produced no state at all.
+    # Nothing was declared for the macro reading in this fixture, so it produced no state at all.
     assert not result.acted and result.confluence is not None
     assert not result.confluence.admitted
-    assert any("confluence: macro_analyst declares undeclared" in r for r in result.refusals)
+    assert any("confluence: macro declares undeclared" in r for r in result.refusals)
     # The cost was priced before the matrix read, so the record still shows what the trade cost.
     assert result.briefs.get("cost") is not None
     summary = json.loads((Path(str(result.path)) / "cycle.json").read_text("utf-8"))
-    assert summary["confluence"]["states"] == {"macro_analyst": "undeclared"}
+    assert summary["confluence"]["states"] == {"macro": "undeclared"}
     assert summary["intent"] is None
 
 
@@ -907,7 +887,7 @@ def conviction_rule(**overrides: Any) -> Any:
     from trading_research_agents.execution.conviction import Conviction, Tier
 
     settings: dict[str, Any] = {
-        "weights": {"technical_analyst": Decimal(1), "macro_analyst": Decimal(1)},
+        "weights": {"technical_analyst": Decimal(1), "macro": Decimal(1)},
         "min_score": Decimal("0.4"),
         "ladder": (
             Tier(Decimal("0.8"), Decimal(1)),
@@ -931,7 +911,7 @@ def test_conviction_sizes_the_trade_and_the_cost_is_priced_at_that_size(
     )
     result = run_cycle(cfg)
 
-    # The macro analyst was not asked, so it is silence: the score is the deciding confidence.
+    # The macro reading was not read, so it is silence: the score is the deciding confidence.
     assert result.stake is not None and result.stake.score.score == Decimal("0.600")
     assert result.stake.multiple == Decimal("0.5") and result.stake.size == Decimal("2.5")
     assert result.acted and result.intent is not None
@@ -939,7 +919,7 @@ def test_conviction_sizes_the_trade_and_the_cost_is_priced_at_that_size(
     # The gate priced the trade it admitted, not the base the operator declared.
     assert result.briefs["cost"]["size"] == "2.5"
     summary = json.loads((Path(str(result.path)) / "cycle.json").read_text("utf-8"))
-    assert summary["conviction"]["score"]["contributions"]["macro_analyst"] == "0"
+    assert summary["conviction"]["score"]["contributions"]["macro"] == "0"
 
 
 def test_conviction_below_the_floor_refuses_after_everything_else_passed(
@@ -965,25 +945,15 @@ def test_a_context_that_disagrees_costs_size_rather_than_being_averaged_away(
     agreeing, _, _ = cycle_config(
         tmp_path / "agrees",
         envelope,
-        {
-            "technical_analyst": analyst_answer(confidence=1.0),
-            "macro_analyst": json.dumps(
-                {
-                    "regime": "risk-on",
-                    "events": [],
-                    "reason": "the declared threshold is bullish",
-                    "data_as_of": "2026-09-27T00:00:00+00:00",
-                }
-            ),
-        },
-        analysts=("technical_analyst", "macro_analyst"),
+        {"technical_analyst": analyst_answer(confidence=1.0)},
+        readings=("macro",),
         conviction=conviction_rule(),
     )
-    # Nothing is declared for the macro analyst in this fixture, so it stays silent either way; what
+    # Nothing is declared for the macro reading in this fixture, so it stays silent either way; what
     # this pins is that silence neither lifts nor dilutes the deciding analyst's confidence.
     result = run_cycle(agreeing)
     assert result.stake is not None and result.stake.score.score == Decimal("1.000")
-    assert result.stake.score.silent == ("macro_analyst",)
+    assert result.stake.score.silent == ("macro",)
 
 
 def test_venue_mode_sends_the_intent_and_keeps_what_came_back(
@@ -1170,17 +1140,17 @@ def test_an_interrupt_at_the_venue_is_written_down_before_it_stops_the_run(
     assert summary["stopped_by"].startswith("interrupted at the venue")
 
 
-def test_a_reading_role_leaves_its_declared_state_without_a_model(
+def test_a_reading_leaves_its_declared_state_without_a_model(
     tmp_path: Path, envelope: Envelope
 ) -> None:
     cfg, _, _ = cycle_config(
         tmp_path,
         envelope,
         {"technical_analyst": analyst_answer()},
-        analysts=("technical_analyst", "macro_analyst"),
+        readings=("macro",),
     )
     result = run_cycle(cfg)
-    said = result.context["macro_analyst"]
+    said = result.context["macro"]
     # Nothing is asked, so nothing can fail: the code over the operator's thresholds stands.
     assert said == {"declared_state": said["declared_state"], "read_by": "code"}
     assert said["declared_state"]["declared"] == "undeclared"
@@ -1352,7 +1322,7 @@ def test_a_malformed_answer_is_asked_again_with_the_reason(
     assert again.startswith(fake.calls[0].user)
 
 
-def test_each_analyst_reads_its_own_data_and_none_sees_another_analysts_reading(
+def test_each_reading_sees_its_own_series_and_the_analyst_sees_none_of_them(
     tmp_path: Path, envelope: Envelope
 ) -> None:
     macro = series_for(tmp_path, "us10y", "4.4", "{ bearish_above = 4.25 }")
@@ -1364,28 +1334,22 @@ def test_each_analyst_reads_its_own_data_and_none_sees_another_analysts_reading(
         tmp_path,
         envelope,
         answers,
-        series={"macro_analyst": (macro,), "onchain_analyst": (onchain,)},
-        analysts=("technical_analyst", "macro_analyst", "onchain_analyst"),
+        series={"macro": (macro,), "onchain": (onchain,)},
+        readings=("macro", "onchain"),
     )
     result = run_cycle(cfg)
     where = Path(str(result.path)) / "briefs"
-    seen = {
-        role: (where / f"{name}.json").read_text("utf-8")
-        for role, name in (
-            ("technical_analyst", "technical"),
-            ("macro_analyst", "macro_analyst"),
-            ("onchain_analyst", "onchain_analyst"),
-        )
-    }
+    seen = {name: (where / f"{name}.json").read_text("utf-8") for name in ("technical", "macro")}
+    seen["onchain"] = (where / "onchain.json").read_text("utf-8")
     others = {
-        "technical_analyst": ("us10y", "venue_net_flow", "macro_analyst", "onchain_analyst"),
-        "macro_analyst": ("venue_net_flow", "onchain_analyst", "technical", "market_structure"),
-        "onchain_analyst": ("us10y", "macro_analyst", "technical", "market_structure"),
+        "technical": ("us10y", "venue_net_flow", "declared_series"),
+        "macro": ("venue_net_flow", "market_structure"),
+        "onchain": ("us10y", "market_structure"),
     }
-    for role, words in others.items():
-        assert [w for w in words if w in seen[role]] == [], role
+    for name, words in others.items():
+        assert [w for w in words if w in seen[name]] == [], name
     # The readings are weighed by code alone.
-    assert result.context["macro_analyst"]["declared_state"]["declared"] == "bearish"
+    assert result.context["macro"]["declared_state"]["declared"] == "bearish"
 
 
 def judged_cycle(

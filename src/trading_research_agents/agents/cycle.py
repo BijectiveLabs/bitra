@@ -29,20 +29,16 @@ from typing import Any
 
 from trading_research_agents.agents import (
     event_analyst,
-    macro_analyst,
-    onchain_analyst,
-    sentiment_analyst,
     technical_analyst,
     validator,
 )
 from trading_research_agents.agents.alarms import DAILY_LOSS_MARK, DRAWDOWN_MARK
 from trading_research_agents.agents.briefs import (
     BriefError,
-    context_brief,
     cost_brief,
     data_brief,
-    declared_state,
     interval_name,
+    reading_brief,
     technical_brief,
 )
 from trading_research_agents.agents.cited import survived
@@ -107,6 +103,8 @@ from trading_research_agents.execution.trigger import (
 )
 from trading_research_agents.llm.completer import Completer
 from trading_research_agents.llm.usage import BudgetSpentError, UsageLedger
+from trading_research_agents.readings import ONCHAIN, READINGS
+from trading_research_agents.readings.state import declared_state
 from trading_research_agents.records import (
     COMPACT,
     append_index,
@@ -145,15 +143,12 @@ TARGETS = {"long": Direction.LONG, "short": Direction.SHORT}
 OPEN_INTEREST_LOOK_BACK = 12
 # Cycles looked through for the analyst's last reading; most of them were held by the trigger.
 PREVIOUS_LOOK_BACK = 96
-# The reading roles: code reads their series against the operator's thresholds and records the
-# declared state. They asked a model until 0.11; no gate ever read the model's label.
-# The shelf files that feed each reading role, for saying where to declare one.
+# The shelf files that feed each reading, for saying where to declare one.
 CLASSES_OF: dict[str, tuple[str, ...]] = {
-    macro_analyst.ROLE: ("macro",),
-    onchain_analyst.ROLE: ("onchain", "derivatives"),
-    sentiment_analyst.ROLE: ("sentiment",),
+    "macro": ("macro",),
+    "onchain": ("onchain", "derivatives"),
+    "sentiment": ("sentiment",),
 }
-READING = (macro_analyst.ROLE, onchain_analyst.ROLE, sentiment_analyst.ROLE)
 
 
 # What a contract market has and a spot pair does not.
@@ -260,20 +255,19 @@ class CycleConfig:
     spot: bool = False
     # What the underlying is, from the venue's own market fields. An equity's exchange keeps
     # hours: with equity_session "regular" an entry waits for the session and a hold may not run
-    # past its close; on-chain figures do not bear on a share, so that analyst is not asked.
+    # past its close; on-chain figures do not bear on a share, so that reading is not read.
     asset_class: str = "crypto"
     # The market itself, as the venue describes it. A prediction outcome is decided by the event
     # analyst on a probability, priced to resolution, and sized by its stake.
     market: Market | None = None
     equity_session: str = "any"
     equity_closed: tuple[date, ...] = ()
-    # A reading analyst is asked only when the roster names it. `tra run` names the ones with a
-    # declared source, because paying a model to say it was given nothing is waste; an operator who
-    # wants a role asked anyway, on notes alone, names it in [agents].analysts.
+    # A reading is read only when the roster names it. `tra run` names the ones with a declared
+    # source; an operator who wants one read anyway, on notes alone, names it in [agents].readings.
     data_options: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     series: Mapping[str, tuple[Path, ...]] = field(default_factory=dict)
     news: tuple[Path, ...] = ()
-    analysts: tuple[str, ...] = (technical_analyst.ROLE,)
+    readings: tuple[str, ...] = ()
     max_workers: int = 4
     # Progress, on its own wire. A watcher sees the steps as they happen and can change none of
     # them; the default is nobody watching.
@@ -283,14 +277,12 @@ class CycleConfig:
     def __post_init__(self) -> None:
         if not self.instrument.strip():
             raise CycleError("a cycle names its instrument")
-        if technical_analyst.ROLE not in self.analysts:
-            raise CycleError(f"a cycle asks {technical_analyst.ROLE}; it is the role that decides")
-        unknown = sorted(set(self.analysts) - set(READING) - {technical_analyst.ROLE})
+        unknown = sorted(set(self.readings) - set(READINGS))
         if unknown:
-            raise CycleError(f"{unknown} is not an analyst; have {sorted(READING)}")
-        stray = sorted(set(self.series) - set(READING))
+            raise CycleError(f"{unknown} is not a reading; have {list(READINGS)}")
+        stray = sorted(set(self.series) - set(READINGS))
         if stray:
-            raise CycleError(f"series declared for {stray}, which read nothing")
+            raise CycleError(f"series declared for {stray}, which is not a reading")
         bad_stance = sorted(set(self.validators) - set(STANCES))
         if bad_stance:
             raise CycleError(f"{bad_stance} is not a stance; have {list(STANCES)}")
@@ -393,10 +385,10 @@ class CycleResult:
             "refusals": self.refusals,
             "stopped_by": self.stopped_by,
             "seen": self.seen,
-            # Every series a reading analyst was handed: where from, the value, and how old.
+            # Every series a reading read: where from, the value, and how old.
             "series": self.briefs.get("series"),
-            # Reading roles this cycle did not read, and why.
-            "not_asked": self.briefs.get("not_asked"),
+            # Readings this cycle did not read, and why.
+            "not_read": self.briefs.get("not_read"),
             "exits": self.exits or None,
             # What the models cost this cycle, and which calls had no declared price.
             "spend": self.briefs.get("spend"),
@@ -663,29 +655,9 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
     if cfg.market is not None and cfg.market.outcome:
         return _decide_on_an_outcome(cfg, where, result, snapshot, cycle, equity, cfg.market)
 
-    # The reading briefs come first: what the operator's thresholds say on them is code, known
-    # before any model is asked, and the technical analyst decides with it in front of it.
-    calendar = _calendar(cfg, result)
-    reading_briefs: dict[str, dict[str, Any]] = {}
-    for role in READING:
-        if role == onchain_analyst.ROLE and cfg.asset_class == "equity" and role in cfg.analysts:
-            why = "on-chain figures do not bear on an equity underlying, so not asked"
-            result.briefs.setdefault("not_asked", {})[role] = why
-            announce(cfg.watch, role, SKIPPED, why)
-            continue
-        if role not in cfg.analysts:
-            # Shown, not hidden: an analyst missing from the table reads as one that broke.
-            why = _not_on_roster(cfg, role)
-            result.briefs.setdefault("not_asked", {})[role] = why
-            announce(cfg.watch, role, SKIPPED, why)
-            continue
-        built = _reading_brief(cfg, role, snapshot, calendar, result)
-        if built is None:
-            why = next((r for r in reversed(result.refusals) if r.startswith(role)), "not asked")
-            result.briefs.setdefault("not_asked", {})[role] = why
-            announce(cfg.watch, role, SKIPPED, why.removeprefix(f"{role}: "))
-            continue
-        reading_briefs[role] = _within_scope(role, built, result)
+    # The readings come first: what the operator's thresholds say on them is code, known before
+    # any model is asked, and the technical analyst decides with it in front of it.
+    reading_briefs = _readings(cfg, snapshot, result)
     context = _context_frames(cfg, result)
     result.frames = context
     try:
@@ -715,7 +687,7 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         shown["previous"] = last
     asked = _within_scope(technical_analyst.ROLE, shown, result)
     write_json(where.brief("technical"), asked)
-    states = {role: _reading_state(role, brief) for role, brief in reading_briefs.items()}
+    states = {name: _reading_state(name, brief) for name, brief in reading_briefs.items()}
     announce(cfg.watch, "regime", DONE, _regime_line(cfg, technical, states))
 
     tasks = [
@@ -735,9 +707,9 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
             path=where.answer("technical"),
         )
     ]
-    for role, brief in reading_briefs.items():
-        write_json(where.brief(role), brief)
-        announce(cfg.watch, role, DONE, f"read by code: {states[role]['declared']}")
+    for name, brief in reading_briefs.items():
+        write_json(where.brief(name), brief)
+        announce(cfg.watch, name, DONE, f"read by code: {states[name]['declared']}")
 
     fan = run_tasks(tasks, max_workers=cfg.max_workers)
     result.fan = fan
@@ -1535,10 +1507,34 @@ def _previous_reading(
     return None
 
 
-def _reading_state(role: str, brief: Mapping[str, Any]) -> dict[str, Any]:
-    declared = declared_state(role, brief)
+def _readings(
+    cfg: CycleConfig, snapshot: Snapshot, result: CycleResult
+) -> dict[str, dict[str, Any]]:
+    """The figures of every reading on the roster; the others are named with why they were not."""
+    calendar = _calendar(cfg, result)
+    out: dict[str, dict[str, Any]] = {}
+    for name in READINGS:
+        if name == ONCHAIN and cfg.asset_class == "equity" and name in cfg.readings:
+            why = "on-chain figures do not bear on an equity underlying, so not read"
+        elif name not in cfg.readings:
+            # Shown, not hidden: a reading missing from the table reads as one that broke.
+            why = _not_on_roster(cfg, name)
+        else:
+            built = _reading_brief(cfg, name, snapshot, calendar, result)
+            if built is not None:
+                out[name] = built
+                continue
+            why = next((r for r in reversed(result.refusals) if r.startswith(name)), "not read")
+            why = why.removeprefix(f"{name}: ")
+        result.briefs.setdefault("not_read", {})[name] = why
+        announce(cfg.watch, name, SKIPPED, why)
+    return out
+
+
+def _reading_state(name: str, brief: Mapping[str, Any]) -> dict[str, Any]:
+    declared = declared_state(name, brief)
     return {
-        "declared": declared.get("as_role_says_it") or declared.get("declared"),
+        "declared": declared.get("in_its_words") or declared.get("declared"),
         "score": declared.get("score", "0"),
     }
 
@@ -1550,15 +1546,15 @@ def _regime_line(cfg: CycleConfig, brief: Any, states: Mapping[str, Any]) -> str
         said.append(f"structure {shape.trend}" + (f", {shape.event}" if shape.event else ""))
     said.extend(f"{name} {frame['regime']}" for name, frame in (brief.timeframes or {}).items())
     # Shown to the operator; the analyst's brief does not carry them.
-    said.extend(f"{role} {state['declared']}" for role, state in states.items())
+    said.extend(f"{name} {state['declared']}" for name, state in states.items())
     return ", ".join(said)
 
 
-def _not_on_roster(cfg: CycleConfig, role: str) -> str:
-    if cfg.series.get(role):
-        return "not in [agents].analysts, so not asked"
-    shelves = " or ".join(f"sources/{name}.toml" for name in CLASSES_OF.get(role, ()))
-    return f"nothing declared in {shelves or 'sources/'}, so not asked"
+def _not_on_roster(cfg: CycleConfig, name: str) -> str:
+    if cfg.series.get(name):
+        return "not in [agents].readings, so not read"
+    shelves = " or ".join(f"sources/{shelf}.toml" for shelf in CLASSES_OF.get(name, ()))
+    return f"nothing declared in {shelves or 'sources/'}, so not read"
 
 
 def _calendar(cfg: CycleConfig, result: CycleResult) -> tuple[Event, ...]:
@@ -1574,37 +1570,37 @@ def _calendar(cfg: CycleConfig, result: CycleResult) -> tuple[Event, ...]:
 
 def _reading_brief(
     cfg: CycleConfig,
-    role: str,
+    name: str,
     snapshot: Snapshot,
     calendar: tuple[Event, ...],
     result: CycleResult,
 ) -> dict[str, Any] | None:
-    """One reading analyst's brief, or nothing when its series cannot be read at all."""
+    """One reading's figures, or nothing when its series cannot be read at all."""
     series: tuple[Series, ...] = ()
-    files = cfg.series.get(role, ())
+    files = cfg.series.get(name, ())
     for declared in files:
         try:
             readable, problems = load_readable(declared)
         except SeriesError as exc:
-            # One unreadable file does not silence a role that has other shelves to read from.
-            result.refusals.append(f"{role} {declared.name}: {exc}")
+            # One unreadable file does not silence a reading that has other shelves to read from.
+            result.refusals.append(f"{name} {declared.name}: {exc}")
             continue
         series = (*series, *readable)
-        result.refusals.extend(f"{role} {declared.name}: {problem}" for problem in problems)
+        result.refusals.extend(f"{name} {declared.name}: {problem}" for problem in problems)
     if files and not series:
-        # Everything this role was given is unreadable. Asking anyway would pay a model to say it
-        # saw nothing, and would hide a broken file behind a shrug.
-        result.refusals.append(f"{role}: nothing readable in {[p.name for p in files]}; not asked")
+        # Everything this reading was given is unreadable; reading nothing would hide a broken
+        # file behind an undeclared state.
+        result.refusals.append(f"{name}: nothing readable in {[p.name for p in files]}; not read")
         return None
     try:
-        brief = context_brief(role, snapshot, series=series, events=calendar)
+        brief = reading_brief(name, snapshot, series=series, events=calendar)
     except BriefError as exc:
-        result.refusals.append(f"{role}: {exc}")
+        result.refusals.append(f"{name}: {exc}")
         return None
     rows = list(brief.get("series") or [])
     result.briefs.setdefault("series", []).extend(
         {
-            "role": role,
+            "reading": name,
             "series": row.get("series"),
             "source": row.get("source"),
             "origin": row.get("origin"),
@@ -1618,19 +1614,18 @@ def _reading_brief(
     old = [row for row in rows if row.get("stale")]
     for row in old:
         result.refusals.append(
-            f"{role} {row['series']}: last value {str(row['observed_at'])[:16]}, "
+            f"{name} {row['series']}: last value {str(row['observed_at'])[:16]}, "
             f"{row['age_h']}h old, past max_age {row['max_age']}; shown, not counted"
         )
     if rows and len(old) == len(rows) and not (brief.get("events") or brief.get("notes")):
-        # Every figure this role would read is out of date; paying a model to read them would buy
-        # a label nothing can count.
-        result.refusals.append(f"{role}: every series is past its max_age; not asked")
+        # Every figure this reading has is out of date; a state from them is one nothing can count.
+        result.refusals.append(f"{name}: every series is past its max_age; not read")
         return None
     return brief
 
 
 def _conviction_states(result: CycleResult) -> dict[str, Mapping[str, Any]]:
-    """The declared state of each reading role, computed by code from the operator's thresholds."""
+    """The declared state of each reading, computed by code from the operator's thresholds."""
     return {
         role: said["declared_state"]
         for role, said in result.context.items()
@@ -1639,11 +1634,11 @@ def _conviction_states(result: CycleResult) -> dict[str, Mapping[str, Any]]:
 
 
 def _context_of(briefs: Mapping[str, dict[str, Any]]) -> dict[str, Any]:
-    """What each reading role's series say against the operator's own thresholds."""
+    """What each reading's series say against the operator's own thresholds."""
     return {
-        role: {"declared_state": declared_state(role, briefs[role]), "read_by": "code"}
-        for role in READING
-        if role in briefs
+        name: {"declared_state": declared_state(name, briefs[name]), "read_by": "code"}
+        for name in READINGS
+        if name in briefs
     }
 
 

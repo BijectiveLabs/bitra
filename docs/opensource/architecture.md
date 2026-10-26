@@ -34,8 +34,10 @@ trading_research_agents/
   store/       snapshots and cycle directories                                  -> everything above, llm
   surface/     the gates as callable tools, read tools and tightening actions
                (listed on the MCP page); shared by mcp and agents                -> everything above
+  readings/    macro, on-chain and sentiment: the operator's series against the
+               operator's thresholds, a declared state and a graded score; no model -> data
   agents/      the research roles at layers 0, 2 and 3; the session roles; the
-               cycle and its analysts, validators and screener                  -> everything above, llm, store, surface
+               cycle and its analyst, validators and screener                   -> everything above, llm, store, surface, readings
   mcp/         the gates as MCP tools                                            -> everything except agent
   market_data/ one-minute flow and book bars, derivatives and liquidations, dated
                text, gap marks; the verified archive in day files and hour parts,
@@ -198,7 +200,7 @@ shared store; nothing in the package needs one.
 flowchart LR
     subgraph now["the cycle today"]
         direction TB
-        f1["features and briefs, by code"] --> r1["reading roles, by code"]
+        f1["features and briefs, by code"] --> r1["readings, by code"]
         r1 --> m1["technical analyst<br/>the one model call"]
         m1 --> g1["gates: cost, exits,<br/>confluence, conviction"]
     end

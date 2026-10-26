@@ -22,8 +22,8 @@ with its reason, so you can check afterwards what happened and why.
 It is an early release, so expect settings to change between versions. What works
 today: linear perpetuals, spot pairs (stock perpetuals and tokenized stocks among them) and
 prediction market outcomes through one order path, a universe of perpetuals found and measured by
-the system, a screener that picks where to look, the full autonomous cycle on live data, one analyst that proposes, three reading roles read by
-code, up to three validators, stops and
+the system, a screener that picks where to look, the full autonomous cycle on live data, one analyst that proposes, three readings of
+your own series computed by code, up to three validators, stops and
 targets the analyst names inside bounds you set, the gates that decide, sizing from your own rules,
 real orders on a venue's practice environment behind a mandate you sign, a risk manager that can
 only make the desk more careful, and two auditors that read the records.
@@ -56,7 +56,7 @@ flowchart TD
     pick -- "none taken" --> held
     pick -- "taken" --> briefs
     briefs["the system writes the briefs<br/>each role sees only the figures its job needs"] --> readers
-    readers["reading roles, read by code<br/>macro, on-chain, sentiment against your lines"] --> tech
+    readers["readings, by code, no model<br/>macro, on-chain, sentiment against your lines"] --> tech
     tech["technical analyst: the one model call<br/>a direction, a confidence, a horizon"] --> price["the system prices the round trip<br/>fee, spread, impact, funding, slippage"]
     price --> exits{"the stop and the target<br/>the analyst's levels, held inside your bounds<br/>does the trade break even at half its kind winning?"}
     exits -- "no" --> refused
@@ -76,14 +76,14 @@ flowchart TD
 | Role | Reads | Answers | Can never |
 |---|---|---|---|
 | technical analyst | candles, spread, funding, book imbalance, open interest change, and the regime on its timeframe and the higher ones you declare | a direction, a setup from a fixed list, a confidence, a horizon, and where its stop and target sit | size the trade, place a level outside your `[exit]` bounds, run a trend setup in a range, or fade a market that is not a measured range |
-| macro, on-chain and sentiment roles | dated rates and levels, chain and derivatives figures, scores and notes you curate | no answer: code reads each series against the lines you drew and gives a declared state | ask a model, or propose a direction |
+| macro, on-chain and sentiment readings (code, not agents) | dated rates and levels, chain and derivatives figures, scores and notes you curate | a declared state and a graded score: each series against the lines you drew | ask a model, or propose a direction |
 | market screener | what the system measured for each admitted instrument: move, spread, regime, volume, correlation to BTC | which instruments to take, in what order, citing their figures | add an instrument the system did not admit |
 | validators: pro and contra | the proposal and the figures behind it, each without the other's case | the strongest case for or against, as cited claims | see the other side's case, or cite a figure it wasn't given |
 | validator: neutral, as judge | the same, and both cases once code has checked every claim | support, oppose or abstain, the one verdict that counts | see the advocates' verdicts, or count claims instead of weighing them |
 | risk manager | what the run recorded: round trips, the losing streak, your limits, the alarm that woke it | continue, cut the size of new entries, pause instruments, or halt, each for a stated number of hours | loosen a limit you set, or add size |
 | technology and quant auditors | the cycles this desk recorded | findings and proposed changes | change anything |
 
-Everything after the analysts is arithmetic over numbers you declared. No model can place, cancel
+Everything after the models answer is arithmetic over numbers you declared. No model can place, cancel
 or resize an order, read a file outside the project, or edit your configuration. [Agents](/opensource/agents)
 has the full table of what an agent can reach, and [The cycle](/opensource/cycle) walks through every step.
 

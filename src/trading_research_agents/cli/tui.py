@@ -273,8 +273,8 @@ class RunView:
 STEPS = (
     "figures",
     "market_screener",
-    "macro_analyst",
-    "onchain_analyst",
+    "macro",
+    "onchain",
     "risk_manager",
     "executor",
     "auditor",
@@ -331,7 +331,7 @@ class CycleView:
 
     The whole pipeline the operator configured is laid out before anything starts, every step
     pending, so a terminal is never blank while models think. A running step shows a spinner and
-    its own clock ticking; a finished one shows how it ended and how long it took. The analysts run
+    its own clock ticking; a finished one shows how it ended and how long it took. Model calls run
     on threads, so updates arrive from several at once: state changes and redraws share one lock.
     """
 
@@ -912,12 +912,12 @@ def cycle_view(record: Mapping[str, Any]) -> Group:
 
     if record.get("series"):
         read = Table(box=box.SIMPLE_HEAD, show_edge=False, pad_edge=False, title="series read")
-        for name in ("analyst", "series", "value", "as of", "age h", "state", "from"):
+        for name in ("reading", "series", "value", "as of", "age h", "state", "from"):
             read.add_column(name)
         for row in record["series"]:
             state = str(row.get("state"))
             read.add_row(
-                str(row.get("role", "")).removesuffix("_analyst"),
+                str(row.get("reading", "")),
                 str(row.get("series")),
                 str(row.get("value")),
                 str(row.get("observed_at") or "")[:16],
@@ -1063,14 +1063,13 @@ def cycle_view(record: Mapping[str, Any]) -> Group:
                 state = "unreadable"
             style = {"ok": "green", "failed": "red", "reused": "dim", "unreadable": "red"}[state]
             who.add_row(str(row.get("agent")), Text(state, style=style), str(row.get("seconds")))
-        for role, why in sorted((record.get("not_asked") or {}).items()):
-            said = str(why).removeprefix(role + ": ")
-            who.add_row(role, Text(f"not asked: {said}", style="yellow"), "")
+        for name, why in sorted((record.get("not_read") or {}).items()):
+            who.add_row(name, Text(f"not read: {why}", style="yellow"), "")
         parts.append(who)
     return Group(*parts)
 
 
-# The steps after the analysts, in the order a cycle runs them, by the record key each one fills.
+# The steps after the analyst, in the order a cycle runs them, by the record key each one fills.
 LATER_STEPS = (
     ("exits", "stop and target"),
     ("conviction", "conviction"),

@@ -1,14 +1,15 @@
 """How much capital a cycle puts behind an idea, decided by a rule the operator wrote.
 
 The matrix answers whether the context agrees with the direction. This answers the other half of
-the question a desk actually has: how much. Four analysts and three validators are only worth their
-token bill if what they say changes the size of the trade, and not merely whether it happens.
+the question a desk actually has: how much. An analyst, three readings and three validators are
+only worth their cost if what they say changes the size of the trade, and not merely whether it
+happens.
 
 The rule is code, and the weights are the operator's. That is deliberate. A model asked "how
 confident are you, and how big should this be" will answer differently on Tuesday than on Monday
 from the same figures, and a size that depends on which sentence was written last cannot be
-backtested, reproduced or audited. So a score is computed from what each role declared, what the
-validators voted after their claims were checked, and the deciding analyst's own confidence; the
+backtested, reproduced or audited. So a score is computed from what each reading declared, what
+the validators voted after their claims were checked, and the deciding analyst's own confidence; the
 score picks a tier off a ladder the operator wrote; the tier multiplies the base size; and every cap
 in the project still applies afterwards. Nothing here can make a trade larger than the operator
 already allowed - it can only make it smaller.
@@ -159,7 +160,7 @@ class Stake:
 
 
 def strength_of(state: Mapping[str, Any] | None) -> Decimal:
-    """A role's graded score, signed for the instrument; the plain word when no score is there."""
+    """A reading's graded score, signed for the instrument; the plain word when there is none."""
     if not state:
         return Decimal(0)
     raw = state.get("score")
@@ -183,11 +184,11 @@ def score_of(
     """Add up the desk's voices for this direction, each one as strong as it actually is.
 
     Every voice is a signed figure. The deciding analyst brings its weight times its confidence. A
-    reading analyst brings its weight times its graded score - how far its series sit past the
+    reading brings its weight times its graded score - how far its series sit past the
     operator's lines, between -1 and 1 - pointed with or against the direction. A validator brings
     its weight for or against. The score is what they add up to, over the weight they actually
     expressed: a macro reading barely past its line moves the score a little either way, a reading
-    a full band past it moves it a lot, and a role that said nothing neither helps nor dilutes.
+    a full band past it moves it a lot, and a voice that said nothing neither helps nor dilutes.
     Opposition reduces size; only opposition strong enough to outweigh the case stops the trade.
     """
     if target not in AGREES:

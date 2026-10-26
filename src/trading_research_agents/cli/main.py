@@ -36,7 +36,6 @@ from trading_research_agents.agents.context import (
     ContextError,
     declared_in,
     inspect_shelf,
-    roster_for,
 )
 from trading_research_agents.agents.cycle import CycleError, budget_spent
 from trading_research_agents.agents.pipeline import read_refusals
@@ -346,7 +345,7 @@ def build_parser() -> argparse.ArgumentParser:
     session_cmd.add_argument("--out", type=Path, default=None, help="default: runs/session-<time>")
     session_cmd.add_argument("--ladder", type=Path, default=Path("ladder.json"))
     session_cmd.add_argument(
-        "--macro", type=Path, help="a series.toml of macro series for the macro analyst"
+        "--macro", type=Path, help="a series.toml of macro series for the macro reading"
     )
     session_cmd.add_argument("--onchain", type=Path, help="a series.toml of on-chain series")
     session_cmd.add_argument("--events", type=Path, help="a calendar (JSON or CSV: when, what)")
@@ -1754,7 +1753,7 @@ TEMPLATE_FILES = {
     "data.toml": "data.toml",
     "observation.toml": "observation.toml",
     # One declaration per class of data, so a vendor is a line in a file rather than a file of
-    # its own. The analysts that read them are asked only when their class is declared.
+    # its own. A reading is read only when its class is declared.
     "sources/macro.toml": "sources/macro.toml",
     "sources/onchain.toml": "sources/onchain.toml",
     "sources/derivatives.toml": "sources/derivatives.toml",
@@ -2547,7 +2546,7 @@ def sources_show(args: argparse.Namespace) -> int:
             )
         lines.append(f"{row['series']:<20} {row['from']}; {row['source'] or '-'}; {state}")
     if not rows:
-        lines.append("no series declared under sources/; the reading analysts are not asked")
+        lines.append("no series declared under sources/; no reading is read")
     emit({"series": rows}, args.json, lines)
     return 0 if all(r.get("counted") for r in rows) else 1
 
@@ -3432,8 +3431,8 @@ def _agent_config(text: str, provider_name: str, model: str) -> str:
 
 AUTONOMOUS_GATES = """
 [confluence]
-# Which reading analysts must agree with the direction. Empty until you declare their sources in
-# sources/, because a role that was never asked has agreed to nothing and this gate fails closed.
+# Which readings must agree with the direction. Empty until you declare their sources in
+# sources/, because a reading that was never read has agreed to nothing and this gate fails closed.
 required = []
 long_states = ["bullish"]
 short_states = ["bearish"]
@@ -3443,7 +3442,7 @@ min_support = 0                    # validators that must support it; needs [age
 [conviction]
 # What each voice is worth, and how much of the base size their agreement buys. With nothing on the
 # shelf yet, the only voice is the deciding analyst, so the score is its own confidence. Add a
-# weight beside each analyst as you declare its sources.
+# weight beside each reading as you declare its sources.
 weights = { technical_analyst = 2.0 }
 min_score = 0.4                    # below this the desk does not trade, whatever the gates said
 # max_leverage = 3.0               # notional against [run].equity; a ceiling, never a target
@@ -3529,9 +3528,9 @@ is left before it can decide anything:
 Then `tra check` tells you what is still missing, `tra run` decides once, and
 `tra run --every 15m` keeps deciding on each fifteen-minute bar.
 
-Optional, and worth doing in this order: fill in a file under `sources/` and its analyst joins the
-roster; give that analyst a weight in `[conviction].weights` and its agreement starts changing the
-size; name it in `[confluence].required` and its disagreement starts refusing the trade.
+Optional, and worth doing in this order: fill in a file under `sources/` and its reading joins
+the roster; give that reading a weight in `[conviction].weights` and its agreement starts changing
+the size; name it in `[confluence].required` and its disagreement starts refusing the trade.
 
 `docs.bijectivelabs.dev/opensource/boundaries` says what this software will not do, and why.
 """
@@ -3649,8 +3648,8 @@ def run_cycle_command(args: argparse.Namespace) -> int:
     news = tuple(declared.text)
     if not news and (beside / "events.csv").is_file():
         news = (beside / "events.csv",)
-    # A declared roster wins; otherwise the roles with something to read are the ones to pay for.
-    analysts = a.analysts or roster_for(declared, "technical_analyst")
+    # A declared roster wins; otherwise every reading with something to read is read.
+    readings = a.readings or declared.readings
     mode = args.mode or cfg.execution.mode
     # A hand for the instrument this run starts on, so a misconfigured mandate is refused before any
     # data is pulled. A pass over a universe builds another one for whichever instrument it chose:
@@ -3749,7 +3748,7 @@ def run_cycle_command(args: argparse.Namespace) -> int:
         data_options={declared.kind: dict(declared.options) for declared in data_cfg.kinds},
         series=series,
         news=news,
-        analysts=analysts,
+        readings=readings,
     )
     schedule = Schedule(every_s=args.every, cycles=args.cycles, kill_switch=cfg.kill_switch)
     spine = _cycle_steps(cycle_cfg)
@@ -4456,8 +4455,8 @@ def _cycle_steps(cfg: Any) -> list[str]:
     if cfg.account is not None:
         steps.append("capital")
     steps.extend(["regime", "technical"])
-    # Every reading analyst has a row, asked or not; the row says which.
-    steps.extend(["macro_analyst", "onchain_analyst", "sentiment_analyst"])
+    # Every reading has a row, read or not; the row says which.
+    steps.extend(["macro", "onchain", "sentiment"])
     steps.extend(["cost", "exit"])
     steps.extend(f"validator_{stance}" for stance in cfg.validators)
     if not cfg.matrix.idle:
@@ -4520,16 +4519,16 @@ def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], l
             f"  {row['series']:<14} {row['value']} as of {str(row['observed_at'])[:16]}, "
             f"{row['age_h']}h old, {row['state']}; {row['origin']}"
         )
-    for role, why in sorted((result.briefs.get("not_asked") or {}).items()):
-        lines.append(f"{role.replace('_analyst', ''):<10} {why.removeprefix(role + ': ')}")
-    for role, said in sorted(result.context.items()):
-        if role.startswith("validator"):
+    for name, why in sorted((result.briefs.get("not_read") or {}).items()):
+        lines.append(f"{name:<10} {why}")
+    for name, said in sorted(result.context.items()):
+        if name.startswith("validator"):
             continue
         declared = said.get("declared_state") or {}
         word = declared.get("declared", "undeclared")
-        spoken = declared.get("as_role_says_it")
+        spoken = declared.get("in_its_words")
         state = f"{word} ({spoken})" if spoken else word
-        lines.append(f"{role.replace('_analyst', ''):<10} read by code: {state}")
+        lines.append(f"{name:<10} read by code: {state}")
     if result.analyst is not None:
         lines.append(
             f"technical: {result.analyst.target} on {result.analyst.setup} at "
@@ -4771,10 +4770,12 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
         if shelf.empty:
             good.append(
                 f"sources: {', '.join(shelf.empty)} on the shelf, nothing declared yet; "
-                "fill one in and its analyst joins the roster"
+                "fill one in and its reading joins the roster"
             )
-        roster = roster_for(shelf, "technical_analyst")
-        good.append(f"roster: {', '.join(roster)}; `tra run` asks these")
+        readings = (cfg.agents.readings if cfg.agents is not None else ()) or shelf.readings
+        roster = ("technical_analyst", *readings)
+        read = f"{', '.join(readings)} read by code" if readings else "no reading declared"
+        good.append(f"roster: technical_analyst asks a model; {read}; `tra run` uses these")
         ready, missing = _gate_lines(
             cfg,
             roster,
@@ -5131,7 +5132,7 @@ def _gate_lines(
         absent = sorted(set(matrix.required) - set(roster))
         if absent:
             bad.append(
-                f"[confluence].required names {absent}, which the roster does not ask; "
+                f"[confluence].required names {absent}, which the roster does not read; "
                 "declare their sources or the cycle refuses every time"
             )
         if matrix.min_support > len(stances):
@@ -5237,7 +5238,7 @@ def _gate_lines(
         )
         good.append(
             "conviction: every voice counts as strong as it is - the deciding analyst by its "
-            "confidence, a reading analyst by how far its series sit past your lines - and the "
+            "confidence, a reading by how far its series sit past your lines - and the "
             "score is their net over what they expressed; opposition shrinks the size, and only "
             "opposition that outweighs the case refuses the trade"
         )
@@ -5256,7 +5257,7 @@ def _gate_lines(
         unweighted = sorted(set(roster) - set(rule.weights))
         if unweighted:
             good.append(
-                f"conviction: {unweighted} is asked but carries no weight; "
+                f"conviction: {unweighted} is on the roster but carries no weight; "
                 "it explains without moving the size"
             )
     asked = cfg.agents.validators if cfg.agents is not None else ()
@@ -5511,10 +5512,9 @@ def _span_s(seconds: float) -> str:
 
 def _load_notes(a: Any, roster: tuple[str, ...], screener: bool = False) -> list[str]:
     """How a cycle's calls land on providers, and what happens when one of them says no."""
-    named = list(a.analysts or roster or ("technical_analyst",))
-    # The reading roles are read by code; only the deciding role asks a model.
-    asked = [role for role in named if role == "technical_analyst"]
-    reading = [role for role in named if role != "technical_analyst"]
+    # The readings are read by code; only the role that proposes asks a model.
+    asked = ["technical_analyst"]
+    reading = [name for name in (a.readings or roster) if name != "technical_analyst"]
     roles = [
         *asked,
         *(["validator"] if a.validators else []),

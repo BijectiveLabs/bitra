@@ -1,4 +1,4 @@
-"""Where the reading analysts' figures come from, how fresh they are, and refreshing them."""
+"""Where the readings' figures come from, how fresh they are, and refreshing them."""
 
 from __future__ import annotations
 
@@ -151,7 +151,7 @@ def test_describe_and_due_say_what_a_cycle_would_count(tmp_path: Path) -> None:
     assert describe(spec, tmp_path, NOW)["counted"] is False
 
 
-def test_the_cycle_names_a_stale_series_and_skips_a_role_with_nothing_current(
+def test_the_cycle_names_a_stale_series_and_skips_a_reading_with_nothing_current(
     tmp_path: Path, envelope: Envelope
 ) -> None:
     from test_cycle import analyst_answer, cycle_config
@@ -162,12 +162,12 @@ def test_the_cycle_names_a_stale_series_and_skips_a_role_with_nothing_current(
         tmp_path,
         envelope,
         {"technical_analyst": analyst_answer()},
-        series={"macro_analyst": (path,)},
-        analysts=("technical_analyst", "macro_analyst"),
+        series={"macro": (path,)},
+        readings=("macro",),
     )
     result = run_cycle(cfg)
     assert any("us10y: last value 2020-01-01" in r for r in result.refusals)
-    assert any("every series is past its max_age; not asked" in r for r in result.refusals)
+    assert any("every series is past its max_age; not read" in r for r in result.refusals)
     assert result.record()["series"][0]["state"] == "stale"
 
 
@@ -202,7 +202,7 @@ def test_blockchain_charts_read_their_x_and_y(tmp_path: Path) -> None:
     assert vendor.asked[0][0].startswith("https://api.blockchain.info/charts/n-unique-addresses?")
 
 
-def test_an_analyst_nobody_declared_data_for_is_shown_as_not_asked(
+def test_a_reading_nobody_declared_data_for_is_shown_as_not_read(
     tmp_path: Path, envelope: Envelope
 ) -> None:
     from rich.console import Console
@@ -213,12 +213,12 @@ def test_an_analyst_nobody_declared_data_for_is_shown_as_not_asked(
 
     cfg, _, _ = cycle_config(tmp_path, envelope, [analyst_answer()])
     record = run_cycle(cfg).record()
-    assert record["not_asked"]["onchain_analyst"] == (
-        "nothing declared in sources/onchain.toml or sources/derivatives.toml, so not asked"
+    assert record["not_read"]["onchain"] == (
+        "nothing declared in sources/onchain.toml or sources/derivatives.toml, so not read"
     )
     console = Console(record=True, width=200)
     console.print(cycle_view(record))
-    assert "not asked" in console.export_text()
+    assert "not read" in console.export_text()
 
 
 def test_one_missing_file_leaves_its_neighbours_readable(tmp_path: Path) -> None:

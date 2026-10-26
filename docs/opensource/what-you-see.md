@@ -42,9 +42,9 @@ like it would have had to win just to break even:
 
 ![one cycle](/images/cycle.png)
 
-Then the data the cycle used and how old it was, the series the reading analysts read, the stop and
+Then the data the cycle used and how old it was, the series the readings read, the stop and
 take profit it would have placed, and which agents answered. A cycle that goes further adds what
-each validator argued, how conviction weighed the analysts, the risk at the stop and the targets:
+each validator argued, how conviction weighed the voices, the risk at the stop and the targets:
 
 ![data, series, exits and agents](/images/one-cycle.png)
 

@@ -181,18 +181,18 @@ every venue in the chain.
 The parameters a kind was fetched with are recorded beside the value, because they are part of why
 the age is what it is. Both `tra data pull` and `tra run` pass them.
 
-## The shelf: what the reading analysts are given
+## The shelf: what the readings read
 
-Live values come in chains, above. Everything a reading analyst sees comes from the shelf instead:
-one declaration file per class of data, beside the config, under `sources/`.
+Live values come in chains, above. Everything a reading reads comes from the shelf instead: one
+declaration file per class of data, beside the config, under `sources/`.
 
 | File | Class | Shape | Read by |
 |---|---|---|---|
-| `sources/macro.toml` | dated levels and rates | `[[series]]`, one per file | `macro_analyst` |
-| `sources/news.toml` | dated text | `[[news]]`, one per file | `macro_analyst`, `sentiment_analyst` |
-| `sources/sentiment.toml` | dated scores | `[[series]]` | `sentiment_analyst` |
-| `sources/onchain.toml` | dated chain figures | `[[series]]` | `onchain_analyst` |
-| `sources/derivatives.toml` | dated funding, open interest, basis | `[[series]]` | `onchain_analyst` |
+| `sources/macro.toml` | dated levels and rates | `[[series]]`, one per file | `macro` |
+| `sources/news.toml` | dated text | `[[news]]`, one per file | `macro`, `sentiment` |
+| `sources/sentiment.toml` | dated scores | `[[series]]` | `sentiment` |
+| `sources/onchain.toml` | dated chain figures | `[[series]]` | `onchain` |
+| `sources/derivatives.toml` | dated funding, open interest, basis | `[[series]]` | `onchain` |
 
 The split is by class of data, not by vendor. A vendor is a line in a file, so a desk that moves
 from a free export to a paid subscription edits one entry and nothing else changes: not the code,
@@ -202,10 +202,10 @@ else has to match.
 Nothing on the shelf fetches. Each entry names a local file the operator produced, with its
 columns, its timestamp unit and its `publish_lag`, and the series engine applies the same as-of
 rule to all of them. `[[news]]` entries name dated-text files (`when,what[,source]`) and the macro
-analyst reads them as events while the sentiment analyst reads them as notes.
+reading takes them as events while the sentiment reading takes them as notes.
 
 `tra init` writes all five files as forms with the entries commented out. A form declares nothing,
-so an untouched project asks only the technical analyst. `tra check` prints what each file
+so an untouched project reads nothing beside the market and asks only the technical analyst. `tra check` prints what each file
 declares, flags an export that is declared but missing, and prints the roster.
 
 ## The audit

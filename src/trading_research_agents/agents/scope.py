@@ -1,9 +1,9 @@
 """What each role is given, what it may answer, and what is somebody else's job.
 
-A desk works because a job has edges. The analyst that labels a regime does not size the order, the
-role that prices the round trip does not decide whether the idea is any good, and none of them
-places anything. Here those edges are written down once, in code, so they are the same in a cycle,
-in a session and in a test.
+A desk works because a job has edges. The analyst that proposes a direction does not size the
+order, the role that prices the round trip does not decide whether the idea is any good, and none
+of them places anything. Here those edges are written down once, in code, so they are the same in
+a cycle, in a session and in a test.
 
 Four things keep a role inside its job, and only the last is words:
 
@@ -13,7 +13,7 @@ Four things keep a role inside its job, and only the last is words:
   the prompt   one line naming what is not this role's job
 
 The fourth needs the least trust and gets the least authority. `crossings` looks for a small
-vocabulary no reading analyst has reason to write - an order, a size, an exit - and records a hit
+vocabulary a reviewing role has no reason to write - an order, a size, an exit - and records a hit
 beside the answer. It never silences the answer, because the answer already decides nothing; the
 record is there so an operator can see a model drifting out of its lane.
 """
@@ -24,12 +24,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from trading_research_agents.agents import (
-    macro_analyst,
-    onchain_analyst,
-    sentiment_analyst,
-    technical_analyst,
-)
+from trading_research_agents.agents import technical_analyst
 
 VALIDATOR = "validator"
 SCREENER = "market_screener"
@@ -37,9 +32,9 @@ TECH_AUDITOR = "tech_auditor"
 QUANT_AUDITOR = "quant_auditor"
 
 # Phrases that belong to a later step. Deliberately small and unambiguous: "buy" and "sell" are not
-# here, because a headline about a central bank buying bonds is a proper thing for an analyst to
-# report. What is here is the language of an order, a size and an exit, which is language a reading
-# analyst has no reason to use at all.
+# here, because a headline about a central bank buying bonds is a proper thing for a reviewer to
+# quote. What is here is the language of an order, a size and an exit, which is language a role
+# that reviews or ranks has no reason to use at all.
 NOT_YOURS: dict[str, tuple[str, ...]] = {
     "an order": (
         "go long",
@@ -96,33 +91,7 @@ class Scope:
         return key in self.reads or any(key.startswith(f) for f in self.families)
 
 
-# Every reading analyst sees its own series and the sentence that says how to read them. None of
-# them sees equity, size, the controls, the cost of the round trip or the exit distances: those
-# belong to steps that come later, and a figure a role never receives is a figure it cannot misuse.
-_CONTEXT = ("instrument", "as_of", "basis", "series", "declared_series")
-
 SCOPES: dict[str, Scope] = {
-    macro_analyst.ROLE: Scope(
-        role=macro_analyst.ROLE,
-        reads=(*_CONTEXT, "events", "horizon"),
-        answers=("regime", "events", "reason", "figures_used", "data_as_of"),
-        decides="nothing on its own; recorded beside the operator's declared state",
-        prose=("reason",),
-    ),
-    onchain_analyst.ROLE: Scope(
-        role=onchain_analyst.ROLE,
-        reads=(*_CONTEXT, "flow_window"),
-        answers=("signal", "reason", "figures_used", "data_as_of"),
-        decides="nothing on its own; recorded beside the operator's declared state",
-        prose=("reason",),
-    ),
-    sentiment_analyst.ROLE: Scope(
-        role=sentiment_analyst.ROLE,
-        reads=(*_CONTEXT, "notes", "declared"),
-        answers=("state", "figures_used", "reason", "data_as_of"),
-        decides="nothing on its own; recorded beside the operator's declared state",
-        prose=("reason",),
-    ),
     technical_analyst.ROLE: Scope(
         role=technical_analyst.ROLE,
         reads=(

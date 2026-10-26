@@ -92,9 +92,9 @@ priced, and an `[execution].venue` that does not match `[run].venue_key` - that 
 refusal rather than a note.
 
 The gates it writes ask for nothing until you give them something: `[confluence].required` is empty,
-because a role nobody asked has agreed to nothing, and `[conviction].weights` names only the
+because a reading nobody read has agreed to nothing, and `[conviction].weights` names only the
 deciding analyst, so the conviction score is that analyst's own confidence. Fill in a file under
-`sources/` and its analyst joins the roster; give that analyst a weight and its agreement starts
+`sources/` and its reading joins the roster; give that reading a weight and its agreement starts
 changing the size; name it in `required` and its disagreement starts refusing the trade. Three steps,
 in that order, each one visible in `tra check` before it costs a token.
 
@@ -104,7 +104,7 @@ the universe (system: one data pull each, the trigger per instrument, ordered by
   -> snapshot (engine)
   -> trigger             (system: has anything moved? nothing below here runs if not)
   -> briefs (system, each role's own sections only)
-  -> reading roles      (system: your thresholds over macro, on-chain, sentiment series)
+  -> readings           (system: your thresholds over macro, on-chain, sentiment series)
   -> technical analyst   (the one model call that proposes a direction)
   -> the round trip priced (system)
   -> the stop and the target (the analyst's levels, held in your [exit] bounds; break-even checked)
@@ -373,24 +373,27 @@ measured regime supports: with a trend, inside a range, or flat"). Write a narro
 trade a single idea. The research core in `tra backtest` and `tra agent session` is different: it
 trades one registered mechanism, by design.
 
-The macro analyst's regime is a different thing: risk-on or risk-off is about the world outside the
-chart, and it can disagree with what price is doing. Both are kept, apart: the technical analyst
-does not see the macro state, and conviction weighs the macro analyst's graded score against the
-technical reading after both have answered.
+The macro reading's regime is a different thing: risk-on or risk-off is about the world outside
+the chart, and it can disagree with what price is doing. Both are kept, apart: the technical analyst
+does not see the macro state, and conviction weighs the macro reading's graded score against the
+technical analyst's proposal after it has answered.
 
-## Who is asked, and what each one reads
+## Who is asked, and what is read
 
-| Role | Reads | Gives | When |
+One model is asked. Everything else beside the market is read by code.
+
+| Step | Reads | Gives | When |
 |---|---|---|---|
-| `technical_analyst` | the closed candles of the snapshot, the spread, the funding rate, the regime on each timeframe, the book imbalance, the open interest change; nothing from the reading roles | a target, a named setup, a confidence, a horizon, a reason, and the figures it read | every cycle; it is the one model call, the role that decides |
-| `macro_analyst` | macro series and the dated text of `news.toml` | the declared state of your thresholds, computed by code | when `sources/macro.toml` or `sources/news.toml` declares something, or `--macro` / `--news` names a file |
-| `onchain_analyst` | chain figures and derivative figures, read side by side | the declared state, computed by code | when `sources/onchain.toml` or `sources/derivatives.toml` declares something, or `--onchain` / `--derivatives` |
-| `sentiment_analyst` | dated scores, plus the same dated text as notes | the declared state, computed by code; `undeclared` when nothing crosses a line | when `sources/sentiment.toml` declares something, or `--sentiment` |
+| `technical_analyst` (a model) | the closed candles of the snapshot, the spread, the funding rate, the regime on each timeframe, the book imbalance, the open interest change; none of the readings | a target, a named setup, a confidence, a horizon, a reason, and the figures it read | every cycle; it is the one model call, the role that proposes |
+| `macro` (code) | macro series and the dated text of `news.toml` | the declared state of your thresholds and its graded score | when `sources/macro.toml` or `sources/news.toml` declares something, or `--macro` / `--news` names a file |
+| `onchain` (code) | chain figures and derivative figures, read side by side | the declared state and its graded score | when `sources/onchain.toml` or `sources/derivatives.toml` declares something, or `--onchain` / `--derivatives` |
+| `sentiment` (code) | dated scores, plus the same dated text as notes | the declared state and its graded score; `undeclared` when nothing crosses a line | when `sources/sentiment.toml` declares something, or `--sentiment` |
 
-The three reading roles ask no model. Until 0.11 a model also labelled each of their briefs; every
-gate already read the declared state rather than the label, measured on the demo desks the labels
-added nothing a decision could use, and they cost about a quarter of a cycle's tokens. Their role
-names stay, because `[confluence]`, `[conviction].weights` and `[agents].analysts` key on them.
+The readings ask no model. Until 0.11 each was an analyst whose model also labelled its figures;
+every gate already read the declared state rather than the label, measured on the demo desks the
+labels added nothing a decision could use, and they cost about a quarter of a cycle's tokens.
+`[confluence].required`, `[conviction].weights` and `[agents].readings` name them `macro`,
+`onchain` and `sentiment`; the old analyst names are refused with the new one.
 
 ### The shelf
 
@@ -413,12 +416,12 @@ my-run/
 A vendor is a line inside one of those files, so replacing one with another is an edit in one place
 and nothing else in the project moves. `tra init` writes all five as forms with every entry
 commented out, and a form declares nothing: an untouched project asks only the technical analyst
-and pays for nothing else. Fill one in and its analyst joins the roster on the next run. Two
-classes can feed one role, which is why the on-chain analyst reads chain and derivative figures
+and reads nothing else. Fill one in and its reading joins the roster on the next run. Two classes
+can feed one reading, which is why the on-chain reading takes chain and derivative figures
 together.
 
 `tra check` reads the shelf without reading the data: it names what each file declares, names an
-export that is declared but not on disk, and prints the roster the next `tra run` will ask. The
+export that is declared but not on disk, and prints the roster the next `tra run` will use. The
 older layout (`series.toml`, `onchain.toml`, `sentiment.toml` beside the config) is still read, so
 a project written before the shelf existed keeps working.
 
@@ -433,7 +436,7 @@ Index or any vendor that answers JSON over https, and `tra run` does that before
 series' `refresh` interval has passed. Every series also has a `max_age`; a value older than that is
 shown as `stale` and never counted. [Sources](/opensource/sources) covers both.
 
-Each reading role reads through the same series engine as `tra agent session`, with the same as-of
+Each reading goes through the same series engine as `tra agent session`, with the same as-of
 rule: a value is never used before the moment it was published, and the operator's `publish_lag` is
 what decides that moment.
 
@@ -480,7 +483,7 @@ places anything. Four things keep a role inside its job, and only the last is wo
 
 | Enforced by | What it prevents |
 |---|---|
-| the brief | A role cannot reason about what it was never given. No reading role's brief carries equity, size, the controls, the cost of the round trip or the exit distances. `agents/scope.py` filters every brief to that role's declared reads, and what it removed is written in the record. |
+| the brief | A role cannot reason about what it was never given. No validator's or screener's brief carries equity, size, the controls or the exit distances. `agents/scope.py` filters every brief to that role's declared reads, and what it removed is written in the record. |
 | the schema | A closed schema with only that role's own fields. A validator has nowhere to put a size, and a field outside the schema is a parse error rather than a surprise. |
 | the wiring | Nothing downstream reads a sentence. The confluence matrix and the conviction score read the declared state the system derived from the operator's thresholds; the cost gate reads the snapshot's own book; the size comes from the operator's ladder and caps. |
 | the prompt | One line naming what is not this role's job, plus a small vocabulary the system looks for in case it appears anyway. |
@@ -503,7 +506,7 @@ Deterministic, in the configuration, reading the declared state rather than the 
 
 ```toml
 [confluence]
-required = ["macro_analyst", "onchain_analyst"]
+required = ["macro", "onchain"]
 long_states = ["bullish"]
 short_states = ["bearish"]
 on_missing = "refuse"          # refuse | ignore
@@ -553,7 +556,8 @@ either side is an abstention, a contra with nothing that holds is support, a pro
 holds is opposition, and the record says neutral was not asked.
 
 Every stance receives the proposal and the figures it was built from: not the round trip, not the
-claimed edge, and not the other analysts' readings, which code weighs once in conviction. Each
+claimed edge, and not the macro, on-chain or sentiment readings, which code weighs once in
+conviction. Each
 answers with claims that cite a figure by the brief's own name, with that figure's value:
 
 ```json
@@ -590,16 +594,16 @@ neutral are counted for what they say beyond their stance: a pro that supports o
 opposes says nothing new and weighs nothing in conviction, while a pro that abstains or opposes
 counts as opposition and a contra that abstains or supports counts as support.
 
-## Conviction: who weighs the analysts, and how much goes behind the idea
+## Conviction: who weighs the voices, and how much goes behind the idea
 
 The matrix answers whether the context agrees with the direction. `[conviction]` answers the
-question a desk actually has next: how much. Analysts are allowed to disagree - crypto doesn't move
+question a desk actually has next: how much. The voices are allowed to disagree - crypto doesn't move
 in straight lines, and a macro reading against a technical setup is ordinary. What matters is how
 strong each side is, so every voice counts as strong as it actually is.
 
 ```toml
 [conviction]
-weights = { technical_analyst = 2.0, onchain_analyst = 1.5, macro_analyst = 1.0, sentiment_analyst = 0.5 }
+weights = { technical_analyst = 2.0, onchain = 1.5, macro = 1.0, sentiment = 0.5 }
 validator_weight = 1.0
 min_score = 0.4                  # below this the desk does not trade
 max_leverage = 3.0               # notional against [run].equity; a ceiling, never a target
@@ -615,9 +619,9 @@ at_least = 0.4
 size_multiple = 0.25
 ```
 
-### Each analyst's score
+### Each reading's score
 
-Each reading role's score is computed by the system from its own figures against the lines you drew in
+Each reading's score is computed by the system from its own figures against the lines you drew in
 `sources/*.toml`, signed for the instrument and between -1 and 1:
 
 ```toml
@@ -626,21 +630,20 @@ threshold = { bullish_below = 4.05, bearish_above = 4.25 }   # US10Y: low yields
 
 The two lines make a neutral band 0.20 wide. A yield of 4.02 is 0.03 past the bullish line, which
 is 0.15 of a band: a score of +0.15, barely bullish. A yield of 3.80 is more than a full band past
-it: +1.0. Anything inside the band is 0. With several series, the analyst's score is their average.
+it: +1.0. Anything inside the band is 0. With several series, the reading's score is their average.
 A threshold with only one line declared has no band to measure against, so it counts as a full +1
 or -1 whenever it is crossed, and `tra check` says so.
 
-The model still reads the same figures and writes its own label and reason. Both go in the record,
-and when they disagree the record says so. The score the system computed is what gets weighed, because it
-comes out the same every time from the same figures.
+No model reads these figures. The score is what gets weighed, because it comes out the same
+every time from the same figures, and the record keeps every series it came from.
 
 ### Adding them up
 
 | Voice | Brings | Counts toward the total by |
 |---|---|---|
 | the deciding analyst | `weight * confidence` | `weight` |
-| a reading role | `weight * score`, plus when it agrees with the direction, minus when against | `weight * abs(score)` |
-| a reading role with nothing past its lines | `0` | nothing; it is listed as silent |
+| a reading | `weight * score`, plus when it agrees with the direction, minus when against | `weight * abs(score)` |
+| a reading with nothing past its lines | `0` | nothing; it is listed as silent |
 | a validator that supports, after its claims were checked | `+validator_weight` | `validator_weight` |
 | a validator that opposes | `-validator_weight` | `validator_weight` |
 
@@ -661,8 +664,8 @@ rounding down and never up.
 |---|---|---|
 | a short at 0.70, macro barely bullish (+0.15), sentiment barely bullish (+0.057) | 1.222 / 2.178 = **0.561** | half the base |
 | a long at 0.70, macro +0.6, on-chain +0.5, sentiment -0.4 | 2.55 / 3.55 = **0.718** | half the base |
-| a long at 0.90, every analyst a full band in agreement, the judge for | 5.8 / 6.0 = **0.967** | the whole base |
-| a short at 0.70, every analyst a full band bullish | below zero, so **0** | no trade |
+| a long at 0.90, every reading a full band in agreement, the judge for | 5.8 / 6.0 = **0.967** | the whole base |
+| a short at 0.70, every reading a full band bullish | below zero, so **0** | no trade |
 
 The first row is a real cycle from 2026-10-04. Before scores were graded it read as two full
 voices against and refused at 0; as figures it is a small dent in a clear case.
@@ -674,8 +677,8 @@ role pulls either - it is what the notional works out to against the equity, and
 the ceiling on that.
 
 The confluence matrix above is different on purpose: it reads the words, not the scores, and a
-role you list in `required` vetoes when it points the other way however slightly. Use it only for
-the roles you really want to have a veto; leave the rest to conviction.
+reading you list in `required` vetoes when it points the other way however slightly. Use it only
+for the readings you really want to have a veto; leave the rest to conviction.
 
 When the size the ladder chooses is not the base size, the round trip is priced again at the size
 that is actually going out, because impact is a function of size. The cost in the record is the cost

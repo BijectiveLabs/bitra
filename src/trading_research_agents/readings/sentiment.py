@@ -1,4 +1,4 @@
-"""What the sentiment analyst is handed, and what it is told when there is nothing to read.
+"""The sentiment reading, and what it says when there is nothing to read.
 
 Sentiment is the easiest figure in this business to invent, so this brief is deliberately narrow.
 It reads only what the operator mapped in: dated scores through the same series engine as macro

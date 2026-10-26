@@ -1,6 +1,6 @@
 """What the cycle is doing while it does it, so a terminal is not a blank screen for a minute.
 
-A cycle spends most of its wall clock waiting on sockets: one data pull, then four analysts, then
+A cycle spends most of its wall clock waiting on sockets: one data pull, then the analyst, then
 the validators. Printing the outcome afterwards is correct and useless - the operator cannot tell a
 slow model from a hung process, and the first thing anyone does with silence is press Ctrl-C.
 

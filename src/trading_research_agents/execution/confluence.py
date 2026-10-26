@@ -1,13 +1,13 @@
 """The confluence gate: whether the context agrees with the direction, decided in code.
 
-The reading analysts explain; the operator's own thresholds decide. This gate reads the declared
-state of each role - the one code computes from the thresholds in the operator's series files - and
-never the label a model wrote. That is what keeps a sentence from being an input to a trade.
+The operator's own thresholds decide. This gate reads the declared state of each reading - the one
+code computes from the thresholds in the operator's series files - and never a sentence a model
+wrote. That is what keeps a sentence from being an input to a trade.
 
-It fails closed. A role the operator marked as required whose declaration is `undeclared` or `mixed`
-has produced no state, and a state nobody produced is not a neutral state: the cycle refuses and
-says which role was silent. An operator who means to run on one leg says so in the file, and the
-record shows they did.
+It fails closed. A reading the operator marked as required whose declaration is `undeclared` or
+`mixed` has produced no state, and a state nobody produced is not a neutral state: the cycle refuses
+and says which reading was silent. An operator who means to run on one leg says so in the file,
+and the record shows they did.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ class ConfluenceError(ValueError):
 
 @dataclass(frozen=True)
 class Matrix:
-    """[confluence]: which roles must agree, what agreement means, and how votes are counted."""
+    """[confluence]: which readings must agree, what agreement means, and how votes count."""
 
     required: tuple[str, ...] = ()
     long_states: tuple[str, ...] = ("bullish",)
@@ -107,7 +107,7 @@ class Confluence:
 
 
 def declared_of(state: Mapping[str, Any] | None) -> str:
-    """The one word in a role's declared-state record, or `undeclared` when there is none."""
+    """The one word in a reading's declared-state record, or `undeclared` when there is none."""
     if not state:
         return "undeclared"
     word = str(state.get("declared", "undeclared"))
@@ -123,29 +123,29 @@ def confluent(
 ) -> Confluence:
     """Apply the matrix to the declared states and the validators' votes.
 
-    `states` is what code derived from the operator's thresholds, one entry per role that was asked.
+    `states` is what code derived from the operator's thresholds, one entry per reading read.
     `votes` are the validators' verdicts after their claims were checked against the brief.
     """
     allowed = matrix.allowed_for(target)
     read: dict[str, str] = {}
     reasons: list[str] = []
-    for role in matrix.required:
-        if role not in states:
-            read[role] = "not asked"
+    for name in matrix.required:
+        if name not in states:
+            read[name] = "not read"
             if matrix.on_missing == "refuse":
                 reasons.append(
-                    f"{role} is required and was not asked; a missing state is not neutral"
+                    f"{name} is required and was not read; a missing state is not neutral"
                 )
             continue
-        word = declared_of(states[role])
-        read[role] = word
+        word = declared_of(states[name])
+        read[name] = word
         if word in allowed:
             continue
         if word in ("undeclared", "mixed") and matrix.on_missing == "ignore":
             # The operator said in the file that a silent leg is acceptable. It is still recorded.
-            reasons.append(f"{role} is {word}, allowed by on_missing = ignore")
+            reasons.append(f"{name} is {word}, allowed by on_missing = ignore")
             continue
-        reasons.append(f"{role} declares {word}; a {target} needs {list(allowed)}")
+        reasons.append(f"{name} declares {word}; a {target} needs {list(allowed)}")
 
     support = sum(1 for vote in votes if vote == "support")
     opposition = sum(1 for vote in votes if vote == "oppose")

@@ -16,7 +16,7 @@ directly. It reads the figures the system computed from it, with their age and w
 |---|---|---|---|
 | trade history (prints) | CSV, `.csv.gz`, a `.zip` of one CSV, Parquet | `tra data audit FILE --mapping mapping.toml` | each row becomes a canonical trade, the file is audited, and a clean dataset is written as Parquet with its manifest. Backtests, research sessions and the `file:data` link of a live chain read it from there |
 | a dated series: rates, flows, a sentiment score, funding history, anything with a time and a value | CSV, JSON, Parquet | one `[[series]]` entry in `sources/<class>.toml` | read with the publication lag you declare, so a figure counts only from when it was knowable; graded against your thresholds; shown with its age; ignored past its `max_age` |
-| dated text: releases, statements, your own notes | CSV, JSON | `sources/news.toml` | read as events by the macro analyst and as notes by the sentiment analyst |
+| dated text: releases, statements, your own notes | CSV, JSON | `sources/news.toml` | read as events by the macro reading and as notes by the sentiment reading |
 | a live feed from a data vendor: candles, the book, funding, open interest | anything your code can read | a source plugin, named in a chain in `data.toml` | asked like any other source, its answer stamped with its age and origin, refused when older than the chain's `ttl` |
 
 ## How it is stored
@@ -122,7 +122,7 @@ max_age = "4d"
 threshold = { bearish_above = 4.5, bullish_below = 3.5 }
 ```
 
-How series reach the analysts, how they are refreshed and how their age is shown is in
+How series reach the readings, how they are refreshed and how their age is shown is in
 [Data sources](/opensource/sources).
 
 ## A live feed from a vendor

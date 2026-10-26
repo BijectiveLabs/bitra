@@ -102,7 +102,7 @@ def test_the_hourly_cap_is_the_desks_not_each_roles(tmp_path: Path) -> None:
             clock=lambda: 1000.0,
             window=window,
         )
-        for role in ("technical_analyst", "macro_analyst", "validator")
+        for role in ("technical_analyst", "market_screener", "validator")
     ]
     roles[0].complete(system="", user="", schema={})
     roles[1].complete(system="", user="", schema={})
