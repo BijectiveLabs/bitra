@@ -75,3 +75,15 @@ def test_the_better_side_trades_only_when_its_value_clears_the_margin() -> None:
     assert best_side(-1.0, 3.0, margin_bps=0.0) == ("short", 3.0)
     assert best_side(4.0, 3.0, margin_bps=5.0) is None
     assert best_side(None, None, margin_bps=0.0) is None
+
+
+def test_a_calibration_on_few_outcomes_still_fits_and_none_at_all_is_refused() -> None:
+    rng = np.random.default_rng(6)
+    raw = rng.random(60)
+    y = (rng.random(60) < raw).astype(float)
+    assert choose_calibrator(raw, y).name in ("platt", "isotonic")
+    # Outcomes that never hit: only the step curve fits, and it says as little as it may.
+    never = choose_calibrator(raw[:20], np.zeros(20))
+    assert never.name == "isotonic" and float(never.map(np.array([0.9]))[0]) == 0.001
+    with pytest.raises(ForecastError, match="no calibrator"):
+        choose_calibrator(np.array([]), np.array([]))

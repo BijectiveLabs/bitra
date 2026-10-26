@@ -11,6 +11,7 @@ kept inside [0.001, 0.999]: certainty is never something a fit on a sample can s
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -19,6 +20,7 @@ import numpy as np
 from trading_research_agents.forecast.logistic import Array, ForecastError, Logistic
 
 EPSILON = 1e-3
+PLATT_ROWS = 12
 
 
 class Calibrator(Protocol):
@@ -46,7 +48,8 @@ class Platt:
 
     @classmethod
     def fit(cls, score: Array, y: Array) -> Platt:
-        return cls(Logistic.fit(_logit(score).reshape(-1, 1), y, l2=1e-3))
+        # Two parameters: a dozen outcomes with both results in them can place a curve.
+        return cls(Logistic.fit(_logit(score).reshape(-1, 1), y, l2=1e-3, min_rows=PLATT_ROWS))
 
     def map(self, score: Array) -> Array:
         return _bounded(self.curve.predict(_logit(score).reshape(-1, 1)))
@@ -87,17 +90,29 @@ def _brier(calibrator: Calibrator, score: Array, y: Array) -> float:
 
 
 def choose_calibrator(score: Array, y: Array) -> Calibrator:
-    """The calibrator with the lower out-of-sample Brier score, fitted on every outcome."""
+    """The calibrator with the lower out-of-sample Brier score, fitted on every outcome.
+
+    A candidate that cannot be fitted on a half is out of the running; with neither left there is
+    no calibration, and so no forecast.
+    """
     halves = (np.arange(len(score)) % 2 == 0, np.arange(len(score)) % 2 == 1)
-    errors: dict[str, float] = {"platt": 0.0, "isotonic": 0.0}
-    for fit_on, test_on in (halves, halves[::-1]):
-        errors["platt"] += _brier(Platt.fit(score[fit_on], y[fit_on]), score[test_on], y[test_on])
-        isotonic = Isotonic.fit(score[fit_on], y[fit_on])
-        errors["isotonic"] += _brier(isotonic, score[test_on], y[test_on])
-    # A tie goes to the curve with two parameters.
-    if errors["isotonic"] < errors["platt"]:
-        return Isotonic.fit(score, y)
-    return Platt.fit(score, y)
+    fits: dict[str, Callable[[Array, Array], Calibrator]] = {
+        "platt": Platt.fit,
+        "isotonic": Isotonic.fit,
+    }
+    errors: dict[str, float] = {}
+    for name, fit in fits.items():
+        try:
+            errors[name] = sum(
+                _brier(fit(score[a], y[a]), score[b], y[b]) for a, b in (halves, halves[::-1])
+            )
+        except ForecastError:
+            continue
+    if not errors:
+        raise ForecastError("no calibrator could be fitted on these outcomes")
+    # A tie goes to the curve with two parameters, which is listed first.
+    chosen = min(errors, key=lambda name: errors[name])
+    return fits[chosen](score, y)
 
 
 __all__ = ["Calibrator", "Isotonic", "Platt", "choose_calibrator"]

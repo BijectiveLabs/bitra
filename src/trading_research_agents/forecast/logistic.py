@@ -31,8 +31,8 @@ class Logistic:
     scales: Array
 
     @classmethod
-    def fit(cls, x: Array, y: Array, *, l2: float = L2) -> Logistic:
-        rows, _ = _checked(x, y)
+    def fit(cls, x: Array, y: Array, *, l2: float = L2, min_rows: int = MIN_ROWS) -> Logistic:
+        rows, _ = _checked(x, y, min_rows)
         means = x.mean(axis=0)
         spread = x.std(axis=0)
         scales = np.where(spread > 0, spread, 1.0)
@@ -57,11 +57,11 @@ class Logistic:
         return _sigmoid(design @ self.weights)
 
 
-def _checked(x: Array, y: Array) -> tuple[int, int]:
+def _checked(x: Array, y: Array, min_rows: int) -> tuple[int, int]:
     if x.ndim != 2 or len(x) != len(y):
         raise ForecastError(f"rows and outcomes do not line up: {x.shape} against {y.shape}")
-    if len(x) < MIN_ROWS:
-        raise ForecastError(f"{len(x)} rows; a fit needs at least {MIN_ROWS}")
+    if len(x) < min_rows:
+        raise ForecastError(f"{len(x)} rows; a fit needs at least {min_rows}")
     if not (np.all(np.isfinite(x)) and np.all(np.isfinite(y))):
         raise ForecastError("a value that is not finite is in the rows")
     if len(np.unique(y)) < 2:

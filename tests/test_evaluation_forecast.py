@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from pathlib import Path
+from typing import Any, cast
 
 from test_evaluation_arena import START, archive, config  # noqa: F401  (archive is a fixture)
 from trading_research_agents.data.schema import Direction
@@ -76,3 +77,25 @@ def test_the_forecast_row_runs_in_the_arena_the_same_way_twice(
     a = write_arena(first, tmp_path / "a")
     b = write_arena(run_arena(cfg, root=archive), tmp_path / "b")
     assert (a / "arena.json").read_bytes() == (b / "arena.json").read_bytes()
+
+
+def test_without_a_model_it_looks_again_the_next_day(archive: Path) -> None:  # noqa: F811
+    row = policy(archive, min_samples=10**6)
+    at = midnight_ns(START) + 2 * DAY_NS
+    view = row.fit.views.view("BTCUSDT", at)
+    row.decide(view)
+    row.min_samples = 50
+    assert row.decide(row.fit.views.view("BTCUSDT", at + HOUR_NS)) is None
+    assert row._fitted is None
+    row.decide(row.fit.views.view("BTCUSDT", at + DAY_NS))
+    fitted = cast(Any, row)._fitted
+    assert fitted is not None and fitted.samples >= 100
+
+
+def test_days_before_the_archive_began_do_not_choose_the_features(archive: Path) -> None:  # noqa: F811
+    row = policy(archive)
+    # A fit context that starts a month before the archive does, as the arena's warm-up does.
+    early = cast(Any, row.fit)
+    object.__setattr__(early, "first_ns", midnight_ns(START) - 40 * DAY_NS)
+    columns = row.columns_before(midnight_ns(START) + 8 * DAY_NS)
+    assert "mom_z_24" in columns and "ret_bps_1" in columns

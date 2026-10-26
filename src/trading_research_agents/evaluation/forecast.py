@@ -26,7 +26,6 @@ from trading_research_agents.evaluation.baselines import HOLD_BARS, STOP_ATR, TA
 from trading_research_agents.evaluation.history import MarketHistory, Views, label_of
 from trading_research_agents.evaluation.policy import DecisionView, TradeIdea
 from trading_research_agents.evaluation.settle import Costs, Funding, Settlement, settle
-from trading_research_agents.features.catalog import MAX_WINDOW_BARS
 from trading_research_agents.forecast.calibration import Calibrator, choose_calibrator
 from trading_research_agents.forecast.decision import best_side, expected_bps
 from trading_research_agents.forecast.logistic import ForecastError, Logistic
@@ -157,7 +156,9 @@ class ForecastPolicy:
         return out, atr
 
     def _model(self, at_ns: int) -> Fitted | None:
-        if self._fitted_at is None or at_ns - self._fitted_at >= self.refit_ns:
+        # Until there is a model, look again each day rather than wait a whole refit period.
+        every = self.refit_ns if self._fitted is not None else DAY_NS
+        if self._fitted_at is None or at_ns - self._fitted_at >= every:
             self._fitted_at = at_ns
             self._fitted = self._refit(at_ns)
         return self._fitted
@@ -184,18 +185,26 @@ class ForecastPolicy:
 
     def _decisions(self, at_ns: int) -> range:
         step = self.fit.interval_ns
-        # The history's own warm-up is not a decision any feature could be read at.
-        warm = self.fit.first_ns + MAX_WINDOW_BARS * step
-        since = max(warm, at_ns - self.fit_ns)
+        since = max(self.fit.first_ns, at_ns - self.fit_ns)
         return range(since + (-since) % step, at_ns, step)
 
+    def settled_before(self, at_ns: int) -> list[tuple[str, int]]:
+        """The decisions whose idea, on either side, had settled by `at_ns`, oldest first.
+
+        An idea settles only on minutes the archive saw, so a decision before the archive began
+        or inside a gap is not here, and cannot choose the features or teach the model.
+        """
+        out: list[tuple[str, int]] = []
+        for decided in self._decisions(at_ns):
+            for instrument in self.fit.instruments:
+                labels = (self._label(instrument, decided, side) for side in SIDES)
+                if any(label is not None and label[1] <= at_ns for label in labels):
+                    out.append((instrument, decided))
+        return out
+
     def columns_before(self, at_ns: int) -> tuple[str, ...]:
-        """The features present in at least `PRESENT` of the decisions in the fit window."""
-        seen = [
-            self.fit.views.view(instrument, decided).features[_primary(self.fit)]
-            for decided in self._decisions(at_ns)
-            for instrument in self.fit.instruments
-        ]
+        """The features present in at least `PRESENT` of the settled decisions."""
+        seen = [self._vector(i, d) for i, d in self.settled_before(at_ns)]
         if not seen:
             return ()
         return tuple(
@@ -207,20 +216,21 @@ class ForecastPolicy:
     def samples_before(
         self, at_ns: int, side: Direction, columns: Sequence[str] = FEATURES
     ) -> tuple[list[list[float]], list[float]]:
-        """Rows and labels of the ideas that had settled by `at_ns`, oldest first."""
+        """Rows and labels of the ideas on `side` that had settled by `at_ns`, oldest first."""
         rows: list[list[float]] = []
         labels: list[float] = []
-        for decided in self._decisions(at_ns):
-            for instrument in self.fit.instruments:
-                label = self._label(instrument, decided, side)
-                if label is None or label[1] > at_ns:
-                    continue
-                vector = self.fit.views.view(instrument, decided).features[_primary(self.fit)]
-                row = _row(vector, columns)
-                if row is not None:
-                    rows.append(row)
-                    labels.append(label[0])
+        for instrument, decided in self.settled_before(at_ns):
+            label = self._label(instrument, decided, side)
+            if label is None or label[1] > at_ns:
+                continue
+            row = _row(self._vector(instrument, decided), columns)
+            if row is not None:
+                rows.append(row)
+                labels.append(label[0])
         return rows, labels
+
+    def _vector(self, instrument: str, decided: int) -> Mapping[str, object]:
+        return self.fit.views.view(instrument, decided).features[_primary(self.fit)]
 
     def _label(self, instrument: str, decided: int, side: Direction) -> tuple[float, int] | None:
         key = (instrument, decided, side)
