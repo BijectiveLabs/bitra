@@ -87,12 +87,10 @@ What it does while it runs:
   flow and the book, five minutes after it for derivatives and text, since a venue publishes a
   bucket after it closes. A closed day is compacted into one file once every stream has written
   its last hour of it.
-- **A silent connection** is noticed only when its keepalive gives up. The recorder pings every
-  five seconds (a venue that asks for less often keeps its own interval), so a silence is noticed
-  within about fifteen. What the connection did not deliver was not seen, so the stream is marked
-  unseen from its last message, not from the moment the silence was noticed; holding each hour for
-  three minutes is what lets the recorder mark minutes that had already closed.
-
+- **A silent connection** is noticed only when its keepalive gives up, up to a minute and a half
+  later with ccxt. What it did not deliver was not seen, so the recorder marks the stream unseen
+  from its last message, not from the moment the silence was noticed; holding each hour for three
+  minutes is what lets it mark minutes that had already closed.
 Every disconnect, reconnect, compaction and minute of latency goes to `data/market/events.jsonl`,
 one structured line each; `tra record status` reads it.
 

@@ -34,7 +34,6 @@ from trading_research_agents.market_data.venues.ccxt_stream import (
     default_link,
     levels_loop,
     market_of,
-    quicken_keepalive,
     run_streams,
     text_loop,
 )
@@ -95,9 +94,7 @@ def _connect(venue: str) -> tuple[Any, Any]:
     rest = build(venue, {"enableRateLimit": True})
     if factory is None or rest is None:
         raise MarketDataError(f"ccxt does not stream {venue!r}")
-    client = factory({"enableRateLimit": True})
-    quicken_keepalive(client)
-    return client, rest
+    return factory({"enableRateLimit": True}), rest
 
 
 def record_report(args: argparse.Namespace, *, connect: Connect = _connect) -> Report:
