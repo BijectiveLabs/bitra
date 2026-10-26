@@ -17,8 +17,8 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from trading_research_agents.market_data.bars import MarketDataError
-from trading_research_agents.market_data.budget import RequestBudget
 from trading_research_agents.market_data.deriv import DerivPoint, Series, detail_of
+from trading_research_agents.market_data.ports import BudgetStore
 
 NS_PER_MS = 1_000_000
 CANDLE_MS = 60_000
@@ -65,7 +65,7 @@ class CcxtBackfill:
         self,
         client: Any,
         *,
-        budget: RequestBudget,
+        budget: BudgetStore,
         clock: Callable[[], int] = time.time_ns,
         page: int = 200,
         attempts: int = 3,
