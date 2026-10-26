@@ -80,7 +80,7 @@ def test_without_the_reference_the_figures_say_so() -> None:
 
 def test_the_catalog_names_each_feature_once_and_computes_all() -> None:
     names = [f.spec.name for f in DEFAULT_FEATURES]
-    assert len(names) == len(set(names)) == 30
+    assert len(names) == len(set(names)) == 34
     assert MAX_WINDOW_BARS == 97
     own = bars_of(walk(2.0), "ETHUSDT")
     vector = compute_features(

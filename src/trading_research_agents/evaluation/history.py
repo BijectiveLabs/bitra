@@ -17,15 +17,18 @@ from trading_research_agents.evaluation.policy import DecisionView
 from trading_research_agents.features import FeatureVector, Inputs, compute_features
 from trading_research_agents.features.catalog import MAX_WINDOW_BARS
 from trading_research_agents.market_data.archive import (
+    BOOK,
     DERIV,
     FLOW,
     DayManifest,
-    day_file,
+    day_units,
     manifest_file,
     read_flow_range,
 )
+from trading_research_agents.market_data.archive_book import read_book_range
 from trading_research_agents.market_data.archive_deriv import read_deriv_range
 from trading_research_agents.market_data.bars import FlowBar, MarketDataError
+from trading_research_agents.market_data.book import BookBar, resample_book
 from trading_research_agents.market_data.days import NS_PER_MINUTE, NS_PER_S
 from trading_research_agents.market_data.deriv import LEVELS, DerivPoint, Series, Timeline
 from trading_research_agents.market_data.resample import resample
@@ -68,12 +71,19 @@ class MarketHistory:
         minutes: Sequence[FlowBar],
         points: Sequence[DerivPoint],
         intervals_ns: Sequence[int],
+        *,
+        book: Sequence[BookBar] = (),
     ) -> None:
         self.instrument = instrument
         self.tape = MinuteTape(minutes)
         self.points = tuple(points)
-        self._bars = {i: resample(self.tape.bars, i) for i in sorted(set(intervals_ns))}
+        intervals = sorted(set(intervals_ns))
+        self._bars = {i: resample(self.tape.bars, i) for i in intervals}
         self._ends = {i: [b.end_ns for b in bars] for i, bars in self._bars.items()}
+        self._book = {i: resample_book(book, i) for i in intervals}
+        self._book_ends = {i: [b.end_ns for b in bars] for i, bars in self._book.items()}
+        self.events = tuple(p for p in self.points if p.series is Series.LIQUIDATION)
+        self._event_times = [p.as_of_ns for p in self.events]
         self.timelines: dict[Series, Timeline] = {}
         for series in LEVELS:
             found = [p for p in self.points if p.series is series]
@@ -86,6 +96,17 @@ class MarketHistory:
         """The last `count` bars of `interval_ns` that had closed by `at_ns`."""
         stop = bisect_right(self._ends[interval_ns], at_ns)
         return tuple(self._bars[interval_ns][max(0, stop - count) : stop])
+
+    def closed_book(self, interval_ns: int, at_ns: int, count: int = 1) -> tuple[BookBar, ...]:
+        """The last `count` book bars of `interval_ns` that had closed by `at_ns`."""
+        stop = bisect_right(self._book_ends[interval_ns], at_ns)
+        return tuple(self._book[interval_ns][max(0, stop - count) : stop])
+
+    def events_until(self, at_ns: int, since_ns: int) -> tuple[DerivPoint, ...]:
+        """Liquidations published in (since_ns, at_ns]."""
+        low = bisect_right(self._event_times, since_ns)
+        high = bisect_right(self._event_times, at_ns)
+        return self.events[low:high]
 
     def next_return(self, interval_ns: int, at_ns: int) -> float | None:
         """The return of the bar closing one interval after `at_ns`: for scoring, never a view."""
@@ -126,6 +147,8 @@ class Views:
                 interval_ns=interval_ns,
                 bars=history.closed(interval_ns, at_ns),
                 deriv=history.timelines,
+                book=history.closed_book(interval_ns, at_ns),
+                events=history.events_until(at_ns, at_ns - MAX_WINDOW_BARS * interval_ns),
                 context={n: self.histories[n].closed(interval_ns, at_ns) for n in self.context},
             )
             found = self._vectors[key] = compute_features(inputs)
@@ -168,13 +191,15 @@ def load_history(
     read, so a result names the exact archive it was computed from."""
     minutes = read_flow_range(root, venue, instrument, first, last)
     points = read_deriv_range(root, venue, instrument, first, last)
+    book = read_book_range(root, venue, instrument, first, last)
     manifests: dict[str, str] = {}
     day = first
     while day <= last:
-        for stream in (FLOW, DERIV):
-            path = day_file(root, venue, instrument, stream, day)
-            if path.is_file():
+        for stream in (FLOW, DERIV, BOOK):
+            for path in day_units(root, venue, instrument, stream, day).values():
                 digest = DayManifest.read(manifest_file(path)).sha256
                 manifests[path.relative_to(root).as_posix()] = digest
         day += timedelta(days=1)
-    return Loaded(MarketHistory(instrument, minutes, points, intervals_ns), manifests)
+    recorded = book if any(b.samples for b in book) else ()
+    history = MarketHistory(instrument, minutes, points, intervals_ns, book=recorded)
+    return Loaded(history, manifests)

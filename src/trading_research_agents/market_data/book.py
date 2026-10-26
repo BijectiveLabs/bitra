@@ -11,11 +11,11 @@ quantities and stays exact; its mean is computed when read.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
 
-from trading_research_agents.market_data.bars import GapState, MarketDataError
+from trading_research_agents.market_data.bars import GapState, MarketDataError, worst
 from trading_research_agents.market_data.days import NS_PER_MINUTE
 
 TOP_LEVELS = 10
@@ -174,3 +174,53 @@ class BookBarBuilder:
             mid_close=minute.mid,
             gap=gap,
         )
+
+
+def resample_book(bars: Sequence[BookBar], interval_ns: int) -> list[BookBar]:
+    """Coarser book bars from one-minute ones: means weighted by samples, sums added, the last mid.
+
+    A minute absent from the input or missing makes the coarse bar partial; one with no minute seen
+    is missing.
+    """
+    if not bars:
+        return []
+    if interval_ns <= 0 or interval_ns % NS_PER_MINUTE:
+        raise MarketDataError(f"{interval_ns} ns is not a whole number of minutes")
+    groups: dict[int, list[BookBar]] = {}
+    for bar in bars:
+        groups.setdefault(bar.start_ns - bar.start_ns % interval_ns, []).append(bar)
+    return [_merge(start, interval_ns, parts) for start, parts in groups.items()]
+
+
+def _merge(start: int, interval_ns: int, parts: list[BookBar]) -> BookBar:
+    seen = [p for p in parts if p.gap is not GapState.MISSING]
+    sampled = [p for p in seen if p.samples]
+    count = sum(p.samples for p in sampled)
+    expected = interval_ns // NS_PER_MINUTE
+    gap = worst(p.gap for p in seen) if seen else GapState.MISSING
+    if seen and len(seen) < expected:
+        gap = worst((gap, GapState.PARTIAL))
+
+    def weighted(name: str) -> float | None:
+        values = [(getattr(p, name), p.samples) for p in sampled]
+        return sum(v * n for v, n in values) / count if count else None
+
+    return BookBar(
+        venue=parts[0].venue,
+        instrument=parts[0].instrument,
+        start_ns=start,
+        end_ns=start + interval_ns,
+        samples=count,
+        spread_bps_mean=weighted("spread_bps_mean"),
+        spread_bps_max=max((p.spread_bps_max or 0.0) for p in sampled) if count else None,
+        imbalance_top10_mean=weighted("imbalance_top10_mean"),
+        depth_bid_10bps_sum_base=_total(p.depth_bid_10bps_sum_base for p in sampled),
+        depth_ask_10bps_sum_base=_total(p.depth_ask_10bps_sum_base for p in sampled),
+        mid_close=sampled[-1].mid_close if sampled else None,
+        gap=gap,
+    )
+
+
+def _total(values: Iterable[Decimal | None]) -> Decimal | None:
+    found = [v for v in values if v is not None]
+    return sum(found, Decimal(0)) if found else None

@@ -14,7 +14,8 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 
 from trading_research_agents.market_data.bars import FlowBar, GapState, MarketDataError
-from trading_research_agents.market_data.deriv import Series, Timeline
+from trading_research_agents.market_data.book import BookBar
+from trading_research_agents.market_data.deriv import DerivPoint, Series, Timeline
 
 
 class LookAheadError(MarketDataError):
@@ -47,12 +48,23 @@ class Inputs:
     bars: Sequence[FlowBar]
     deriv: Mapping[Series, Timeline] = field(default_factory=dict)
     context: Mapping[str, Sequence[FlowBar]] = field(default_factory=dict)
+    # Book bars on the same interval, and events (liquidations) as they were published.
+    book: Sequence[BookBar] = ()
+    events: Sequence[DerivPoint] = ()
 
     def __post_init__(self) -> None:
-        for name, bars in (("bars", self.bars), *self.context.items()):
-            late = [b.end_ns for b in bars if b.end_ns > self.at_ns]
+        ends: list[tuple[str, list[int]]] = [
+            ("bars", [b.end_ns for b in self.bars]),
+            ("book", [b.end_ns for b in self.book]),
+            *((name, [b.end_ns for b in bars]) for name, bars in self.context.items()),
+        ]
+        for name, closes in ends:
+            late = [end for end in closes if end > self.at_ns]
             if late:
                 raise LookAheadError(f"{name}: a bar closing at {late[0]} read at {self.at_ns}")
+        early = [p.as_of_ns for p in self.events if p.as_of_ns > self.at_ns]
+        if early:
+            raise LookAheadError(f"events: one published at {early[0]} read at {self.at_ns}")
 
 
 Value = Callable[[Inputs], FeatureValue]

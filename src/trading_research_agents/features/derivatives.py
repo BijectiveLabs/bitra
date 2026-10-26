@@ -9,6 +9,9 @@
   price down), `short_covering` (interest down, price up), `long_liquidation` (both down), `flat`
   (interest moved less than 0.25 %).
 - `long_short_ratio`: the venue's account long/short ratio.
+- `liq_imbalance_24`: (base liquidated from longs - base liquidated from shorts) / all base
+  liquidated, over the last 24 bars; absent when nothing was liquidated in the window, since a quiet
+  window and a venue that does not stream liquidations look the same from here.
 
 A value past its age is absent with the timeline's reason; nothing is carried forward.
 """
@@ -97,3 +100,19 @@ def oi_price_state(inputs: Inputs) -> FeatureValue:
 def long_short_ratio(inputs: Inputs) -> FeatureValue:
     found = known(inputs, Series.LONG_SHORT)
     return found if isinstance(found, Absent) else found.value
+
+
+LIQUIDATION_BARS = 24
+
+
+def liq_imbalance_24(inputs: Inputs) -> FeatureValue:
+    since = inputs.at_ns - LIQUIDATION_BARS * inputs.interval_ns
+    window = [p for p in inputs.events if p.series is Series.LIQUIDATION and since < p.as_of_ns]
+    if not window:
+        return Absent("no liquidation was recorded in the last 24 bars")
+    sides = {p.get("liquidated") for p in window}
+    if not sides <= {"long", "short"}:
+        return Absent("the venue's liquidations do not say which side was liquidated")
+    longs = sum(float(p.value) for p in window if p.get("liquidated") == "long")
+    shorts = sum(float(p.value) for p in window if p.get("liquidated") == "short")
+    return (longs - shorts) / (longs + shorts)
