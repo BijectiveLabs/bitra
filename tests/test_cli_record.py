@@ -74,6 +74,10 @@ def args_for(tmp_path: Path, *extra: str) -> Any:
 def test_the_commands_are_wired() -> None:
     assert ("record", "run") in HANDLERS and ("record", "status") in HANDLERS
     assert build_parser().parse_args(["record", "status"]).command == "status"
+    # `--once` is the recorder's own; the console's one-shot `-c` must not read it as a command.
+    parsed = build_parser().parse_args(["record", "--once", "2s"])
+    assert parsed.once is None and parsed.record_for == "2s"
+    assert parsed.command == "run" and build_parser().parse_args(["record"]).command == "run"
 
 
 def test_record_once_runs_for_the_bounded_time_on_a_fake_venue(tmp_path: Path) -> None:

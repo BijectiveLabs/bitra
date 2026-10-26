@@ -70,8 +70,16 @@ def add_record_command(top: Any) -> None:
     )
     cmd.set_defaults(command="run")
     _options(cmd, None)
-    cmd.add_argument("--once", default=None, help="run for this long, such as 30m, then stop")
+    # Its own destination: `once` is the console's one-shot command, and a clash would run "30m".
+    cmd.add_argument(
+        "--once",
+        dest="record_for",
+        default=None,
+        help="run for this long, such as 30m, then stop",
+    )
     sub = cmd.add_subparsers(dest="command", required=False)
+    # Without a subcommand the recorder runs; an optional subparser otherwise leaves None here.
+    sub.default = "run"
     status = sub.add_parser("status", help="coverage, gaps and latency from the records")
     # Settings given before `status` stand unless given again after it.
     _options(status, argparse.SUPPRESS)
@@ -92,8 +100,8 @@ def _connect(venue: str) -> tuple[Any, Any]:
 def record_report(args: argparse.Namespace, *, connect: Connect = _connect) -> Report:
     cfg = load_record_config(args.data_config)
     stop_at = None
-    if args.once is not None:
-        stop_at = time.time_ns() + int(parse_duration(str(args.once)) * NS_PER_S)
+    if args.record_for is not None:
+        stop_at = time.time_ns() + int(parse_duration(str(args.record_for)) * NS_PER_S)
     base = args.data_config.resolve().parent
     specs = _feeds(cfg, base)
     pro, rest = connect(cfg.venue)
