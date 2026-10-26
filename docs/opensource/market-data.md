@@ -88,12 +88,33 @@ What it does while it runs:
   flow and the book, five minutes after it for derivatives and text, since a venue publishes a
   bucket after it closes. A closed day is compacted into one file once every stream has written
   its last hour of it.
-- **A silent connection** is noticed only when its keepalive gives up, up to a minute and a half
-  later with ccxt. What it did not deliver was not seen, so the recorder marks the stream unseen
-  from its last message, not from the moment the silence was noticed; holding each hour for three
-  minutes is what lets it mark minutes that had already closed.
+- **A silent connection** is noticed only when its keepalive gives up. The recorder pings every
+  five seconds (a venue that asks for less often keeps its own interval), so a silence is noticed
+  within about fifteen. What the connection did not deliver was not seen, so the stream is marked
+  unseen from its last message, not from the moment the silence was noticed; holding each hour for
+  three minutes is what lets the recorder mark minutes that had already closed.
+
 Every disconnect, reconnect, compaction and minute of latency goes to `data/market/events.jsonl`,
 one structured line each; `tra record status` reads it.
+
+### Measured
+
+BTCUSDT, ETHUSDT and SOLUSDT on Bybit, trades, a 50-level book sampled each second and
+liquidations, recorded on 2026-10-26 and 27 from one home connection far from the venue:
+
+| Measure | Value |
+|---|---|
+| Disk, 30 minutes, three markets | 237 KB on disk: per market 9 to 13 KB of flow, 9 KB of book and 14 KB of derivatives (each with its manifest), 12 KB of gap marks; 9 KB of text; 92 KB of the events log |
+| CPU, 30 minutes | 74 s of one core for 1,801 s of wall clock, about 4 % |
+| Latency, venue time to receipt | median about 190 ms; the worst minute 7.5 s |
+| Unseen, two recorders side by side for 20 minutes | 3.5 % of the minutes with the five-second keepalive, 7.5 % with ccxt's own |
+| Unseen, the worst 30 minutes | 50 % with ccxt's own keepalive, the connection going silent 54 times |
+| `tra runs verify --market` | every file matches its manifest |
+
+The connection is the weak point, not the recorder: from this one, Bybit's public stream went
+silent every few minutes, and every silence is in the archive as a gap mark rather than as a quiet
+market. A desk that needs the book whole records from a server near the venue, and checks
+`tra record status` for the share it actually saw.
 
 ## What a flow bar holds
 
