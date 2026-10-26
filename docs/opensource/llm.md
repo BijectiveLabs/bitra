@@ -87,7 +87,7 @@ provider = "groq"
 model = "openai/gpt-oss-120b"
 fallback = ["google:gemini-flash-latest", "anthropic:claude-opus-5-5"]
 
-[agents.roles.sentiment_analyst]
+[agents.roles.validator]
 model = "openai/gpt-oss-20b"
 fallback = ["groq:openai/gpt-oss-120b"]     # this role's own order, instead of the one above
 ```
@@ -118,7 +118,6 @@ What happens next depends on the role, and none of it can make a trade larger:
 | Role | If no model answers | Why |
 |---|---|---|
 | technical analyst | the cycle stops; no trade | it is the only role that proposes a direction |
-| reading analyst (macro, on-chain, sentiment) | its label is missing; its score still counts | the score is arithmetic over your thresholds and never needed the model |
 | validator | the trade is refused (`[agents].on_missing_validator = "refuse"`, the default); with `"continue"` it goes on with the votes that came back | a check you declared that did not happen is not a check |
 | market screener | the instruments the system admitted go on unfiltered | the screener can only remove, never add |
 | auditor | a line in the report | auditors never act |
@@ -233,19 +232,10 @@ role is sent an effort at all, for the reason above.
 
 ## Not paying twice for the same reading
 
-The macro, on-chain and sentiment briefs are built from series that update daily on free feeds and
-faster on paid ones. When a brief's figures are identical to ones already answered, the earlier
-answer is used again instead of asking:
-
-```toml
-[agents]
-reuse_reading_for = "1h"     # how long an unchanged reading stands; "off" asks every cycle
-```
-
-The key is the figures, without the clock: any new value, on any feed at any speed, asks again at
-once. The window only bounds how long an unchanged reading stands. The declared state is computed
-by the system every cycle either way, and it is what decisions read. A reused answer is marked `reused`
-with its age in the cycle's agents table and under `reused` in `cycle.json`.
+The macro, on-chain and sentiment roles ask no model. Their briefs are read by code against the
+thresholds you declared, and that declared state is what confluence and conviction read; until 0.11
+a model also labelled each brief, and no decision ever rested on the label, so the calls were
+retired.
 
 Two more things keep calls from being wasted. The validators are not asked when the system is certain to
 refuse whatever they say: the desk with nothing added, the day's round trips, the declared reward to

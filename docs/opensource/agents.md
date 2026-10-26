@@ -20,9 +20,9 @@ the system's own rules, tested and failing closed, and a role acts through them,
 |---|---|---|---|
 | `market_screener` | in a cycle, one live snapshot per instrument in the universe; in a session, the data gate, the envelope and the cost floor | nothing; it may only take an instrument out of a list the system already admitted | once per pass, or once per session |
 | `technical_analyst` | the recorded trades and bars; in a research run the registered mechanism, in `tra run` the regime and higher timeframes, with your mechanism as a preference | a `Signal`, as the decision core of a run: a direction, a setup named from a closed list, the figures it read, and in `tra run` the stop and target prices that bound the idea, held by the system inside your `[exit]` bounds | once per closed bar, within its budget |
-| `macro_analyst` | series the operator mapped in (events, cross-venue funding, sentiment) | nothing | every cycle in `tra run`; once per session in a session, when series are given |
-| `onchain_analyst` | on-chain series the operator mapped in | nothing | every cycle in `tra run`; once per session in a session, when series are given |
-| `sentiment_analyst` | dated scores and dated notes the operator curates, through the same series engine | `negative`, `neutral`, `positive`, or `not declared` when nothing was mapped in | reads only; nothing is scraped |
+| `macro_analyst` | series the operator mapped in (events, cross-venue funding, sentiment), read by code; no model | nothing; its declared state is recorded | every cycle in `tra run`; once per session in a session, when series are given |
+| `onchain_analyst` | on-chain series the operator mapped in, read by code; no model | nothing; its declared state is recorded | every cycle in `tra run`; once per session in a session, when series are given |
+| `sentiment_analyst` | dated scores and dated notes the operator curates, read by code; no model | nothing; its declared state is recorded, `undeclared` when nothing crosses a line | every cycle in `tra run` when series are given; nothing is scraped |
 | `validator` | `figures_of`, `checked` over the brief the deciding analyst was given | one stance (pro, contra, neutral): the proposal as the analyst gave it (side, setup, levels, confidence) and the figures it was built from, never another analyst's reading, the cost, the claimed edge or the desk's rules; every claim it makes has to cite one of those figures with its value, and the system discards the ones that do not. With all three stances, pro and contra build their cases apart and neutral judges both ([the validators](/opensource/cycle#the-validators)) | once per cycle, when `[agents].validators` is set |
 | `risk_manager` | in `tra run`: the client's limits, what is in force, the alarms, the round trips by instrument; in a session: the limits, the canary caps, the ladder, latency, net against the registration | in `tra run`: `reduce` (size multiple below 1), `pause` (instruments), `halt` (the kill switch), each for `hold_hours`; in a session: `tighten_limits`, `demote`, `arm_kill_switch` | in `tra run`, between cycles whenever the quant auditor is asked; in a session, after the runs |
 | `executor` | the venue, the rate limits, the allocation across instruments | an allocation, fractions summing to at most one | after the risk decision |
@@ -117,7 +117,9 @@ pass; the second adds only what it actually asked.
 
 ## What each role holds before it is asked
 
-A role does not start from a blank prompt. The system computes the figures first and the model reads
+The three reading roles ask no model since 0.11: their briefs are read by code against your
+thresholds, which is all any gate ever read from them. A role that does ask a model does not start
+from a blank prompt. The system computes the figures first and the model reads
 a brief with the basis of every number in it: measured on the operator's data with a sample
 size, or declared by the operator and labelled as such.
 
@@ -140,9 +142,6 @@ the schema its answer fills.
 | Role | Reads | Answers | Code then checks |
 |---|---|---|---|
 | `technical_analyst` | the features, structure, regime and higher timeframes of its instrument, the book, open interest, its own last reading | `target`, `setup`, `confidence`, `horizon_bars`, `stop_price`, `target_price`, `reason`, `figures_used` | the schema, the setup against the measured regime, the levels on the right side of the price, every citation |
-| `macro_analyst` | its series with what was known when, the operator's thresholds, measured correlations with n, the calendar | `regime`, `events`, `reason`, `figures_used`, `data_as_of` | the schema, every citation, words that belong to a later step (recorded) |
-| `onchain_analyst` | its series, their net over a window and z-scores | `signal`, `reason`, `figures_used`, `data_as_of` | the same |
-| `sentiment_analyst` | its scores and dated notes | `state`, `figures_used`, `reason`, `data_as_of` | the same |
 | validators: pro, contra | the proposal and the figures it was built from; neither sees the other's case | `stance`, `claims`, `verdict`, `reason` | the schema; a claim that does not cite a figure it was given is dropped |
 | validator: neutral, as judge | the same, and both cases as code checked them, without the advocates' verdicts | `stance`, `claims`, `verdict`, `reason` | the same; its verdict is the one that counts, and it is not asked when only one side has a case |
 | `event_analyst` | the question, the outcome's book and recent prices, the calendar and your notes | `probability`, `confidence`, `reason`, `figures_used` | the schema, every citation |
@@ -150,12 +149,11 @@ the schema its answer fills.
 
 An answer that does not fit its schema is asked for once more with the reason, and then refused.
 
-No analyst sees another's data or another's answer. The technical analyst reads its own market and
-not the macro, on-chain or sentiment readings; each reading analyst reads its own shelf and nothing
-the others were given; the validators argue from the proposal's own figures. A view that knows the
-other views can lean toward them, and then two analysts agreeing says less than it seems to. The
-readings are combined once, by code, in confluence and conviction, after every analyst has
-answered on its own.
+No role sees another's data or another's answer. The technical analyst reads its own market and
+not the macro, on-chain or sentiment readings; each reading role reads its own shelf and nothing the
+others were given; the validators argue from the proposal's own figures. A view that knows the other
+views can lean toward them, and then two voices agreeing says less than it seems to. The readings
+are combined once, by code, in confluence and conviction.
 How that and the citation check have done on a demo desk is in
 [Working with language models](/opensource/llm#when-an-answer-does-not-fit-or-points-at-nothing).
 
@@ -179,7 +177,7 @@ What a role's answer does differs:
 | Role | What its answer decides |
 |---|---|
 | `technical_analyst` | the side, the setup and the levels; every gate after it works on these |
-| `macro_analyst`, `onchain_analyst`, `sentiment_analyst` | nothing directly: confluence and conviction read the state the system derives from your thresholds on the same figures, and the label is recorded beside it. With `[conviction].reader_labels` above 0, a label counts where nothing is declared, as with a file of headlines |
+| `macro_analyst`, `onchain_analyst`, `sentiment_analyst` | they give no answer: confluence and conviction read the state code derives from your thresholds on their figures |
 | validators | one vote each in conviction, after their claims are checked |
 | `market_screener` | which instruments, from code's own order, get a cycle; it may drop, never add |
 | `risk_manager` | between cycles: size cuts, pauses, a halt; never a loosening |
@@ -347,7 +345,7 @@ A question worth answering plainly, because it decides where the token bill goes
 
 | Step | Who does it | What it may do |
 |---|---|---|
-| read one class of data and label it | a reading analyst | say what it sees, in its own vocabulary; the score it is weighed by is graded by the system from the same figures against the operator's lines |
+| read one class of data against your lines | a reading role, in code | a declared state and a graded score, from the figures against the operator's lines |
 | propose a direction and a horizon | the technical analyst | one target, one confidence, one reason |
 | argue for or against that proposal | pro and contra, apart | claims that cite figures from the brief; the system discards the rest |
 | judge the two cases | neutral | one verdict from the claims that survived, weighed on the premise of the setup |

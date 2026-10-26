@@ -104,7 +104,8 @@ the universe (system: one data pull each, the trigger per instrument, ordered by
   -> snapshot (engine)
   -> trigger             (system: has anything moved? nothing below here runs if not)
   -> briefs (system, each role's own sections only)
-  -> technical analyst + reading analysts   (parallel)
+  -> reading roles      (system: your thresholds over macro, on-chain, sentiment series)
+  -> technical analyst   (the one model call that proposes a direction)
   -> the round trip priced (system)
   -> the stop and the target (the analyst's levels, held in your [exit] bounds; break-even checked)
   -> validators          (when configured: pro and contra apart, then neutral judges both)
@@ -379,12 +380,17 @@ technical reading after both have answered.
 
 ## Who is asked, and what each one reads
 
-| Agent | Reads | Answers | Asked when |
+| Role | Reads | Gives | When |
 |---|---|---|---|
-| `technical_analyst` | the closed candles of the snapshot, the spread, the funding rate, the regime on each timeframe, the book imbalance, the open interest change; nothing from the other analysts | a target, a named setup, a confidence, a horizon, a reason, and the figures it read | every cycle; it is the role that decides |
-| `macro_analyst` | macro series and the dated text of `news.toml` | a regime, the events it saw, a reason | when `sources/macro.toml` or `sources/news.toml` declares something, or `--macro` / `--news` names a file |
-| `onchain_analyst` | chain figures and derivative figures, read side by side | accumulation, distribution or neutral, and why | when `sources/onchain.toml` or `sources/derivatives.toml` declares something, or `--onchain` / `--derivatives` |
-| `sentiment_analyst` | dated scores, plus the same dated text as notes | negative, neutral, positive, or not declared | when `sources/sentiment.toml` declares something, or `--sentiment` |
+| `technical_analyst` | the closed candles of the snapshot, the spread, the funding rate, the regime on each timeframe, the book imbalance, the open interest change; nothing from the reading roles | a target, a named setup, a confidence, a horizon, a reason, and the figures it read | every cycle; it is the one model call, the role that decides |
+| `macro_analyst` | macro series and the dated text of `news.toml` | the declared state of your thresholds, computed by code | when `sources/macro.toml` or `sources/news.toml` declares something, or `--macro` / `--news` names a file |
+| `onchain_analyst` | chain figures and derivative figures, read side by side | the declared state, computed by code | when `sources/onchain.toml` or `sources/derivatives.toml` declares something, or `--onchain` / `--derivatives` |
+| `sentiment_analyst` | dated scores, plus the same dated text as notes | the declared state, computed by code; `undeclared` when nothing crosses a line | when `sources/sentiment.toml` declares something, or `--sentiment` |
+
+The three reading roles ask no model. Until 0.11 a model also labelled each of their briefs; every
+gate already read the declared state rather than the label, measured on the demo desks the labels
+added nothing a decision could use, and they cost about a quarter of a cycle's tokens. Their role
+names stay, because `[confluence]`, `[conviction].weights` and `[agents].analysts` key on them.
 
 ### The shelf
 
@@ -427,25 +433,19 @@ Index or any vendor that answers JSON over https, and `tra run` does that before
 series' `refresh` interval has passed. Every series also has a `max_age`; a value older than that is
 shown as `stale` and never counted. [Sources](/opensource/sources) covers both.
 
-The three reading analysts go out together with the technical analyst, so the cycle waits for the
-slowest of them and not for the sum of all four. Each one reads through the same series engine as
-`tra agent session`, with the same as-of rule: a value is never used before the moment it was
-published, and the operator's `publish_lag` is what decides that moment.
+Each reading role reads through the same series engine as `tra agent session`, with the same as-of
+rule: a value is never used before the moment it was published, and the operator's `publish_lag` is
+what decides that moment.
 
-Two habits are enforced rather than encouraged. Nothing is scraped: an analyst reads the files its
-operator declared, and there is no code path from an agent to the internet; the engine refreshes a
-fetched file, never the model. And a role with no
-source says so; the sentiment analyst answers `not declared` rather than `neutral`, because those
-are different facts and an operator has to be able to tell them apart. A role whose files are all
-unreadable is not asked at all, and the cycle records which files it could not read.
+Two habits are enforced rather than encouraged. Nothing is scraped: a role reads the files its
+operator declared, and the engine refreshes a fetched file. And a role with no source says so: its
+state is `undeclared`, never `neutral`, because those are different facts and an operator has to be
+able to tell them apart. A role whose files are all unreadable is not read at all, and the cycle
+records which files it could not read.
 
-A role can run on its own model. `[agents.roles.<role>]` overrides the provider, the model, the
-output cap, the timeout and the retries for that role alone, and anything it does not override it
-inherits. That is how a cheap model labels a regime while a stronger one reasons over the bars.
-
-A reading analyst whose model fails leaves a line in `cycle.json` and the cycle carries on. Its
-declared state is arithmetic over your thresholds, so it still counts in the confluence matrix and in
-conviction; only the model's label is lost.
+A role that asks a model can run on its own. `[agents.roles.<role>]` overrides the provider, the
+model, the output cap, the timeout and the retries for that role alone, and anything it does not
+override it inherits.
 
 ## Where a direction came from
 
@@ -461,8 +461,7 @@ have paid for themselves this month" is a question the records can answer.
 **The figures.** Every role that says something about numbers answers with `figures_used` - each
 figure by the brief's own name, with the value it read - and the system checks each one against the brief
 it was handed. A figure that is not there, or a value that does not match, is discarded and the
-discard is recorded. For the reading analysts that is a mark on the record; the label was never what
-decides. For the analyst that does decide it has teeth: if not one citation survives, the cycle
+discard is recorded. For the analyst that decides it has teeth: if not one citation survives, the cycle
 refuses, because a direction that cannot point at a figure in its own brief came from somewhere
 this cycle cannot see.
 
@@ -475,20 +474,20 @@ to match, so a citation that resolved to the wrong figure is discarded anyway.
 
 ## Every role inside its own job
 
-A desk works because a job has edges. The analyst that labels a regime does not size the order, the
+A desk works because a job has edges. The analyst that reads the bars does not size the order, the
 role that prices the round trip does not decide whether the idea is any good, and none of them
 places anything. Four things keep a role inside its job, and only the last is words:
 
 | Enforced by | What it prevents |
 |---|---|
-| the brief | A role cannot reason about what it was never given. No reading analyst receives equity, size, the controls, the cost of the round trip or the exit distances. `agents/scope.py` filters every brief to that role's declared reads, and what it removed is written in the record. |
-| the schema | A closed schema with only that role's own fields. A macro analyst has nowhere to put a size, and a field outside the schema is a parse error rather than a surprise. |
+| the brief | A role cannot reason about what it was never given. No reading role's brief carries equity, size, the controls, the cost of the round trip or the exit distances. `agents/scope.py` filters every brief to that role's declared reads, and what it removed is written in the record. |
+| the schema | A closed schema with only that role's own fields. A validator has nowhere to put a size, and a field outside the schema is a parse error rather than a surprise. |
 | the wiring | Nothing downstream reads a sentence. The confluence matrix and the conviction score read the declared state the system derived from the operator's thresholds; the cost gate reads the snapshot's own book; the size comes from the operator's ladder and caps. |
 | the prompt | One line naming what is not this role's job, plus a small vocabulary the system looks for in case it appears anyway. |
 
 The last line needs care and gets the least authority. Pattern-matching prose is blunt, and "buy"
 and "sell" belong in a proper sentence about what a central bank did, so the vocabulary is only the
-phrases no reading analyst has reason to write - "go long", "stop loss", "position size",
+phrases that carry an order or a size - "go long", "stop loss", "position size",
 "leverage". A hit is recorded as a crossing beside the answer and changes nothing, because the
 answer was never what decides. We cannot stop a model from writing a sentence; we can make the
 sentence carry no authority and leave a mark when it tries to.
@@ -618,7 +617,7 @@ size_multiple = 0.25
 
 ### Each analyst's score
 
-Each reading analyst's score is computed by the system from its own figures against the lines you drew in
+Each reading role's score is computed by the system from its own figures against the lines you drew in
 `sources/*.toml`, signed for the instrument and between -1 and 1:
 
 ```toml
@@ -640,8 +639,8 @@ comes out the same every time from the same figures.
 | Voice | Brings | Counts toward the total by |
 |---|---|---|
 | the deciding analyst | `weight * confidence` | `weight` |
-| a reading analyst | `weight * score`, plus when it agrees with the direction, minus when against | `weight * abs(score)` |
-| a reading analyst with nothing past its lines | `0` | nothing; it is listed as silent |
+| a reading role | `weight * score`, plus when it agrees with the direction, minus when against | `weight * abs(score)` |
+| a reading role with nothing past its lines | `0` | nothing; it is listed as silent |
 | a validator that supports, after its claims were checked | `+validator_weight` | `validator_weight` |
 | a validator that opposes | `-validator_weight` | `validator_weight` |
 

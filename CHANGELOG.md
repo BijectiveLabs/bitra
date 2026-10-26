@@ -24,6 +24,20 @@ All notable changes to this project are recorded here. The format follows
 - A language-model response cache (`llm.cache`) with record, replay and off; replay never calls a
   model.
 
+### Changed
+
+- The macro, on-chain and sentiment roles ask no model. Their briefs are read by code against the
+  thresholds you declared, which is what confluence and conviction always read; no decision rested on
+  the label a model wrote beside it. The cycle makes one model call fewer per reading role, about a
+  quarter of a cycle's tokens on the demo desks. The research session reads them the same way.
+
+### Removed
+
+- `[conviction].reader_labels`, `[agents].reuse_reading_for` and `[agents.roles.macro_analyst]`,
+  `[agents.roles.onchain_analyst]`, `[agents.roles.sentiment_analyst]` are refused with the reason:
+  nothing asks those models any more. Remove the keys; nothing else in a desk's configuration
+  changes. Typed events from dated text come back through the judge planned for 0.12.
+
 ### Fixed
 
 - `tra data get` on Bybit: the venue republished its trade archives with an eleventh column,
