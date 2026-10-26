@@ -23,6 +23,7 @@ from trading_research_agents.market_data.archive import (
     HOUR_NS,
     HOURS_PER_DAY,
     MINUTES_PER_HOUR,
+    TEXT,
     ArchiveError,
     DayManifest,
     SourceFile,
@@ -45,6 +46,7 @@ from trading_research_agents.market_data.book import BookBar
 from trading_research_agents.market_data.days import DAY_NS, midnight_ns
 from trading_research_agents.market_data.deriv import DerivPoint
 from trading_research_agents.market_data.gaps import GapMark, record_gap
+from trading_research_agents.market_data.text import TextItem, read_text_file, write_text_day
 
 Parts = Mapping[int, Path]
 Manifests = Mapping[int, DayManifest]
@@ -152,10 +154,20 @@ def _compact_deriv(
     )
 
 
+def _compact_text(
+    root: Path, venue: str, instrument: str, day: date, parts: Parts, manifests: Manifests
+) -> DayManifest:
+    items: list[TextItem] = []
+    for hour in sorted(parts):
+        items.extend(read_text_file(parts[hour], instrument))
+    return write_text_day(items, root, feed=instrument, day=day, sources=_sources(manifests))
+
+
 COMPACTORS: dict[str, Compactor] = {
     FLOW: _compact_flow,
     BOOK: _compact_book,
     DERIV: _compact_deriv,
+    TEXT: _compact_text,
 }
 
 
