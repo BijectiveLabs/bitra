@@ -23,7 +23,7 @@ from trading_research_agents.data.series import Event
 from trading_research_agents.market_data.archive import HOUR_NS
 from trading_research_agents.market_data.book import BookSample
 from trading_research_agents.market_data.compact import compact_day
-from trading_research_agents.market_data.days import NS_PER_S, day_of
+from trading_research_agents.market_data.days import NS_PER_MINUTE, NS_PER_S, day_of
 from trading_research_agents.market_data.deriv import DerivPoint
 from trading_research_agents.market_data.gaps import GapMark, record_gap
 from trading_research_agents.market_data.record_config import RecordConfig
@@ -92,6 +92,7 @@ class Recorder:
         self.logs = {feed: TextLog(root, feed, now_ns=now_ns) for feed in names}
         self.outage_reasons: dict[tuple[str, str], str] = {}
         self.latencies: dict[str, list[int]] = {}
+        self._latency_minute = now_ns // NS_PER_MINUTE
         self.days: set[tuple[str, str, str, date]] = set()
         self._mark_start(now_ns)
         self._event(now_ns, "started", markets=list(markets), streams=list(config.streams))
@@ -157,13 +158,13 @@ class Recorder:
             track.finish(now_ns)
         for book in self.books.values():
             book.finish(now_ns)
-        self._latency(now_ns)
+        self._latency(now_ns, now=True)
         self._write_due(now_ns, everything=True)
         self._late(now_ns)
         end = now_ns - now_ns % HOUR_NS + HOUR_NS
-        for name in self.flows:
+        for name, stream in self._streamed():
             reason = "the recorder stopped"
-            record_gap(self.root, GapMark(self.venue, name, "trades", now_ns, end, reason))
+            record_gap(self.root, GapMark(self.venue, name, stream, now_ns, end, reason))
         self._event(now_ns, "stopped")
 
     # Inside
@@ -218,7 +219,12 @@ class Recorder:
         track = holders.get(stream, {}).get(name)
         return track is not None and any(day_of(h) == day for h in track.hours)
 
-    def _latency(self, now_ns: int) -> None:
+    def _latency(self, now_ns: int, *, now: bool = False) -> None:
+        """Latency of the minute just ended: one line per market per minute, not per message."""
+        minute = now_ns // NS_PER_MINUTE
+        if minute == self._latency_minute and not now:
+            return
+        self._latency_minute = minute
         for name, seen in self.latencies.items():
             if not seen:
                 continue
@@ -242,9 +248,12 @@ class Recorder:
         hour = now_ns - now_ns % HOUR_NS
         if hour == now_ns:
             return
-        for name in self.flows:
+        for name, stream in self._streamed():
             reason = "the recorder was not running"
-            record_gap(self.root, GapMark(self.venue, name, "trades", hour, now_ns, reason))
+            record_gap(self.root, GapMark(self.venue, name, stream, hour, now_ns, reason))
+
+    def _streamed(self) -> list[tuple[str, str]]:
+        return [(name, "trades") for name in self.flows] + [(name, "book") for name in self.books]
 
     def _event(self, at_ns: int, event: str, **fields: Any) -> None:
         when = datetime.fromtimestamp(at_ns / NS_PER_S, tz=UTC).isoformat()

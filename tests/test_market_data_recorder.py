@@ -193,3 +193,26 @@ def test_book_points_and_text_are_kept_beside_the_flow(tmp_path: Path) -> None:
     assert len(read_deriv_range(tmp_path, "bybit", "BTCUSDT", DAY, DAY)) == 2
     (said,) = read_text_range(tmp_path, "coindesk", DAY, DAY)
     assert said.first_seen_ns == T0 + 3 * M
+
+
+def test_latency_is_reported_once_a_minute(tmp_path: Path) -> None:
+    rec = recorder(tmp_path)
+    for s in range(1, 50, 5):
+        at = T0 + s * NS_PER_S
+        rec.on_trades("BTCUSDT", [trade(at, f"q{s}")], received_ns=at + 100_000_000)
+        rec.tick(at + 1)
+    rec.tick(T0 + M + 1)
+    latency = [e for e in events(tmp_path) if e["event"] == "latency"]
+    assert len(latency) == 1 and latency[0]["latency_p50_ms"] == 100
+
+
+def test_points_for_an_hour_already_written_are_merged_not_lost(tmp_path: Path) -> None:
+    rec = recorder(tmp_path)
+    oi = DerivPoint(Series.OPEN_INTEREST, T0 + 5 * M, T0 + 6 * M, Decimal("61797.182"))
+    mark = DerivPoint(Series.MARK, T0 + 9 * M, T0 + 70 * M, Decimal("93530.5"))
+    rec.on_points("BTCUSDT", [oi])
+    rec.tick(T0 + HOUR + 10 * M)
+    rec.on_points("BTCUSDT", [mark])
+    rec.tick(T0 + HOUR + 11 * M)
+    assert len(read_deriv_range(tmp_path, "bybit", "BTCUSDT", DAY, DAY)) == 2
+    assert not [e for e in events(tmp_path) if e["event"] == "late_points"]

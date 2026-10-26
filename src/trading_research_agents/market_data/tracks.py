@@ -20,6 +20,7 @@ from trading_research_agents.market_data.archive import (
     FLOW,
     HOUR_NS,
     SourceFile,
+    day_file,
     hour_of,
     missing_minutes,
     part_file,
@@ -36,7 +37,7 @@ from trading_research_agents.market_data.archive_deriv import read_deriv_file, w
 from trading_research_agents.market_data.bars import FlowBar, GapState, quiet_bar, worst
 from trading_research_agents.market_data.book import BookBar, BookBarBuilder, BookSample
 from trading_research_agents.market_data.builder import FlowBarBuilder
-from trading_research_agents.market_data.days import NS_PER_MINUTE
+from trading_research_agents.market_data.days import NS_PER_MINUTE, day_of
 from trading_research_agents.market_data.deriv import DerivPoint
 from trading_research_agents.market_data.text import TextItem, write_text_part
 
@@ -279,7 +280,8 @@ class PointTrack:
     def push(self, points: Iterable[DerivPoint]) -> None:
         for point in points:
             hour = _hour_start(point.as_of_ns)
-            if hour in self.written:
+            # An hour already written is written again, merged, until its day is compacted.
+            if hour in self.written and self._compacted(hour):
                 self.late_after_writing += 1
                 continue
             key = (point.series.value, point.as_of_ns, str(point.value))
@@ -289,6 +291,10 @@ class PointTrack:
         return [
             h for h in sorted(self.hours) if everything or h + HOUR_NS + self.grace_ns <= now_ns
         ]
+
+    def _compacted(self, hour_start: int) -> bool:
+        whole = day_file(self.root, self.venue, self.instrument, "deriv", day_of(hour_start))
+        return whole.is_file()
 
     def write(self, hour_start: int) -> None:
         points = list(self.hours.pop(hour_start).values())
