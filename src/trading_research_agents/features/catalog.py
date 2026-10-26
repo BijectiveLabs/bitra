@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from trading_research_agents.features import book, cross, derivatives, flow, price
+from trading_research_agents.features import book, cross, derivatives, flow, price, text
 from trading_research_agents.features.core import (
     Feature,
     FeatureSpec,
@@ -19,6 +19,7 @@ DERIV = frozenset({"flow_1m", "deriv"})
 CONTEXT = frozenset({"flow_1m", "context"})
 BOOK = frozenset({"book_1m"})
 EVENTS = frozenset({"deriv"})
+TEXT = frozenset({"text"})
 
 
 def _feature(name: str, unit: str, bars: int, requires: frozenset[str], value: Value) -> Feature:
@@ -60,6 +61,12 @@ DEFAULT_FEATURES: tuple[Feature, ...] = (
     _feature("beta_btc_96", "ratio", 97, CONTEXT, cross.beta_btc),
     _feature("corr_btc_96", "ratio", 97, CONTEXT, cross.corr_btc),
     _feature("rel_strength_btc_24", "bps", 25, CONTEXT, cross.rel_strength_btc),
+    _feature("text_count_24", "count", 24, TEXT, text.text_count_24),
+    *(
+        _feature(f"text_{kind}_p_24", "probability", 24, TEXT, text.text_kind_p_24(kind))
+        for kind in text.KINDS
+        if kind != "none"
+    ),
 )
 MAX_WINDOW_BARS = max(f.spec.window_bars for f in DEFAULT_FEATURES)
 

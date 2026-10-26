@@ -61,6 +61,7 @@ from trading_research_agents.cli.arena import add_arena_command, arena_report
 from trading_research_agents.cli.console import HISTORY_FILE
 from trading_research_agents.cli.market import add_bars_command, data_bars, verify_market
 from trading_research_agents.cli.record import add_record_command, record_report, record_status
+from trading_research_agents.cli.text import add_text_command, judge_lines, text_judge
 from trading_research_agents.data import (
     NORMALISER_VERSION,
     ArchiveError,
@@ -633,6 +634,7 @@ def build_parser() -> argparse.ArgumentParser:
     hindsight_cmd.add_argument("--json", action="store_true")
     add_arena_command(top)
     add_record_command(top)
+    add_text_command(top)
 
     sizing_cmd = top.add_parser(
         "sizing",
@@ -1980,6 +1982,13 @@ def record_command(args: argparse.Namespace) -> int:
 def record_status_command(args: argparse.Namespace) -> int:
     """What the records say about coverage, gaps and latency over the last day."""
     payload, lines, code = record_status(args)
+    emit(payload, args.json, lines)
+    return code
+
+
+def text_judge_command(args: argparse.Namespace) -> int:
+    """The archived headlines of a range of days, read by the declared typed judge."""
+    payload, lines, code = text_judge(args)
     emit(payload, args.json, lines)
     return code
 
@@ -4813,6 +4822,9 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
                         "and `tra run` will stop at the cost gate"
                     )
                 good.extend(_agrees_across_files(cfg, declared_data, bad))
+            judged, unjudged = judge_lines(data_config, env)
+            good.extend(judged)
+            bad.extend(unjudged)
         elif cfg.agents is not None:
             bad.append("data.toml: missing; `tra run` needs it (tra init writes one)")
         if cfg.agents is not None and cfg.agents.provider == PLACEHOLDER_PROVIDER:
@@ -6432,6 +6444,7 @@ HANDLERS = {
     ("arena", "arena"): arena_command,
     ("record", "run"): record_command,
     ("record", "status"): record_status_command,
+    ("text", "judge"): text_judge_command,
     ("sizing", "sizing"): sizing_command,
     ("pause", "pause"): pause_command,
     ("kill", "kill"): kill_command,
