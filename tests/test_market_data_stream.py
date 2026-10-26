@@ -192,3 +192,38 @@ def test_a_bybit_liquidation_says_which_positions_were_liquidated() -> None:
     assert point.get("liquidated") == "long" and point.value == Decimal("0.50")
     (other,) = to_liquidations(rows, venue="elsewhere", market=market, received_ns=START)
     assert other.get("liquidated") is None and other.get("side") == "buy"
+
+
+class Failing:
+    """A backfill whose venue refuses every request."""
+
+    def history(self, *args: Any, **kwargs: Any) -> Any:
+        from trading_research_agents.market_data.bars import MarketDataError
+
+        raise MarketDataError("RateLimitExceeded: slow down")
+
+
+def test_a_failed_level_fetch_is_reported_and_the_recorder_carries_on() -> None:
+    from trading_research_agents.market_data.venues.ccxt_stream import levels_loop
+
+    client = FakePro()
+    sink = Sink()
+    clock = Clock()
+    client.clock = clock
+    config = RecordConfig.from_table({"venue": "bybit", "instruments": ["BTCUSDT"], "streams": []})
+    link = Link(
+        venue="bybit",
+        client=client,
+        recorder=sink,
+        config=config,
+        clock=clock,
+        sleep=clock.sleep,
+        jitter=lambda: 0.0,
+        stop_at_ns=START + 700 * NS,
+    )
+    market = market_of(client, "BTCUSDT")
+    extra = [levels_loop(link, Failing(), [market], START)]  # type: ignore[arg-type]
+    asyncio.run(run_streams(link, [market], extra=extra))
+    assert sink.stopped
+    failed = [c for c in sink.calls if c[0] == "disconnect" and c[1] == "levels"]
+    assert failed and "slow down" in failed[0][2]

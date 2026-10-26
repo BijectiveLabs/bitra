@@ -249,16 +249,25 @@ async def levels_loop(
     link: Link, filler: CcxtBackfill, markets: Sequence[Market], since_ns: int
 ) -> None:
     """Every five minutes, the derivatives levels published since the last look, by history."""
-    cursor_ms = since_ns // NS_PER_MS
+    cursors = {(m.instrument, s): since_ns // NS_PER_MS for m in markets for s in LEVELS}
     while not link.stopping():
         now_ms = link.clock() // NS_PER_MS
         for market in markets:
             for series in LEVELS:
-                found = await asyncio.to_thread(
-                    filler.history, series, market.symbol, cursor_ms, now_ms
-                )
+                key = (market.instrument, series)
+                try:
+                    found = await asyncio.to_thread(
+                        filler.history, series, market.symbol, cursors[key], now_ms
+                    )
+                except MarketDataError as exc:
+                    # A refused read is asked again from the same point next time, so nothing is
+                    # skipped; the recorder hears of it, and the streams carry on.
+                    link.recorder.on_disconnect(
+                        market.instrument, "levels", now_ms * NS_PER_MS, str(exc)
+                    )
+                    continue
                 link.recorder.on_points(market.instrument, found.points)
-        cursor_ms = now_ms + 1
+                cursors[key] = now_ms + 1
         await link.sleep(LEVELS_EVERY_S)
 
 
