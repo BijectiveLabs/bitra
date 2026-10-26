@@ -24,16 +24,11 @@ from typing import Any
 from trading_research_agents.agents import (
     auditor,
     executor,
-    macro_analyst,
     market_screener,
-    onchain_analyst,
     risk_manager,
 )
 from trading_research_agents.agents.auditor.tools import audit_brief
-from trading_research_agents.agents.briefs import declared_state
-from trading_research_agents.agents.macro_analyst.tools import macro_brief, returns_from_closes
 from trading_research_agents.agents.market_screener.tools import ScreenFigures, screen_figures
-from trading_research_agents.agents.onchain_analyst.tools import onchain_brief
 from trading_research_agents.agents.react import ToolLoopError, run_tool_loop
 from trading_research_agents.agents.risk_manager.tools import risk_brief
 from trading_research_agents.agents.roles import RoleError, prompt
@@ -45,6 +40,10 @@ from trading_research_agents.envelope.model import Envelope
 from trading_research_agents.execution.cost import FundingSchedule
 from trading_research_agents.llm.completer import Completer
 from trading_research_agents.llm.usage import BudgetSpentError, UsageLedger
+from trading_research_agents.readings import MACRO, ONCHAIN
+from trading_research_agents.readings.macro import macro_brief, returns_from_closes
+from trading_research_agents.readings.onchain import onchain_brief
+from trading_research_agents.readings.state import declared_state
 from trading_research_agents.surface import (
     list_runs,
     read_run_report,
@@ -321,7 +320,7 @@ class _Session:
         return kept, excluded
 
     def context(
-        self, role: str, series_path: Path | None, reference: Path | None
+        self, reading: str, series_path: Path | None, reference: Path | None
     ) -> dict[str, Any] | None:
         """A measured brief over the operator's series, aligned as-of to a reference dataset, and
         what the operator's thresholds declare on it. Read by code; no model is asked."""
@@ -330,19 +329,19 @@ class _Session:
         try:
             series = load_all(series_path)
         except SeriesError as exc:
-            raise SessionError(f"{role}: {exc}") from exc
+            raise SessionError(f"{reading}: {exc}") from exc
         times, closes = _minute_closes(reference) if reference is not None else ([], [])
         at_ns = times[-1] if times else int(self.started.timestamp() * 1_000_000_000)
         returns = returns_from_closes(times, closes) if times else []
-        if role == macro_analyst.ROLE:
+        if reading == MACRO:
             events = read_events(self.cfg.events) if self.cfg.events is not None else ()
             brief = macro_brief(series, at_ns=at_ns, times_ns=times, returns=returns, events=events)
         else:
             brief = onchain_brief(series, at_ns=at_ns, times_ns=times, returns=returns)
-        (self.out / f"{role}-brief.json").write_text(
+        (self.out / f"{reading}-brief.json").write_text(
             json.dumps(brief, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
         )
-        return {"declared_state": declared_state(role, brief), "read_by": "code"}
+        return {"declared_state": declared_state(reading, brief), "read_by": "code"}
 
     def analyse(self, instrument: str, path: Path, limits: Limits) -> RunReport:
         s = self.cfg.strategy
@@ -667,10 +666,10 @@ def run_session(cfg: SessionConfig) -> SessionResult:
     kept, excluded = s.screen(figures)
     tell("market_screener", "done", f"{len(kept)} kept, {len(excluded)} excluded")
     reference = next(iter(cfg.datasets.values()))
-    macro = s.context(macro_analyst.ROLE, cfg.macro_series, reference)
-    tell("macro_analyst", *_read_by_code(macro))
-    onchain = s.context(onchain_analyst.ROLE, cfg.onchain_series, reference)
-    tell("onchain_analyst", *_read_by_code(onchain))
+    macro = s.context(MACRO, cfg.macro_series, reference)
+    tell(MACRO, *_read_by_code(macro))
+    onchain = s.context(ONCHAIN, cfg.onchain_series, reference)
+    tell(ONCHAIN, *_read_by_code(onchain))
     limits = cfg.strategy.limits
     ladder = Ladder(cfg.ladder_path)
     reports: dict[str, RunReport] = {}
@@ -740,7 +739,7 @@ def run_session(cfg: SessionConfig) -> SessionResult:
 
 
 def _read_by_code(said: dict[str, Any] | None) -> tuple[str, str]:
-    """The progress row of a reading role: skipped without a series, else what code declared."""
+    """The progress row of a reading: skipped without a series, else what code declared."""
     if said is None:
         return "skipped", ""
     return "done", f"read by code: {said['declared_state']['declared']}"

@@ -1,12 +1,12 @@
 ---
-description: Where the macro, on-chain and sentiment analysts' figures come from, how to declare and refresh series, and how to see the age of every figure.
+description: Where the macro, on-chain and sentiment readings' figures come from, how to declare and refresh series, and how to see the age of every figure.
 ---
 
-# Where the analysts' figures come from
+# Where the readings' figures come from
 
 The technical analyst reads the venue: candles, the book, funding and open interest, pulled through
-`data.toml` on every cycle with their age attached. The macro, on-chain and sentiment analysts read
-something else: dated series you declare under `sources/`. This page is about those, and about how
+`data.toml` on every cycle with their age attached. The macro, on-chain and sentiment readings are
+code over something else: dated series you declare under `sources/`. This page is about those, and about how
 you can tell, on any cycle, that they read a real figure and how old it was.
 
 ## The short version
@@ -98,7 +98,7 @@ Checked against the Coin Metrics community catalog on 2026-10-07, daily frequenc
 Large-holder and whale figures, per-exchange flows and stablecoin movements between venues are not
 in the free tier. They are what a paid provider sells, and the desk reads them the same way: one
 `[[series]]` with `fetch = { from = "http", ... }` pointed at that provider, and a threshold. What
-the on-chain analyst reads is whatever is declared in `onchain.toml` and `derivatives.toml`; nothing
+the on-chain reading reads is whatever is declared in `onchain.toml` and `derivatives.toml`; nothing
 in the code is tied to a vendor, and a vendor with no declaration is not read.
 
 ## Fetching
@@ -164,7 +164,7 @@ decides whether its last value still counts.
 
 A `[[news]]` entry can fetch too: an RSS or Atom feed, or any JSON news API. The headlines land in
 the entry's file as `when,what,source` rows, merged with what it held, and anything older than
-`keep` is let go. The macro analyst reads them as events and the sentiment analyst as notes.
+`keep` is let go. The macro reading takes them as events and the sentiment reading as notes.
 
 ```toml
 [[news]]
@@ -191,25 +191,25 @@ A headline is stored as one plain line: markup and entities resolved, control ch
 at most 280 characters. A feed that declares a document type is refused, so no entity is ever
 expanded. Fetch only what the service's terms allow you to fetch.
 
-A reading role whose series declare nothing, which is what a file of headlines is, has no declared
+A reading whose series declare nothing, which is what a file of headlines is, has no declared
 state for conviction to read. Headlines are kept and shown; turning dated text into typed events a
 decision can weigh is the job of the judge planned for 0.12, not of a model's free label.
 
 ## Derivatives positioning
 
 Series in `sources/derivatives.toml` (long/short ratios, taker volume, open interest history,
-liquidations) are read by the on-chain role beside the chain figures, and your thresholds on
+liquidations) are read by the on-chain reading beside the chain figures, and your thresholds on
 them reach confluence and conviction like any other series. The technical analyst does not see
-them: it reads its own market's candles, book, funding and open interest, so its reading does not
-lean on another role's data.
+them: it reads its own market's candles, book, funding and open interest, so its proposal does not
+lean on another reading's data.
 
-## When a reading role is not read
+## When a reading is not read
 
-A reading role with nothing declared for it is not read. It still has a
-row in the cycle table, marked `not asked`, with the reason: nothing declared in
-`sources/onchain.toml` or `sources/derivatives.toml`, not in `[agents].analysts`, every series past
-its `max_age`, or every file unreadable. A role asked but missing from `[conviction].weights` is
-flagged by `tra check`: it is read, and its state moves nothing.
+A reading with nothing declared for it is not read. It still has a row in the cycle table, marked
+`not read`, with the reason: nothing declared in `sources/onchain.toml` or
+`sources/derivatives.toml`, not in `[agents].readings`, every series past its `max_age`, or every
+file unreadable. A reading on the roster but missing from `[conviction].weights` is flagged by
+`tra check`: it is read, and its state moves nothing.
 
 On-chain figures for Bitcoin are read as market-wide context for every instrument a desk trades,
 the way a yield is. A desk that wants a chain per instrument declares one series per asset.

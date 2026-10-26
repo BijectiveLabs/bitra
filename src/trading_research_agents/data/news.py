@@ -1,6 +1,6 @@
 """Fetch dated text into a declared news file: an RSS or Atom feed, or a JSON news API.
 
-The analysts still read only the local file, as `when,what,source` rows. This writes it: new
+The readings still read only the local file, as `when,what,source` rows. This writes it: new
 headlines are merged with what the file holds, anything older than the entry's `keep` is dropped,
 and the text is reduced to a plain line before it is stored, because a headline is material a
 model reads and never markup it renders.

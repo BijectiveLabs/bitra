@@ -8,8 +8,8 @@
     tra paper                                  # live public trades, simulated fills, zero orders
 
 `sources/` is the shelf: one file per class of data, and a vendor is a line inside a file rather
-than a file of its own. Declare `macro.toml` and the macro analyst is asked; leave `sentiment.toml`
-alone and the sentiment analyst is not asked at all. Every entry names a file you produced, free
+than a file of its own. Declare `macro.toml` and the macro reading is read; leave `sentiment.toml`
+alone and the sentiment reading is not read at all. Every entry names a file you produced, free
 export or paid dump alike, and nothing in here fetches anything.
 
 Everything a run needs is in `strategy.toml`, commented line by line. `strategies/

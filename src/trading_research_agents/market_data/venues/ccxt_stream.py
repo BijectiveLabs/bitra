@@ -40,10 +40,6 @@ NS_PER_S = 1_000_000_000
 BACKOFF_START_S = 1.0
 BACKOFF_MAX_S = 60.0
 LEVELS_EVERY_S = 300
-# Every minute a connection is silent before its keepalive gives up is a minute not recorded; with
-# two missed pings allowed, this notices a silence within 10 to 15 seconds rather than ccxt's
-# usual 36 to 90.
-KEEPALIVE_MS = 5000
 TICK_S = 1.0
 SIDES = {"buy": Side.BUY, "sell": Side.SELL}
 LIQUIDATED = {"bybit": {"buy": "long", "sell": "short"}}
@@ -77,13 +73,6 @@ class Market:
     symbol: str
     unit: Decimal
     scales: Scales
-
-
-def quicken_keepalive(client: Any) -> None:
-    """Ping often enough to notice a silent connection quickly; a venue's quicker interval stays."""
-    streaming = getattr(client, "streaming", None)
-    if isinstance(streaming, dict) and int(streaming.get("keepAlive") or 0) > KEEPALIVE_MS:
-        streaming["keepAlive"] = KEEPALIVE_MS
 
 
 def market_of(client: Any, instrument: str) -> Market:
@@ -359,7 +348,6 @@ __all__ = [
     "default_link",
     "levels_loop",
     "market_of",
-    "quicken_keepalive",
     "run_streams",
     "text_loop",
     "to_liquidations",

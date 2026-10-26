@@ -29,59 +29,51 @@ from trading_research_agents.execution.targets import (
     within_targets,
 )
 
-BULLISH = {"declared": "bullish", "as_role_says_it": "risk-on", "series_declared": 1}
-BEARISH = {"declared": "bearish", "as_role_says_it": "risk-off", "series_declared": 1}
+BULLISH = {"declared": "bullish", "in_its_words": "risk-on", "series_declared": 1}
+BEARISH = {"declared": "bearish", "in_its_words": "risk-off", "series_declared": 1}
 SILENT = {"declared": "undeclared", "series_declared": 0}
 MIXED = {"declared": "mixed", "states": ["bearish", "bullish"], "series_declared": 2}
 
 
 def test_a_long_needs_the_declared_states_the_operator_asked_for() -> None:
-    matrix = Matrix(required=("macro_analyst", "onchain_analyst"))
-    agreed = confluent(
-        matrix, target="long", states={"macro_analyst": BULLISH, "onchain_analyst": BULLISH}
-    )
+    matrix = Matrix(required=("macro", "onchain"))
+    agreed = confluent(matrix, target="long", states={"macro": BULLISH, "onchain": BULLISH})
 
     assert agreed.admitted and agreed.reasons == ()
-    assert agreed.states == {"macro_analyst": "bullish", "onchain_analyst": "bullish"}
+    assert agreed.states == {"macro": "bullish", "onchain": "bullish"}
 
 
 def test_one_role_pointing_the_other_way_refuses_and_names_it() -> None:
-    matrix = Matrix(required=("macro_analyst", "onchain_analyst"))
-    agreed = confluent(
-        matrix, target="long", states={"macro_analyst": BULLISH, "onchain_analyst": BEARISH}
-    )
+    matrix = Matrix(required=("macro", "onchain"))
+    agreed = confluent(matrix, target="long", states={"macro": BULLISH, "onchain": BEARISH})
 
     assert not agreed.admitted
-    assert any("onchain_analyst declares bearish" in r for r in agreed.reasons)
+    assert any("onchain declares bearish" in r for r in agreed.reasons)
 
 
 def test_a_state_nobody_produced_is_not_a_neutral_state() -> None:
-    matrix = Matrix(required=("macro_analyst", "sentiment_analyst"))
-    agreed = confluent(
-        matrix, target="long", states={"macro_analyst": BULLISH, "sentiment_analyst": SILENT}
-    )
+    matrix = Matrix(required=("macro", "sentiment"))
+    agreed = confluent(matrix, target="long", states={"macro": BULLISH, "sentiment": SILENT})
 
     assert not agreed.admitted
-    assert any("sentiment_analyst declares undeclared" in r for r in agreed.reasons)
+    assert any("sentiment declares undeclared" in r for r in agreed.reasons)
 
-    absent = confluent(matrix, target="long", states={"macro_analyst": BULLISH})
+    absent = confluent(matrix, target="long", states={"macro": BULLISH})
     assert not absent.admitted
-    assert any("was not asked" in r for r in absent.reasons)
-    assert absent.states["sentiment_analyst"] == "not asked"
+    assert any("was not read" in r for r in absent.reasons)
+    assert absent.states["sentiment"] == "not read"
 
 
 def test_mixed_declarations_do_not_pass_for_agreement() -> None:
-    matrix = Matrix(required=("onchain_analyst",))
-    agreed = confluent(matrix, target="short", states={"onchain_analyst": MIXED})
+    matrix = Matrix(required=("onchain",))
+    agreed = confluent(matrix, target="short", states={"onchain": MIXED})
 
     assert not agreed.admitted and any("declares mixed" in r for r in agreed.reasons)
 
 
 def test_an_operator_may_allow_a_silent_leg_and_the_record_says_they_did() -> None:
-    matrix = Matrix(required=("macro_analyst", "sentiment_analyst"), on_missing="ignore")
-    agreed = confluent(
-        matrix, target="long", states={"macro_analyst": BULLISH, "sentiment_analyst": SILENT}
-    )
+    matrix = Matrix(required=("macro", "sentiment"), on_missing="ignore")
+    agreed = confluent(matrix, target="long", states={"macro": BULLISH, "sentiment": SILENT})
 
     assert agreed.admitted
     assert any("allowed by on_missing = ignore" in r for r in agreed.reasons)
@@ -106,7 +98,7 @@ def test_votes_are_counted_against_the_declared_minimums() -> None:
 
 def test_a_matrix_that_asks_for_nothing_says_so() -> None:
     assert Matrix().idle
-    assert not Matrix(required=("macro_analyst",)).idle
+    assert not Matrix(required=("macro",)).idle
     assert not Matrix(min_support=1).idle
     # A declared zero is the strictest setting there is, not the absence of a setting.
     assert not Matrix(max_opposition=0).idle

@@ -37,17 +37,24 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
-- The macro, on-chain and sentiment roles ask no model. Their briefs are read by code against the
-  thresholds you declared, which is what confluence and conviction always read; no decision rested on
-  the label a model wrote beside it. The cycle makes one model call fewer per reading role, about a
-  quarter of a cycle's tokens on the demo desks. The research session reads them the same way.
+- The macro, on-chain and sentiment analysts are now readings, `macro`, `onchain` and `sentiment`,
+  in their own package (`readings/`): code over the series you declare, against the thresholds you
+  drew, which is what confluence and conviction always read; no decision rested on the label a
+  model wrote beside it. The cycle makes one model call fewer per reading, about a quarter of a
+  cycle's tokens on the demo desks. The research session reads them the same way.
+- The readings are named by their new names everywhere a desk names them: `[agents].readings`
+  (in place of `[agents].analysts`, since the technical analyst is always asked),
+  `[confluence].required`, `[conviction].weights`, the rows of the live table, `briefs/macro.json`,
+  and `not_read` in `cycle.json`. A desk written before 0.11 runs unchanged: `[agents].analysts`
+  and the old analyst names are read as the readings they became, a role table or
+  `reuse_reading_for` for a reading is read and does nothing, and `tra check` names what to write
+  now. A record written before 0.11 still shows in `tra watch`.
 
 ### Removed
 
-- `[conviction].reader_labels`, `[agents].reuse_reading_for` and `[agents.roles.macro_analyst]`,
-  `[agents.roles.onchain_analyst]`, `[agents.roles.sentiment_analyst]` are refused with the reason:
-  nothing asks those models any more. Remove the keys; nothing else in a desk's configuration
-  changes. Typed events from dated text come back through the judge planned for 0.12.
+- `[conviction].reader_labels` is refused with the reason: it weighed a label no model writes any
+  more, so reading on would size differently than the desk declared. Remove the key. Typed events
+  from dated text come back through the judge planned for 0.12.
 
 ### Fixed
 

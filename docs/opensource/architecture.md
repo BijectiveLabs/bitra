@@ -34,8 +34,10 @@ trading_research_agents/
   store/       snapshots and cycle directories                                  -> everything above, llm
   surface/     the gates as callable tools, read tools and tightening actions
                (listed on the MCP page); shared by mcp and agents                -> everything above
+  readings/    macro, on-chain and sentiment: the operator's series against the
+               operator's thresholds, a declared state and a graded score; no model -> data
   agents/      the research roles at layers 0, 2 and 3; the session roles; the
-               cycle and its analysts, validators and screener                  -> everything above, llm, store, surface
+               cycle and its analyst, validators and screener                   -> everything above, llm, store, surface, readings
   mcp/         the gates as MCP tools                                            -> everything except agent
   market_data/ one-minute flow and book bars, derivatives and liquidations, dated
                text, gap marks; the verified archive in day files and hour parts,
@@ -178,7 +180,7 @@ What each failure means, and what the plane does about it:
 | Failure | What it means | What the plane does |
 |---|---|---|
 | a stream drops | coverage is lost from the last message | the minute it dropped in is partial, the minutes after it are missing until a message arrives, the span goes to `gaps.jsonl`, and the stream reconnects after 1 s doubling to 60 s, with jitter |
-| a connection goes silent | its keepalive notices it, within about 15 s at the recorder's 5 s ping | the stream is unseen from its last message; hours are held three minutes so minutes already closed are marked too |
+| a connection goes silent | its keepalive notices up to 90 s later | the stream is unseen from its last message; hours are held three minutes so minutes already closed are marked too |
 | a trade arrives after its minute closed | the venue or the network was late | counted on the minute while its hour is open; counted in the events log once the hour is written; never added to a closed minute |
 | the same trade arrives twice | a reconnect replayed it | dropped by its trade id |
 | a trade carries a venue timestamp before the bar being built | the stream reordered it | placed by venue time inside the grace, so the archive and the stream build the same bar |
@@ -198,7 +200,7 @@ shared store; nothing in the package needs one.
 flowchart LR
     subgraph now["the cycle today"]
         direction TB
-        f1["features and briefs, by code"] --> r1["reading roles, by code"]
+        f1["features and briefs, by code"] --> r1["readings, by code"]
         r1 --> m1["technical analyst<br/>the one model call"]
         m1 --> g1["gates: cost, exits,<br/>confluence, conviction"]
     end

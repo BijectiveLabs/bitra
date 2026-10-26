@@ -102,8 +102,8 @@ def test_each_conviction_voice_says_which_way_it_pulled() -> None:
             "multiple": "0.5",
             "score": {
                 "score": "0.563",
-                "weights": {"macro_analyst": "1.0", "sentiment_analyst": "0.5"},
-                "contributions": {"macro_analyst": "0.465", "sentiment_analyst": "-0.186"},
+                "weights": {"macro": "1.0", "sentiment": "0.5"},
+                "contributions": {"macro": "0.465", "sentiment": "-0.186"},
             },
         }
     }
@@ -171,7 +171,7 @@ def test_a_validator_counts_for_what_it_says_beyond_its_stance() -> None:
             "validator_pro": {"verdict": pro},
             "validator_contra": {"verdict": contra},
             "validator_neutral": {"verdict": neutral},
-            "macro_analyst": {"regime": "risk-off"},
+            "macro": {"declared_state": {"declared": "bearish"}, "read_by": "code"},
         }
         return _informative_votes(SimpleNamespace(context=context))  # type: ignore[arg-type]
 
@@ -191,3 +191,25 @@ def test_a_cycle_that_ended_early_says_which_panels_it_never_reached() -> None:
     text = shown(cycle_view(record))
     assert "not reached" in text and "risk per trade, desk, cost gate, targets, intent" in text
     assert "the cycle ended at conviction" in text
+
+
+def test_a_record_written_before_the_readings_still_shows_what_was_not_read() -> None:
+    record = {
+        "series": [
+            {
+                "role": "macro_analyst",
+                "series": "us10y",
+                "value": "4.4",
+                "observed_at": "2026-09-27T00:00:00+00:00",
+                "age_h": 30,
+                "state": "bearish",
+                "origin": "file",
+                "source": "operator export",
+            }
+        ],
+        "agents": {"agents": [{"agent": "technical", "ok": True, "seconds": 2.0}]},
+        "not_asked": {"onchain_analyst": "nothing declared in sources/onchain.toml, so not asked"},
+    }
+    text = shown(cycle_view(record))
+    assert "macro" in text and "us10y" in text and "macro_analyst" not in text
+    assert "onchain_analyst" in text and "not read: nothing declared" in text

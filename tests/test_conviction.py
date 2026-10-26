@@ -27,9 +27,9 @@ from trading_research_agents.execution.sizing import SizingError, leverage_of, n
 
 RULE = Conviction(
     weights={
-        "macro_analyst": Decimal(1),
-        "onchain_analyst": Decimal("1.5"),
-        "sentiment_analyst": Decimal("0.5"),
+        "macro": Decimal(1),
+        "onchain": Decimal("1.5"),
+        "sentiment": Decimal("0.5"),
         "technical_analyst": Decimal(2),
     },
     validator_weight=Decimal(1),
@@ -65,9 +65,7 @@ def test_everything_agreeing_trades_the_whole_base_size() -> None:
     score = score_of(
         RULE,
         target="long",
-        states=states(
-            macro_analyst="bullish", onchain_analyst="bullish", sentiment_analyst="bullish"
-        ),
+        states=states(macro="bullish", onchain="bullish", sentiment="bullish"),
         confidence=0.9,
         votes=("support", "support", "abstain"),
     )
@@ -83,15 +81,13 @@ def test_one_leg_pointing_the_other_way_costs_size() -> None:
     score = score_of(
         RULE,
         target="long",
-        states=states(
-            macro_analyst="bullish", onchain_analyst="bearish", sentiment_analyst="bullish"
-        ),
+        states=states(macro="bullish", onchain="bearish", sentiment="bullish"),
         confidence=0.7,
         votes=("support", "oppose", "abstain"),
     )
 
-    assert score.agreed == ("macro_analyst", "sentiment_analyst", "technical_analyst")
-    assert score.against == ("onchain_analyst",)
+    assert score.agreed == ("macro", "sentiment", "technical_analyst")
+    assert score.against == ("onchain",)
     # A full band of opposition from the heaviest reading voice, and a validator against: 0.2.
     assert score.score == Decimal("0.200")
 
@@ -104,12 +100,12 @@ def test_the_middle_of_the_ladder_trades_a_fraction() -> None:
     score = score_of(
         RULE,
         target="long",
-        states=states(macro_analyst="bullish", onchain_analyst="bullish"),
+        states=states(macro="bullish", onchain="bullish"),
         confidence=0.6,
         votes=(),
     )
     # Sentiment declared nothing, so it is silence rather than a vote either way.
-    assert score.silent == ("sentiment_analyst",)
+    assert score.silent == ("sentiment",)
     # Two voices agreeing in full lift a 0.6 confidence to 3.7 of 4.5.
     assert score.score == Decimal("0.822")
 
@@ -119,7 +115,7 @@ def test_the_middle_of_the_ladder_trades_a_fraction() -> None:
 
 def test_silence_is_never_counted_as_agreement() -> None:
     quiet = score_of(RULE, target="long", states={}, confidence=0.8, votes=())
-    assert quiet.silent == ("macro_analyst", "onchain_analyst", "sentiment_analyst")
+    assert quiet.silent == ("macro", "onchain", "sentiment")
     # Only the deciding analyst spoke, so the score is its own confidence: silence neither raised it
     # nor diluted it. A reading barely past its line moves it barely, and silence is the limit of
     # that, so the two cannot be treated differently without a jump at zero.
@@ -131,9 +127,7 @@ def test_a_short_reads_the_declarations_the_other_way_round() -> None:
     score = score_of(
         RULE,
         target="short",
-        states=states(
-            macro_analyst="bearish", onchain_analyst="bearish", sentiment_analyst="bearish"
-        ),
+        states=states(macro="bearish", onchain="bearish", sentiment="bearish"),
         confidence=0.8,
         votes=(),
     )
@@ -145,9 +139,7 @@ def test_the_leverage_ceiling_is_a_notional_cap_and_it_only_shrinks() -> None:
     score = score_of(
         RULE,
         target="long",
-        states=states(
-            macro_analyst="bullish", onchain_analyst="bullish", sentiment_analyst="bullish"
-        ),
+        states=states(macro="bullish", onchain="bullish", sentiment="bullish"),
         confidence=1.0,
         votes=(),
     )
@@ -160,7 +152,7 @@ def test_the_leverage_ceiling_is_a_notional_cap_and_it_only_shrinks() -> None:
 
 
 def test_the_position_cap_still_stands_above_the_ladder() -> None:
-    score = score_of(RULE, target="long", states=states(macro_analyst="bullish"), confidence=1.0)
+    score = score_of(RULE, target="long", states=states(macro="bullish"), confidence=1.0)
     put = stake(score, base_size=Decimal("0.5"), max_position=Decimal("0.2"), equity=None)
 
     assert put.size == Decimal("0.2") and put.capped_by == "max_position"
@@ -168,7 +160,7 @@ def test_the_position_cap_still_stands_above_the_ladder() -> None:
 
 
 def test_a_size_that_cannot_reach_one_step_is_refused_rather_than_rounded_up() -> None:
-    score = score_of(RULE, target="long", states=states(macro_analyst="bullish"), confidence=1.0)
+    score = score_of(RULE, target="long", states=states(macro="bullish"), confidence=1.0)
     put = stake(score, base_size=Decimal("0.0004"), step=Decimal("0.001"))
 
     assert not put.admitted and put.size == Decimal(0)
@@ -205,7 +197,7 @@ def test_the_ladder_is_read_from_the_top_however_it_was_written() -> None:
 
 def test_a_rule_that_cannot_be_applied_is_refused_when_it_is_written() -> None:
     with pytest.raises(ConvictionError, match="is positive"):
-        Conviction(weights={"macro_analyst": Decimal(0)})
+        Conviction(weights={"macro": Decimal(0)})
     with pytest.raises(ConvictionError, match="min_score"):
         Conviction(min_score=Decimal("1.5"))
     with pytest.raises(ConvictionError, match="max_leverage"):
@@ -248,10 +240,10 @@ def test_weak_opposition_costs_a_little_size_and_the_trade_goes_ahead() -> None:
     score = score_of(
         RULE,
         target="short",
-        states=graded(macro_analyst="0.15", sentiment_analyst="0.057"),
+        states=graded(macro="0.15", sentiment="0.057"),
         confidence=0.7,
     )
-    assert score.against == ("macro_analyst", "sentiment_analyst")
+    assert score.against == ("macro", "sentiment")
     assert score.score == Decimal("0.561")
     put = stake(score)
     assert put.admitted and put.multiple == Decimal("0.5")
@@ -261,7 +253,7 @@ def test_mostly_agreeing_with_one_dissent_trades_a_middle_size() -> None:
     score = score_of(
         RULE,
         target="long",
-        states=graded(macro_analyst="0.6", onchain_analyst="0.5", sentiment_analyst="-0.4"),
+        states=graded(macro="0.6", onchain="0.5", sentiment="-0.4"),
         confidence=0.7,
     )
     assert score.score == Decimal("0.718")
@@ -272,7 +264,7 @@ def test_opposition_that_outweighs_the_case_stops_the_trade() -> None:
     score = score_of(
         RULE,
         target="short",
-        states=graded(macro_analyst="1", onchain_analyst="1", sentiment_analyst="1"),
+        states=graded(macro="1", onchain="1", sentiment="1"),
         confidence=0.7,
     )
     assert score.score == Decimal("0.000")
@@ -280,7 +272,7 @@ def test_opposition_that_outweighs_the_case_stops_the_trade() -> None:
 
 
 def test_a_stronger_reading_moves_the_score_further() -> None:
-    weak = score_of(RULE, target="long", states=graded(macro_analyst="0.2"), confidence=0.6)
-    strong = score_of(RULE, target="long", states=graded(macro_analyst="0.9"), confidence=0.6)
-    against = score_of(RULE, target="long", states=graded(macro_analyst="-0.9"), confidence=0.6)
+    weak = score_of(RULE, target="long", states=graded(macro="0.2"), confidence=0.6)
+    strong = score_of(RULE, target="long", states=graded(macro="0.9"), confidence=0.6)
+    against = score_of(RULE, target="long", states=graded(macro="-0.9"), confidence=0.6)
     assert against.score < Decimal("0.600") < weak.score < strong.score

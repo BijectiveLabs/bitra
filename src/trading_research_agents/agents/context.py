@@ -1,4 +1,4 @@
-"""Which declaration file feeds which analyst, and how a project says what it has.
+"""Which declaration file feeds which reading, and how a project says what it has.
 
 A desk does not have one data source, it has a shelf of them, and the shelf changes when a
 subscription starts or a free endpoint dies. So the declarations are one file per class of data,
@@ -25,28 +25,28 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from trading_research_agents.agents import macro_analyst, onchain_analyst, sentiment_analyst
 from trading_research_agents.data.series import (
     SeriesError,
     load_news_map,
     load_series_map,
 )
+from trading_research_agents.readings import MACRO, ONCHAIN, SENTIMENT
 
 SOURCES_DIR = "sources"
 
-# One class of data, one file, and the role that reads it. Two classes may feed one role: a desk's
-# chain figures and its derivative figures are both read by the on-chain analyst, because they
-# answer the same question about who is accumulating and who is leaving.
+# One class of data, one file, and the reading it feeds. Two classes may feed one reading: a desk's
+# chain figures and its derivative figures are both on-chain, because they answer the same question
+# about who is accumulating and who is leaving.
 SERIES_CLASSES: dict[str, str] = {
-    "macro": macro_analyst.ROLE,
-    "sentiment": sentiment_analyst.ROLE,
-    "onchain": onchain_analyst.ROLE,
-    "derivatives": onchain_analyst.ROLE,
+    "macro": MACRO,
+    "sentiment": SENTIMENT,
+    "onchain": ONCHAIN,
+    "derivatives": ONCHAIN,
 }
 # Dated text, not dated numbers, so it is read by the calendar reader rather than the series
-# engine. The macro analyst reads it as events; the sentiment analyst reads it as notes.
+# engine. The macro reading takes it as events; the sentiment reading takes it as notes.
 TEXT_CLASSES: dict[str, tuple[str, ...]] = {
-    "news": (macro_analyst.ROLE, sentiment_analyst.ROLE),
+    "news": (MACRO, SENTIMENT),
 }
 # What a project written before `sources/` existed called these files. Still read, still supported.
 LEGACY: dict[str, str] = {
@@ -62,26 +62,28 @@ class ContextError(ValueError):
 
 @dataclass(frozen=True)
 class Declared:
-    """What a project has on its shelf, by class and by the role that will read it."""
+    """What a project has on its shelf, by class and by the reading it feeds."""
 
     series: dict[str, list[Path]] = field(default_factory=dict)
     text: list[Path] = field(default_factory=list)
     classes: dict[str, Path] = field(default_factory=dict)
     # On the shelf but declaring nothing yet. `tra init` writes these, and a class stays off until
-    # the operator fills one in, so an untouched project asks for no role it cannot feed.
+    # the operator fills one in, so an untouched project reads nothing it cannot feed.
     empty: tuple[str, ...] = ()
 
     @property
-    def roles(self) -> tuple[str, ...]:
+    def readings(self) -> tuple[str, ...]:
         return tuple(sorted(self.series))
 
-    def for_role(self, role: str) -> tuple[Path, ...]:
-        return tuple(self.series.get(role, ()))
+    def for_reading(self, reading: str) -> tuple[Path, ...]:
+        return tuple(self.series.get(reading, ()))
 
     def record(self) -> dict[str, Any]:
         return {
             "classes": {name: str(path) for name, path in sorted(self.classes.items())},
-            "roles": {role: [str(p) for p in paths] for role, paths in sorted(self.series.items())},
+            "readings": {
+                name: [str(p) for p in files] for name, files in sorted(self.series.items())
+            },
             "text": [str(p) for p in self.text],
             "empty": list(self.empty),
         }
@@ -158,7 +160,7 @@ def inspect_shelf(declared: Declared) -> tuple[Reading, ...]:
     """Read every declaration without reading the data: structure and the named files exist.
 
     This is what `tra check` asks before a client spends a cycle's tokens. A missing export is
-    the ordinary mistake, and it is cheaper to name it here than to have a role refuse later.
+    the ordinary mistake, and it is cheaper to name it here than to have a cycle refuse later.
     """
     out: list[Reading] = []
     for name, path in sorted(declared.classes.items()):
@@ -187,8 +189,3 @@ def inspect_shelf(declared: Declared) -> tuple[Reading, ...]:
             )
         )
     return tuple(out)
-
-
-def roster_for(declared: Declared, deciding_role: str) -> tuple[str, ...]:
-    """The roles worth asking: the one that decides, plus every role with something to read."""
-    return (deciding_role, *declared.roles)

@@ -76,7 +76,21 @@ def test_the_shelf_starts_empty_and_check_says_what_filling_it_in_does(
     main(["check"])
     out = capsys.readouterr().out
     assert "nothing declared yet" in out
-    assert "ok    roster: technical_analyst; `tra run` asks these" in out
+    assert (
+        "ok    roster: technical_analyst asks a model; no reading declared; `tra run` uses these"
+        in out
+    )
+
+    # A desk written before 0.11 still runs, and check names what to write now.
+    strategy = target / "strategy.toml"
+    before = strategy.read_text("utf-8")
+    strategy.write_text(before + '\n[confluence]\nrequired = ["macro_analyst"]\n', "utf-8")
+    main(["check"])
+    assert (
+        "ok    written before 0.11, still read: [confluence].required: macro_analyst is macro"
+        in capsys.readouterr().out
+    )
+    strategy.write_text(before, "utf-8")
 
     (target / "sources" / "macro.toml").write_text(
         '[[series]]\nname = "us10y"\nfile = "macro/us10y.csv"\nts = "date"\n'
@@ -96,7 +110,10 @@ def test_the_shelf_starts_empty_and_check_says_what_filling_it_in_does(
     main(["check"])
     out = capsys.readouterr().out
     assert "ok    sources/macro.toml: 1 declared (us10y)" in out
-    assert "ok    roster: technical_analyst, macro_analyst; `tra run` asks these" in out
+    assert (
+        "ok    roster: technical_analyst asks a model; macro read by code; `tra run` uses these"
+        in out
+    )
 
 
 def test_backtest_is_trade_replay_by_another_name(

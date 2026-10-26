@@ -15,10 +15,6 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
-from trading_research_agents.agents import macro_analyst, onchain_analyst, sentiment_analyst
-from trading_research_agents.agents.macro_analyst.tools import macro_brief, returns_from_closes
-from trading_research_agents.agents.onchain_analyst.tools import onchain_brief
-from trading_research_agents.agents.sentiment_analyst.tools import sentiment_brief
 from trading_research_agents.agents.technical_analyst.tools import Features, features
 from trading_research_agents.data.schema import Candle, Direction
 from trading_research_agents.data.series import Event, Series
@@ -32,6 +28,10 @@ from trading_research_agents.execution.pretrade import (
     pre_trade_cost,
 )
 from trading_research_agents.execution.regime import RegimeRule, label
+from trading_research_agents.readings import MACRO, ONCHAIN, SENTIMENT
+from trading_research_agents.readings.macro import macro_brief, returns_from_closes
+from trading_research_agents.readings.onchain import onchain_brief
+from trading_research_agents.readings.sentiment import sentiment_brief
 from trading_research_agents.store.snapshot import Snapshot
 from trading_research_agents.strategy.core import Bar
 
@@ -285,31 +285,31 @@ def reference_returns(snapshot: Snapshot) -> tuple[list[int], list[float]]:
     return times, returns_from_closes(times, closes)
 
 
-def context_brief(
-    role: str,
+def reading_brief(
+    reading: str,
     snapshot: Snapshot,
     *,
     series: Sequence[Series] = (),
     events: Sequence[Event] = (),
     at_ns: int | None = None,
 ) -> dict[str, Any]:
-    """The brief for one of the reading analysts: macro and news, on-chain, or sentiment.
+    """The figures of one reading: macro and news, on-chain, or sentiment.
 
     All three read series the operator mapped in, through the same engine and the same as-of rule,
-    so a value is never used before the moment it was published. A role with nothing declared still
-    gets a brief, and the brief says there was nothing: that is a state an operator must be able to
+    so a value is never used before the moment it was published. A reading with nothing declared
+    still has figures, and they say there was nothing: that is a state an operator must be able to
     see, not a gap to fill with a comfortable number.
     """
     moment = at_ns if at_ns is not None else _snapshot_time(snapshot)
     times, returns = reference_returns(snapshot)
-    if role == macro_analyst.ROLE:
+    if reading == MACRO:
         brief = macro_brief(series, at_ns=moment, times_ns=times, returns=returns, events=events)
-    elif role == onchain_analyst.ROLE:
+    elif reading == ONCHAIN:
         brief = onchain_brief(series, at_ns=moment, times_ns=times, returns=returns)
-    elif role == sentiment_analyst.ROLE:
+    elif reading == SENTIMENT:
         brief = sentiment_brief(series, at_ns=moment, times_ns=times, returns=returns, notes=events)
     else:
-        raise BriefError(f"{role} is not a reading analyst")
+        raise BriefError(f"{reading} is not a reading")
     brief["instrument"] = snapshot.instrument
     brief["declared_series"] = [s.name for s in series]
     _scope_rows(brief, series, snapshot.instrument)
@@ -344,74 +344,6 @@ def _scope_rows(brief: dict[str, Any], series: Sequence[Series], instrument: str
         row["asset"] = spec.asset
         if spec.asset != here:
             row["counts"] = str(spec.elsewhere)
-
-
-# What a declared threshold means for each reading role's own vocabulary. The operator declares
-# bullish and bearish; the role answers in its own words, and these are the same statement.
-DECLARED_AS = {
-    macro_analyst.ROLE: {"bullish": "risk-on", "bearish": "risk-off"},
-    onchain_analyst.ROLE: {"bullish": "accumulation", "bearish": "distribution"},
-    sentiment_analyst.ROLE: {"bullish": "positive", "bearish": "negative"},
-}
-
-
-def declared_state(role: str, brief: Mapping[str, Any]) -> dict[str, Any]:
-    """What the operator's own thresholds say, before any model reads the same figures.
-
-    This is the half of the answer that does not depend on a model: each series in the brief carries
-    the state of the operator's declared threshold, and when they all point the same way that is the
-    declared state. It is recorded beside what the model said, so an operator can see the two agree
-    or not, and so the gate that comes next can rest on the declaration rather than on a sentence.
-    """
-    rows = [
-        row for row in brief.get("series", []) if row.get("basis") == "operator-declared threshold"
-    ]
-    states = [str(row.get("state")) for row in rows]
-    named = sorted({s for s in states if s in ("bullish", "bearish")})
-    score = _net_strength(rows)
-    graded = bool(rows) and all(bool(row.get("graded")) for row in rows)
-    if not named:
-        return {"declared": "undeclared", "series_declared": len(states), "score": "0"}
-    if len(named) > 1:
-        # The gate still reads `mixed` and fails closed on it; conviction weighs the net.
-        return {
-            "declared": "mixed",
-            "states": named,
-            "series_declared": len(states),
-            "score": str(score),
-            "graded": graded,
-        }
-    return {
-        "declared": named[0],
-        "as_role_says_it": DECLARED_AS.get(role, {}).get(named[0]),
-        "series_declared": len(states),
-        "score": str(score),
-        "graded": graded,
-    }
-
-
-def _net_strength(rows: Sequence[Mapping[str, Any]]) -> Decimal:
-    """The mean signed strength of a role's declared series, between -1 and 1.
-
-    A row written before strengths existed carries only its word, and is read as the full +1 or
-    -1 it always meant. A series whose value is unknown says nothing and is left out.
-    """
-    found: list[Decimal] = []
-    for row in rows:
-        state = str(row.get("state"))
-        if state not in ("bullish", "bearish", "neutral"):
-            continue
-        raw = row.get("strength")
-        if raw is not None:
-            value = Decimal(str(raw))
-        else:
-            value = {"bullish": Decimal(1), "bearish": Decimal(-1)}.get(state, Decimal(0))
-        # A series about another asset is divided over the same count but weighed less, so a desk
-        # reading only another asset's chain hears a quieter voice, not the same one.
-        found.append(value * Decimal(str(row.get("counts", 1))))
-    if not found:
-        return Decimal(0)
-    return (sum(found, Decimal(0)) / len(found)).quantize(Decimal("0.001"))
 
 
 def _snapshot_time(snapshot: Snapshot) -> int:

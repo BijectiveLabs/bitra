@@ -1,4 +1,4 @@
-# External series for the macro and on-chain analysts. Any source: a vendor export, a central
+# External series for the macro and on-chain readings. Any source: a vendor export, a central
 # bank CSV, your own recorder. Name the file, the columns, the unit of time, and how long after
 # the observation the figure was actually published (publish_lag): a value is never used before
 # the moment it was known. Thresholds are yours, labelled as declared; the correlation of each

@@ -51,7 +51,7 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | `tra record status` | coverage, gaps and latency of the recording over the last day |
 | `tra data audit export.csv --mapping mapping.toml` | your own CSV or Parquet, through the same audit ([Your own data](/opensource/your-data)) |
 | `tra data pull BTCUSDT` | one live snapshot through the chains in `data.toml` |
-| `tra sources show`, `tra sources pull` | where the reading roles' series come from and how old they are; refresh them now |
+| `tra sources show`, `tra sources pull` | where the readings' series come from and how old they are; refresh them now |
 | `tra sources add macro us10y --from fred --id DGS10 --high bearish` | a series onto the shelf in one step: pulled now, its lines drawn from its own history |
 | `tra universe` | which perpetuals discovery finds on the venue now, and what each filter took out |
 | `tra runs verify` | every cycle's files against their hashes, and its briefs against its raw inputs |

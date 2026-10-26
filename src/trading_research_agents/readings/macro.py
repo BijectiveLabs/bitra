@@ -1,10 +1,10 @@
-"""What the macro analyst is handed: measured figures per series, never a raw file.
+"""The macro reading: measured figures per series the operator mapped in, never a raw file.
 
-For each series the operator mapped in: the value known at the time of the brief and when it
-became known, the state against the operator's declared threshold (labelled as declared), the
-correlation and lead-lag of the series against the instrument's returns on the operator's own
-data, with the sample size, and the scheduled events inside the horizon. The model reads a
-table of numbers with their n; it does not read a vendor's opinion of what a number means.
+For each series: the value known at the time of the reading and when it became known, the state
+against the operator's declared threshold (labelled as declared), the correlation and lead-lag of
+the series against the instrument's returns on the operator's own data, with the sample size, and
+the scheduled events inside the horizon. Every figure is a number with its n; nothing here is a
+vendor's opinion of what a number means.
 """
 
 from __future__ import annotations

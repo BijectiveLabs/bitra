@@ -16,9 +16,7 @@ from trading_research_agents.agents.auditor.tools import (
     usage_summary,
 )
 from trading_research_agents.agents.executor.tools import export_signals, rate_budget, size_for
-from trading_research_agents.agents.macro_analyst.tools import macro_brief, returns_from_closes
 from trading_research_agents.agents.market_screener.tools import screen_figures
-from trading_research_agents.agents.onchain_analyst.tools import onchain_brief
 from trading_research_agents.agents.risk_manager.tools import (
     alpha_decay,
     drawdown,
@@ -34,6 +32,8 @@ from trading_research_agents.data.series import Point, Series, SeriesSpec, Thres
 from trading_research_agents.envelope import Envelope
 from trading_research_agents.llm import FakeCompleter
 from trading_research_agents.llm.usage import BudgetLimits, MeteredCompleter, UsageLedger
+from trading_research_agents.readings.macro import macro_brief, returns_from_closes
+from trading_research_agents.readings.onchain import onchain_brief
 from trading_research_agents.strategy import Bar
 from trading_research_agents.trading import Ladder, load_strategy_config
 
@@ -441,7 +441,7 @@ def test_a_session_hands_the_roles_measured_briefs(tmp_path: Path, envelope: Env
         figures["proposed_regime"] in ("ranging", "trending", "illiquid", "volatile")
         and "regime_reason" in figures
     )
-    brief = json.loads((tmp_path / "out" / "macro_analyst-brief.json").read_text("utf-8"))
+    brief = json.loads((tmp_path / "out" / "macro-brief.json").read_text("utf-8"))
     assert (
         brief["series"][0]["basis"] == "operator-declared threshold"
         and brief["series"][0]["state"] == "bullish"

@@ -311,20 +311,3 @@ def test_a_failed_level_fetch_is_reported_and_the_recorder_carries_on() -> None:
     assert sink.stopped
     failed = [c for c in sink.calls if c[0] == "disconnect" and c[1] == "levels"]
     assert failed and "slow down" in failed[0][2]
-
-
-def test_a_silence_is_noticed_within_seconds_and_a_venue_quicker_interval_is_kept() -> None:
-    from trading_research_agents.market_data.venues.ccxt_stream import (
-        KEEPALIVE_MS,
-        quicken_keepalive,
-    )
-
-    slow = FakePro()
-    slow.streaming = {"keepAlive": 18_000, "maxPingPongMisses": 2}  # type: ignore[attr-defined]
-    quicken_keepalive(slow)
-    assert slow.streaming["keepAlive"] == KEEPALIVE_MS  # type: ignore[attr-defined]
-    quick = FakePro()
-    quick.streaming = {"keepAlive": 2_000}  # type: ignore[attr-defined]
-    quicken_keepalive(quick)
-    assert quick.streaming["keepAlive"] == 2_000  # type: ignore[attr-defined]
-    quicken_keepalive(FakePro())

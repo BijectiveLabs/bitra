@@ -5,13 +5,13 @@
 # different parts of the system: a score goes through the series engine and gets a threshold and a correlation, a
 # headline goes through the calendar reader and keeps its words.
 #
-# With nothing declared here, the sentiment analyst answers "not declared" rather than "neutral".
+# With nothing declared here, the sentiment reading says "not declared" rather than "neutral".
 # Those are different facts and the reports keep them apart.
 
 # Each entry takes the same fields as macro.toml, including max_age, fetch and refresh; see there.
 
 # Nothing is switched on yet. Uncomment an entry, put the file where it points, and the
-# sentiment analyst joins the roster on the next run.
+# sentiment reading joins the roster on the next run.
 
 # [[series]]
 # name = "fear_greed"

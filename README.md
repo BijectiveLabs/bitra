@@ -49,8 +49,8 @@ with its reason, so you can check afterwards what happened and why.
 It's an early release, so expect settings to change between versions. What works
 today: linear perpetuals, spot pairs (stock perpetuals and tokenized stocks among them) and
 prediction market outcomes through one order path, a universe of perpetuals found and measured by
-the system, a screener that picks where to look, the full autonomous cycle on live data, one analyst that proposes, three reading roles read by
-code, up to three validators, stops and
+the system, a screener that picks where to look, the full autonomous cycle on live data, one analyst that proposes, three readings of
+your own series computed by code, up to three validators, stops and
 targets the analyst names inside bounds you set, the gates that decide, sizing from your own rules,
 real orders on a venue's practice environment behind a mandate you sign, a risk manager that can
 only make the desk more careful, and two auditors that read the records. Under it, a market data
@@ -99,7 +99,7 @@ Three kinds of work, kept apart because they fail differently.
 
 | | Does | Never does | Today |
 |---|---|---|---|
-| **Code** | records the market, computes every figure, prices the round trip, applies your limits, sizes, sends one order with its exits, settles every replayed idea | guess, or carry a stale value forward as current | everything around the model call |
+| **Code** | records the market, computes every figure, reads your own series against your lines (the macro, on-chain and sentiment readings), prices the round trip, applies your limits, sizes, sends one order with its exits, settles every replayed idea | guess, or carry a stale value forward as current | everything around the model call |
 | **A reasoning model** | reads figures code computed and proposes a direction, a setup and its levels, citing the figures it used | compute a number, size a trade, touch an order or a key, loosen a limit | one call per cycle, the technical analyst; validators when you declare them |
 | **A fast typed judge** | turns dated text into typed events with probabilities, checks a model's claims against its brief, screens text for injected instructions | decide a direction from numbers, size, or reach an order | planned for 0.12 and 0.13, optional, behind a vendor-neutral port |
 
@@ -120,9 +120,11 @@ flowchart LR
     subgraph decide["decision: code around one model call"]
         direction TB
         features["features<br/>34 figures known at the bar's close"]
+        readings["readings: macro, on-chain, sentiment<br/>your series against your lines, no model"]
         analyst["technical analyst<br/>proposes, cites figures"]
         gates["gates<br/>cost, exits, confluence, conviction"]
     end
+    shelf[("sources/<br/>dated series you declare")]
     subgraph act["risk and execution: code"]
         direction TB
         risk["controls<br/>risk at the stop, daily loss, drawdown, kill switch"]
@@ -134,6 +136,7 @@ flowchart LR
     rest --> record
     rest --> bars
     store --> features
+    shelf --> readings --> gates
     features --> analyst --> gates --> risk --> order --> venues
     store --> arena
     features --> arena
@@ -144,7 +147,7 @@ path as the work below lands. Where it is going, in the order it is being built:
 
 | Release | Adds |
 |---|---|
-| 0.11 | the market data plane (`tra data bars`, `tra record`), the feature library, the arena; the reading roles stop asking a model |
+| 0.11 | the market data plane (`tra data bars`, `tra record`), the feature library, the arena; the macro, on-chain and sentiment analysts become readings that ask no model |
 | 0.12 | a forecast and a calibrator fitted on recorded outcomes, one expected-value decision in place of the vetoes, risk as its own gate; the typed judge for dated text |
 | 0.13 | the reasoning model woken only when the market gives it something to weigh, its claims checked by the judge; the v1 cycle retired once the arena shows the new one is better |
 
@@ -280,9 +283,9 @@ like it would have had to win just to break even:
 
 ![one cycle](assets/cycle.png)
 
-Then the data the cycle used and how old it was, the series the reading roles read, the stop and
+Then the data the cycle used and how old it was, the series the readings read, the stop and
 take profit it would have placed, and which agents answered. A cycle that goes further adds what
-each validator argued, how conviction weighed the analysts, the risk at the stop and the targets:
+each validator argued, how conviction weighed the voices, the risk at the stop and the targets:
 
 ![data, series, exits and agents](assets/one-cycle.png)
 
@@ -327,7 +330,7 @@ flowchart TD
     pick -- "none taken" --> held
     pick -- "taken" --> briefs
     briefs["the system writes the briefs<br/>each role sees only the figures its job needs"] --> readers
-    readers["reading roles, read by code<br/>macro, on-chain, sentiment against your lines"] --> tech
+    readers["readings, by code, no model<br/>macro, on-chain, sentiment against your lines"] --> tech
     tech["technical analyst: the one model call<br/>a direction, a confidence, a horizon"] --> price["the system prices the round trip<br/>fee, spread, impact, funding, slippage"]
     price --> exits{"the stop and the target<br/>the analyst's levels, held inside your bounds<br/>does the trade break even at half its kind winning?"}
     exits -- "no" --> refused
@@ -347,16 +350,16 @@ Who does what:
 | Role | Reads | Answers | Can never |
 |---|---|---|---|
 | technical analyst | candles, spread, funding, book imbalance, open interest change, and the regime on its timeframe and the higher ones you declare | a direction, a setup from a fixed list, a confidence, a horizon, and where its stop and target sit | size the trade, place a level outside your `[exit]` bounds, run a trend setup in a range, or fade a market that is not a measured range |
-| macro, on-chain and sentiment roles | dated rates and levels, chain and derivatives figures, scores and notes you curate | no answer: code reads each series against the lines you drew and gives a declared state | ask a model, or propose a direction |
+| macro, on-chain and sentiment readings (code, not agents) | dated rates and levels, chain and derivatives figures, scores and notes you curate | a declared state and a graded score: each series against the lines you drew | ask a model, or propose a direction |
 | market screener | what the system measured for each admitted instrument: move, spread, regime, volume, correlation to BTC | which instruments to take, in what order, citing their figures | add an instrument the system did not admit |
 | validators: pro and contra | the proposal and the figures behind it, each without the other's case | the strongest case for or against, as cited claims | see the other side's case, or cite a figure it wasn't given |
 | validator: neutral, as judge | the same, and both cases once code has checked every claim | support, oppose or abstain, the one verdict that counts | see the advocates' verdicts, or count claims instead of weighing them |
 | risk manager | what the run recorded: round trips, the losing streak, your limits, the alarm that woke it | continue, cut the size of new entries, pause instruments, or halt, each for a stated number of hours | loosen a limit you set, or add size |
 | technology and quant auditors | the cycles this desk recorded | findings and proposed changes | change anything |
 
-The macro, on-chain and sentiment roles read dated series you declare under `sources/`, by code and
-without a model: until 0.11 a model also labelled each of them, and no decision ever rested on that
-label, so the calls were retired. Each series
+The macro, on-chain and sentiment readings are code over dated series you declare under
+`sources/`, and ask no model: until 0.11 each was an analyst whose model labelled the same figures,
+no decision ever rested on that label, and the calls were retired. Each series
 is either a file you keep or a feed the desk refreshes itself (FRED, the Crypto Fear & Greed Index,
 or any paid vendor that answers JSON over https). `tra sources show` lists every series with where it
 came from and how old its last value is, and a value older than its `max_age` is shown as stale and
@@ -366,7 +369,7 @@ Which validators run is yours to declare. A vote never decides on its own: it mo
 the weight you give it (`[conviction].validator_weight`), and a stance counts for what it says beyond
 its assignment, since a pro that supports is expected to.
 
-Voices are allowed to disagree. Each reading role's view becomes a score between -1 and 1, computed from
+Voices are allowed to disagree. Each reading becomes a score between -1 and 1, computed from
 its own figures against the lines you drew, so a macro reading barely past its line counts as a small
 voice and one far past it counts as a big one. Conviction adds them up: agreement grows the size,
 opposition shrinks it in proportion, and only opposition that outweighs the case stops the trade. A
@@ -379,7 +382,7 @@ timeframes you list in `[run].context_intervals`, and it hands over what your ma
 this cycle as well. A setup that doesn't fit the regime, such as a trend trade in a sideways
 market, is refused by name; `[regime]` holds the lines.
 
-Everything after the analysts is arithmetic over numbers you declared. No model can place, cancel or
+Everything after the models answer is arithmetic over numbers you declared. No model can place, cancel or
 resize an order, read a file outside the project, or edit your configuration. [Agents](https://docs.bijectivelabs.dev/opensource/agents) has
 the full table of what an agent can reach, and [The cycle](https://docs.bijectivelabs.dev/opensource/cycle) walks through every step.
 
@@ -520,7 +523,7 @@ Once orders flow, three things look after the money, all of them the system's ow
 | an order may use only part of the free margin | a taker entry is a limit IOC within your slippage band, never a naked market order | one the venue's stop or take profit closed is written up with its real fees and funding |
 | a day's loss past your limit stops new entries | the stop and take profit go with the entry, so they outlive this process | the kill switch flattens everything before the desk stops |
 
-Who decides what, in one line each: **the analysts propose the direction, your risk rule sets the
+Who decides what, in one line each: **the analyst proposes the direction, your risk rule sets the
 size, you choose the leverage, and no model touches the last two.** Leverage never makes a trade
 bigger. It only decides how much margin the trade ties up and how far away liquidation sits.
 
@@ -618,7 +621,7 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | `tra record`, `tra record --once 30m` | order flow, the book, liquidations, derivatives and news kept while they happen, per `[record]` in `data.toml` |
 | `tra record status` | coverage, gaps and latency of the recording over the last day |
 | `tra runs verify --market data` | every market day file and hour part against its manifest |
-| `tra sources show`, `tra sources pull` | where the reading roles' series come from and how old they are; refresh them now |
+| `tra sources show`, `tra sources pull` | where the readings' series come from and how old they are; refresh them now |
 | `tra sources add macro us10y --from fred --id DGS10 --high bearish` | a series onto the shelf in one step: pulled now, its lines drawn from its own history |
 | `tra universe` | which perpetuals discovery finds on the venue now, and what each filter took out |
 | `tra runs verify` | every cycle's files against their hashes, and its briefs against its raw inputs |

@@ -1,6 +1,6 @@
-"""Refresh a declared series file from an HTTP JSON endpoint, so the analysts read today's figure.
+"""Refresh a declared series file from an HTTP JSON endpoint, so the readings see today's figure.
 
-The analysts still read only the local file; this writes it. A vendor is a `fetch` table in the
+The readings still read only the local file; this writes it. A vendor is a `fetch` table in the
 series declaration, so a free endpoint and a paid one are declared the same way.
 """
 

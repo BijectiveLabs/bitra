@@ -1,10 +1,11 @@
 """Agents that do not wait for each other, and a cycle that survives one of them failing.
 
-A model call is seconds of waiting on a socket. Four analysts in sequence is four times that
-wait for no reason, so they go out together on a small pool of threads. What makes this safe is
-not the concurrency but what happens around it: each answer is written the moment it arrives, a
-failure is recorded and does not touch the others, and the results come back in a fixed order no
-matter who finished first, so two runs of the same cycle read the same way.
+A model call is seconds of waiting on a socket. Two advocating validators in sequence is twice that
+wait for no reason, so calls that do not depend on each other go out together on a small pool of
+threads. What makes this safe is not the concurrency but what happens around it: each answer is
+written the moment it arrives, a failure is recorded and does not touch the others, and the results
+come back in a fixed order no matter who finished first, so two runs of the same cycle read the
+same way.
 
 This is the whole of our fan-out. It is deliberately not a framework: there is no graph to
 declare, no scheduler to configure, and the checkpoint is a file on disk.

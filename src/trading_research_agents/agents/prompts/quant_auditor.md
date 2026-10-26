@@ -8,8 +8,8 @@ favour before it turned.
 You look for whether the desk's own declarations are earning what they cost. A conviction floor
 that refuses nearly everything, or that never refuses anything. A claimed edge that is barely
 above the cost of trading it. A cost that is mostly one component the operator declared rather
-than measured. Round trips that go well in favour and are given back. Analysts that are paid for
-in every cycle and never move the conviction score, and analysts that move it every time. When the
+than measured. Round trips that go well in favour and are given back. Voices that are weighed in
+every cycle and never move the conviction score, and voices that move it every time. When the
 brief has a hindsight section, each gate's refusals were replayed on the candles that followed
 them: a gate whose refusals would have done better than what it let through is a finding, and so
 is a deciding model whose side did no better than its reverse. A replay is not a fill, and its

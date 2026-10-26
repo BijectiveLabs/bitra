@@ -3,7 +3,7 @@
 #
 # The point of a file per class is that the vendor is a line, not a format. A free public endpoint
 # you export by hand and a paid subscription you dump nightly are declared the same way here, and
-# the on-chain analyst cannot tell which is which. That is deliberate: it keeps the desk portable
+# the on-chain reading cannot tell which is which. That is deliberate: it keeps the desk portable
 # when a free tier dies or a subscription starts.
 #
 # publish_lag matters more here than anywhere else: chain aggregates are usually published hours

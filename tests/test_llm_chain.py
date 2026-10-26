@@ -90,7 +90,7 @@ def test_a_link_that_cannot_be_built_is_recorded_and_stepped_over() -> None:
         raise ProviderError("the anthropic SDK is not installed")
 
     chain = CompleterChain(
-        role="macro_analyst",
+        role="validator",
         links=[Link("anthropic:opus", missing), Link("groq:a", lambda: Model("groq:a"))],
     )
     assert ask(chain).model == "groq:a"

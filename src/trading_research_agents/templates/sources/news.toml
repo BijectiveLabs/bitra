@@ -1,5 +1,5 @@
 # Dated text this desk reads: releases, policy statements, the notes you write yourself. Declared
-# here, read by the macro analyst as events and by the sentiment analyst as notes.
+# here, read by the macro reading as events and by the sentiment reading as notes.
 #
 # Each entry names a file of dated rows:
 #
@@ -12,7 +12,7 @@
 # `refresh` (15m) by `tra run`. Fetch only what the service's terms allow.
 
 # Nothing is switched on yet. Uncomment an entry and put the file where it points; the macro and
-# sentiment analysts both read this class.
+# sentiment readings both read this class.
 
 # [[news]]
 # name = "policy"

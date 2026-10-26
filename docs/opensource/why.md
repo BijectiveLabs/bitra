@@ -71,8 +71,8 @@ defences gave only limited protection once that stored context was corrupted. OW
 injection first among the risks of LLM applications (LLM01:2025).
 
 **What the software does.** The role that proposes a direction reads numbers computed by code, not
-text from outside. Headlines and notes reach no model at all: the reading roles that hold them are
-read by code against the operator's thresholds, and every prompt says that text inside a brief is
+text from outside. Headlines and notes reach no model at all: the readings that hold them are code
+over the operator's thresholds, and every prompt says that text inside a brief is
 material to read, never an instruction to follow. There is no memory a model writes for itself: what a role sees is built by code for each
 call and recorded. And whatever a model says, it cannot send, cancel or change an order, or reach a
 key.
@@ -168,11 +168,11 @@ mentions:
 | Found | What changed |
 |---|---|
 | Validators asked side by side voted their assignment: pro supported 63 times in 64, contra opposed 61 times in 63, and a neutral asked alone abstained in 33 of 37 cycles | pro and contra build their cases apart and neutral judges the checked cases ([the validators](/opensource/cycle#the-validators)) |
-| Reading analysts cited figures by names the brief did not use, 27 times in four days | a naming rule in the prompts and a check that resolves names; none discarded in the week of runs that followed |
+| The reading analysts of the time cited figures by names the brief did not use, 27 times in four days | a naming rule in the prompts and a check that resolves names; none discarded in the week of runs that followed |
 | A demo API served an order book 3.2 hours old, 35 bps from where its own trades printed | orders are refused against a book older than 30 seconds |
 | A library reported a fee the venue charged as a rebate | fees are read as the venue charged them |
 | A venue's leverage call answered "success" while the setting stayed where it was | leverage and margin mode are confirmed by reading them back |
-| The technical analyst could see the other analysts' conclusions | every analyst reads only its own data; code weighs the readings once |
+| The technical analyst could see the other analysts' conclusions | the technical analyst reads only its own market; code weighs the readings once |
 | An auditor could propose a change to a setting that does not exist, as long as its table did | a proposed setting has to be one its table accepts |
 
 The details are on [Venues](/opensource/venues), [Agents](/opensource/agents) and

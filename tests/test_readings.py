@@ -1,4 +1,4 @@
-"""The analysts that only read: what they are handed, and what they say when handed nothing."""
+"""The readings: what code reads from the operator's series, and what it says when given nothing."""
 
 from __future__ import annotations
 
@@ -9,12 +9,13 @@ from typing import Any
 
 import pytest
 
-from trading_research_agents.agents import macro_analyst, onchain_analyst, sentiment_analyst
-from trading_research_agents.agents.briefs import BriefError, context_brief, reference_returns
-from trading_research_agents.agents.sentiment_analyst.tools import sentiment_brief
+from trading_research_agents.agents.briefs import BriefError, reading_brief, reference_returns
 from trading_research_agents.data.schema import Candle
 from trading_research_agents.data.series import load_all, read_events
 from trading_research_agents.data.sources import Fetched
+from trading_research_agents.readings import MACRO, ONCHAIN, SENTIMENT
+from trading_research_agents.readings.sentiment import sentiment_brief
+from trading_research_agents.readings.state import declared_state
 from trading_research_agents.store.snapshot import Snapshot
 
 NOW = 1_800_000_000.0
@@ -122,25 +123,25 @@ def test_the_sentiment_brief_carries_change_zscore_and_the_operator_threshold(
     assert [n["what"] for n in with_notes["notes"]] == ["a dated note"]
 
 
-def test_a_context_brief_is_built_for_each_reading_role(tmp_path: Path) -> None:
+def test_figures_are_read_for_each_reading(tmp_path: Path) -> None:
     path = series_file(tmp_path, "us10y", [("2026-09-20", "4.1"), ("2026-09-25", "4.4")])
     series = load_all(path)
     snap = snapshot()
     times, returns = reference_returns(snap)
     assert len(times) == 6 and len(returns) == 6 and returns[0] == 0.0
 
-    for role in (macro_analyst.ROLE, onchain_analyst.ROLE, sentiment_analyst.ROLE):
-        brief = context_brief(role, snap, series=series)
+    for name in (MACRO, ONCHAIN, SENTIMENT):
+        brief = reading_brief(name, snap, series=series)
         assert brief["instrument"] == "BTCUSDT" and brief["declared_series"] == ["us10y"]
         assert brief["series"][0]["value"] == "4.4"
         # The correlation is measured on the operator's own closes, and carries its n.
         measured = brief["series"][0]["correlation_measured"]
         assert measured is None or "n" in measured
 
-    with pytest.raises(BriefError, match="not a reading analyst"):
-        context_brief("technical_analyst", snap)
+    with pytest.raises(BriefError, match="not a reading"):
+        reading_brief("technical_analyst", snap)
     with pytest.raises(BriefError, match="snapshot is empty"):
-        context_brief(macro_analyst.ROLE, Snapshot(cycle="c", instrument="BTCUSDT"))
+        reading_brief(MACRO, Snapshot(cycle="c", instrument="BTCUSDT"))
 
 
 def test_a_role_may_run_on_its_own_model(tmp_path: Path) -> None:
@@ -181,7 +182,7 @@ def test_a_role_may_run_on_its_own_model(tmp_path: Path) -> None:
         load_strategy_config(path)
 
 
-def test_the_roster_can_be_named_in_the_config(tmp_path: Path) -> None:
+def test_the_readings_can_be_named_in_the_config(tmp_path: Path) -> None:
     from trading_research_agents.trading import load_strategy_config
     from trading_research_agents.trading.config import ConfigError
 
@@ -197,32 +198,32 @@ def test_the_roster_can_be_named_in_the_config(tmp_path: Path) -> None:
         + "token_budget = 100000\nmax_calls_per_hour = 100\nmin_interval_s = 0\n"
     )
     path = tmp_path / "strategy.toml"
-    path.write_text(
-        base + 'analysts = ["technical_analyst", "sentiment_analyst"]\n',
-        "utf-8",
-    )
+    path.write_text(base + 'readings = ["sentiment"]\n', "utf-8")
     cfg = load_strategy_config(path)
-    assert cfg.agents is not None
-    assert cfg.agents.analysts == ("technical_analyst", "sentiment_analyst")
+    assert cfg.agents is not None and cfg.agents.readings == ("sentiment",)
 
-    # Left out, the roster is decided by which sources are there, not by this field.
+    # Left out, the readings are decided by which sources are there, not by this field.
     path.write_text(base, "utf-8")
-    assert load_strategy_config(path).agents.analysts == ()  # type: ignore[union-attr]
+    assert load_strategy_config(path).agents.readings == ()  # type: ignore[union-attr]
+
+    # The names a desk wrote before 0.11 are read as the readings they became.
+    path.write_text(base + 'readings = ["sentiment_analyst"]\n', "utf-8")
+    assert load_strategy_config(path).agents.readings == ("sentiment",)  # type: ignore[union-attr]
+    path.write_text(base + 'analysts = ["technical_analyst", "macro_analyst"]\n', "utf-8")
+    assert load_strategy_config(path).agents.readings == ("macro",)  # type: ignore[union-attr]
 
     for body, message in (
-        ('analysts = ["macro_analyst"]\n', "it is the role that decides"),
-        ('analysts = ["technical_analyst", "poet"]\n', "cannot be asked"),
-        ('analysts = "technical_analyst"\n', "a list of role names"),
-        ('analysts = ["technical_analyst", "technical_analyst"]\n', "names a role twice"),
+        ('readings = ["poet"]\n', "is not one of"),
+        ('readings = "macro"\n', "a list of reading names"),
+        ('readings = ["macro", "macro_analyst"]\n', "names macro twice"),
+        ('analysts = ["technical_analyst", "poet"]\n', "is not one of"),
     ):
         path.write_text(base + body, "utf-8")
         with pytest.raises(ConfigError, match=message):
             load_strategy_config(path)
 
 
-def test_code_reads_the_declared_state_beside_whatever_the_model_says(tmp_path: Path) -> None:
-    from trading_research_agents.agents.briefs import declared_state
-
+def test_code_reads_the_declared_state_from_the_operator_thresholds(tmp_path: Path) -> None:
     path = series_file(
         tmp_path,
         "venue_net_flow",
@@ -230,22 +231,22 @@ def test_code_reads_the_declared_state_beside_whatever_the_model_says(tmp_path: 
         threshold="{ bearish_above = 1500, bullish_below = 0 }",
     )
     snap = snapshot()
-    brief = context_brief(onchain_analyst.ROLE, snap, series=load_all(path))
-    read = declared_state(onchain_analyst.ROLE, brief)
-    assert read["declared"] == "bearish" and read["as_role_says_it"] == "distribution"
+    brief = reading_brief(ONCHAIN, snap, series=load_all(path))
+    read = declared_state(ONCHAIN, brief)
+    assert read["declared"] == "bearish" and read["in_its_words"] == "distribution"
     assert read["series_declared"] == 1
 
-    # The same declaration, said in each role's own words.
-    assert declared_state(macro_analyst.ROLE, brief)["as_role_says_it"] == "risk-off"
-    assert declared_state(sentiment_analyst.ROLE, brief)["as_role_says_it"] == "negative"
+    # The same declaration, said in each reading's own words.
+    assert declared_state(MACRO, brief)["in_its_words"] == "risk-off"
+    assert declared_state(SENTIMENT, brief)["in_its_words"] == "negative"
 
     # A series with no threshold declares nothing, and that is its own answer.
-    plain = context_brief(
-        onchain_analyst.ROLE,
+    plain = reading_brief(
+        ONCHAIN,
         snap,
         series=load_all(series_file(tmp_path, "supply", [("2026-09-20", "10")])),
     )
-    assert declared_state(onchain_analyst.ROLE, plain)["declared"] == "undeclared"
+    assert declared_state(ONCHAIN, plain)["declared"] == "undeclared"
 
     # Two declarations pointing different ways is `mixed`, never quietly one of them.
     both = {
@@ -254,11 +255,11 @@ def test_code_reads_the_declared_state_beside_whatever_the_model_says(tmp_path: 
             {"state": "bearish", "basis": "operator-declared threshold"},
         ]
     }
-    assert declared_state(onchain_analyst.ROLE, both)["declared"] == "mixed"
+    assert declared_state(ONCHAIN, both)["declared"] == "mixed"
 
 
 def test_a_series_about_another_asset_counts_for_less_on_this_one(tmp_path: Path) -> None:
-    from trading_research_agents.agents.briefs import base_of, declared_state
+    from trading_research_agents.agents.briefs import base_of
 
     path = series_file(
         tmp_path,
@@ -274,15 +275,15 @@ def test_a_series_about_another_asset_counts_for_less_on_this_one(tmp_path: Path
     assert base_of("BTC-USDT-SWAP") == "BTC" and base_of("BTC/USDC:USDC") == "BTC"
     assert base_of("BTC_USDT") == "BTC" and base_of("ZECUSDC") == "ZEC"
 
-    own = context_brief(onchain_analyst.ROLE, snapshot(), series=series)
+    own = reading_brief(ONCHAIN, snapshot(), series=series)
     assert own["series"][0]["asset"] == "BTC" and "counts" not in own["series"][0]
 
     other = snapshot()
     other.instrument = "ZECUSDT"
-    away = context_brief(onchain_analyst.ROLE, other, series=series)
+    away = reading_brief(ONCHAIN, other, series=series)
     assert away["series"][0]["counts"] == "0.25"
-    here = Decimal(declared_state(onchain_analyst.ROLE, own)["score"])
-    there = Decimal(declared_state(onchain_analyst.ROLE, away)["score"])
+    here = Decimal(declared_state(ONCHAIN, own)["score"])
+    there = Decimal(declared_state(ONCHAIN, away)["score"])
     assert here != 0 and there == (here * Decimal("0.25")).quantize(Decimal("0.001"))
 
 
@@ -303,8 +304,6 @@ def test_a_threshold_grades_how_far_past_its_line_a_value_sits() -> None:
 
 
 def test_the_declared_state_carries_the_net_graded_score() -> None:
-    from trading_research_agents.agents.briefs import declared_state
-
     rows = {
         "series": [
             {
@@ -321,7 +320,7 @@ def test_the_declared_state_carries_the_net_graded_score() -> None:
             },
         ]
     }
-    said = declared_state(macro_analyst.ROLE, rows)
+    said = declared_state(MACRO, rows)
     assert said["declared"] == "bullish" and said["score"] == "0.104" and said["graded"] is True
 
     # Opposite words stay `mixed` for the gate, and the net is what conviction weighs.
@@ -331,5 +330,12 @@ def test_the_declared_state_carries_the_net_graded_score() -> None:
             {"state": "bearish", "strength": "-0.2", "basis": "operator-declared threshold"},
         ]
     }
-    mixed = declared_state(onchain_analyst.ROLE, both)
+    mixed = declared_state(ONCHAIN, both)
     assert mixed["declared"] == "mixed" and mixed["score"] == "0.300"
+
+
+def test_the_config_names_the_same_readings_the_package_reads() -> None:
+    from trading_research_agents.readings import READINGS, RETIRED
+    from trading_research_agents.trading import config
+
+    assert config.READINGS == READINGS and config.RETIRED_READERS == RETIRED

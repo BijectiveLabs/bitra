@@ -1,4 +1,4 @@
-"""What the on-chain analyst is handed: the same series engine, with flow and z-score figures.
+"""The on-chain reading: the same series engine, with flow and z-score figures.
 
 An on-chain series (exchange net flow, supply held, transaction counts) arrives through the
 same column map as a macro one, and the brief carries the same basis line: values known at
