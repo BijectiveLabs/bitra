@@ -60,7 +60,7 @@ _ALLOWED: dict[str, set[str]] = {
 BENEATH = {"records", "extras"}
 ALLOWED = {name: deps | (BENEATH - {name}) for name, deps in _ALLOWED.items()}
 
-LLM_CLIENTS = {"anthropic", "openai", "langchain", "langgraph", "litellm", "ollama"}
+LLM_CLIENTS = {"anthropic", "openai", "langchain", "langgraph", "litellm", "ollama", "typesafe"}
 
 # Plugin directories are the only places a venue may be named in the package. Templates are
 # copies of examples/ that `tra init` writes into a project; they are never imported.
