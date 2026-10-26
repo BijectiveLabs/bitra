@@ -216,3 +216,14 @@ def test_points_for_an_hour_already_written_are_merged_not_lost(tmp_path: Path) 
     rec.tick(T0 + HOUR + 11 * M)
     assert len(read_deriv_range(tmp_path, "bybit", "BTCUSDT", DAY, DAY)) == 2
     assert not [e for e in events(tmp_path) if e["event"] == "late_points"]
+
+
+def test_parts_left_by_an_earlier_run_are_compacted(tmp_path: Path) -> None:
+    earlier = recorder(tmp_path, T0 + 22 * HOUR)
+    run_trades(earlier, T0 + 22 * HOUR, 10)
+    earlier.stop(T0 + 22 * HOUR + 10 * M + 1)
+    assert part_file(tmp_path, "bybit", "BTCUSDT", FLOW, DAY, 22).is_file()
+    later = recorder(tmp_path, T0 + DAY_NS + 2 * HOUR)
+    later.tick(T0 + DAY_NS + 2 * HOUR + 1)
+    assert day_file(tmp_path, "bybit", "BTCUSDT", FLOW, DAY).is_file()
+    assert not part_file(tmp_path, "bybit", "BTCUSDT", FLOW, DAY, 22).exists()

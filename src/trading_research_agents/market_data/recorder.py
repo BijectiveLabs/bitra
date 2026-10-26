@@ -38,6 +38,7 @@ from trading_research_agents.market_data.tracks import (
 from trading_research_agents.records import append_line
 
 EVENTS = "events.jsonl"
+MINUTE_STREAMS = ("flow_1m", "book_1m", "deriv")
 SKEW_MS = 1000
 # Derivatives points and headlines are kept open this long past their hour: a venue publishes an
 # open-interest bucket after it closes, and a poll can be late.
@@ -94,6 +95,7 @@ class Recorder:
         self.latencies: dict[str, list[int]] = {}
         self._latency_minute = now_ns // NS_PER_MINUTE
         self.days: set[tuple[str, str, str, date]] = set()
+        self._find_leftovers(now_ns)
         self._mark_start(now_ns)
         self._event(now_ns, "started", markets=list(markets), streams=list(config.streams))
 
@@ -243,6 +245,23 @@ class Recorder:
             if points.late_after_writing:
                 self._event(now_ns, "late_points", instrument=name, count=points.late_after_writing)
                 points.late_after_writing = 0
+
+    def _find_leftovers(self, now_ns: int) -> None:
+        """Hour parts of closed days that an earlier run left, so the first tick compacts them."""
+        today = day_of(now_ns)
+        found = [(self.venue, name, s) for name in self.config.markets for s in MINUTE_STREAMS]
+        found += [(TEXT_VENUE, feed, "text") for feed in self.texts]
+        for venue, name, stream in found:
+            folder = self.root / "market" / venue / name / stream
+            if not folder.is_dir():
+                continue
+            for child in folder.iterdir():
+                try:
+                    day = date.fromisoformat(child.name)
+                except ValueError:
+                    continue
+                if child.is_dir() and day < today:
+                    self.days.add((venue, name, stream, day))
 
     def _mark_start(self, now_ns: int) -> None:
         hour = now_ns - now_ns % HOUR_NS
