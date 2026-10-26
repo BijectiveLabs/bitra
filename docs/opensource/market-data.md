@@ -82,7 +82,8 @@ What it does while it runs:
 - **Text** from the news feeds you declare is fetched on each feed's own refresh, and every headline
   is kept once, at the moment the recorder first saw it. Its publisher's time is kept beside it and
   never used to decide what was known, because a headline can be dated earlier than anyone could
-  read it.
+  read it. The typed judge in `[judge]` reads them into typed events for the text features
+  ([The typed judge](/opensource/llm#the-typed-judge)).
 - **Hours** are written as parts once they can no longer change: three minutes after the hour for
   flow and the book, five minutes after it for derivatives and text, since a venue publishes a
   bucket after it closes. A closed day is compacted into one file once every stream has written

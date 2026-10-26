@@ -101,7 +101,7 @@ Three kinds of work, kept apart because they fail differently.
 |---|---|---|---|
 | **Code** | records the market, computes every figure, reads your own series against your lines (the macro, on-chain and sentiment readings), prices the round trip, applies your limits, sizes, sends one order with its exits, settles every replayed idea | guess, or carry a stale value forward as current | everything around the model call |
 | **A reasoning model** | reads figures code computed and proposes a direction, a setup and its levels, citing the figures it used | compute a number, size a trade, touch an order or a key, loosen a limit | one call per cycle, the technical analyst; validators when you declare them |
-| **A fast typed judge** | turns dated text into typed events with probabilities, checks a model's claims against its brief, screens text for injected instructions | decide a direction from numbers, size, or reach an order | planned for 0.12 and 0.13, optional, behind a vendor-neutral port |
+| **A fast typed judge** | turns dated text into typed events with probabilities, screens text for instructions to a machine, and from 0.13 checks a model's claims against its brief | decide a direction from numbers, size, or reach an order | optional, behind a vendor-neutral port (`[judge]`): the archived headlines into the text features |
 
 ```mermaid
 flowchart LR
@@ -119,7 +119,8 @@ flowchart LR
     end
     subgraph decide["decision: code around one model call"]
         direction TB
-        features["features<br/>34 figures known at the bar's close"]
+        judge["typed judge, optional<br/>headlines into typed events"]
+        features["features<br/>41 figures known at the bar's close"]
         readings["readings: macro, on-chain, sentiment<br/>your series against your lines, no model"]
         analyst["technical analyst<br/>proposes, cites figures"]
         gates["gates<br/>cost, exits, confluence, conviction"]
@@ -136,6 +137,7 @@ flowchart LR
     rest --> record
     rest --> bars
     store --> features
+    store --> judge --> features
     shelf --> readings --> gates
     features --> analyst --> gates --> risk --> order --> venues
     store --> arena

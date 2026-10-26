@@ -30,7 +30,7 @@ trading_research_agents/
                live venue through ccxt in trading/venues, controls, canary caps,
                ladder, the runtime                                                     -> everything above
   llm/         language-model providers, fallback chains, usage ledger, response
-               cache                                                            depends on nothing
+               cache; the typed judge port and its adapter                      depends on nothing
   store/       snapshots and cycle directories                                  -> everything above, llm
   surface/     the gates as callable tools, read tools and tightening actions
                (listed on the MCP page); shared by mcp and agents                -> everything above
@@ -44,6 +44,7 @@ trading_research_agents/
                compaction, the recorder; ccxt only in market_data/venues        -> data
   features/    figures computed at a bar's close from what was known then:
                price, path, order flow, derivatives, cross-asset                -> market_data, execution
+  perception/  archived headlines read by the typed judge into text events     -> llm, market_data, features
   evaluation/  views, triple-barrier settlement with the desk's costs,
                baselines, the arena and its records                             -> features, market_data, data, envelope, execution
   cli/         the `tra` command                                                 -> everything
@@ -157,7 +158,8 @@ flowchart TB
     archive[("data/market<br/>day files and hour parts,<br/>a manifest with sha256 beside each")]
     compact["compaction<br/>a closed day joined, verified, parts removed;<br/>unseen hours written as missing"]
     readers["readers and the BarFeed port<br/>a file whose bytes changed is refused"]
-    features["features<br/>34 figures known at the bar's close"]
+    judge["typed judge, optional<br/>headlines into typed events"]
+    features["features<br/>41 figures known at the bar's close"]
     arena["the arena<br/>replay, settlement, statistics"]
     ws --> flow
     ws --> book
@@ -173,6 +175,7 @@ flowchart TB
     hist --> archive
     archive --> compact --> archive
     archive --> readers --> features --> arena
+    readers --> judge --> features
 ```
 
 What each failure means, and what the plane does about it:
@@ -207,7 +210,7 @@ flowchart LR
     subgraph next["the decision being built (0.12 and 0.13)"]
         direction TB
         f2["features, by code"] --> fc["forecast and calibrator<br/>a probability fitted on outcomes"]
-        j2["typed judge<br/>dated text into events,<br/>claims checked"] -.-> fc
+        j2["typed judge<br/>text events today,<br/>claims checked from 0.13"] -.-> fc
         s2["reasoning model<br/>woken only when worth it"] -.-> fc
         fc --> ev["one expected-value decision<br/>p x take - (1 - p) x stop - cost"]
     end
