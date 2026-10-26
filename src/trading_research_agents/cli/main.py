@@ -4525,8 +4525,11 @@ def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], l
     for role, said in sorted(result.context.items()):
         if role.startswith("validator"):
             continue
-        state = said.get("regime") or said.get("signal") or said.get("state") or said.get("error")
-        lines.append(f"{role.replace('_analyst', ''):<10} {state}: {said.get('reason', '')}")
+        declared = said.get("declared_state") or {}
+        word = declared.get("declared", "undeclared")
+        spoken = declared.get("as_role_says_it")
+        state = f"{word} ({spoken})" if spoken else word
+        lines.append(f"{role.replace('_analyst', ''):<10} read by code: {state}")
     if result.analyst is not None:
         lines.append(
             f"technical: {result.analyst.target} on {result.analyst.setup} at "
