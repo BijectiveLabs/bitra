@@ -6,7 +6,8 @@ from decimal import Decimal
 from typing import Any
 
 from trading_research_agents.trading.capital import read_account
-from trading_research_agents.trading.dispatch import VenueHand, _client_id, key_hint
+from trading_research_agents.trading.dispatch import VenueHand
+from trading_research_agents.trading.hand_state import _client_id, key_hint
 from trading_research_agents.trading.venues.margin import leverage_params, route
 
 

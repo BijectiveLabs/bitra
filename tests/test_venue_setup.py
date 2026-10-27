@@ -12,7 +12,8 @@ from trading_research_agents.agents.progress import Step
 from trading_research_agents.cli import tui_cycle
 from trading_research_agents.cli.venue_info import venue_setup
 from trading_research_agents.data.sources.capability import Capability
-from trading_research_agents.trading.dispatch import DispatchError, VenueHand, credentials_for
+from trading_research_agents.trading.dispatch import VenueHand
+from trading_research_agents.trading.hand_state import DispatchError, credentials_for
 
 # ccxt's own attribute name, mixed case and all.
 Passphrase = SimpleNamespace(

@@ -25,7 +25,8 @@ from trading_research_agents.execution.mandate import (
     digest,
     signed_in,
 )
-from trading_research_agents.trading.dispatch import DispatchError, VenueHand, hand_for
+from trading_research_agents.trading.dispatch import VenueHand, hand_for
+from trading_research_agents.trading.hand_state import DispatchError
 
 # What a cycle hands the venue: the size the conviction rule chose, the touch it priced on, and the
 # exits code computed from [exit]. Everything the hand needs, and nothing a model wrote.
@@ -727,7 +728,7 @@ def test_a_venue_that_raises_for_no_position_is_read_as_flat() -> None:
 
 
 def test_the_client_order_id_is_letters_and_digits_within_thirty_two() -> None:
-    from trading_research_agents.trading.dispatch import _client_id
+    from trading_research_agents.trading.hand_state import _client_id
 
     made = _client_id({"at": "2026-10-07T16-30-47Z-1000PEPEUSDT", "instrument": "1000PEPEUSDT"})
     assert made == "tra20261007T163047Z1000PEPEUSDT"[:32] and made.isalnum() and len(made) <= 32

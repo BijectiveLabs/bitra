@@ -238,7 +238,7 @@ class _DispatchKeys:
 
     @property
     def env_keys(self) -> tuple[str, ...]:
-        from trading_research_agents.trading.dispatch import credentials_for
+        from trading_research_agents.trading.hand_state import credentials_for
 
         return tuple(credentials_for(self.venue).values())
 
@@ -246,7 +246,7 @@ class _DispatchKeys:
 def _venue_to_read(cfg: Any, env: Mapping[str, str]) -> bool:
     """Whether `tra keys` checks the execution venue: in venue mode always, in sandbox once its
     keys are set, so they can be proved before venue mode is turned on."""
-    from trading_research_agents.trading.dispatch import credentials_for
+    from trading_research_agents.trading.hand_state import credentials_for
 
     if cfg.execution.places_orders:
         return True

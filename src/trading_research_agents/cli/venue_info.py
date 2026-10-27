@@ -26,7 +26,7 @@ def show_venues(args: argparse.Namespace) -> int:
         CapabilityError,
         capability_of,
     )
-    from trading_research_agents.trading.dispatch import credentials_for
+    from trading_research_agents.trading.hand_state import credentials_for
 
     names = list(args.venue)
     if not names and args.config.is_file():

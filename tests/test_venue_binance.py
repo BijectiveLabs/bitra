@@ -10,7 +10,8 @@ import pytest
 
 from test_mandate import LONG, FakeExchange
 from trading_research_agents.trading.capital import read_account
-from trading_research_agents.trading.dispatch import DispatchError, VenueHand, leverage_number
+from trading_research_agents.trading.dispatch import VenueHand
+from trading_research_agents.trading.hand_state import DispatchError, leverage_number
 from trading_research_agents.trading.venues.margin import route
 
 

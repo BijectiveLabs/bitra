@@ -96,7 +96,7 @@ def _gate_lines(
             else "execution: signals; intents are written for your own executor"
         )
     else:
-        from trading_research_agents.trading.dispatch import credentials_for, key_hint
+        from trading_research_agents.trading.hand_state import credentials_for, key_hint
 
         keys = tuple(credentials_for(mandate.venue).values())
         stops = blocking(

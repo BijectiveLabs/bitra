@@ -110,7 +110,7 @@ class _Desk:
 def _open_desk(args: argparse.Namespace, cfg: Any) -> _Desk:
     """The desk's data, its declared sources, its order log and its metered models."""
     from trading_research_agents.llm.usage import UsageLedger
-    from trading_research_agents.trading.dispatch import OrderRate
+    from trading_research_agents.trading.hand_state import OrderRate
 
     mode = args.mode or cfg.execution.mode
     data_cfg = _desk_data(args.data_config, cfg, args.mode or cfg.execution.mode)
