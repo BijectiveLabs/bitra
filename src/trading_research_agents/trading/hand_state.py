@@ -75,6 +75,24 @@ class DispatchError(ValueError):
     """The order cannot be sent as configured, or the venue refused it."""
 
 
+# An order whose create call failed without the venue saying no: it may be on the book.
+UNKNOWN = "UNKNOWN"
+# Reads of the venue's orders after an ambiguous create, one second apart.
+READ_BACKS = 3
+
+
+def refused_by_venue(exc: BaseException) -> bool:
+    """Whether a failed create is the venue's own refusal, so the order never entered the book.
+
+    Read by class name rather than by import, so the rule holds with or without ccxt installed.
+    ccxt raises an ExchangeError when the venue answered no and a NetworkError when no answer
+    arrived. A duplicate client id is a refusal that proves the order already exists, and anything
+    else may have failed after the request left; neither says the book is untouched.
+    """
+    names = {kind.__name__ for kind in type(exc).__mro__}
+    return "ExchangeError" in names and not names & {"NetworkError", "DuplicateOrderId"}
+
+
 @dataclass
 class OrderRate:
     """The orders the desk sent in the last minute, against [controls].max_orders_per_minute."""

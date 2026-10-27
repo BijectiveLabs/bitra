@@ -994,6 +994,25 @@ def test_a_venue_that_refuses_leaves_the_decision_on_disk(
     assert any("venue: RuntimeError: insufficient margin" in r for r in result.refusals)
     where = Path(str(result.path))
     assert (where / "intents.jsonl").read_text("utf-8").strip()
+    assert json.loads((where / "placed.json").read_text("utf-8"))["sent"] is False
+
+
+def test_an_unknown_send_is_written_down_and_holds_its_instrument(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    from trading_research_agents.execution.unknown import blocking
+
+    def hand(intent: Any) -> dict[str, Any]:
+        return {"sent": None, "status": "UNKNOWN", "client_order_id": "tra9", "unknown": "lost"}
+
+    cfg, _, _ = cycle_config(tmp_path, envelope, [analyst_answer()], mode="venue", place=hand)
+    result = run_cycle(cfg)
+
+    assert result.placed is not None and result.placed["status"] == "UNKNOWN"
+    assert any(r.startswith("venue: order state UNKNOWN") for r in result.refusals)
+    where = Path(str(result.path))
+    assert json.loads((where / "placed.json").read_text("utf-8"))["client_order_id"] == "tra9"
+    assert "tra9" in blocking(cfg.root, cfg.instrument)
 
 
 class Stopped:

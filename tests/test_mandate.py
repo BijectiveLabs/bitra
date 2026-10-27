@@ -475,16 +475,95 @@ def test_an_order_still_working_stops_a_second_decision_on_the_same_position() -
     assert venue.orders == []
 
 
-def test_a_venue_failure_is_one_kind_of_error() -> None:
-    hand = VenueHand(
+class ExchangeError(Exception):
+    """ccxt's root of every answer in which the venue said no."""
+
+
+class InsufficientFunds(ExchangeError):  # noqa: N818 - named as ccxt names it
+    pass
+
+
+class DuplicateOrderId(ExchangeError):  # noqa: N818 - named as ccxt names it
+    pass
+
+
+class NetworkError(Exception):
+    """ccxt's root of every failure in which the venue's answer never arrived."""
+
+
+class RequestTimeout(NetworkError):  # noqa: N818 - named as ccxt names it
+    pass
+
+
+def sending_hand(venue: FakeExchange) -> VenueHand:
+    return VenueHand(
         venue="bybit",
         symbol="BTC/USDT:USDT",
         max_notional=Decimal(2000),
         keys=("BYBIT_API_KEY", "BYBIT_API_SECRET"),
-        client=FakeExchange(RuntimeError("insufficient margin")),
+        client=venue,
+        sleep=lambda s: None,
     )
-    with pytest.raises(DispatchError, match="RuntimeError: insufficient margin"):
+
+
+def test_a_venue_that_says_no_is_an_error_and_nothing_is_read_back() -> None:
+    venue = FakeExchange(InsufficientFunds("insufficient margin"))
+    hand = sending_hand(venue)
+    with pytest.raises(DispatchError, match="InsufficientFunds: insufficient margin"):
         hand(LONG)
+    assert len(venue.orders) == 1
+
+
+class Slow(FakeExchange):
+    """Takes the order, then the answer is lost on the way back."""
+
+    def __init__(self, error: Exception, *, lands: bool) -> None:
+        super().__init__(error)
+        self.lands = lands
+        self.reads = 0
+
+    def fetch_open_orders(self, symbol: str) -> list[dict[str, Any]]:
+        if not self.orders:
+            return []
+        self.reads += 1
+        if not self.lands:
+            return []
+        sent = self.orders[-1]["params"]["clientOrderId"]
+        return [
+            {
+                "id": "order-9",
+                "clientOrderId": sent,
+                "status": "closed",
+                "filled": 0.01,
+                "average": 100000.5,
+            }
+        ]
+
+
+def test_a_timeout_is_not_a_failure_and_the_order_is_found_by_its_client_id() -> None:
+    venue = Slow(RequestTimeout("bybit did not answer in 10s"), lands=True)
+    hand = sending_hand(venue)
+    placed = hand(LONG)
+    assert placed["sent"] is True and placed["order_id"] == "order-9"
+    assert placed["recovered"].startswith("RequestTimeout: bybit did not answer")
+    assert len(venue.orders) == 1
+    assert hand(LONG)["refused"] == "this hand has already sent its one order"
+
+
+def test_an_order_not_found_after_a_timeout_is_unknown_never_failed_and_never_resent() -> None:
+    venue = Slow(RequestTimeout("bybit did not answer in 10s"), lands=False)
+    hand = sending_hand(venue)
+    placed = hand(LONG)
+    assert placed["sent"] is None and placed["status"] == "UNKNOWN"
+    assert placed["client_order_id"] == venue.orders[0]["params"]["clientOrderId"]
+    assert "reconciled" in placed["unknown"] and venue.reads == 3
+    assert len(venue.orders) == 1 and hand.sent_count == 1
+
+
+def test_an_unclassified_error_and_a_duplicate_id_are_read_back_not_trusted() -> None:
+    for error in (RuntimeError("socket closed"), DuplicateOrderId("order link id exists")):
+        venue = Slow(error, lands=True)
+        assert sending_hand(venue)(LONG)["sent"] is True
 
 
 def test_a_hand_needs_a_cap_and_the_keys_come_from_the_environment() -> None:

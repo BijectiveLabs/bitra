@@ -297,6 +297,8 @@ def _intent_lines(result: Any, mode: str) -> list[str]:
             lines.append(f"  timing: {execution_timing(placed)}")
             # Sent is not filled. What became of the order is the line an operator acts on.
             lines.append(f"  outcome: {order_outcome(placed)}")
+        elif placed.get("status") == "UNKNOWN":
+            lines.append(f"order state UNKNOWN: {placed.get('unknown')}")
         elif placed.get("refused"):
             lines.append(f"not placed: {placed['refused']}")
     return lines

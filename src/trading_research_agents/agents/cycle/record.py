@@ -13,6 +13,7 @@ from trading_research_agents.agents.progress import (
     RUNNING,
     announce,
 )
+from trading_research_agents.execution.unknown import record_unknown
 from trading_research_agents.llm.usage import BudgetSpentError
 from trading_research_agents.records import (
     append_index,
@@ -28,6 +29,7 @@ from trading_research_agents.store.snapshot import (
     INPUTS,
     inputs_record,
 )
+from trading_research_agents.trading.hand_state import UNKNOWN
 
 
 def _send(cfg: CycleConfig, where: CycleDir, result: CycleResult) -> CycleResult:
@@ -43,23 +45,40 @@ def _send(cfg: CycleConfig, where: CycleDir, result: CycleResult) -> CycleResult
             result.refusals.append(f"venue: {exc.__class__.__name__}: {exc}")
             announce(cfg.watch, "venue", FAILED, exc.__class__.__name__)
         else:
-            if result.placed.get("sent"):
-                announce(
-                    cfg.watch, "venue", DONE, f"order {result.placed.get('order_id') or 'sent'}"
-                )
-            else:
-                said = str(result.placed.get("refused") or result.placed.get("error") or "not sent")
-                result.refusals.append(f"venue: not sent, {said}")
-                announce(cfg.watch, "venue", REFUSED, said)
-            write_json(where.path.joinpath("placed.json"), result.placed, durable=True)
-            if result.placed.get("interrupted"):
-                result.stopped_by = f"interrupted at the venue: {result.placed.get('note')}"
-                _finish(cfg, where, result)
-                # The record is on disk and the order is off the book; now the operator gets the
-                # stop they asked for, instead of a scheduler that carries on.
-                raise KeyboardInterrupt(result.stopped_by)
+            _said_by_venue(cfg, where, result)
+        write_json(where.path.joinpath("placed.json"), result.placed, durable=True)
+        if result.placed.get("interrupted"):
+            result.stopped_by = f"interrupted at the venue: {result.placed.get('note')}"
+            _finish(cfg, where, result)
+            # The record is on disk and the order is off the book; now the operator gets the stop
+            # they asked for, instead of a scheduler that carries on.
+            raise KeyboardInterrupt(result.stopped_by)
     _finish(cfg, where, result)
     return result
+
+
+def _said_by_venue(cfg: CycleConfig, where: CycleDir, result: CycleResult) -> None:
+    placed = result.placed or {}
+    if placed.get("status") == UNKNOWN:
+        # Neither filled nor failed: written where the keeper and the risk gate look, so the
+        # instrument takes no new entry until the venue says what became of it.
+        said = str(placed.get("unknown") or "the send was not answered")
+        record_unknown(
+            cfg.root,
+            cycle=where.path.name,
+            instrument=cfg.instrument,
+            client_order_id=str(placed.get("client_order_id", "")),
+            said=said,
+            at=cfg.clock(),
+        )
+        result.refusals.append(f"venue: order state UNKNOWN, {said}")
+        announce(cfg.watch, "venue", FAILED, "order state UNKNOWN")
+    elif placed.get("sent"):
+        announce(cfg.watch, "venue", DONE, f"order {placed.get('order_id') or 'sent'}")
+    else:
+        said = str(placed.get("refused") or placed.get("error") or "not sent")
+        result.refusals.append(f"venue: not sent, {said}")
+        announce(cfg.watch, "venue", REFUSED, said)
 
 
 def _stop_before_asking(
