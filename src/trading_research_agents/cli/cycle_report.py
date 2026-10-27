@@ -99,6 +99,25 @@ def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], l
     if result.debate is not None:
         spent += f", {result.debate.seconds}s of validators"
     lines = [f"cycle {result.cycle} {result.instrument}: {spent}"]
+    lines.extend(_data_lines(result))
+    lines.extend(_voice_lines(result))
+    lines.extend(_validator_lines(result))
+    lines.extend(_sizing_lines(result))
+    lines.extend(_exit_lines(result))
+    lines.extend(_target_lines(result))
+    lines.extend(_cost_lines(result))
+    lines.extend(_intent_lines(result, mode))
+    for refusal in result.refusals[:6]:
+        lines.append(f"  refused {refusal}")
+    if result.stopped_by:
+        lines.append(f"stopped by: {result.stopped_by}")
+    lines.append(f"snapshot.json, briefs, answers and cycle.json in {result.path}")
+    return payload, lines
+
+
+def _data_lines(result: Any) -> list[str]:
+    """What the cycle read: each kind of data, each series, and what it could not read."""
+    lines: list[str] = []
     data = result.briefs.get("data") or {}
     for kind, value in sorted((data.get("values") or {}).items()):
         lines.append(f"  {kind:<14} {value['source']:<18} age {value['age_s']}s")
@@ -109,6 +128,12 @@ def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], l
         )
     for name, why in sorted((result.briefs.get("not_read") or {}).items()):
         lines.append(f"{name:<10} {why}")
+    return lines
+
+
+def _voice_lines(result: Any) -> list[str]:
+    """What each voice said: the readings, the team, the deciding analyst, or why none was asked."""
+    lines: list[str] = []
     for name, said in sorted(result.context.items()):
         if name not in READINGS:
             continue
@@ -134,6 +159,11 @@ def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], l
                 f"the mid moved {result.wake.moved_bps} bps against the "
                 f"{result.wake.required_bps} bps this desk asks for before it looks"
             )
+    return lines
+
+
+def _validator_lines(result: Any) -> list[str]:
+    lines: list[str] = []
     for role, said in sorted(result.context.items()):
         if not role.startswith("validator"):
             continue
@@ -144,6 +174,12 @@ def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], l
         if dropped_claims:
             counted += f", {dropped_claims} discarded"
         lines.append(f"{role.replace('_', ' '):<18} {verdict} on {counted}")
+    return lines
+
+
+def _sizing_lines(result: Any) -> list[str]:
+    """How the voices sized the trade: confluence, conviction, stake and risk at the stop."""
+    lines: list[str] = []
     if result.confluence is not None:
         agreement = result.confluence
         states = ", ".join(
@@ -171,6 +207,12 @@ def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], l
             f"risk: {risk.risk_bps} bps of equity at the stop against the declared "
             f"{risk.allowed_bps} bps, size {risk.size}"
         )
+    return lines
+
+
+def _exit_lines(result: Any) -> list[str]:
+    """Where the exits sit, what they need to break even, and how they were measured."""
+    lines: list[str] = []
     if result.exits:
         shown = result.exits
         said = [f"exits: {shown['side']} at about {shown['entry']}"]
@@ -203,6 +245,11 @@ def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], l
                 )
             for note in measured.get("notes") or ():
                 lines.append(f"  {note}")
+    return lines
+
+
+def _target_lines(result: Any) -> list[str]:
+    lines: list[str] = []
     if result.targets is not None:
         met = result.targets
         lines.append(
@@ -216,6 +263,11 @@ def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], l
                 f"research: {met.research_bps} bps of this trade's notional in model calls "
                 "since the last intent"
             )
+    return lines
+
+
+def _cost_lines(result: Any) -> list[str]:
+    lines: list[str] = []
     if result.verdict is not None:
         cost = result.verdict.cost
         total = cost.round_trip_bps.quantize(Decimal("0.01"))
@@ -228,6 +280,11 @@ def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], l
         for component in cost.components:
             row = component.record()
             lines.append(f"  {row['name']:<18} {row['bps']:>10} bps  {row['certainty']}")
+    return lines
+
+
+def _intent_lines(result: Any, mode: str) -> list[str]:
+    lines: list[str] = []
     if result.intent is not None:
         lines.append(f"intent: {result.intent['target']} {result.intent['size']} ({mode})")
         placed = result.placed or {}
@@ -242,12 +299,7 @@ def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], l
             lines.append(f"  outcome: {order_outcome(placed)}")
         elif placed.get("refused"):
             lines.append(f"not placed: {placed['refused']}")
-    for refusal in result.refusals[:6]:
-        lines.append(f"  refused {refusal}")
-    if result.stopped_by:
-        lines.append(f"stopped by: {result.stopped_by}")
-    lines.append(f"snapshot.json, briefs, answers and cycle.json in {result.path}")
-    return payload, lines
+    return lines
 
 
 def execution_timing(placed: Mapping[str, Any]) -> str:
