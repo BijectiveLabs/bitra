@@ -84,7 +84,7 @@ def asked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reply: str, kill: Pat
 
     from trading_research_agents.trading.config import AuditPolicy
 
-    cli = importlib.import_module("trading_research_agents.cli.main")
+    cli = importlib.import_module("trading_research_agents.cli.run_command")
 
     fake = FakeCompleter([reply])
     monkeypatch.setattr(cli, "_metered_roles", lambda *a, **k: lambda role: fake)

@@ -152,7 +152,7 @@ def test_a_cycle_in_volatility_mode_places_and_records_a_measured_stop(
     assert abs(Decimal(result.intent["stop_price"]) - mid * (1 - stop)) <= tick
     assert abs(Decimal(result.intent["take_price"]) - mid * (1 + 2 * stop)) <= tick
     assert measured["clamped_to"] is None
-    from trading_research_agents.cli.main import _cycle_report
+    from trading_research_agents.cli.run_command import _cycle_report
 
     _, lines = _cycle_report(result, cfg.usage, "sandbox")
     assert any(line.startswith("exits measured: ATR ") for line in lines)

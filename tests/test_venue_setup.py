@@ -10,7 +10,7 @@ import pytest
 
 from trading_research_agents.agents.progress import Step
 from trading_research_agents.cli import tui
-from trading_research_agents.cli.main import venue_setup
+from trading_research_agents.cli.data_commands import venue_setup
 from trading_research_agents.data.sources.capability import Capability
 from trading_research_agents.trading.dispatch import DispatchError, VenueHand, credentials_for
 

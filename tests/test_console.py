@@ -14,7 +14,8 @@ from typing import Any
 import pytest
 
 from trading_research_agents.cli import console as shell
-from trading_research_agents.cli.main import CLEARED, REFUSED, build_parser
+from trading_research_agents.cli.common import CLEARED, REFUSED
+from trading_research_agents.cli.main import build_parser
 
 
 def build(
@@ -172,7 +173,7 @@ def test_the_reader_falls_back_rather_than_failing_without_a_terminal(tmp_path: 
 
 
 def test_plain_output_carries_typography_as_ascii() -> None:
-    from trading_research_agents.cli.main import plain_text
+    from trading_research_agents.cli.common import plain_text
 
     said = "the operator\u2019s z\u2011score \u2014 \u201cbullish\u201d\u2026"
     assert plain_text(said) == 'the operator\'s z-score - "bullish"...'
