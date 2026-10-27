@@ -235,6 +235,7 @@ kill_switch = "KILL"               # `tra kill` sets it: flatten and stop; `tra 
 # min_reward_risk = 1.5            # take profit against stop, both from [exit]
 # max_research_bps = 25            # model spend since the last intent, against this notional
 # max_round_trips_per_day = 6
+# min_path_ev_bps = 0              # the trade's value over the instrument's own paths, net of costs
 
 # When the auditors are asked without you typing `tra audit`. They answer different questions and
 # so they wake differently: something breaking is an event, so the technical auditor wakes on an

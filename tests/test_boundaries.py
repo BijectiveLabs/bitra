@@ -47,7 +47,8 @@ _ALLOWED: dict[str, set[str]] = {
     "trading": {"ledger", "envelope", "data", "chain", "execution", "risk", "strategy"},
     "store": GATES | {"llm"},
     "surface": GATES,
-    "agents": GATES | {"llm", "store", "surface", "readings"},
+    # The cycle reads the lead's levels against the paths the forecast draws.
+    "agents": GATES | {"llm", "store", "surface", "readings", "forecast"},
     "mcp": GATES | {"surface"},
     "cli": GATES
     | {

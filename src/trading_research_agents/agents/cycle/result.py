@@ -103,6 +103,8 @@ class CycleResult:
             "targets_rule": self.briefs.get("targets_rule"),
             # Every check the risk gate ran on the intent, and why it refused if it did.
             "risk_gate": self.briefs.get("risk_gate"),
+            # How often the instrument's own paths reach the take before the stop at these levels.
+            "paths": self.briefs.get("paths"),
             "trigger": None if self.wake is None else self.wake.record(),
             "held": self.held,
             "mode": self.briefs.get("mode"),

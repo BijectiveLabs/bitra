@@ -9,12 +9,14 @@ from typing import Any
 
 from trading_research_agents.evaluation.baselines import BuyHold, Fade, Momentum, RandomSide
 from trading_research_agents.evaluation.forecast import FitContext, ForecastPolicy
+from trading_research_agents.evaluation.paths import PathsPolicy
 from trading_research_agents.evaluation.policy import Policy
 
 ENTRY_POINT_GROUP = "trading_research_agents.policies"
 RANDOM = "random"
 V1_RECORD = "v1_record"
 FORECAST = "forecast"
+PATHS = "paths"
 BASELINES = ("buy_hold", "momentum", "fade", RANDOM)
 
 
@@ -33,6 +35,12 @@ def make_policy(
         if fit is None:
             raise UnknownRowError("the forecast row fits on the archive and needs its context")
         return ForecastPolicy(fit)
+    if name == PATHS:
+        if fit is None:
+            raise UnknownRowError(
+                "the paths row prices with the arena's costs; it needs the context"
+            )
+        return PathsPolicy(fit.costs)
     if name == "buy_hold":
         return BuyHold(end_ns, interval_ns)
     if name == "momentum":
@@ -44,7 +52,7 @@ def make_policy(
     plugins = _plugins()
     factory = plugins.get(name)
     if factory is None:
-        known = ", ".join([*BASELINES, FORECAST, V1_RECORD, *sorted(plugins)])
+        known = ", ".join([*BASELINES, FORECAST, PATHS, V1_RECORD, *sorted(plugins)])
         raise UnknownRowError(f"no row named {name!r}; have {known}")
     made = factory()
     named = isinstance(getattr(made, "name", None), str)

@@ -26,6 +26,7 @@ from trading_research_agents.agents.cycle.briefing import (
     _regime_line,
 )
 from trading_research_agents.agents.cycle.config import TARGETS
+from trading_research_agents.agents.cycle.paths import read_the_paths
 from trading_research_agents.agents.cycle.pricing import (
     _break_even,
     _channel,
@@ -96,7 +97,7 @@ def _brief(p: Pass) -> bool:
     return True
 
 
-def _ask_technical(p: Pass) -> bool:
+def _ask_lead(p: Pass) -> bool:
     """The structure lead and its team, in parallel; the readings are written down meanwhile."""
     cfg, result = p.cfg, p.result
     states = {n: _reading_state(n, brief) for n, brief in p.reading_briefs.items()}
@@ -351,13 +352,14 @@ def _validate(p: Pass) -> bool:
 
 DECIDING: tuple[Step, ...] = (
     _brief,
-    _ask_technical,
+    _ask_lead,
     _check_answer,
     combine,
     _fits_regime,
     check_reasons,
     _price,
     _place_exits,
+    read_the_paths,
     _validate,
 )
 

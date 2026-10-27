@@ -68,6 +68,7 @@ carries each component and its certainty.
 | `fade` | the opposite side of `momentum`, on the same triggers and exits |
 | `random` | a seeded side at the times `momentum` fires, with its exits: the null every row is compared with |
 | `forecast` | the expected-value decision: a calibrated probability of the take before the stop, fitted walk-forward on the archive ([below](#the-forecast-row)) |
+| `paths` | the side whose value over the instrument's own candles drawn forward, at the baselines' exits and net of the round trip, is above zero; nothing fitted ([the paths](/opensource/cycle#the-paths)) |
 | `v1_record` | the decisions the desk sent, from `runs/cycles`, held for `--v1-hold`; a live record, not a replay |
 
 The baselines are fixed and versioned, not tuned; changing one would change every comparison, so

@@ -248,9 +248,20 @@ briefs are sent as JSON without spaces, which are tokens that carry nothing.
 ## The typed judge
 
 A reasoning model writes sentences. A typed judge answers closed questions about a piece of text
-with a probability for each answer it was offered, and writes nothing else. TRA uses one for the
-narrow job it is built for: reading the headlines the recorder archived into typed events the
-features can weigh. It never decides a direction from numbers, sizes a trade or reaches an order.
+with a probability for each answer it was offered, and writes nothing else. In TRA that judge is
+Jev, by TypeSafe, and it holds the place a reasoning model is weakest in: it is the fast system that
+perceives and verifies, between the figures code computes and the seats that deliberate.
+
+| Job | Jev | Why |
+|---|---|---|
+| Typed events from dated text: listing, delisting, hack or exploit, outage, regulatory action, macro release, with the asset it concerns | yes | a closed set of labels with probabilities to threshold, where the macro and sentiment labellers it replaced cost a quarter of the tokens and no gate read them |
+| Screening fetched text for instructions to a machine before any model reads it | yes | outside text is untrusted input |
+| Checking each structure reason against the regime code measured | yes | a reason that does not describe the market is caught by a check, not by a second opinion |
+| Checking every claim of a proposal against its brief | from 0.13 | the semantic half of the review; the numeric half stays in code |
+| A direction from numbers, the odds of a take before a stop | no | numbers and comparisons are the vendor's documented weak spot; the paths and the calibrated forecast answer them |
+| Size, stops, exposure, the risk gate, orders | no | code, always |
+
+It never decides a direction from numbers, sizes a trade or reaches an order.
 
 ```toml
 # data.toml

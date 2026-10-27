@@ -119,6 +119,8 @@ the universe (system: one data pull each, the trigger per instrument, ordered by
                           flow specialist reads the book, funding and open interest)
   -> the round trip priced (system)
   -> the stop and the target (the lead's levels, held in your [exit] bounds; break-even checked)
+  -> paths               (system: how often the instrument's own paths reach the take before the
+                          stop at these levels; refuses only below [targets].min_path_ev_bps)
   -> reviewers          (when configured: pro and contra apart, then neutral judges both)
   -> confluence matrix   (system: declared states and votes)   -> whether to trade at all
   -> conviction          (system: the same voices, weighted)    -> how much the desk wants on
@@ -1007,6 +1009,35 @@ average, across the ones that hit the stop, the take profit or the time limit. T
 `[targets]` judge the trade on the edge less the round trip, because that is the number a desk
 lives on. Model spend names the calls that had no declared price in `[agents.pricing]`, rather
 than counting them as free.
+
+## The paths
+
+The structure lead names where a trade is wrong and where it is done. Code then asks the
+instrument's own history how often a take at that distance comes before a stop at that distance
+inside the hold. It does not predict the next price; it reads the odds at the two levels the trade
+carries.
+
+| Step | What it does |
+|---|---|
+| the unit | every closed candle as its open, high, low and close against the previous close, so a take a wick reaches counts |
+| the window | the last 512 closed candles, normalised on their own volatility and clipped at five deviations; a mean move its own noise does not support is taken out |
+| the tokens | each candle gets a coarse token (its move) and a fine one (its range); the next candle is drawn from those that followed the same token, leaning on the coarse token and then the whole window when a token was rarely seen |
+| the paths | 1000, each drawn forward bar by bar at the volatility of the last 64 candles, seeded by the cycle so a replay gives the same figures |
+| the reading | the share that reaches the take first, the stop first or neither within the hold; a candle that reaches both counts as the stop, as the arena settles it |
+
+Every cycle records the reading under `paths` in `cycle.json` and prints it beside the exits,
+with its value net of the round trip: `take first x take distance - stop first x stop distance +
+neither x the mean move of those paths - round trip`. The lead never sees it. Undeclared, it refuses nothing;
+`[targets].min_path_ev_bps` refuses a trade whose value is below the floor, and refuses one whose
+reading could not be made (too few candles, a market that did not move) rather than passing it
+unread. The `paths` row of the arena reads the same way, so whether the reading separates good
+trades from bad is measured before a desk leans on it.
+
+The reference is Kronos (arXiv 2508.02739), a model of candles that tested well: the candle as the
+unit, each window normalised on itself, the next candle drawn on a coarse and a fine token, many
+paths. What its audit found wanting is not carried over: no transformer to train or ship, since its
+skill on the direction of crypto was small and on volatility real; every path kept rather than
+averaged; every draw seeded; and the question asked of the paths is the trade's own barrier.
 
 ## The cost gate, and what each number is worth
 

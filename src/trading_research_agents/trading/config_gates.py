@@ -90,6 +90,7 @@ TARGET_KEYS = (
     "max_research_bps",
     "max_round_trips_per_day",
     "max_break_even_win_rate",
+    "min_path_ev_bps",
 )
 
 
@@ -246,6 +247,7 @@ def _targets(raw: dict[str, Any], exit_rule: ExitRule) -> Targets:
                 else None
             ),
             max_break_even_win_rate=_or_dec(table, "max_break_even_win_rate", "0.5"),
+            min_path_ev_bps=_dec(table, "min_path_ev_bps") if "min_path_ev_bps" in table else None,
         )
     except TargetError as exc:
         raise ConfigError(str(exc)) from exc

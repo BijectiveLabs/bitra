@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -1500,3 +1501,81 @@ def test_a_case_nobody_answers_is_decided_by_code_without_asking_the_judge(
     assert "neutral was not asked" in judged["reason"]
     assert result.confluence is not None and result.confluence.support == 1
     assert result.acted
+
+
+RANGE_THEN_BREAK = [str(100 + (i % 4) * 0.5) for i in range(56)] + ["101", "101.5", "102", "102"]
+
+
+def test_the_leads_levels_are_read_against_the_instruments_own_paths(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    levels = {"stop_frac": Decimal("0.01"), "take_frac": Decimal("0.02")}
+    cfg, _, _ = cycle_config(
+        tmp_path, envelope, [analyst_answer()], chains=chains(closes=RANGE_THEN_BREAK), **levels
+    )
+    result = run_cycle(cfg)
+    summary = json.loads((Path(str(result.path)) / "cycle.json").read_text("utf-8"))
+    paths = summary["paths"]
+    assert paths["side"] == "long" and paths["paths"] == 1000 and paths["context_bars"] == 59
+    assert paths["take_bps"] is not None and paths["stop_bps"] is not None
+    assert math.isclose(paths["take_first"] + paths["stop_first"] + paths["neither"], 1.0)
+    assert result.acted
+    # Seeded by the cycle: the same cycle replays to the same figures.
+    again, _, _ = cycle_config(
+        tmp_path / "again",
+        envelope,
+        [analyst_answer()],
+        chains=chains(closes=RANGE_THEN_BREAK),
+        **levels,
+    )
+    assert run_cycle(again).briefs["paths"]["take_first"] == paths["take_first"]
+    from trading_research_agents.cli.cycle_report import _path_lines
+
+    (line,) = _path_lines(paths)
+    assert line.startswith("paths:     take first") and "bps net of the round trip" in line
+
+
+def test_too_few_candles_leave_the_paths_unread_and_refuse_only_a_declared_floor(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    from trading_research_agents.execution.targets import Targets
+
+    cfg, _, _ = cycle_config(tmp_path, envelope, [analyst_answer()])
+    result = run_cycle(cfg)
+    assert result.acted and "at least 30" in result.briefs["paths"]["absent"]
+    floor = Targets(min_path_ev_bps=Decimal(-1000))
+    held, _, _ = cycle_config(tmp_path / "held", envelope, [analyst_answer()], targets=floor)
+    refused = run_cycle(held)
+    assert refused.intent is None
+    assert any(
+        r.startswith("paths: [targets].min_path_ev_bps is declared") for r in refused.refusals
+    )
+
+
+def test_a_declared_path_floor_refuses_a_trade_the_paths_do_not_pay(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    from trading_research_agents.execution.targets import Targets
+
+    cfg, _, _ = cycle_config(
+        tmp_path,
+        envelope,
+        [analyst_answer()],
+        chains=chains(closes=RANGE_THEN_BREAK),
+        targets=Targets(min_path_ev_bps=Decimal(5000)),
+    )
+    result = run_cycle(cfg)
+    assert result.intent is None
+    assert any(r.startswith("paths:") and "min_path_ev_bps 5000" in r for r in result.refusals)
+
+
+def test_check_names_a_declared_path_floor() -> None:
+    from test_config import agent_raw
+    from trading_research_agents.cli.check_gates import _target_notes
+    from trading_research_agents.trading.config import parse_strategy_config
+
+    cfg = parse_strategy_config(agent_raw(targets={"min_path_ev_bps": Decimal(2)}))
+    assert cfg.targets.min_path_ev_bps == Decimal(2)
+    assert any(
+        line.startswith("paths: a trade worth less than 2 bps") for line in _target_notes(cfg, [])
+    )

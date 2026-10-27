@@ -266,6 +266,11 @@ def _target_notes(cfg: Any, bad: list[str]) -> list[str]:
         good = ["targets: not declared; only the cost gate stands between a claim and an intent"]
     else:
         good = ["targets: " + "; ".join(_targets_said(targets))]
+    if targets.min_path_ev_bps is not None:
+        good.append(
+            f"paths: a trade worth less than {targets.min_path_ev_bps} bps over the instrument's "
+            "own paths, net of the round trip, is refused, and so is one too few candles can read"
+        )
     if targets.min_edge_multiple is None:
         good.append(
             "targets: no edge multiple declared, so a trade worth two basis points more than it "

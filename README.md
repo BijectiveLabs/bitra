@@ -95,13 +95,15 @@ lists the documented failures behind each one, with their sources.
 
 ## How it is built
 
-Three kinds of work, kept apart because they fail differently.
+Three kinds of work, kept apart because they fail differently. Code is in control; Jev, TypeSafe's
+typed judge, is the fast system that perceives and verifies; the reasoning seats deliberate only
+inside what code computed, and their answers are checked before anything counts.
 
 | | Does | Never does | Today |
 |---|---|---|---|
 | **Code** | records the market, computes every figure, reads your own series against your lines (the macro, on-chain and sentiment readings), prices the round trip, applies your limits, sizes, sends one order with its exits, settles every replayed idea | guess, or carry a stale value forward as current | everything around the model call |
 | **A reasoning model** | reads figures code computed and proposes a direction, a setup and its levels, citing the figures it used | compute a number, size a trade, touch an order or a key, loosen a limit | the structure lead, with a blind confirmer and a flow specialist when you declare the team; reviewers when you declare them |
-| **A fast typed judge** | turns dated text into typed events with probabilities, screens text for instructions to a machine, and from 0.13 checks a model's claims against its brief | decide a direction from numbers, size, or reach an order | optional, behind a vendor-neutral port (`[judge]`): the archived headlines into the text features |
+| **Jev, the typed judge** | turns dated text into typed events with probabilities, screens text for instructions to a machine, checks each structure reason against the regime code measured, and from 0.13 checks every claim against its brief | decide a direction from numbers, size, or reach an order | Jev through the TypeSafe adapter, behind a vendor-neutral port (`[judge]`): the archived headlines into text features, and the deciding team's reasons checked before a trade |
 
 ```mermaid
 flowchart LR
@@ -119,16 +121,16 @@ flowchart LR
     end
     subgraph decide["decision: code around the deciding team"]
         direction TB
-        judge["typed judge, optional<br/>headlines into typed events"]
+        judge["Jev, the typed judge<br/>headlines into typed events<br/>reasons checked against the regime"]
         features["features<br/>41 figures known at the bar's close"]
         readings["readings: macro, on-chain, sentiment<br/>your series against your lines, no model"]
         analyst["deciding team<br/>lead, blind confirmer, flow specialist<br/>propose, cite figures"]
-        gates["gates<br/>cost, exits, confluence, conviction"]
+        gates["gates<br/>cost, exits, paths, confluence, conviction"]
     end
     shelf[("sources/<br/>dated series you declare")]
     subgraph act["risk and execution: code"]
         direction TB
-        risk["controls<br/>risk at the stop, daily loss, drawdown, kill switch"]
+        risk["risk gate, signed<br/>caps, loss at the stop, switches,<br/>daily loss, drawdown"]
         order["one order<br/>stop and take profit attached"]
     end
     arena["tra arena<br/>policies replayed, settled net of costs,<br/>beside baselines and a random null"]
@@ -138,6 +140,7 @@ flowchart LR
     rest --> bars
     store --> features
     store --> judge --> features
+    analyst --> judge --> gates
     shelf --> readings --> gates
     features --> analyst --> gates --> risk --> order --> venues
     store --> arena
@@ -150,7 +153,7 @@ path as the work below lands. Where it is going, in the order it is being built:
 | Release | Adds |
 |---|---|
 | 0.11 | the market data plane (`tra data bars`, `tra record`), the feature library, the arena; the macro, on-chain and sentiment analysts become readings that ask no model |
-| 0.12 | a forecast and a calibrator fitted on recorded outcomes, one expected-value decision in place of the vetoes, risk as its own gate; the typed judge for dated text |
+| 0.12 | the lead's levels read against the instrument's own paths, a forecast and a calibrator fitted on recorded outcomes, risk as its own signed gate; Jev for dated text and the team's reasons |
 | 0.13 | the reasoning model woken only when the market gives it something to weigh, its claims checked by the judge; the v1 cycle retired once the arena shows the new one is better |
 
 Each step is measured in the arena before it is trusted, and the four guarantees at the end of this
