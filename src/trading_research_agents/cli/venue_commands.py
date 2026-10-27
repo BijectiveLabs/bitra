@@ -21,14 +21,14 @@ from trading_research_agents.cli.common import (
     REFUSED,
     _declared_environment,
     _environment,
-    _fill_account_fees,
     _has_live_plugin,
     _load_env,
     _ui,
-    _venue_hand,
     _watching,
     emit,
 )
+from trading_research_agents.cli.fees import _fill_account_fees
+from trading_research_agents.cli.venue_access import _venue_hand
 from trading_research_agents.execution import FundingSchedule
 from trading_research_agents.extras import install_hint
 from trading_research_agents.llm.providers import (

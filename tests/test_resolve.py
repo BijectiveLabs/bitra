@@ -83,7 +83,7 @@ def test_a_step_with_no_declaration_is_what_the_venue_states_in_the_base() -> No
     from types import SimpleNamespace
 
     cli = import_module("trading_research_agents.cli.run_command")
-    clients = import_module("trading_research_agents.cli.common")._EXECUTION_CLIENTS
+    clients = import_module("trading_research_agents.cli.venue_access")._EXECUTION_CLIENTS
 
     btc = {**market("BTC-USDT-SWAP", "BTC", "USDT"), "precision": {"amount": 0.01}}
     btc["contractSize"] = 0.01

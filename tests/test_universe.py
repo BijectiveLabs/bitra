@@ -443,7 +443,7 @@ def test_a_pass_measures_every_candidate_and_runs_what_the_screener_put_first(
 def test_the_pass_measures_on_the_bars_the_cycle_decides_on() -> None:
     from types import SimpleNamespace
 
-    from trading_research_agents.cli.run_command import screen_options_for
+    from trading_research_agents.cli.universe_pass import screen_options_for
 
     cycle = SimpleNamespace(
         data_options={"ohlcv": {"interval_s": 60, "limit": 240, "params": {"x": 1}}},

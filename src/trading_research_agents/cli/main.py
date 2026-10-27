@@ -25,14 +25,22 @@ from trading_research_agents.chain import (
 )
 from trading_research_agents.chain.preregistration import PreregistrationError
 from trading_research_agents.cli import console
-from trading_research_agents.cli.check import NOT_A_DESK, _check, check_project
-from trading_research_agents.cli.common import (
-    CLEARED,
-    REFUSED,
-    _watching,
-    plain_asked,
-    set_plain,
+from trading_research_agents.cli.agent_commands import (
+    agent_eval,
+    agent_propose,
+    agent_refusals,
+    agent_session,
+    agent_trace,
 )
+from trading_research_agents.cli.chain_commands import (
+    chain_check,
+    chain_floor,
+    chain_observe,
+    chain_requirements,
+    chain_validate,
+)
+from trading_research_agents.cli.check import NOT_A_DESK, _check, check_project
+from trading_research_agents.cli.common import CLEARED, REFUSED, _watching, plain_asked, set_plain
 from trading_research_agents.cli.data_commands import (
     data_audit,
     data_bars_command,
@@ -43,7 +51,6 @@ from trading_research_agents.cli.data_commands import (
     runs_prune,
     runs_verify,
     show_universe,
-    show_venues,
     sources_add,
     sources_pull,
     sources_show,
@@ -51,16 +58,6 @@ from trading_research_agents.cli.data_commands import (
 from trading_research_agents.cli.init_command import init_project
 from trading_research_agents.cli.parser import build_parser
 from trading_research_agents.cli.research_commands import (
-    agent_eval,
-    agent_propose,
-    agent_refusals,
-    agent_session,
-    agent_trace,
-    chain_check,
-    chain_floor,
-    chain_observe,
-    chain_requirements,
-    chain_validate,
     ladder_demote,
     ladder_promote,
     ladder_show,
@@ -89,6 +86,7 @@ from trading_research_agents.cli.venue_commands import (
     show_models,
     watch_desk,
 )
+from trading_research_agents.cli.venue_info import show_venues
 from trading_research_agents.data import (
     ArchiveError,
     ArchiveFormatError,

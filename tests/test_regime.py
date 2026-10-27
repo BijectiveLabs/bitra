@@ -227,7 +227,7 @@ def test_the_project_declares_context_timeframes_and_the_regime_lines() -> None:
 def test_the_live_table_lists_capital_and_regime_where_they_happen(
     tmp_path: Path, envelope: Envelope
 ) -> None:
-    from trading_research_agents.cli.run_command import _cycle_steps
+    from trading_research_agents.cli.cycle_report import _cycle_steps
 
     cfg, _, _ = cycle_config(tmp_path, envelope, [analyst_answer()], account=lambda: None)
     steps = _cycle_steps(cfg)

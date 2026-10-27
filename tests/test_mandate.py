@@ -676,7 +676,7 @@ def test_a_blank_fee_says_which_line_and_what_to_write() -> None:
 
 
 def test_the_setup_for_a_venue_without_a_live_plugin_has_no_live_table() -> None:
-    from trading_research_agents.cli.data_commands import venue_setup
+    from trading_research_agents.cli.venue_info import venue_setup
     from trading_research_agents.data.sources.capability import capability_of
     from trading_research_agents.envelope.load import parse_envelope
 

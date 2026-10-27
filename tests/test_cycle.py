@@ -663,7 +663,7 @@ def test_the_readings_are_read_by_code_and_ask_no_model(tmp_path: Path, envelope
     assert result.context["onchain"]["declared_state"]["declared"] == "undeclared"
     assert {said["read_by"] for said in result.context.values()} == {"code"}
     assert ("macro", "done", "read by code: risk-off") in steps
-    from trading_research_agents.cli.run_command import _cycle_report
+    from trading_research_agents.cli.cycle_report import _cycle_report
 
     _, lines = _cycle_report(result, usage, "sandbox")
     assert "macro      read by code: bearish (risk-off)" in lines
@@ -1050,7 +1050,7 @@ def test_a_loop_ends_on_the_budget_the_kill_switch_or_the_count(tmp_path: Path) 
 def test_an_interval_below_a_trading_cadence_is_refused() -> None:
     import argparse
 
-    from trading_research_agents.cli.parser import parse_duration_s
+    from trading_research_agents.cli.arguments import parse_duration_s
 
     assert parse_duration_s("5m") == 300.0
     with pytest.raises(argparse.ArgumentTypeError, match="five seconds"):

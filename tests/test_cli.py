@@ -319,7 +319,7 @@ def test_agent_propose_and_refusals(
 
     from trading_research_agents.llm import FakeCompleter
 
-    cli_main = importlib.import_module("trading_research_agents.cli.research_commands")
+    cli_main = importlib.import_module("trading_research_agents.cli.agent_commands")
 
     memo = {
         "mechanism": "Longs paying funding are forced by margin to reduce into settlement.",

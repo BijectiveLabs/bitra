@@ -104,7 +104,7 @@ def test_the_policy_is_read_from_the_project(tmp_path: Path) -> None:
 
 
 def test_the_scheduler_asks_the_right_auditor_for_the_right_reason(tmp_path: Path) -> None:
-    from trading_research_agents.cli.run_command import Auditing
+    from trading_research_agents.cli.auditing import Auditing
     from trading_research_agents.trading.config import AuditPolicy
 
     clock = [1000.0]
@@ -130,7 +130,7 @@ def test_the_scheduler_asks_the_right_auditor_for_the_right_reason(tmp_path: Pat
 
 
 def test_an_auditor_that_cannot_run_is_a_line_not_the_end_of_the_run(tmp_path: Path) -> None:
-    from trading_research_agents.cli.run_command import Auditing
+    from trading_research_agents.cli.auditing import Auditing
     from trading_research_agents.trading.config import AuditPolicy
 
     audits = Auditing(
@@ -144,7 +144,7 @@ def test_an_auditor_that_cannot_run_is_a_line_not_the_end_of_the_run(tmp_path: P
 
 
 def auditing(tmp_path: Path, clock: list[float], **policy: Any) -> Any:
-    from trading_research_agents.cli.run_command import Auditing
+    from trading_research_agents.cli.auditing import Auditing
     from trading_research_agents.trading.config import AuditPolicy
 
     return Auditing(
