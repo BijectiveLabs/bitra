@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 
+from approvals import approved
 from trading_research_agents.data import Side
 from trading_research_agents.envelope import Channel, Envelope
 from trading_research_agents.execution import (
@@ -353,7 +354,9 @@ def test_a_hand_refuses_an_intent_about_another_instrument() -> None:
         env={"SOMEVENUE_API_KEY": "k", "SOMEVENUE_API_SECRET": "s"},
         client=Client(),
     )
-    wrong = hand({"instrument": "BTCUSDT", "target": "long", "size": "0.01", "mid": "60000"})
+    wrong = hand(
+        approved({"instrument": "BTCUSDT", "target": "long", "size": "0.01", "mid": "60000"})
+    )
     assert not wrong["sent"] and "the intent is about BTCUSDT" in wrong["refused"]
     assert not sent
 
@@ -444,16 +447,18 @@ def test_a_cancel_the_venue_refuses_is_recorded_as_what_it_is() -> None:
         )
         return dict(
             hand(
-                {
-                    "instrument": "ETHUSDT",
-                    "target": "long",
-                    "size": "0.01",
-                    "mid": "2700",
-                    "bid": "2699",
-                    "ask": "2701",
-                    "stop_price": "2650",
-                    "take_price": "2800",
-                }
+                approved(
+                    {
+                        "instrument": "ETHUSDT",
+                        "target": "long",
+                        "size": "0.01",
+                        "mid": "2700",
+                        "bid": "2699",
+                        "ask": "2701",
+                        "stop_price": "2650",
+                        "take_price": "2800",
+                    }
+                )
             )
         )
 

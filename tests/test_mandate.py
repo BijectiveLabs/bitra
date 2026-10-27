@@ -15,6 +15,7 @@ from typing import Any
 
 import pytest
 
+from approvals import approved
 from trading_research_agents.execution.mandate import (
     DISCLAIMER,
     MANDATE_FILE,
@@ -206,7 +207,7 @@ def test_the_hand_sends_one_order_and_records_what_came_back() -> None:
         client=venue,
     )
 
-    placed = hand(LONG)
+    placed = hand(approved(LONG))
     assert placed["sent"] is True and placed["order_id"] == "order-1"
     assert placed["side"] == "buy" and placed["notional"] == "1000.00" and placed["role"] == "taker"
     sent = venue.orders[0]
@@ -222,7 +223,7 @@ def test_the_hand_sends_one_order_and_records_what_came_back() -> None:
     assert placed["client_order_id"] == sent["params"]["clientOrderId"]
 
     # One decision, one order: the same hand asked again refuses.
-    assert "already sent" in hand(LONG)["refused"]
+    assert "already sent" in hand(approved(LONG))["refused"]
 
     # A short's exits sit the other way round, and the hand checks that they do.
     hand = VenueHand(
@@ -232,7 +233,9 @@ def test_the_hand_sends_one_order_and_records_what_came_back() -> None:
         keys=("BYBIT_API_KEY", "BYBIT_API_SECRET"),
         client=venue,
     )
-    short = hand({**LONG, "target": "short", "stop_price": "101000", "take_price": "98000"})
+    short = hand(
+        approved({**LONG, "target": "short", "stop_price": "101000", "take_price": "98000"})
+    )
     assert short["side"] == "sell"
     assert venue.orders[-1]["params"]["stopLoss"] == {"triggerPrice": 101000.0}
 
@@ -250,7 +253,7 @@ def test_a_maker_channel_rests_on_the_book_and_never_crosses_it() -> None:
         sleep=lambda _s: None,
     )
 
-    placed = hand({**LONG, "bid": "99999", "ask": "100001"})
+    placed = hand(approved({**LONG, "bid": "99999", "ask": "100001"}))
     sent = venue.orders[0]
     assert sent["type"] == "limit" and sent["price"] == 99999.0
     assert sent["params"]["postOnly"] is True and sent["params"]["timeInForce"] == "GTC"
@@ -273,7 +276,7 @@ def test_a_resting_order_that_does_not_fill_is_cancelled_rather_than_chased() ->
         sleep=lambda _s: None,
     )
 
-    placed = hand({**LONG, "bid": "99999"})
+    placed = hand(approved({**LONG, "bid": "99999"}))
     assert placed["cancelled"] is True and venue.cancelled == ["order-1"]
     assert "did not fill" in placed["note"]
 
@@ -288,7 +291,7 @@ def test_a_maker_order_with_no_book_side_is_not_sent() -> None:
         role="maker",
         client=venue,
     )
-    refused = hand({k: v for k, v in LONG.items() if k not in ("bid", "ask")})
+    refused = hand(approved({k: v for k, v in LONG.items() if k not in ("bid", "ask")}))
 
     assert refused["sent"] is False and "no book side" in refused["refused"]
     assert venue.orders == []
@@ -307,7 +310,7 @@ def test_an_offset_moves_a_resting_order_away_from_the_touch() -> None:
         clock=lambda: 0.0,
         sleep=lambda _s: None,
     )
-    hand({**LONG, "bid": "100000"})
+    hand(approved({**LONG, "bid": "100000"}))
 
     # Ten basis points below the bid for a buy: further from a fill, further from crossing.
     assert venue.orders[0]["price"] == 99900.0
@@ -323,7 +326,7 @@ def test_an_order_is_not_added_to_a_position_the_desk_did_not_expect() -> None:
         client=venue,
     )
 
-    refused = hand(LONG)
+    refused = hand(approved(LONG))
     assert refused["sent"] is False and "the other way" in refused["refused"]
     assert venue.orders == []
 
@@ -335,7 +338,7 @@ def test_an_order_is_not_added_to_a_position_the_desk_did_not_expect() -> None:
         adopt_open_position=True,
         client=venue,
     )
-    assert adopting(LONG)["sent"] is True
+    assert adopting(approved(LONG))["sent"] is True
 
 
 def test_a_hand_that_cannot_read_the_account_does_not_send() -> None:
@@ -347,7 +350,7 @@ def test_a_hand_that_cannot_read_the_account_does_not_send() -> None:
         client=FakeExchange(position=RuntimeError("permission denied")),
     )
     with pytest.raises(DispatchError, match="cannot read the account"):
-        hand(LONG)
+        hand(approved(LONG))
 
 
 def test_a_channel_that_does_not_say_maker_or_taker_is_refused() -> None:
@@ -372,13 +375,13 @@ def test_the_hand_refuses_before_it_reaches_the_venue() -> None:
         client=venue,
     )
 
-    big = hand(LONG)
+    big = hand(approved(LONG))
     assert big["sent"] is False and "above [execution].max_notional" in big["refused"]
 
-    flat = hand({**LONG, "target": "flat"})
+    flat = hand(approved({**LONG, "target": "flat"}))
     assert flat["sent"] is False and "is not an order" in flat["refused"]
 
-    nothing = hand({**LONG, "size": "0"})
+    nothing = hand(approved({**LONG, "size": "0"}))
     assert nothing["sent"] is False and "size is not positive" in nothing["refused"]
 
     assert venue.orders == []
@@ -393,12 +396,12 @@ def test_nothing_is_sent_without_an_exit_at_the_venue() -> None:
         keys=("BYBIT_API_KEY", "BYBIT_API_SECRET"),
         client=venue,
     )
-    bare = hand({**LONG, "stop_price": "", "take_price": ""})
+    bare = hand(approved({**LONG, "stop_price": "", "take_price": ""}))
 
     assert bare["sent"] is False and "no stop and take profit" in bare["refused"]
     assert venue.orders == []
 
-    backwards = hand({**LONG, "stop_price": "103000"})
+    backwards = hand(approved({**LONG, "stop_price": "103000"}))
     assert backwards["sent"] is False and "wrong way round" in backwards["refused"]
     assert venue.orders == []
 
@@ -412,7 +415,7 @@ def test_a_venue_that_cannot_attach_them_is_refused_rather_than_trusted() -> Non
         keys=("BYBIT_API_KEY", "BYBIT_API_SECRET"),
         client=venue,
     )
-    refused = hand(LONG)
+    refused = hand(approved(LONG))
 
     assert refused["sent"] is False and "cannot take a stop and a take profit" in refused["refused"]
     assert venue.orders == []
@@ -428,7 +431,7 @@ def test_an_operator_may_carry_the_exits_themselves_and_it_is_recorded() -> None
         exits="none",
         client=venue,
     )
-    placed = hand(LONG)
+    placed = hand(approved(LONG))
 
     assert placed["sent"] is True and placed["exits"] == "none"
     assert "stopLoss" not in venue.orders[0]["params"]
@@ -453,7 +456,7 @@ def test_a_second_entry_on_an_open_position_is_refused_either_way() -> None:
         keys=("BYBIT_API_KEY", "BYBIT_API_SECRET"),
         client=same,
     )
-    refused = hand(LONG)
+    refused = hand(approved(LONG))
 
     # Adding to a position is a bigger position than the conviction rule sized for.
     assert refused["sent"] is False and "the same way" in refused["refused"]
@@ -469,7 +472,7 @@ def test_an_order_still_working_stops_a_second_decision_on_the_same_position() -
         keys=("BYBIT_API_KEY", "BYBIT_API_SECRET"),
         client=venue,
     )
-    refused = hand(LONG)
+    refused = hand(approved(LONG))
 
     assert refused["sent"] is False and "still open" in refused["refused"]
     assert venue.orders == []
@@ -510,7 +513,7 @@ def test_a_venue_that_says_no_is_an_error_and_nothing_is_read_back() -> None:
     venue = FakeExchange(InsufficientFunds("insufficient margin"))
     hand = sending_hand(venue)
     with pytest.raises(DispatchError, match="InsufficientFunds: insufficient margin"):
-        hand(LONG)
+        hand(approved(LONG))
     assert len(venue.orders) == 1
 
 
@@ -543,17 +546,17 @@ class Slow(FakeExchange):
 def test_a_timeout_is_not_a_failure_and_the_order_is_found_by_its_client_id() -> None:
     venue = Slow(RequestTimeout("bybit did not answer in 10s"), lands=True)
     hand = sending_hand(venue)
-    placed = hand(LONG)
+    placed = hand(approved(LONG))
     assert placed["sent"] is True and placed["order_id"] == "order-9"
     assert placed["recovered"].startswith("RequestTimeout: bybit did not answer")
     assert len(venue.orders) == 1
-    assert hand(LONG)["refused"] == "this hand has already sent its one order"
+    assert hand(approved(LONG))["refused"] == "this hand has already sent its one order"
 
 
 def test_an_order_not_found_after_a_timeout_is_unknown_never_failed_and_never_resent() -> None:
     venue = Slow(RequestTimeout("bybit did not answer in 10s"), lands=False)
     hand = sending_hand(venue)
-    placed = hand(LONG)
+    placed = hand(approved(LONG))
     assert placed["sent"] is None and placed["status"] == "UNKNOWN"
     assert placed["client_order_id"] == venue.orders[0]["params"]["clientOrderId"]
     assert "reconciled" in placed["unknown"] and venue.reads == 3
@@ -563,7 +566,7 @@ def test_an_order_not_found_after_a_timeout_is_unknown_never_failed_and_never_re
 def test_an_unclassified_error_and_a_duplicate_id_are_read_back_not_trusted() -> None:
     for error in (RuntimeError("socket closed"), DuplicateOrderId("order link id exists")):
         venue = Slow(error, lands=True)
-        assert sending_hand(venue)(LONG)["sent"] is True
+        assert sending_hand(venue)(approved(LONG))["sent"] is True
 
 
 def test_a_hand_needs_a_cap_and_the_keys_come_from_the_environment() -> None:
@@ -626,7 +629,9 @@ def _stepped_hand(venue: FakeExchange) -> VenueHand:
 
 def test_a_size_off_the_venues_step_is_refused_rather_than_quietly_rounded() -> None:
     venue = SteppedExchange("0.01")
-    placed = _stepped_hand(venue)({**LONG, "instrument": "ETHUSDT", "size": "0.036", "mid": "2700"})
+    placed = _stepped_hand(venue)(
+        approved({**LONG, "instrument": "ETHUSDT", "size": "0.036", "mid": "2700"})
+    )
     # ccxt would have sent 0.03: a different trade from the one priced and written down.
     assert placed["sent"] is False and "would send 0.03" in placed["refused"]
     assert venue.loaded and venue.orders == []
@@ -634,14 +639,18 @@ def test_a_size_off_the_venues_step_is_refused_rather_than_quietly_rounded() -> 
 
 def test_a_size_under_the_venues_minimum_is_refused() -> None:
     venue = SteppedExchange("0.001", least="0.01")
-    placed = _stepped_hand(venue)({**LONG, "instrument": "ETHUSDT", "size": "0.005", "mid": "2700"})
+    placed = _stepped_hand(venue)(
+        approved({**LONG, "instrument": "ETHUSDT", "size": "0.005", "mid": "2700"})
+    )
     assert placed["sent"] is False and "minimum of 0.01" in placed["refused"]
     assert venue.orders == []
 
 
 def test_a_size_on_the_venues_step_goes_out_as_it_is() -> None:
     venue = SteppedExchange("0.01", least="0.01")
-    placed = _stepped_hand(venue)({**LONG, "instrument": "ETHUSDT", "size": "0.04", "mid": "2700"})
+    placed = _stepped_hand(venue)(
+        approved({**LONG, "instrument": "ETHUSDT", "size": "0.04", "mid": "2700"})
+    )
     assert placed["sent"] is True and venue.orders[0]["amount"] == 0.04
 
 
@@ -670,7 +679,7 @@ def _contract_hand(venue: FakeExchange) -> VenueHand:
 def test_a_size_in_the_base_is_sent_as_contracts() -> None:
     # 0.04 BTC on a venue where one contract is 0.01 BTC is four contracts, not 0.04 of one.
     venue = ContractVenue("0.01", answer={"id": "order-1", "status": "closed", "filled": 4})
-    placed = _contract_hand(venue)({**LONG, "size": "0.04"})
+    placed = _contract_hand(venue)(approved({**LONG, "size": "0.04"}))
     assert placed["sent"] is True and venue.orders[0]["amount"] == 4.0
     assert (
         placed["size"] == "0.04"
@@ -683,7 +692,7 @@ def test_a_size_in_the_base_is_sent_as_contracts() -> None:
 
 def test_a_size_that_is_not_a_whole_number_of_contracts_is_refused() -> None:
     venue = ContractVenue("0.01")
-    placed = _contract_hand(venue)({**LONG, "size": "0.045"})
+    placed = _contract_hand(venue)(approved({**LONG, "size": "0.045"}))
     assert placed["sent"] is False and "contracts of 0.01" in placed["refused"]
     assert venue.orders == []
 
@@ -691,7 +700,7 @@ def test_a_size_that_is_not_a_whole_number_of_contracts_is_refused() -> None:
 def test_a_contract_larger_than_the_base_unit_is_not_a_million_times_the_size() -> None:
     # A token whose contract is ten million of it: 20 million tokens is two contracts.
     venue = ContractVenue("10000000", answer={"id": "order-1", "status": "closed", "filled": 2})
-    placed = _contract_hand(venue)({**LONG, "size": "20000000", "mid": "0.00001"})
+    placed = _contract_hand(venue)(approved({**LONG, "size": "20000000", "mid": "0.00001"}))
     assert placed["sent"] is True and venue.orders[0]["amount"] == 2.0
 
 
@@ -706,7 +715,7 @@ def test_a_venue_that_will_not_say_its_contract_size_is_not_guessed() -> None:
             return {"contract": True, "limits": {"amount": {"min": None}}}
 
     venue = Silent("1")
-    placed = _contract_hand(venue)({**LONG, "size": "0.04"})
+    placed = _contract_hand(venue)(approved({**LONG, "size": "0.04"}))
     assert placed["sent"] is False and "does not say how large one" in placed["refused"]
     assert venue.orders == []
 
@@ -847,7 +856,7 @@ def test_an_account_in_long_short_mode_is_refused_before_anything_is_sent() -> N
         keys=("K", "S"),
         client=venue,
     )
-    placed = hand(LONG)
+    placed = hand(approved(LONG))
     assert placed["sent"] is False and "long/short position mode" in placed["refused"]
     assert venue.orders == [] and "long/short position mode" in hand.ready()
 
@@ -868,7 +877,7 @@ def test_an_interrupt_while_an_order_rests_takes_it_off_the_book_first() -> None
         clock=lambda: 0.0,
         sleep=interrupted,
     )
-    placed = hand({**LONG, "bid": "99999"})
+    placed = hand(approved({**LONG, "bid": "99999"}))
     assert placed["interrupted"] is True and placed["cancelled"] is True
     assert venue.cancelled == ["order-1"] and "cancelled before the process left" in placed["note"]
 
@@ -887,7 +896,7 @@ def test_a_clock_out_of_step_with_the_venue_refuses_before_the_first_order() -> 
         client=venue,
         clock=lambda: 1_000_000_000.0,
     )
-    placed = hand(LONG)
+    placed = hand(approved(LONG))
     assert placed["sent"] is False and "+2600 ms" in placed["refused"] and venue.orders == []
     assert "+2600 ms" in hand.ready()
 
@@ -918,7 +927,7 @@ def test_an_order_is_found_by_state_when_the_plain_lookup_refuses() -> None:
         clock=lambda: 0.0,
         sleep=lambda _s: None,
     )
-    placed = hand({**LONG, "bid": "99999"})
+    placed = hand(approved({**LONG, "bid": "99999"}))
     assert placed["filled"] == "0.01" and placed["cancelled"] is False and venue.cancelled == []
 
 
@@ -950,7 +959,7 @@ def _maker(venue: FakeExchange, **overrides: Any) -> VenueHand:
 
 def test_a_resting_order_sits_at_the_book_as_it_is_now_not_as_it_was() -> None:
     venue = Moved("100040", "100042")
-    placed = _maker(venue)({**LONG, "bid": "99999", "ask": "100001"})
+    placed = _maker(venue)(approved({**LONG, "bid": "99999", "ask": "100001"}))
     # It rests at today's bid, and the record says how far the mid moved and where it rested.
     assert venue.orders[0]["price"] == 100040.0
     assert placed["rested_at"] == "the book at send time" and placed["drift_bps"] == "4.10"
@@ -958,12 +967,17 @@ def test_a_resting_order_sits_at_the_book_as_it_is_now_not_as_it_was() -> None:
 
 def test_a_decision_the_market_has_left_behind_is_refused() -> None:
     venue = Moved("100150", "100152")
-    placed = _maker(venue, max_drift_bps=Decimal(10))({**LONG, "bid": "99999", "ask": "100001"})
+    placed = _maker(venue, max_drift_bps=Decimal(10))(
+        approved({**LONG, "bid": "99999", "ask": "100001"})
+    )
     assert placed["sent"] is False and "moved 15.10 bps against the trade" in placed["refused"]
     assert venue.orders == []
     # A move in the trade's favour is not drift against it.
     kinder = Moved("99850", "99852")
-    assert _maker(kinder, max_drift_bps=Decimal(10))({**LONG, "bid": "99999"})["sent"] is True
+    assert (
+        _maker(kinder, max_drift_bps=Decimal(10))(approved({**LONG, "bid": "99999"}))["sent"]
+        is True
+    )
 
 
 def test_venue_mode_sends_only_the_market_types_built_and_listed() -> None:
@@ -979,12 +993,12 @@ def test_venue_mode_sends_only_the_market_types_built_and_listed() -> None:
 
     order = {**LONG, "instrument": "ETHUSDT", "size": "0.03", "mid": "2700"}
     # Spot is built, but a desk sends to it only when it lists it.
-    placed = _stepped_hand(SpotExchange("0.01"))(order)
+    placed = _stepped_hand(SpotExchange("0.01"))(approved(order))
     assert placed["sent"] is False
     assert (
         "is a spot market and [execution].markets lists ['linear perpetual']" in placed["refused"]
     )
-    unbuilt = _stepped_hand(OptionExchange("0.01"))(order)
+    unbuilt = _stepped_hand(OptionExchange("0.01"))(approved(order))
     assert (
         unbuilt["sent"] is False and "is a option market; venue mode trades" in unbuilt["refused"]
     )
@@ -1031,7 +1045,7 @@ def test_an_okx_account_in_spot_mode_is_refused_before_anything_is_sent() -> Non
         keys=("K", "S"),
         client=venue,
     )
-    placed = hand(LONG)
+    placed = hand(approved(LONG))
     assert placed["sent"] is False and "Spot mode" in placed["refused"]
     assert venue.orders == [] and "Spot mode" in hand.ready()
 
@@ -1045,7 +1059,7 @@ def test_an_okx_account_in_spot_mode_is_refused_before_anything_is_sent() -> Non
         max_notional=Decimal(2000),
         keys=("K", "S"),
         client=Futures(),
-    )(LONG)["sent"]
+    )(approved(LONG))["sent"]
 
 
 def test_a_bitget_unified_key_sent_to_the_classic_api_is_refused_before_anything_is_sent() -> None:
@@ -1065,7 +1079,7 @@ def test_a_bitget_unified_key_sent_to_the_classic_api_is_refused_before_anything
         client=venue,
     )
     assert "unified trading account" in hand.ready()
-    placed = hand(LONG)
+    placed = hand(approved(LONG))
     assert placed["sent"] is False and "unified trading account" in placed["refused"]
     assert venue.orders == []
 
@@ -1079,7 +1093,7 @@ def test_a_bitget_unified_key_sent_to_the_classic_api_is_refused_before_anything
         max_notional=Decimal(2000),
         keys=("K", "S"),
         client=Classic(),
-    )(LONG)["sent"]
+    )(approved(LONG))["sent"]
 
 
 def test_a_decision_older_than_its_bound_is_not_sent_and_a_fresh_one_is_measured() -> None:
@@ -1093,12 +1107,12 @@ def test_a_decision_older_than_its_bound_is_not_sent_and_a_fresh_one_is_measured
         max_decision_age_s=60.0,
     )
     old = (datetime.now(UTC) - timedelta(minutes=5)).strftime("%Y-%m-%dT%H-%M-%SZ")
-    stale = hand({**LONG, "at": old})
+    stale = hand(approved({**LONG, "at": old}))
     assert stale["sent"] is False and "past [execution].max_decision_age_s 60" in stale["refused"]
     assert venue.orders == []
 
     fresh = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%SZ")
-    placed = hand({**LONG, "at": fresh})
+    placed = hand(approved({**LONG, "at": fresh}))
     assert placed["sent"] is True and placed["send_ms"] >= 0
     assert placed["decision_age_s"] is not None and placed["decision_age_s"] < 60
     # Filled at 100000.5 against a mid of 100000: half a basis point paid on a buy.
@@ -1114,7 +1128,22 @@ def test_a_taker_order_with_no_book_to_protect_it_is_not_sent() -> None:
         keys=("BYBIT_API_KEY", "BYBIT_API_SECRET"),
         client=venue,
     )
-    refused = hand({k: v for k, v in LONG.items() if k not in ("bid", "ask")})
+    refused = hand(approved({k: v for k, v in LONG.items() if k not in ("bid", "ask")}))
 
     assert refused["sent"] is False and "no book to protect" in refused["refused"]
     assert venue.orders == []
+
+
+def test_the_hand_sends_nothing_the_risk_gate_did_not_sign() -> None:
+    from trading_research_agents.risk import RiskLimits, RiskState, evaluate
+
+    venue = FakeExchange()
+    hand = sending_hand(venue)
+    assert "no approval" in hand(LONG)["refused"]
+    signed = approved(LONG)
+    assert "does not match" in hand({**signed, "size": "0.02"})["refused"]
+    assert "does not match" in hand({**signed, "instrument": "ETHUSDT"})["refused"]
+    late = evaluate(LONG, limits=RiskLimits(valid_for_s=1), state=RiskState(None, 0), now=0.0)
+    assert "expired" in hand(late.approved_intent(LONG))["refused"]
+    assert venue.orders == []
+    assert hand(signed)["sent"] is True and len(venue.orders) == 1

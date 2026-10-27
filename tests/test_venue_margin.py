@@ -8,6 +8,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
+from approvals import approved
 from trading_research_agents.trading.dispatch import VenueHand
 from trading_research_agents.trading.venues.accounts import account_refusal
 from trading_research_agents.trading.venues.margin import BitgetUnified, account_settings, route
@@ -96,7 +97,7 @@ def hand(client: Unified, **overrides: Any) -> VenueHand:
 
 def test_the_declared_mode_is_set_with_the_leverage_and_read_from_its_own_row() -> None:
     client = Unified()
-    placed = hand(client)(LONG)
+    placed = hand(client)(approved(LONG))
     assert placed["sent"] is True
     # The crossed row still says 10x; the isolated row the order trades in says 3x.
     assert {r["marginMode"]: r["leverage"] for r in client.rows} == {
@@ -109,7 +110,7 @@ def test_the_declared_mode_is_set_with_the_leverage_and_read_from_its_own_row() 
 
 def test_a_leverage_that_will_not_change_is_refused_with_the_venues_words() -> None:
     client = Unified(settable=False)
-    placed = hand(client)(LONG)
+    placed = hand(client)(approved(LONG))
     assert placed["sent"] is False and client.orders == []
     assert "would not confirm the leverage on BTC/USDT:USDT in isolated margin" in placed["refused"]
     assert "position is open" in placed["refused"]
@@ -118,14 +119,14 @@ def test_a_leverage_that_will_not_change_is_refused_with_the_venues_words() -> N
 def test_hedge_mode_is_read_from_the_account_and_refused() -> None:
     client = Unified(hold="hedge_mode")
     assert "long/short position mode" in hand(client).ready()
-    assert hand(client)(LONG)["sent"] is False
+    assert hand(client)(approved(LONG))["sent"] is False
     assert hand(Unified()).hedged() == ""
 
 
 def test_every_order_on_the_account_names_the_margin_mode_close_included() -> None:
     client = Unified()
     worker = hand(client, margin_mode="cross")
-    assert worker(LONG)["sent"] is True
+    assert worker(approved(LONG))["sent"] is True
     closed = worker.close_position("time")
     assert closed["closed"] is True
     assert [o["params"]["marginMode"] for o in client.orders] == ["crossed", "crossed"]
@@ -186,5 +187,5 @@ def test_a_fill_reported_without_a_price_is_priced_from_its_own_fills() -> None:
                 {"order": "other", "amount": 1.0, "price": 1.0},
             ]
 
-    placed = hand(Bare())(LONG)
+    placed = hand(Bare())(approved(LONG))
     assert placed["average"] == "100001.6" and placed["slippage_bps"] == "0.16"

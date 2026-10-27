@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 
+from approvals import approved
 from trading_research_agents.trading.capital import (
     Account,
     CapitalError,
@@ -164,17 +165,17 @@ def test_the_day_loss_is_measured_from_the_first_reading_of_the_day(tmp_path: Pa
 
 def test_leverage_is_applied_and_read_back_before_the_first_order() -> None:
     venue = Venue(leverage="10")
-    placed = hand(venue)(LONG)
+    placed = hand(venue)(approved(LONG))
     assert placed["sent"] is True and venue.leverage == Decimal(3)
     assert placed["capital"]["leverage"] == "3" and placed["capital"]["margin_mode"] == "isolated"
     # A venue that already holds the declared value answers "not modified", and that is fine.
     again = Venue(leverage="3")
-    assert hand(again)(LONG)["sent"] is True
+    assert hand(again)(approved(LONG))["sent"] is True
 
 
 def test_a_leverage_the_venue_will_not_take_refuses_the_order() -> None:
     venue = Venue(leverage="10", settable=False)
-    placed = hand(venue)(LONG)
+    placed = hand(venue)(approved(LONG))
     assert placed["sent"] is False and "at 10x at the venue" in placed["refused"]
     assert venue.orders == []
 
@@ -182,20 +183,20 @@ def test_a_leverage_the_venue_will_not_take_refuses_the_order() -> None:
 def test_an_order_the_free_margin_cannot_carry_is_refused() -> None:
     # 0.01 BTC at 100000 is 1000 of notional, 333.33 of margin at 3x; half of 500 is 250.
     venue = Venue(free="500")
-    placed = hand(venue)(LONG)
+    placed = hand(venue)(approved(LONG))
     assert placed["sent"] is False and "needs 333.88 USDT of margin" in placed["refused"]
 
 
 def test_a_stop_past_liquidation_is_refused() -> None:
     # At 80x liquidation is 0.75% away, inside a stop 1% away: a stop past liquidation.
-    placed = hand(Venue(leverage="80"), leverage=Decimal(80))(LONG)
+    placed = hand(Venue(leverage="80"), leverage=Decimal(80))(approved(LONG))
     assert placed["sent"] is False and "liquidation is estimated" in placed["refused"]
 
 
 def test_the_desk_order_rate_is_shared_across_hands() -> None:
     rate = OrderRate(per_minute=1)
-    assert hand(Venue(), rate=rate)(LONG)["sent"] is True
-    second = hand(Venue(), rate=rate)({**LONG, "instrument": "BTCUSDT"})
+    assert hand(Venue(), rate=rate)(approved(LONG))["sent"] is True
+    second = hand(Venue(), rate=rate)(approved({**LONG, "instrument": "BTCUSDT"}))
     assert second["sent"] is False and "max_orders_per_minute is 1" in second["refused"]
 
 
@@ -526,7 +527,7 @@ def separate(client: SeparateVenue, venue: str = "binance") -> VenueHand:
 
 def test_separate_exits_follow_the_fill_as_reduce_only_orders() -> None:
     venue = SeparateVenue()
-    placed = separate(venue)(LONG)
+    placed = separate(venue)(approved(LONG))
     assert placed["sent"] is True and set(placed["exit_orders"]) == {"stop", "take"}
     entry, stop, take = venue.orders[-3:]
     assert "stopLoss" not in entry["params"] and "takeProfit" not in entry["params"]
@@ -542,7 +543,7 @@ def test_separate_exits_follow_the_fill_as_reduce_only_orders() -> None:
 
 def test_a_fill_whose_exit_cannot_be_placed_is_closed_at_once() -> None:
     venue = SeparateVenue(refuse="takeProfitPrice")
-    placed = separate(venue)(LONG)
+    placed = separate(venue)(approved(LONG))
     assert (
         placed["exit_orders"] is None and "the take could not be placed" in placed["exits_refused"]
     )
@@ -554,21 +555,21 @@ def test_a_fill_whose_exit_cannot_be_placed_is_closed_at_once() -> None:
 
 def test_an_exit_left_from_an_earlier_position_comes_off_before_the_entry() -> None:
     venue = SeparateVenue(resting=[{"id": "old-take"}])
-    placed = separate(venue)(LONG)
+    placed = separate(venue)(approved(LONG))
     assert placed["sent"] is True and placed["earlier_exits_cancelled"] == 1
     assert venue.cancelled[0] == "old-take" and venue.cancel_params[0] == {"trigger": True}
 
     stuck = SeparateVenue(resting=[{"id": "old-take"}], stuck=True)
-    refused = separate(stuck)(LONG)
+    refused = separate(stuck)(approved(LONG))
     assert refused["sent"] is False and "would not come off" in refused["refused"]
     assert stuck.orders == []
 
 
 def test_a_venue_that_cannot_attach_points_to_separate_exits() -> None:
-    placed = hand(SeparateVenue())(LONG)
+    placed = hand(SeparateVenue())(approved(LONG))
     assert placed["sent"] is False and 'exits = "separate"' in placed["refused"]
     # Where resting exits are not read yet, separate exits are refused rather than left to chance.
-    unread = separate(SeparateVenue(), venue="acme")(LONG)
+    unread = separate(SeparateVenue(), venue="acme")(approved(LONG))
     assert unread["sent"] is False and "not read here yet" in unread["refused"]
 
 
@@ -588,12 +589,12 @@ class NoLeverageRead(Venue):
 
 def test_leverage_the_venue_cannot_report_is_confirmed_by_its_reply() -> None:
     venue = NoLeverageRead(leverage="10")
-    placed = hand(venue)(LONG)
+    placed = hand(venue)(approved(LONG))
     assert placed["sent"] is True and venue.leverage == Decimal(3)
     assert placed["leverage_confirmed"] == "by the venue's reply"
     # A reply that is an error confirms nothing, and with nothing to read the order is refused.
     stuck = NoLeverageRead(leverage="10", settable=False)
-    refused = hand(stuck)(LONG)
+    refused = hand(stuck)(approved(LONG))
     assert refused["sent"] is False and "would not confirm the leverage" in refused["refused"]
 
 
@@ -637,7 +638,7 @@ def test_a_margin_mode_the_venue_would_not_change_refuses_and_says_why() -> None
         def fetch_leverage(self, symbol: str) -> dict[str, Any]:
             return {"longLeverage": float(self.leverage), "marginMode": "cross"}
 
-    placed = hand(CrossOnly(leverage="3"))(LONG)
+    placed = hand(CrossOnly(leverage="3"))(approved(LONG))
     assert placed["sent"] is False
     assert "in cross margin at the venue" in placed["refused"]
     assert "need future pos write permissions" in placed["refused"]

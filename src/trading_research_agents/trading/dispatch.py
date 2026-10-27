@@ -30,6 +30,7 @@ from decimal import Decimal
 from typing import Any, cast
 
 from trading_research_agents.execution.mandate import DEFAULT_MARKETS, MARKETS
+from trading_research_agents.risk import approval_problem
 from trading_research_agents.trading.hand_state import (
     BPS,
     MAX_BOOK_AGE_S,
@@ -104,6 +105,7 @@ class VenueHand(HandUpkeep):
         """
         send = _Send(intent)
         checks = (
+            self._approved_by_risk,
             self._meant_for_this_hand,
             self._market_admits,
             self._sized,
@@ -120,6 +122,12 @@ class VenueHand(HandUpkeep):
             if refused is not None:
                 return refused
         return self._send(send)
+
+    def _approved_by_risk(self, send: _Send) -> dict[str, Any] | None:
+        # The one check no configuration turns off: an entry the risk gate did not sign for this
+        # very intent, in this run, within its validity, never reaches the venue.
+        problem = approval_problem(send.intent, now=self.clock())
+        return _refused(problem) if problem else None
 
     def _meant_for_this_hand(self, send: _Send) -> dict[str, Any] | None:
         about = str(send.intent.get("instrument", ""))

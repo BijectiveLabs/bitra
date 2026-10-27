@@ -997,6 +997,49 @@ def test_a_venue_that_refuses_leaves_the_decision_on_disk(
     assert json.loads((where / "placed.json").read_text("utf-8"))["sent"] is False
 
 
+def test_the_intent_sent_carries_the_risk_gates_approval(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    from trading_research_agents.risk import approval_problem
+
+    sent: list[dict[str, Any]] = []
+
+    def hand(intent: Any) -> dict[str, Any]:
+        sent.append(dict(intent))
+        return {"sent": True, "order_id": "order-1", "status": "closed"}
+
+    cfg, _, _ = cycle_config(tmp_path, envelope, [analyst_answer()], mode="venue", place=hand)
+    result = run_cycle(cfg)
+
+    assert approval_problem(sent[0], now=cfg.clock().timestamp()) == ""
+    summary = json.loads((Path(str(result.path)) / "cycle.json").read_text("utf-8"))
+    assert (
+        summary["risk_gate"]["approved"] is True
+        and "risk per trade" in summary["risk_gate"]["checks"]
+    )
+
+
+def test_an_armed_switch_stops_the_cycle_at_the_risk_gate(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    switch = tmp_path / "KILL"
+    switch.write_text("stop", encoding="utf-8")
+    sent: list[Any] = []
+    cfg, _, _ = cycle_config(
+        tmp_path,
+        envelope,
+        [analyst_answer()],
+        mode="venue",
+        place=sent.append,
+        switches=(switch,),
+    )
+    result = run_cycle(cfg)
+
+    assert result.intent is None and result.placed is None and sent == []
+    assert any(r.startswith("risk gate: held by the switch at") for r in result.refusals)
+    assert not (Path(str(result.path)) / "intents.jsonl").exists()
+
+
 def test_an_unknown_send_is_written_down_and_holds_its_instrument(
     tmp_path: Path, envelope: Envelope
 ) -> None:

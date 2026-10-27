@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 
+from approvals import approved
 from trading_research_agents.trading.dispatch import VenueHand
 from trading_research_agents.trading.round_trip import _fee_in_quote
 
@@ -109,7 +110,7 @@ def hand(client: SpotVenue, **overrides: Any) -> VenueHand:
 
 def test_a_spot_long_is_paid_in_full_with_its_exits_attached_and_no_leverage() -> None:
     venue = SpotVenue()
-    placed = hand(venue)(dict(SPOT_LONG))
+    placed = hand(venue)(approved(dict(SPOT_LONG)))
     assert placed["sent"] is True, placed
     sent = venue.orders[0]
     assert sent["side"] == "buy" and sent["amount"] == 2.0 and "reduceOnly" not in sent["params"]
@@ -122,14 +123,16 @@ def test_a_spot_long_is_paid_in_full_with_its_exits_attached_and_no_leverage() -
 
 def test_a_spot_market_is_never_sold_short() -> None:
     venue = SpotVenue()
-    placed = hand(venue)({**SPOT_LONG, "target": "short", "stop_price": "155", "take_price": "140"})
+    placed = hand(venue)(
+        approved({**SPOT_LONG, "target": "short", "stop_price": "155", "take_price": "140"})
+    )
     assert placed["sent"] is False and "needs a borrow this desk does not take" in placed["refused"]
     assert venue.orders == []
 
 
 def test_an_order_the_free_cash_cannot_pay_for_is_refused() -> None:
     venue = SpotVenue(usdt="500")
-    placed = hand(venue)(dict(SPOT_LONG))
+    placed = hand(venue)(approved(dict(SPOT_LONG)))
     assert placed["sent"] is False
     assert (
         "costs 300.30 USDT with its fee and 0.5 of the free 500.00 is 250.00" in placed["refused"]
@@ -140,7 +143,7 @@ def test_the_holding_is_the_balance_and_residue_under_the_minimum_is_flat() -> N
     assert hand(SpotVenue(sol="0.004")).position() == 0
     assert hand(SpotVenue(sol="2.5")).position() == Decimal("2.5")
     held = SpotVenue(sol="2.5")
-    placed = hand(held)(dict(SPOT_LONG))
+    placed = hand(held)(approved(dict(SPOT_LONG)))
     assert placed["sent"] is False and "already holds 2.5 of SOL/USDT" in placed["refused"]
 
 
@@ -214,6 +217,6 @@ def test_attached_exits_kept_as_algo_orders_are_cancelled_before_a_spot_sale() -
 
 def test_separate_exits_are_refused_on_a_coin_balance_before_anything_is_cancelled() -> None:
     venue = SpotVenue(resting=1)
-    placed = hand(venue, exits="separate")(dict(SPOT_LONG))
+    placed = hand(venue, exits="separate")(approved(dict(SPOT_LONG)))
     assert placed["sent"] is False and "a coin balance does not take" in placed["refused"]
     assert venue.orders == [] and venue.cancelled == []

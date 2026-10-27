@@ -45,7 +45,7 @@ def _cycle_steps(cfg: Any) -> list[str]:
     steps.append("cost gate")
     if not cfg.targets.idle:
         steps.append("targets")
-    steps.append("intent")
+    steps.extend(["risk gate", "intent"])
     if cfg.mode == "venue":
         steps.append("venue")
     return steps

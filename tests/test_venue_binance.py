@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from approvals import approved
 from test_mandate import LONG, FakeExchange
 from trading_research_agents.trading.capital import read_account
 from trading_research_agents.trading.dispatch import VenueHand
@@ -98,6 +99,6 @@ def test_an_order_is_not_priced_against_a_book_the_venue_stamped_hours_ago() -> 
         max_notional=Decimal(2000),
         keys=("K", "S"),
         client=venue,
-    )(LONG)
+    )(approved(LONG))
     assert placed["sent"] is False and "stamped 11507s ago" in placed["refused"]
     assert venue.orders == []

@@ -17,7 +17,7 @@ import pytest
 SRC = Path(__file__).resolve().parent.parent / "src" / "trading_research_agents"
 PACKAGE = "trading_research_agents"
 
-GATES = {"ledger", "envelope", "data", "chain", "execution", "strategy", "trading"}
+GATES = {"ledger", "envelope", "data", "chain", "execution", "risk", "strategy", "trading"}
 
 # How records reach the disk is beneath everything: any package may write one, and it imports none.
 _ALLOWED: dict[str, set[str]] = {
@@ -41,8 +41,10 @@ _ALLOWED: dict[str, set[str]] = {
     "evaluation": {"features", "market_data", "data", "envelope", "execution", "forecast"},
     "chain": {"ledger", "envelope", "data"},
     "execution": {"ledger", "envelope", "data", "chain"},
+    # The gate every new order passes: the execution layer's arithmetic, and nothing above it.
+    "risk": {"execution"},
     "strategy": {"ledger", "envelope", "data", "chain", "execution"},
-    "trading": {"ledger", "envelope", "data", "chain", "execution", "strategy"},
+    "trading": {"ledger", "envelope", "data", "chain", "execution", "risk", "strategy"},
     "store": GATES | {"llm"},
     "surface": GATES,
     "agents": GATES | {"llm", "store", "surface", "readings"},

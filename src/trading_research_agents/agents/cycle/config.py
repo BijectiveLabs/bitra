@@ -117,6 +117,10 @@ class CycleConfig:
     # the kill switch file is written, and the next pass flattens and stops the run.
     max_drawdown_bps: Decimal | None = None
     drawdown_kill: Path | None = None
+    # Hard limits the risk gate holds every intent to, and the switch files that hold the desk.
+    max_notional: Decimal | None = None
+    max_trades_per_day: int | None = None
+    switches: tuple[Path, ...] = ()
     # [sizing]: the desk's own round trips may lower the risk per trade, never raise it.
     sizing: SizingRule = field(default_factory=SizingRule)
     # What the models have already cost since this desk last wrote an intent. A day of refusals is

@@ -299,6 +299,7 @@ LATER_STEPS = (
     ("desk", "desk"),
     ("cost", "cost gate"),
     ("targets", "targets"),
+    ("risk_gate", "risk gate"),
     ("intent", "intent"),
 )
 
