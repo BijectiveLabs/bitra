@@ -154,7 +154,7 @@ def test_a_unified_key_is_routed_and_an_operator_setting_is_not_overruled() -> N
 
 
 def test_a_fee_ccxt_signs_as_a_rebate_is_counted_as_the_venue_charged_it() -> None:
-    from trading_research_agents.trading.positions import _fee_in_quote
+    from trading_research_agents.trading.round_trip import _fee_in_quote
 
     # As read on 2026-10-20: Bitget charged six basis points; ccxt said -0.0732375.
     fill = {

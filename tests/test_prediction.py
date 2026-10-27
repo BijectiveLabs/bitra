@@ -30,7 +30,7 @@ from trading_research_agents.execution.outcome import (
 from trading_research_agents.execution.pretrade import book_from_levels
 from trading_research_agents.trading.dispatch import VenueHand
 from trading_research_agents.trading.market import Market
-from trading_research_agents.trading.positions import _settled
+from trading_research_agents.trading.round_trip import _settled
 
 HANDLE = "FED_CUTS_IN_DECEMBER:YES"
 NO_HANDLE = "FED_CUTS_IN_DECEMBER:NO"

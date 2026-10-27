@@ -233,7 +233,7 @@ def test_a_built_market_type_the_desk_did_not_list_is_refused() -> None:
 
 
 def test_a_round_trip_is_counted_in_the_markets_settlement_currency() -> None:
-    from trading_research_agents.trading.positions import _settlement
+    from trading_research_agents.trading.round_trip import _settlement
 
     class Described:
         symbol = "BTC/USD:BTC"

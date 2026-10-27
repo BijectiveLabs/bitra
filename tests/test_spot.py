@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 
 from trading_research_agents.trading.dispatch import VenueHand
-from trading_research_agents.trading.positions import _fee_in_quote
+from trading_research_agents.trading.round_trip import _fee_in_quote
 
 SPOT_LONG: dict[str, Any] = {
     "target": "long",
