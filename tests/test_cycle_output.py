@@ -189,7 +189,10 @@ def test_a_cycle_that_ended_early_says_which_panels_it_never_reached() -> None:
         "refusals": ["conviction: score 0.337 is below the declared floor 0.4"],
     }
     text = shown(cycle_view(record))
-    assert "not reached" in text and "risk per trade, desk, cost gate, targets, intent" in text
+    assert (
+        "not reached" in text
+        and "risk per trade, desk, cost gate, targets, risk gate, intent" in text
+    )
     assert "the cycle ended at conviction" in text
 
 

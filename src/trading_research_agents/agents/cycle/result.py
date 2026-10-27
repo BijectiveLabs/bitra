@@ -101,6 +101,8 @@ class CycleResult:
             # What the models cost this cycle, and which calls had no declared price.
             "spend": self.briefs.get("spend"),
             "targets_rule": self.briefs.get("targets_rule"),
+            # Every check the risk gate ran on the intent, and why it refused if it did.
+            "risk_gate": self.briefs.get("risk_gate"),
             "trigger": None if self.wake is None else self.wake.record(),
             "held": self.held,
             "mode": self.briefs.get("mode"),

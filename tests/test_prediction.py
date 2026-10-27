@@ -17,6 +17,7 @@ from typing import Any
 
 import pytest
 
+from approvals import approved
 from test_cycle import NOW, Stub, candles, cycle_config
 from trading_research_agents.agents.cycle import run_cycle
 from trading_research_agents.data.sources import Fetched, SourceChain
@@ -217,7 +218,7 @@ ORDER = {
 
 def test_an_outcome_is_bought_inside_its_price_limits_and_its_take_rests_at_the_venue() -> None:
     venue = Kalshi()
-    placed = hand(venue)(dict(ORDER))
+    placed = hand(venue)(approved(dict(ORDER)))
     assert placed["sent"] is True, placed
     entry, take = venue.orders
     # 20 bps through the 0.42 ask, a limit IOC; no client id, no attached stop: the stake is it.
@@ -232,7 +233,7 @@ def test_an_outcome_is_bought_inside_its_price_limits_and_its_take_rests_at_the_
 
 
 def test_an_outcome_is_never_sold_short() -> None:
-    placed = hand(Kalshi())({**ORDER, "target": "short"})
+    placed = hand(Kalshi())(approved({**ORDER, "target": "short"}))
     assert placed["sent"] is False and "needs a borrow" in placed["refused"]
 
 

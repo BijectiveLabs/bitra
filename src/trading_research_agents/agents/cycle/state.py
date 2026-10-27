@@ -53,6 +53,8 @@ class Pass:
     allowed_bps: Decimal | None = None
     capped: Any = None
     verdict: Any = None
+    # The intent as the gates drafted it, then as the risk gate approved it.
+    intent: dict[str, Any] = field(default_factory=dict)
 
 
 Step = Callable[[Pass], bool]

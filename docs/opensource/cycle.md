@@ -72,6 +72,16 @@ order is cancelled first, `placed.json` and `cycle.json` say so (`"interrupted":
 the cancel went through), and only then does the run end. Stopping between cycles exits with the last
 cycle's outcome; stopping inside one always exits as a refusal, so a supervisor can tell the two apart.
 
+**A send that is never answered.** A create call can time out after the venue took the order. The
+order hand never sends a second one: it looks for the order by the client id it carried, a few
+times, a second apart. Found, the cycle carries on with what the venue listed (`"recovered"` says
+why). Not found, `placed.json` says `"status": "UNKNOWN"` - neither filled nor failed - and the
+order is written to `unknown_orders.jsonl`. While it is there, the risk gate admits no new entry on
+that instrument; every pass looks for it again, and it is resolved when the venue lists it (it is
+then looked after like any filled entry) or when ten minutes pass with every order list readable.
+A venue that answered no (`InsufficientFunds`, `InvalidOrder`) is a refusal, recorded and not
+retried; a duplicate client id is read back like a timeout, because it proves the order exists.
+
 One case nothing in a process can cover: closing a Windows console window. Windows gives the
 process a few seconds and ends it whatever it is doing. What protects capital then is what was
 already at the venue - the stop and take profit travel with the entry, and the next cycle refuses
@@ -119,6 +129,8 @@ the universe (system: one data pull each, the trigger per instrument, ordered by
   -> the desk            (system: what the whole book is already carrying) -> whether it fits
   -> cost gate           (system: the claim against the cost)
   -> targets             (system: net bps, the edge over the cost, reward-to-risk, research, count)
+  -> risk gate           (system: hard caps, the loss at the stop recomputed from the intent, the
+                          switches, unanswered sends, today's trades and losses; signs the intent)
   -> intent, or a refusal that names the figure that refused it
 ```
 

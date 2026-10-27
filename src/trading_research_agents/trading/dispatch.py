@@ -30,11 +30,14 @@ from decimal import Decimal
 from typing import Any, cast
 
 from trading_research_agents.execution.mandate import DEFAULT_MARKETS, MARKETS
+from trading_research_agents.risk import approval_problem
 from trading_research_agents.trading.hand_state import (
     BPS,
     MAX_BOOK_AGE_S,
+    READ_BACKS,
     SIDES,
     UNDESCRIBED,
+    UNKNOWN,
     DispatchError,
     OrderRate,
     _client_id,
@@ -42,6 +45,7 @@ from trading_research_agents.trading.hand_state import (
     _drift_bps,
     _slippage_bps,
     credentials_for,
+    refused_by_venue,
 )
 from trading_research_agents.trading.hand_upkeep import HandUpkeep
 from trading_research_agents.trading.market import Market
@@ -101,6 +105,7 @@ class VenueHand(HandUpkeep):
         """
         send = _Send(intent)
         checks = (
+            self._approved_by_risk,
             self._meant_for_this_hand,
             self._market_admits,
             self._sized,
@@ -117,6 +122,12 @@ class VenueHand(HandUpkeep):
             if refused is not None:
                 return refused
         return self._send(send)
+
+    def _approved_by_risk(self, send: _Send) -> dict[str, Any] | None:
+        # The one check no configuration turns off: an entry the risk gate did not sign for this
+        # very intent, in this run, within its validity, never reaches the venue.
+        problem = approval_problem(send.intent, now=self.clock())
+        return _refused(problem) if problem else None
 
     def _meant_for_this_hand(self, send: _Send) -> dict[str, Any] | None:
         about = str(send.intent.get("instrument", ""))
@@ -309,6 +320,7 @@ class VenueHand(HandUpkeep):
     def _send(self, send: _Send) -> dict[str, Any]:
         """The one order, then what the venue said about it and what follows it."""
         began = self.clock()
+        recovered = ""
         try:
             order = self.client.create_order(
                 self.symbol,
@@ -319,11 +331,24 @@ class VenueHand(HandUpkeep):
                 send.params,
             )
         except Exception as exc:
-            raise DispatchError(self.redact(f"{exc.__class__.__name__}: {exc}")) from exc
+            said = self.redact(f"{exc.__class__.__name__}: {exc}")
+            if refused_by_venue(exc):
+                raise DispatchError(said) from exc
+            # The request may have reached the book. This hand never sends again, and the order
+            # is looked for by the id it carried before anything is concluded.
+            self.sent_count += 1
+            found, unread = self.find_sent(send.order_id)
+            if found is None:
+                if unread:
+                    said += f"; the venue would not list {', '.join(sorted(set(unread)))}"
+                return self._unknown(send, said, round((self.clock() - began) * 1000))
+            order, recovered = found, said
+        else:
+            self.sent_count += 1
         send_ms = round((self.clock() - began) * 1000)
-        order = self.in_base(order, send.unit)
-        self.sent_count += 1
-        placed = self._placed(send, order, send_ms)
+        placed = self._placed(send, self.in_base(order, send.unit), send_ms)
+        if recovered:
+            placed["recovered"] = f"{recovered}; found at the venue by its client id"
         if self.role == "maker":
             placed.update(self._settle(str(placed["order_id"])))
         elif placed["filled"] is None or placed["average"] is None:
@@ -340,6 +365,22 @@ class VenueHand(HandUpkeep):
         if cast(Market, send.market).outcome:
             placed["exits"] = "bounded"
             placed.update(self._rest_take(placed, send.intent))
+        return placed
+
+    def _unknown(self, send: _Send, said: str, send_ms: int) -> dict[str, Any]:
+        """A send that may or may not be on the book: neither filled nor failed until reconciled."""
+        placed = self._placed(send, {}, send_ms)
+        placed.update(
+            {
+                "sent": None,
+                "status": UNKNOWN,
+                "unknown": (
+                    f"{said}; no order with client id {send.order_id} was listed after "
+                    f"{READ_BACKS} reads, and it may still reach the book; nothing more is sent on "
+                    f"{self.symbol} until it is reconciled"
+                ),
+            }
+        )
         return placed
 
     def _placed(self, send: _Send, order: Mapping[str, Any], send_ms: int) -> dict[str, Any]:

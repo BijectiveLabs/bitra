@@ -23,8 +23,10 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from trading_research_agents.execution.unknown import SETTLE_S, resolutions, resolve, unresolved
 from trading_research_agents.records import append_line, has_index, read_lines, recent
 from trading_research_agents.trading.entry import SIDES, Entry
+from trading_research_agents.trading.hand_state import UNKNOWN
 from trading_research_agents.trading.round_trip import (
     _base,
     _contract_unit,
@@ -88,10 +90,30 @@ def _sent(root: Path) -> Iterator[tuple[str, dict[str, Any], dict[str, Any]]]:
             yield cycle.name, placed, rows[-1]
 
 
+def _as_found(placed: dict[str, Any], ended: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
+    """An UNKNOWN send that the venue later listed, as the send it turned out to be."""
+    if placed.get("status") != UNKNOWN:
+        return placed
+    row = ended.get(str(placed.get("client_order_id", "")))
+    order = None if row is None or row.get("outcome") != "found" else row.get("order")
+    if not isinstance(order, Mapping):
+        return placed
+    return {
+        **placed,
+        "sent": True,
+        "order_id": str(order.get("id", "")),
+        "status": order.get("status"),
+        "filled": order.get("filled"),
+        "average": order.get("average"),
+    }
+
+
 def filled_entries(root: Path) -> dict[str, Entry]:
     """Per instrument, the newest entry this desk sent that the venue filled."""
     found: dict[str, Entry] = {}
-    for cycle, placed, intent in _sent(Path(root)):
+    ended = resolutions(Path(root))
+    for cycle, sent, intent in _sent(Path(root)):
+        placed = _as_found(sent, ended)
         filled = filled_of(placed, intent)
         opened = _opened(cycle)
         name = str(intent.get("instrument", ""))
@@ -161,9 +183,9 @@ class Keeper:
     def run(self, *, kill: bool = False) -> list[str]:
         """One look at every instrument. Returns the lines a person reads; the journal keeps all."""
         now = self.clock()
+        said = self._reconcile_unknown(now)
         entries = filled_entries(self.root)
         done = finished_orders(self.root)
-        said: list[str] = []
         names = list(self.instruments)
         if self.follow_records:
             names = list(dict.fromkeys([*names, *entries]))
@@ -209,6 +231,33 @@ class Keeper:
             said.append(f"positions: {name} was closed at the venue; {_trip_line(trip)}")
         if not kill:
             said.extend(self._complete(now, entries))
+        return said
+
+    def _reconcile_unknown(self, now: datetime) -> list[str]:
+        """Look for every UNKNOWN order by its client id, and resolve the ones the venue settles."""
+        said: list[str] = []
+        for cid, row in unresolved(self.root).items():
+            name = str(row.get("instrument", ""))
+            try:
+                order, unread = self.hand_for(name).find_sent(cid)
+            except Exception as exc:
+                said.append(
+                    f"positions: {name} order {cid} still UNKNOWN ({exc.__class__.__name__})"
+                )
+                continue
+            if order is not None:
+                resolve(self.root, client_order_id=cid, outcome="found", order=order, at=now)
+                said.append(
+                    f"positions: {name} order {cid} found at the venue, {order.get('status')}, "
+                    f"filled {order.get('filled')}; it is looked after from now on"
+                )
+                continue
+            asked_at = datetime.fromisoformat(str(row.get("at")))
+            if unread or (now - asked_at).total_seconds() <= SETTLE_S:
+                said.append(f"positions: {name} order {cid} still UNKNOWN; asked again next pass")
+                continue
+            resolve(self.root, client_order_id=cid, outcome="not_found", order=None, at=now)
+            said.append(f"positions: {name} order {cid} never reached the book; resolved")
         return said
 
     def _complete(self, now: datetime, entries: Mapping[str, Entry]) -> list[str]:

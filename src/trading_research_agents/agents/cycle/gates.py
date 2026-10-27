@@ -14,6 +14,7 @@ from decimal import Decimal
 from typing import Any
 
 from trading_research_agents.agents.briefs import BriefError
+from trading_research_agents.agents.cycle.approval import risk_gate
 from trading_research_agents.agents.cycle.briefing import _conviction_states
 from trading_research_agents.agents.cycle.decide import _stop, price_at
 from trading_research_agents.agents.cycle.pricing import (
@@ -264,10 +265,16 @@ def _targets(p: Pass) -> bool:
     return _admitted(p, "targets", met.admitted, detail)
 
 
+def _draft(p: Pass) -> bool:
+    p.intent = _intent_record(p)
+    return True
+
+
 def _intent(p: Pass) -> bool:
-    """The intent, written before anything is sent, so the decision survives whatever comes next."""
+    """The approved intent, written before anything is sent, so the decision survives whatever
+    comes next."""
     cfg, result, analyst = p.cfg, p.result, p.analyst
-    result.intent = _intent_record(p)
+    result.intent = p.intent
     announce(cfg.watch, "intent", DONE, f"{analyst.target} {p.size} on {analyst.setup}")
     append_line(p.where.path / "intents.jsonl", result.intent, durable=True)
     return True
@@ -331,6 +338,8 @@ GATES: tuple[Step, ...] = (
     _reprice,
     _cost_gate,
     _targets,
+    _draft,
+    risk_gate,
     _intent,
 )
 

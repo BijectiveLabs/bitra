@@ -12,6 +12,7 @@ from typing import Any
 
 import pytest
 
+from approvals import approved
 from trading_research_agents.trading.dispatch import VenueHand, market_kind
 from trading_research_agents.trading.market import Market, MarketError
 
@@ -171,7 +172,7 @@ def _send() -> tuple[dict[str, Any], tuple[Any, ...]]:
         client=venue,
         clock=lambda: 4070908800.0,
     )
-    placed = hand(dict(INTENT))
+    placed = hand(approved(dict(INTENT)))
     return placed, venue.calls[0]
 
 
@@ -227,7 +228,7 @@ def test_a_built_market_type_the_desk_did_not_list_is_refused() -> None:
         clock=lambda: 4070908800.0,
         markets=(),
     )
-    placed = hand(dict(INTENT))
+    placed = hand(approved(dict(INTENT)))
     assert placed["sent"] is False and "[execution].markets lists []" in placed["refused"]
     assert venue.calls == []
 

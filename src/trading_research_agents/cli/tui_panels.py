@@ -68,6 +68,9 @@ def _cycle_panel(record: Mapping[str, Any]) -> list[Any]:
                     ),
                 )
             )
+        elif placed.get("status") == "UNKNOWN":
+            said = f"UNKNOWN, reconciling: {placed.get('unknown')}"
+            head.append(("venue", Text(said, style="bold yellow")))
         else:
             why = placed.get("refused") or placed.get("error") or "not sent"
             head.append(("venue", Text(f"NOT SENT: {why}", style="bold red")))
@@ -296,6 +299,7 @@ LATER_STEPS = (
     ("desk", "desk"),
     ("cost", "cost gate"),
     ("targets", "targets"),
+    ("risk_gate", "risk gate"),
     ("intent", "intent"),
 )
 

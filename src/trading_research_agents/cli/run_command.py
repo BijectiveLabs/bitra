@@ -251,6 +251,9 @@ def _cycle_config(desk: _Desk) -> Any:
         sizing=cfg.sizing,
         # Flattening is the kill switch's job; the cycle only arms it.
         drawdown_kill=cfg.kill_switch if cfg.limits.on_drawdown == "flatten" else None,
+        max_notional=cfg.execution.max_notional,
+        max_trades_per_day=cfg.limits.max_trades_per_day,
+        switches=tuple(path for path in (cfg.kill_switch, cfg.pause_switch) if path is not None),
         trigger=cfg.trigger,
         forced=bool(args.now),
         max_risk_per_trade_bps=cfg.limits.max_risk_per_trade_bps,

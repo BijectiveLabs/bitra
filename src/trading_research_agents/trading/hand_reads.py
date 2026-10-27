@@ -16,7 +16,7 @@ from trading_research_agents.trading.capital import (
     margin_needed,
     read_account,
 )
-from trading_research_agents.trading.hand_state import BPS, EXITS, ROLES, DispatchError
+from trading_research_agents.trading.hand_state import BPS, EXITS, READ_BACKS, ROLES, DispatchError
 from trading_research_agents.trading.hand_terms import HandTerms
 from trading_research_agents.trading.market import Market, MarketError
 from trading_research_agents.trading.venues.exits import exit_cancel_params, exit_reads
@@ -166,6 +166,40 @@ class HandReads(HandTerms):
             raise DispatchError(
                 self.redact(f"cannot read the open orders: {exc.__class__.__name__}: {exc}")
             ) from exc
+
+    def find_sent(self, client_id: str) -> tuple[dict[str, Any] | None, list[str]]:
+        """The order this hand sent, found among the venue's orders by its client id, and the
+        order lists the venue would not show.
+
+        Read a few times, a second apart: a venue that lost the answer to a create may take a
+        moment to list the order it accepted. A list that cannot be read is not a list without the
+        order, so its name is returned and the caller keeps the order UNKNOWN.
+        """
+        unread: list[str] = []
+        if not client_id:
+            return None, unread
+        for attempt in range(READ_BACKS):
+            if attempt:
+                self.sleep(1.0)
+            for read in ("fetch_open_orders", "fetch_closed_orders", "fetch_canceled_orders"):
+                found = self._listed(read, client_id, unread)
+                if found is not None:
+                    return found, unread
+        return None, unread
+
+    def _listed(self, read: str, client_id: str, unread: list[str]) -> dict[str, Any] | None:
+        fetch = getattr(self.client, read, None)
+        if fetch is None:
+            return None
+        try:
+            rows = fetch(self.symbol) or []
+        except Exception as exc:
+            unread.append(f"{read} ({exc.__class__.__name__})")
+            return None
+        for row in rows:
+            if str(row.get("clientOrderId") or "") == client_id:
+                return dict(row)
+        return None
 
     def position(self) -> Decimal | None:
         """What the account already holds, or nothing when the venue will not say.

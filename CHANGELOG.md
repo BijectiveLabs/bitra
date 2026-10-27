@@ -8,6 +8,16 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- The risk gate (`risk/`): every new order passes one entry point that checks the intent against
+  the hard caps, recomputes the loss at the stop from the intent's own numbers, and reads the
+  switches, unanswered sends, today's trades and the day's loss and drawdown, failing closed when
+  any of them cannot be read. It signs what it approves; the order hand refuses an intent without
+  that signature, so no path to the venue goes around it. `cycle.json` keeps every check under
+  `risk_gate`.
+- A create call that goes unanswered is no longer recorded as not sent. The order hand looks for
+  the order by its client id; one it cannot find is `UNKNOWN` in `placed.json` and
+  `unknown_orders.jsonl`, holds its instrument, and is reconciled on every pass.
+
 - `tra data bars`: one-minute flow bars from a venue's trade archive, with the taker's side of
   every trade, trade counts, large-trade volume and gap marks, and the market's derivatives history
   (funding, open interest, mark, index, long/short) beside them, in a day archive under
@@ -55,6 +65,9 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- A venue error at the create call is classified: a refusal by the venue raises as before, and
+  anything else (a timeout, a dropped connection, a duplicate client id) is read back by the
+  order's client id instead of being recorded as `sent: false`.
 - The macro, on-chain and sentiment analysts are now readings, `macro`, `onchain` and `sentiment`,
   in their own package (`readings/`): code over the series you declare, against the thresholds you
   drew, which is what confluence and conviction always read; no decision rested on the label a

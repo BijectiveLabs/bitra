@@ -23,7 +23,10 @@ trading_research_agents/
                archive plugins in data/venues, column maps for the rest      -> ledger, envelope
   chain/       falsification chain, layers 0 to 5                               -> ledger, envelope, data
   execution/   cost identity, fills after latency, trade-through matching,
-               fill probability, markout                                        -> ledger, envelope, data, chain
+               fill probability, markout, orders whose send went unanswered     -> ledger, envelope, data, chain
+  risk/        the gate every new order passes: hard caps, the loss at the stop
+               recomputed, switches, unanswered sends, today's trades and losses;
+               signs the intent it approves                                     -> execution
   strategy/    the core protocol, exits bound to the mechanism, the walk-forward
                harness; no strategy of its own                                 -> everything above
   trading/     the live feed through ccxt in trading/feeds, simulated venue, the
@@ -68,6 +71,11 @@ Rules, each enforced by a test in `tests/test_boundaries.py`:
 7. `mcp` reaches everything except `agent`, and its tools only read.
 8. The only actions on `surface` tighten a limit, step the ladder down, or arm the kill
    switch. A role holding the surface holds nothing that loosens.
+
+One more rule is held by behaviour rather than by imports: every new order passes
+`risk.evaluate`, and the order hand refuses an intent that does not carry the gate's signature for
+that very intent, made in this run and still valid. Closing or flattening a position needs no
+approval. `tests/test_mandate.py` and `tests/test_cycle.py` break if either lock is removed.
 
 ## Adoption rules
 
@@ -121,7 +129,8 @@ a venue is a name in the settings, and the parts below work the same for all of 
 | Market | one shape for every market type, read from ccxt's unified market, a prediction outcome included | `trading/market.py` |
 | Order | the entry, its exits attached, one per decision, under a client id from the cycle | `trading/dispatch.py` |
 | Execution | a taker entry as a limit IOC inside a slippage band, a maker entry post-only with a timeout | `trading/dispatch.py` |
-| Order state | waits for the fill, cancels what is left, and records what the venue said in its own words | `trading/dispatch.py` |
+| Risk | the last gate before an order: hard caps, the loss at the stop, switches, unanswered sends, today's trades and losses; it signs what it approves and the order hand checks the signature | `risk/` |
+| Order state | waits for the fill, cancels what is left, and records what the venue said in its own words; a create that went unanswered is looked for by its client id, and one not found is UNKNOWN until reconciled | `trading/dispatch.py`, `execution/unknown.py` |
 | Position | reconciled with the venue on every pass; closed by time or by the kill switch, reduce-only | `trading/positions.py` |
 | Account | equity, free margin, the margin an order ties up, the day's loss and the drawdown | `trading/capital.py` |
 
