@@ -32,6 +32,7 @@ from trading_research_agents.execution.trigger import (
     Trigger,
 )
 from trading_research_agents.llm.completer import Completer
+from trading_research_agents.llm.judge import Judge
 from trading_research_agents.llm.usage import UsageLedger
 from trading_research_agents.readings import READINGS
 from trading_research_agents.trading.market import Market
@@ -42,6 +43,9 @@ MODES = MANDATE_MODES
 
 
 TARGETS = {"long": Direction.LONG, "short": Direction.SHORT}
+# Who may join the technical analyst: a blind second read of its own brief, and a reader of the
+# flow figures that then leave the technical brief.
+TEAM = ("technical_peer", "flow_analyst")
 
 
 # What a contract market has and a spot pair does not.
@@ -161,6 +165,12 @@ class CycleConfig:
     series: Mapping[str, tuple[Path, ...]] = field(default_factory=dict)
     news: tuple[Path, ...] = ()
     readings: tuple[str, ...] = ()
+    # [agents].team: who answers beside the technical analyst. Empty is the analyst alone, on the
+    # whole brief, as before.
+    team: tuple[str, ...] = ()
+    # The typed judge, when declared: each structure read's reason checked against the measured
+    # labels. Absent, that check is not made and the record says nothing was asked.
+    judge: Judge | None = None
     max_workers: int = 4
     # Progress, on its own wire. A watcher sees the steps as they happen and can change none of
     # them; the default is nobody watching.
@@ -176,6 +186,9 @@ class CycleConfig:
         stray = sorted(set(self.series) - set(READINGS))
         if stray:
             raise CycleError(f"series declared for {stray}, which is not a reading")
+        strangers = sorted(set(self.team) - set(TEAM))
+        if strangers or len(set(self.team)) != len(self.team):
+            raise CycleError(f"the team is each of {list(TEAM)} at most once, not {self.team}")
         bad_stance = sorted(set(self.validators) - set(STANCES))
         if bad_stance:
             raise CycleError(f"{bad_stance} is not a stance; have {list(STANCES)}")

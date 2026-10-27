@@ -36,6 +36,7 @@ from trading_research_agents.agents.cycle.pricing import (
 )
 from trading_research_agents.agents.cycle.record import _finish
 from trading_research_agents.agents.cycle.state import Pass, Step
+from trading_research_agents.agents.cycle.team import check_reasons, combine, split, tasks
 from trading_research_agents.agents.cycle.validators import _before_votes, _run_validators
 from trading_research_agents.agents.parallel import Task, run_tasks
 from trading_research_agents.agents.progress import DONE, REFUSED, announce, timed
@@ -89,13 +90,14 @@ def _brief(p: Pass) -> bool:
     )
     if last is not None:
         shown["previous"] = last
-    p.asked = _within_scope(technical_analyst.ROLE, shown, result)
+    structure, p.flow_brief = split(shown, cfg.team)
+    p.asked = _within_scope(technical_analyst.ROLE, structure, result)
     write_json(p.where.brief("technical"), p.asked)
     return True
 
 
 def _ask_technical(p: Pass) -> bool:
-    """The one model call of the cycle; the readings are written down while it is out."""
+    """The technical analyst and its team, in parallel; the readings are written down meanwhile."""
     cfg, result = p.cfg, p.result
     states = {n: _reading_state(n, brief) for n, brief in p.reading_briefs.items()}
     announce(cfg.watch, "regime", DONE, _regime_line(cfg, p.technical, states))
@@ -115,11 +117,13 @@ def _ask_technical(p: Pass) -> bool:
         ),
         path=p.where.answer("technical"),
     )
+    members = tasks(p)
     for name, brief in p.reading_briefs.items():
         write_json(p.where.brief(name), brief)
         announce(cfg.watch, name, DONE, f"read by code: {states[name]['declared']}")
-    fan = run_tasks([task], max_workers=cfg.max_workers)
+    fan = run_tasks([task, *members], max_workers=cfg.max_workers)
     result.fan = fan
+    p.answers = dict(fan.answers)
     result.context = _context_of(p.reading_briefs)
     for name, error in fan.failed.items():
         result.refusals.append(f"{name}: {error}")
@@ -174,7 +178,7 @@ def _check_answer(p: Pass) -> bool:
             "it is not something this desk can act on or review afterwards"
         )
         return _stop(p, why, "technical", "no setup")
-    return _fits_regime(p)
+    return True
 
 
 def _fits_regime(p: Pass) -> bool:
@@ -348,6 +352,9 @@ DECIDING: tuple[Step, ...] = (
     _brief,
     _ask_technical,
     _check_answer,
+    combine,
+    _fits_regime,
+    check_reasons,
     _price,
     _place_exits,
     _validate,

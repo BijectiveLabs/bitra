@@ -103,6 +103,13 @@ kill_switch = "KILL"               # `tra kill` sets it: flatten and stop; `tra 
 # series and your thresholds; it asks no model. The technical analyst is always asked.
 # readings = ["macro", "sentiment"]
 #
+# The team beside the technical analyst, each answering without seeing the others. A peer reads
+# the analyst's own brief blind, and the two must name the same side or there is no trade; give
+# it another model family below, since two reads from one model err together. A flow analyst
+# reads the book, funding and open interest, which then leave the analyst's brief, and is a voice
+# in [conviction]. Each member is one more call per cycle.
+# team = ["technical_peer", "flow_analyst"]
+#
 # The stances that argue about a proposal once there is one. Each stance is one more call, so this
 # is off until you ask for it. Pro argues for, contra argues against, neutral weighs both. Every
 # claim they make has to cite a figure from the brief with its value, and the system throws away the ones
@@ -116,6 +123,10 @@ kill_switch = "KILL"               # `tra kill` sets it: flatten and stop; `tra 
 # line per role is usually all it takes. No vendor is assumed anywhere: provider, model and effort
 # are yours on every row. A whole cycle is several calls inside a minute. On a tier that limits tokens per minute, put the
 # validators on a second vendor so the calls split across two limits:
+# [agents.roles.technical_peer]
+# provider = "google"
+# model = "gemini-pro-latest"
+#
 # [agents.roles.validator]
 # provider = "google"
 # model = "gemini-flash-latest"
@@ -149,7 +160,7 @@ kill_switch = "KILL"               # `tra kill` sets it: flatten and stop; `tra 
 # case refuses the trade. docs.bijectivelabs.dev/opensource/cycle works four cases through. Nothing here can make a trade
 # larger than [controls] and [run].size already allow - it can only make it smaller.
 # [conviction]
-# weights = { technical_analyst = 2.0, onchain = 1.5, macro = 1.0, sentiment = 0.5 }
+# weights = { technical_analyst = 2.0, flow_analyst = 1.0, onchain = 1.5, macro = 1.0, sentiment = 0.5 }
 # validator_weight = 1.0
 # min_score = 0.4                  # below this the desk does not trade, whatever the matrix said
 # max_leverage = 3.0               # notional against [run].equity; a ceiling, never a target

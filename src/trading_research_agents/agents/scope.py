@@ -21,10 +21,10 @@ record is there so an operator can see a model drifting out of its lane.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
-from trading_research_agents.agents import technical_analyst
+from trading_research_agents.agents import flow_analyst, technical_analyst, technical_peer
 
 VALIDATOR = "validator"
 SCREENER = "market_screener"
@@ -91,6 +91,11 @@ class Scope:
         return key in self.reads or any(key.startswith(f) for f in self.families)
 
 
+# What the flow analyst reads. With it on the team these leave the technical briefs, so each figure
+# has one reader.
+FLOW = ("spread_bps", "book_imbalance", "funding_rate", "open_interest")
+FLOW_READS = ("instrument", "interval_s", "age_s", "close", *FLOW)
+
 SCOPES: dict[str, Scope] = {
     technical_analyst.ROLE: Scope(
         role=technical_analyst.ROLE,
@@ -139,6 +144,13 @@ SCOPES: dict[str, Scope] = {
         prose=("reason",),
         families=("ret_",),
     ),
+    flow_analyst.ROLE: Scope(
+        role=flow_analyst.ROLE,
+        reads=FLOW_READS,
+        answers=("target", "confidence", "reason", "figures_used"),
+        decides="one voice in conviction, signed by the side it reads; never a level or a size",
+        prose=("reason",),
+    ),
     SCREENER: Scope(
         role=SCREENER,
         reads=("as_of", "basis", "mechanism", "candidates"),
@@ -171,6 +183,9 @@ SCOPES: dict[str, Scope] = {
     ),
 }
 
+# The peer is handed the lead's brief and held to the lead's edges.
+SCOPES[technical_peer.ROLE] = replace(SCOPES[technical_analyst.ROLE], role=technical_peer.ROLE)
+
 
 def scope_of(role: str) -> Scope:
     try:
@@ -199,7 +214,7 @@ def crossings(role: str, said: Mapping[str, Any]) -> tuple[str, ...]:
     """Where an answer's prose reached into a later step. Recorded, never used to silence it."""
     allowed = scope_of(role)
     found: list[str] = []
-    if role == technical_analyst.ROLE:
+    if role in (technical_analyst.ROLE, technical_peer.ROLE):
         # The direction and the horizon are this role's job, and the vocabulary of an entry is the
         # vocabulary it is paid to use. Sizing and exits are still not its own, but it names them
         # by describing the mechanism, so only an invented rule is looked for here.

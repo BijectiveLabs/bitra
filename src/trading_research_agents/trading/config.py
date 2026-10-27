@@ -182,6 +182,9 @@ class AgentSettings:
     # [agents].readings: the readings to read, when the operator wants to say it outright. Empty
     # means every reading with a declared source.
     readings: tuple[str, ...] = ()
+    # [agents].team: who answers beside the technical analyst: a blind peer on its brief, and a
+    # flow analyst on the book, funding and open interest. Empty is the analyst alone.
+    team: tuple[str, ...] = ()
     # [agents].validators: the stances asked about a proposal once there is one. Each stance is one
     # more call, so this is empty until an operator asks for it.
     validators: tuple[str, ...] = ()
@@ -236,8 +239,11 @@ RETIRED_READERS = {
     "onchain_analyst": "onchain",
     "sentiment_analyst": "sentiment",
 }
-# The voices conviction can weigh: the one model that proposes, and the readings.
-VOICES = ("technical_analyst", *READINGS)
+# Who may join the technical analyst. The agents package owns these names; repeated here as the
+# readings are.
+TEAM = ("technical_peer", "flow_analyst")
+# The voices conviction can weigh: the analyst that proposes, the flow analyst, and the readings.
+VOICES = ("technical_analyst", "flow_analyst", *READINGS)
 LOW_EFFORT = "low"
 
 
@@ -505,6 +511,8 @@ def _placeholder(settings: AgentSettings) -> Strategy:
 KNOWN_ROLES = (
     "market_screener",
     "technical_analyst",
+    "technical_peer",
+    "flow_analyst",
     "risk_manager",
     "executor",
     "auditor",
@@ -554,6 +562,15 @@ def _readings(table: Mapping[str, Any]) -> tuple[str, ...]:
     # The roster before 0.11 also named the analyst that is now always asked.
     named = [name for name in raw if name != "technical_analyst"]
     return _known(named, READINGS, "[agents].readings")
+
+
+def _team(raw: Any) -> tuple[str, ...]:
+    """`[agents].team`: who answers beside the technical analyst."""
+    if raw is None:
+        return ()
+    if not isinstance(raw, list) or not all(isinstance(name, str) for name in raw):
+        raise ConfigError("[agents].team is a list of role names")
+    return _known(raw, TEAM, "[agents].team")
 
 
 def renamed_in(raw: Mapping[str, Any]) -> tuple[str, ...]:
@@ -651,6 +668,7 @@ AGENTS_KEYS = (
     "screen",
     "roles",
     "readings",
+    "team",
     # What a desk wrote before 0.11; read, and named by `tra check`.
     "analysts",
     "reuse_reading_for",
@@ -721,6 +739,7 @@ def _agents(raw: dict[str, Any], strategy_raw: dict[str, Any]) -> AgentSettings 
         screen=_screen(table.get("screen")),
         roles=_roles(table.get("roles")),
         readings=_readings(table),
+        team=_team(table.get("team")),
         validators=_validators(table.get("validators")),
         on_missing_validator=_choice(
             table, "on_missing_validator", ("refuse", "continue"), "refuse", "[agents]"
@@ -986,7 +1005,11 @@ def _confluence(raw: dict[str, Any]) -> Matrix:
     unknown = sorted(set(table) - set(CONFLUENCE_KEYS))
     if unknown:
         raise ConfigError(f"[confluence]: unknown {unknown}; have {list(CONFLUENCE_KEYS)}")
-    required = _known(_names(table.get("required"), "required"), READINGS, "[confluence].required")
+    required = _known(
+        _names(table.get("required"), "required"),
+        (*READINGS, "flow_analyst"),
+        "[confluence].required",
+    )
     try:
         return Matrix(
             required=required,

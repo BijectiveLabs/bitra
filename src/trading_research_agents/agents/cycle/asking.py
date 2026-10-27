@@ -8,6 +8,7 @@ from typing import Any
 
 from trading_research_agents.agents import (
     technical_analyst,
+    technical_peer,
 )
 from trading_research_agents.agents.cycle.config import CycleConfig
 from trading_research_agents.agents.cycle.result import CycleResult
@@ -19,7 +20,11 @@ from trading_research_agents.records import (
 
 # A desk picks its setup from the market in front of it; the research core trades one registered
 # mechanism. Same role and schema, so only the instructions differ.
-LIVE_PROMPTS = {technical_analyst.ROLE: "technical_analyst_live"}
+LIVE_PROMPTS = {
+    technical_analyst.ROLE: "technical_analyst_live",
+    # The peer is a second read of the same brief, under the same instructions.
+    technical_peer.ROLE: "technical_analyst_live",
+}
 
 
 # Neutral fills the validator's schema, but as the judge of the two cases it has its own job.

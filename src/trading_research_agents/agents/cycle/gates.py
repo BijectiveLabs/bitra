@@ -317,6 +317,8 @@ def _intent_record(p: Pass) -> dict[str, Any]:
         **p.exits,
         "channel": cfg.venue_key,
         "entry_role": _channel(cfg).entry_role,
+        # Each member's side, when the analyst did not decide alone.
+        **({"team": dict(p.team_reads)} if p.team_reads else {}),
     }
 
 
