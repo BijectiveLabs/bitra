@@ -25,9 +25,9 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from trading_research_agents.execution.mandate import DEFAULT_MARKETS, MARKETS
 from trading_research_agents.trading.hand_state import (
@@ -54,6 +54,36 @@ from trading_research_agents.trading.venues.limits import (
 
 
 @dataclass
+class _Send:
+    """One intent on its way to the venue: what each check has read so far, in the order read."""
+
+    intent: Mapping[str, Any]
+    market: Market | None = None
+    kind: str = ""
+    target: str = ""
+    side: str = ""
+    derivative: bool = False
+    size: Decimal = Decimal(0)
+    mid: Decimal = Decimal(0)
+    notional: Decimal = Decimal(0)
+    age: float | None = None
+    standing: Decimal | None = None
+    swept: int = 0
+    unit: Decimal = Decimal(1)
+    contracts: Decimal = Decimal(0)
+    drift: Decimal | None = None
+    fresh: dict[str, Any] | None = None
+    carried: dict[str, str] = field(default_factory=dict)
+    order_id: str = ""
+    params: dict[str, Any] = field(default_factory=dict)
+    price: Decimal | None = None
+
+
+def _refused(why: str, **seen: Any) -> dict[str, Any]:
+    return {"sent": False, "refused": why, **seen}
+
+
+@dataclass
 class VenueHand(HandUpkeep):
     """What a cycle in venue mode sends with: one venue, one instrument, one cap, one role.
 
@@ -63,237 +93,283 @@ class VenueHand(HandUpkeep):
     """
 
     def __call__(self, intent: Mapping[str, Any]) -> dict[str, Any]:
-        """Send it, or say why it was not sent. Either way the caller gets a record."""
-        about = str(intent.get("instrument", ""))
+        """Send it, or say why it was not sent. Either way the caller gets a record.
+
+        The checks run in this order because several of them act on the venue - the clock and
+        account reads, cancelling this desk's earlier exits, setting leverage, taking a slot in
+        the order rate - and each of those is only worth doing once every cheaper check passed.
+        """
+        send = _Send(intent)
+        checks = (
+            self._meant_for_this_hand,
+            self._market_admits,
+            self._sized,
+            self._timely,
+            self._account_admits,
+            self._nothing_resting,
+            self._in_contracts,
+            self._priced_now,
+            self._carried,
+            self._order_terms,
+        )
+        for check in checks:
+            refused = check(send)
+            if refused is not None:
+                return refused
+        return self._send(send)
+
+    def _meant_for_this_hand(self, send: _Send) -> dict[str, Any] | None:
+        about = str(send.intent.get("instrument", ""))
         if self.instrument and about and about != self.instrument:
             # A desk that watches several instruments builds a hand per instrument. Sending this
             # one under another's symbol is the one mistake no record afterwards can undo.
-            return {
-                "sent": False,
-                "refused": (
-                    f"this hand sends {self.instrument} as {self.symbol}; the intent is about "
-                    f"{about}"
-                ),
-            }
+            return _refused(
+                f"this hand sends {self.instrument} as {self.symbol}; the intent is about {about}"
+            )
         if self.sent_count:
             # One decision, one order. A hand asked twice is a wiring fault, not a second trade.
-            return {"sent": False, "refused": "this hand has already sent its one order"}
-        market = self.market()
-        kind = market.label
+            return _refused("this hand has already sent its one order")
+        return None
+
+    def _market_admits(self, send: _Send) -> dict[str, Any] | None:
+        market = send.market = self.market()
+        kind = send.kind = market.label
         if kind not in MARKETS and kind != UNDESCRIBED:
             # A type with no rules here would be priced and protected by another type's rules.
-            return {
-                "sent": False,
-                "refused": (
-                    f"{self.symbol} is a {kind} market; venue mode trades "
-                    f"{', '.join(MARKETS)} markets today, and other market types are not "
-                    "built yet"
-                ),
-            }
+            return _refused(
+                f"{self.symbol} is a {kind} market; venue mode trades "
+                f"{', '.join(MARKETS)} markets today, and other market types are not built yet"
+            )
         if kind not in self.markets and kind != UNDESCRIBED:
-            return {
-                "sent": False,
-                "refused": (
-                    f"{self.symbol} is a {kind} market and [execution].markets lists "
-                    f"{list(self.markets)}"
-                ),
-            }
-        target = str(intent.get("target", ""))
+            return _refused(
+                f"{self.symbol} is a {kind} market and [execution].markets lists "
+                f"{list(self.markets)}"
+            )
+        target = send.target = str(send.intent.get("target", ""))
         if target not in SIDES:
-            return {"sent": False, "refused": f"target {target!r} is not an order"}
+            return _refused(f"target {target!r} is not an order")
         if target == "short" and not market.shortable:
-            return {
-                "sent": False,
-                "refused": (
-                    f"{self.symbol} is a {kind} market; a short there sells coins the account "
-                    "does not hold, which needs a borrow this desk does not take"
-                ),
-            }
-        derivative = not (market.held_as_balance or market.outcome)
-        side = SIDES[target]
-        size = Decimal(str(intent.get("size", "0")))
-        mid = Decimal(str(intent.get("mid", "0")))
-        if size <= 0:
-            return {"sent": False, "refused": "size is not positive"}
-        notional = size * mid
-        if notional > self.max_notional:
-            return {
-                "sent": False,
-                "refused": (
-                    f"notional {notional} is above [execution].max_notional {self.max_notional}"
-                ),
-            }
-        age = _decision_age_s(intent, self.clock())
+            return _refused(
+                f"{self.symbol} is a {kind} market; a short there sells coins the account "
+                "does not hold, which needs a borrow this desk does not take"
+            )
+        return None
+
+    def _sized(self, send: _Send) -> dict[str, Any] | None:
+        market = cast(Market, send.market)
+        send.derivative = not (market.held_as_balance or market.outcome)
+        send.side = SIDES[send.target]
+        send.size = Decimal(str(send.intent.get("size", "0")))
+        send.mid = Decimal(str(send.intent.get("mid", "0")))
+        if send.size <= 0:
+            return _refused("size is not positive")
+        send.notional = send.size * send.mid
+        if send.notional > self.max_notional:
+            return _refused(
+                f"notional {send.notional} is above [execution].max_notional {self.max_notional}"
+            )
+        return None
+
+    def _timely(self, send: _Send) -> dict[str, Any] | None:
+        age = send.age = _decision_age_s(send.intent, self.clock())
         if age is not None and age > self.max_decision_age_s:
-            return {
-                "sent": False,
-                "refused": (
-                    f"the decision is {age:.0f}s old, past [execution].max_decision_age_s "
-                    f"{self.max_decision_age_s:.0f}; its figures are no longer the market's"
-                ),
-                "decision_age_s": round(age, 1),
-            }
+            return _refused(
+                f"the decision is {age:.0f}s old, past [execution].max_decision_age_s "
+                f"{self.max_decision_age_s:.0f}; its figures are no longer the market's",
+                decision_age_s=round(age, 1),
+            )
         if not self.skew_checked:
             skew = self.clock_skew()
             if skew:
-                return {"sent": False, "refused": skew}
+                return _refused(skew)
             self.skew_checked = True
-        hedged = self.hedged() if derivative else ""
+        return None
+
+    def _account_admits(self, send: _Send) -> dict[str, Any] | None:
+        hedged = self.hedged() if send.derivative else ""
         if hedged:
-            return {"sent": False, "refused": hedged}
+            return _refused(hedged)
         if not self.account_checked:
-            setting = account_refusal(self.venue, self.client, derivative=derivative)
+            setting = account_refusal(self.venue, self.client, derivative=send.derivative)
             if setting:
-                return {"sent": False, "refused": setting}
+                return _refused(setting)
             self.account_checked = True
-        standing = self.position()
+        standing = send.standing = self.position()
         if standing and not self.adopt_open_position:
             # Any open position, not only one pointing the other way. A second entry in the same
             # direction is a larger position than the conviction rule sized, and nothing upstream
             # asked for it.
-            way = "the other way" if (standing > 0) != (target == "long") else "the same way"
-            return {
-                "sent": False,
-                "refused": (
-                    f"the account already holds {standing} of {self.symbol} {way}; flatten it, "
-                    "wait for it to close, or set [execution].adopt_open_position"
-                ),
-                "position": str(standing),
-            }
-        if self.exits == "separate" and not derivative:
-            return {
-                "sent": False,
-                "refused": (
-                    f"{self.symbol} is a {kind} market; exits placed after the fill are "
-                    "reduce-only orders, which a coin balance does not take; use "
-                    'exits = "attached" here'
-                ),
-            }
+            way = "the other way" if (standing > 0) != (send.target == "long") else "the same way"
+            return _refused(
+                f"the account already holds {standing} of {self.symbol} {way}; flatten it, "
+                "wait for it to close, or set [execution].adopt_open_position",
+                position=str(standing),
+            )
+        return None
+
+    def _nothing_resting(self, send: _Send) -> dict[str, Any] | None:
+        if self.exits == "separate" and not send.derivative:
+            return _refused(
+                f"{self.symbol} is a {send.kind} market; exits placed after the fill are "
+                "reduce-only orders, which a coin balance does not take; use "
+                'exits = "attached" here'
+            )
         # Only with nothing held: an adopted position keeps the exits that protect it.
-        swept = self._sweep_exits() if self.exits == "separate" and not standing else 0
+        swept = self._sweep_exits() if self.exits == "separate" and not send.standing else 0
         if isinstance(swept, str):
-            return {"sent": False, "refused": swept}
+            return _refused(swept)
+        send.swept = swept
         resting = self._open_orders()
         if resting:
-            return {
-                "sent": False,
-                "refused": (
-                    f"{resting} order(s) are still open on {self.symbol}; a second one would be a "
-                    "second decision on the same position"
-                ),
-                "open_orders": resting,
-            }
+            return _refused(
+                f"{resting} order(s) are still open on {self.symbol}; a second one would be a "
+                "second decision on the same position",
+                open_orders=resting,
+            )
+        return None
 
+    def _in_contracts(self, send: _Send) -> dict[str, Any] | None:
         try:
-            unit = self.contract_size()
+            send.unit = self.contract_size()
         except DispatchError as exc:
-            return {"sent": False, "refused": str(exc)}
-        contracts = size / unit
-        off_step = self.off_step(contracts, size, unit)
-        if off_step:
-            return {"sent": False, "refused": off_step}
+            return _refused(str(exc))
+        send.contracts = send.size / send.unit
+        off_step = self.off_step(send.contracts, send.size, send.unit)
+        return _refused(off_step) if off_step else None
 
+    def _priced_now(self, send: _Send) -> dict[str, Any] | None:
         # The snapshot this was priced on is as old as the analysts and validators were slow -
         # half a minute is ordinary. Seen on 2026-10-04: a post-only order rested at that stale
         # touch was on the wrong side of a market that had moved, and the venue rejected it at once.
         now_bid, now_ask = self._touch_now()
         if self.book_age_s is not None and self.book_age_s > MAX_BOOK_AGE_S:
-            return {
-                "sent": False,
-                "refused": (
-                    f"the venue's book for {self.symbol} is stamped {self.book_age_s:.0f}s ago; "
-                    "an order is not priced against a book that old"
-                ),
-            }
-        drift = _drift_bps(mid, now_bid, now_ask, side)
+            return _refused(
+                f"the venue's book for {self.symbol} is stamped {self.book_age_s:.0f}s ago; "
+                "an order is not priced against a book that old"
+            )
+        drift = send.drift = _drift_bps(send.mid, now_bid, now_ask, send.side)
         if drift is not None and self.max_drift_bps is not None and drift > self.max_drift_bps:
-            return {
-                "sent": False,
-                "refused": (
-                    f"the book moved {drift:.2f} bps against the trade since it was priced, more "
-                    f"than [execution].max_drift_bps {self.max_drift_bps}; the decision is stale"
-                ),
-                "drift_bps": str(drift.quantize(Decimal("0.01"))),
-            }
-        fresh = {"bid": now_bid, "ask": now_ask} if now_bid and now_ask else None
+            return _refused(
+                f"the book moved {drift:.2f} bps against the trade since it was priced, more "
+                f"than [execution].max_drift_bps {self.max_drift_bps}; the decision is stale",
+                drift_bps=str(drift.quantize(Decimal("0.01"))),
+            )
+        send.fresh = {"bid": now_bid, "ask": now_ask} if now_bid and now_ask else None
+        return None
 
-        held_back = self._ensure_leverage() if derivative else ""
+    def _carried(self, send: _Send) -> dict[str, Any] | None:
+        held_back = self._ensure_leverage() if send.derivative else ""
         if held_back:
-            return {"sent": False, "refused": held_back}
+            return _refused(held_back)
+        market = cast(Market, send.market)
         carried = (
-            self._capital(notional, side, mid, intent)
-            if derivative
-            else self._cash(notional, market, size, mid)
+            self._capital(send.notional, send.side, send.mid, send.intent)
+            if send.derivative
+            else self._cash(send.notional, market, send.size, send.mid)
         )
         if isinstance(carried, str):
-            return {"sent": False, "refused": carried}
+            return _refused(carried)
+        send.carried = carried
         if self.rate is not None:
             busy = self.rate.admit(self.clock())
             if busy:
-                return {"sent": False, "refused": busy}
+                return _refused(busy)
+        return None
 
-        order_id = _client_id(intent, client_id_max(self.venue), client_id_prefix(self.venue))
+    def _order_terms(self, send: _Send) -> dict[str, Any] | None:
+        market = cast(Market, send.market)
+        intent = send.intent
+        send.order_id = _client_id(intent, client_id_max(self.venue), client_id_prefix(self.venue))
         # The prediction venues take no client id through ccxt; their orders are matched by the id
         # the venue returns, and one decision still sends one order.
-        params: dict[str, Any] = {} if market.outcome else {"clientOrderId": order_id}
-        if derivative:
+        params = send.params = {} if market.outcome else {"clientOrderId": send.order_id}
+        if send.derivative:
             params.update(self.order_params())
         params.update(self.params)
-        protective = {} if market.outcome else self._protective(intent, target)
+        protective = {} if market.outcome else self._protective(intent, send.target)
         if isinstance(protective, str):
-            return {"sent": False, "refused": protective}
+            return _refused(protective)
         params.update(protective)
-        price = self._resting_price(fresh or intent, side) if self.role == "maker" else None
+        touch = send.fresh or intent
         if self.role == "maker":
-            if price is None:
-                return {"sent": False, "refused": "no book side to rest on; the snapshot had none"}
+            send.price = self._resting_price(touch, send.side)
+            if send.price is None:
+                return _refused("no book side to rest on; the snapshot had none")
             params["postOnly"] = True
             params.setdefault("timeInForce", "GTC")
-        else:
-            # Never a naked market order: a limit that takes what is there within the band and
-            # cancels the rest, so a thin book cannot fill the entry at any price it likes.
-            price = self._protected_price(fresh or intent, side)
-            if price is None:
-                return {"sent": False, "refused": "no book to protect a taker order against"}
-            params.setdefault("timeInForce", "IOC")
+            return None
+        # Never a naked market order: a limit that takes what is there within the band and
+        # cancels the rest, so a thin book cannot fill the entry at any price it likes.
+        send.price = self._protected_price(touch, send.side)
+        if send.price is None:
+            return _refused("no book to protect a taker order against")
+        params.setdefault("timeInForce", "IOC")
+        return None
+
+    def _send(self, send: _Send) -> dict[str, Any]:
+        """The one order, then what the venue said about it and what follows it."""
         began = self.clock()
         try:
             order = self.client.create_order(
                 self.symbol,
                 "limit",
-                side,
-                float(contracts),
-                float(price),
-                params,
+                send.side,
+                float(send.contracts),
+                float(cast(Decimal, send.price)),
+                send.params,
             )
         except Exception as exc:
             raise DispatchError(self.redact(f"{exc.__class__.__name__}: {exc}")) from exc
         send_ms = round((self.clock() - began) * 1000)
-        order = self.in_base(order, unit)
+        order = self.in_base(order, send.unit)
         self.sent_count += 1
+        placed = self._placed(send, order, send_ms)
+        if self.role == "maker":
+            placed.update(self._settle(str(placed["order_id"])))
+        elif placed["filled"] is None or placed["average"] is None:
+            # A reply with a fill and no price is not an execution report (seen on 2026-10-20: a
+            # venue answered a create with its ids alone), so the venue's own order is read.
+            placed.update(self._taken(str(placed["order_id"])))
+        placed["slippage_bps"] = _slippage_bps(placed.get("average"), send.mid, send.side)
+        if send.swept:
+            placed["earlier_exits_cancelled"] = send.swept
+        if self.exits == "separate":
+            placed.update(
+                self._place_exits(placed, send.intent, send.side, send.unit, send.order_id)
+            )
+        if cast(Market, send.market).outcome:
+            placed["exits"] = "bounded"
+            placed.update(self._rest_take(placed, send.intent))
+        return placed
 
-        placed: dict[str, Any] = {
+    def _placed(self, send: _Send, order: Mapping[str, Any], send_ms: int) -> dict[str, Any]:
+        intent, unit, drift, age = send.intent, send.unit, send.drift, send.age
+        return {
             "sent": True,
             "venue": self.venue,
             "instrument": self.instrument,
             "environment": self.environment,
             "symbol": self.symbol,
             "role": self.role,
-            "side": side,
-            "size": str(size),
-            **({"contracts": f"{contracts:f}", "contract_size": f"{unit:f}"} if unit != 1 else {}),
-            "price": None if price is None else str(price),
-            "notional": str(notional),
-            "client_order_id": order_id,
+            "side": send.side,
+            "size": str(send.size),
+            **(
+                {"contracts": f"{send.contracts:f}", "contract_size": f"{unit:f}"}
+                if unit != 1
+                else {}
+            ),
+            "price": None if send.price is None else str(send.price),
+            "notional": str(send.notional),
+            "client_order_id": send.order_id,
             "exits": self.exits,
             "stop_price": str(intent.get("stop_price", "")) or None,
             "take_price": str(intent.get("take_price", "")) or None,
-            "priced_mid": str(mid),
+            "priced_mid": str(send.mid),
             "drift_bps": None if drift is None else str(drift.quantize(Decimal("0.01"))),
             "decision_age_s": None if age is None else round(age, 1),
             "send_ms": send_ms,
-            "rested_at": "the book at send time" if fresh else "the snapshot's touch",
-            "capital": carried,
+            "rested_at": "the book at send time" if send.fresh else "the snapshot's touch",
+            "capital": send.carried,
             **({"leverage_confirmed": "by the venue's reply"} if self.leverage_by_reply else {}),
             "order_id": str(order.get("id", "")),
             # A venue that reports no status reports none: "None" is not a status.
@@ -301,21 +377,6 @@ class VenueHand(HandUpkeep):
             "filled": None if order.get("filled") is None else str(order["filled"]),
             "average": None if order.get("average") is None else str(order["average"]),
         }
-        if self.role == "maker":
-            placed.update(self._settle(str(placed["order_id"])))
-        elif placed["filled"] is None or placed["average"] is None:
-            # A reply with a fill and no price is not an execution report (seen on 2026-10-20: a
-            # venue answered a create with its ids alone), so the venue's own order is read.
-            placed.update(self._taken(str(placed["order_id"])))
-        placed["slippage_bps"] = _slippage_bps(placed.get("average"), mid, side)
-        if swept:
-            placed["earlier_exits_cancelled"] = swept
-        if self.exits == "separate":
-            placed.update(self._place_exits(placed, intent, side, unit, order_id))
-        if market.outcome:
-            placed["exits"] = "bounded"
-            placed.update(self._rest_take(placed, intent))
-        return placed
 
     def _place_exits(
         self,

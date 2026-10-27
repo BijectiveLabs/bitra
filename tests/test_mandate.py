@@ -1024,3 +1024,18 @@ def test_a_decision_older_than_its_bound_is_not_sent_and_a_fresh_one_is_measured
     assert placed["decision_age_s"] is not None and placed["decision_age_s"] < 60
     # Filled at 100000.5 against a mid of 100000: half a basis point paid on a buy.
     assert placed["slippage_bps"] == "0.05"
+
+
+def test_a_taker_order_with_no_book_to_protect_it_is_not_sent() -> None:
+    venue = FakeExchange()
+    hand = VenueHand(
+        venue="bybit",
+        symbol="BTC/USDT:USDT",
+        max_notional=Decimal(2000),
+        keys=("BYBIT_API_KEY", "BYBIT_API_SECRET"),
+        client=venue,
+    )
+    refused = hand({k: v for k, v in LONG.items() if k not in ("bid", "ask")})
+
+    assert refused["sent"] is False and "no book to protect" in refused["refused"]
+    assert venue.orders == []
