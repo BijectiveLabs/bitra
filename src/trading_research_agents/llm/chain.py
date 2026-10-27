@@ -33,7 +33,7 @@ class ChainError(ProviderError):
 
 # A link whose quota is spent fails the same way on every call until the vendor resets it, and
 # each failure costs seconds the market does not wait for (seen 2026-10-06: a spent Gemini quota
-# put 15 to 45 seconds in front of every validator, and the book moved past the drift limit).
+# put 15 to 45 seconds in front of every reviewer, and the book moved past the drift limit).
 # Such a link rests, process-wide, and the chain goes to the next one until the rest is over.
 QUOTA_REST_S = 900.0
 QUOTA_WORDS = ("resource_exhausted", "quota", "insufficient_quota")

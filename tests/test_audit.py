@@ -46,9 +46,9 @@ CYCLE = {
             },
         ]
     },
-    "validators": {
+    "reviewers": {
         "agents": [
-            {"agent": "validator_pro", "ok": True, "error": "", "seconds": 3.0, "reused": False}
+            {"agent": "reviewer_pro", "ok": True, "error": "", "seconds": 3.0, "reused": False}
         ]
     },
     "data": {
@@ -219,14 +219,14 @@ def test_a_proposal_cannot_invent_a_setting() -> None:
     figures = {"agents.failed": "2"}
     made_up = checked(proposing("[targets].min_edge_multiple_strict"), figures=figures)
     assert made_up.findings == () and "there is no such rule" in made_up.discarded[0]
-    per_role = checked(proposing("[agents.roles.validator].veto_power"), figures=figures)
+    per_role = checked(proposing("[agents.roles.reviewer].veto_power"), figures=figures)
     assert per_role.findings == ()
     # A role that asks no model has no table to change.
     retired = checked(proposing("[agents.roles.macro_analyst].model"), figures=figures)
     assert retired.findings == () and "is not a role that asks a model" in retired.discarded[0]
 
     assert checked(proposing("[agents].max_output_tokens"), figures=figures).findings
-    assert checked(proposing("[agents.roles.validator].model"), figures=figures).findings
+    assert checked(proposing("[agents.roles.reviewer].model"), figures=figures).findings
     # A table without a fixed list of settings is judged by the table check alone.
     assert checked(proposing("[sources.rates].file"), figures=figures).findings
 

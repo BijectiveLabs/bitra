@@ -114,20 +114,20 @@ kill_switch = "KILL"               # `tra kill` sets it: flatten and stop; `tra 
 # is off until you ask for it. Pro argues for, contra argues against, neutral weighs both. Every
 # claim they make has to cite a figure from the brief with its value, and the system throws away the ones
 # that do not: a verdict with no surviving claim becomes abstain.
-# validators = ["pro", "contra", "neutral"]
-# on_missing_validator = "refuse" # a declared stance no model answered refuses the trade;
+# reviewers = ["pro", "contra", "neutral"]
+# on_missing_reviewer = "refuse" # a declared stance no model answered refuses the trade;
 #                                  # "continue" trades on the votes that did come back
 # max_retry_wait_s = 15           # wait once for a provider that says "try again in N s"
 #
 # A role can run on its own model. Anything it does not override it inherits from [agents], so one
 # line per role is usually all it takes. No vendor is assumed anywhere: provider, model and effort
 # are yours on every row. A whole cycle is several calls inside a minute. On a tier that limits tokens per minute, put the
-# validators on a second vendor so the calls split across two limits:
+# reviewers on a second vendor so the calls split across two limits:
 # [agents.roles.blind_confirmer]
 # provider = "google"
 # model = "gemini-pro-latest"
 #
-# [agents.roles.validator]
+# [agents.roles.reviewer]
 # provider = "google"
 # model = "gemini-flash-latest"
 # fallback = ["groq:openai/gpt-oss-120b"]
@@ -150,18 +150,18 @@ kill_switch = "KILL"               # `tra kill` sets it: flatten and stop; `tra 
 # long_states = ["bullish"]        # what a long needs from each required reading
 # short_states = ["bearish"]
 # on_missing = "refuse"            # refuse | ignore
-# min_support = 1                  # validators that must support it (needs [agents].validators)
-# max_opposition = 0               # validators that may oppose it; 0 is the strictest there is
+# min_support = 1                  # reviewers that must support it (needs [agents].reviewers)
+# max_opposition = 0               # reviewers that may oppose it; 0 is the strictest there is
 #
 # How much goes behind the idea. Every voice counts as strong as it is: the deciding analyst by its
 # confidence, each reading by how far its series sit past the lines you drew in sources/
-# (-1 to 1), each validator for or against. The score is their net over the weight they expressed:
+# (-1 to 1), each reviewer for or against. The score is their net over the weight they expressed:
 # agreement lifts it, opposition lowers it in proportion, and only opposition that outweighs the
 # case refuses the trade. docs.bijectivelabs.dev/opensource/cycle works four cases through. Nothing here can make a trade
 # larger than [controls] and [run].size already allow - it can only make it smaller.
 # [conviction]
 # weights = { structure_lead = 2.0, flow_specialist = 1.0, onchain = 1.5, macro = 1.0, sentiment = 0.5 }
-# validator_weight = 1.0
+# reviewer_weight = 1.0
 # min_score = 0.4                  # below this the desk does not trade, whatever the matrix said
 # max_leverage = 3.0               # notional against [run].equity; a ceiling, never a target
 #

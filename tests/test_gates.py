@@ -85,7 +85,7 @@ def test_votes_are_counted_against_the_declared_minimums() -> None:
 
     assert not thin.admitted
     assert thin.support == 1 and thin.opposition == 1 and thin.abstained == 1
-    assert any("1 validator(s) support it; 2 required" in r for r in thin.reasons)
+    assert any("1 reviewer(s) support it; 2 required" in r for r in thin.reasons)
 
     enough = confluent(matrix, target="long", states={}, votes=("support", "support", "abstain"))
     assert enough.admitted

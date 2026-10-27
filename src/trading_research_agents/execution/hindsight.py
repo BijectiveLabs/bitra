@@ -96,8 +96,9 @@ def gate_of(record: Mapping[str, Any]) -> str:
         said = str(refusals[-1]) if refusals else ""
     head = said.split(":", 1)[0].strip()
     head = head.split(" at ", 1)[0]
-    if head.startswith("validator"):
-        return "validators"
+    # A record written before 0.12 names the reviewers validators.
+    if head.startswith(("reviewer", "validator")):
+        return "reviewers"
     if head == "cost gate":
         return "cost"
     return head or "no reason recorded"

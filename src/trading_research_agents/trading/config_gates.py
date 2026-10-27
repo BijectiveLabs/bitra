@@ -22,6 +22,7 @@ from trading_research_agents.trading.config_agents import (
     READINGS,
     VOICES,
     _known,
+    current_keys,
 )
 from trading_research_agents.trading.config_values import (
     ConfigError,
@@ -131,7 +132,7 @@ DESK_KEYS = ("max_open_risk_bps", "max_open_positions", "correlation_above")
 
 CONVICTION_KEYS = (
     "weights",
-    "validator_weight",
+    "reviewer_weight",
     "min_score",
     "max_leverage",
     "ladder",
@@ -145,6 +146,7 @@ def _conviction(raw: dict[str, Any]) -> Conviction:
         return Conviction()
     if not isinstance(table, dict):
         raise ConfigError("[conviction] must be a table")
+    table = current_keys(table, "[conviction]")
     if "reader_labels" in table:
         raise ConfigError(
             "[conviction].reader_labels: a reading no longer gives a label of its own since "
@@ -171,8 +173,8 @@ def _conviction(raw: dict[str, Any]) -> Conviction:
     try:
         return Conviction(
             weights=weights,
-            validator_weight=(
-                _dec(table, "validator_weight") if "validator_weight" in table else Decimal(0)
+            reviewer_weight=(
+                _dec(table, "reviewer_weight") if "reviewer_weight" in table else Decimal(0)
             ),
             min_score=_dec(table, "min_score") if "min_score" in table else Decimal(0),
             ladder=tuple(rungs),

@@ -50,7 +50,7 @@ It's an early release, so expect settings to change between versions. What works
 today: linear perpetuals, spot pairs (stock perpetuals and tokenized stocks among them) and
 prediction market outcomes through one order path, a universe of perpetuals found and measured by
 the system, a screener that picks where to look, the full autonomous cycle on live data, one analyst that proposes, three readings of
-your own series computed by code, up to three validators, stops and
+your own series computed by code, up to three reviewers, stops and
 targets the analyst names inside bounds you set, the gates that decide, sizing from your own rules,
 real orders on a venue's practice environment behind a mandate you sign, a risk manager that can
 only make the desk more careful, and two auditors that read the records. Under it, a market data
@@ -100,7 +100,7 @@ Three kinds of work, kept apart because they fail differently.
 | | Does | Never does | Today |
 |---|---|---|---|
 | **Code** | records the market, computes every figure, reads your own series against your lines (the macro, on-chain and sentiment readings), prices the round trip, applies your limits, sizes, sends one order with its exits, settles every replayed idea | guess, or carry a stale value forward as current | everything around the model call |
-| **A reasoning model** | reads figures code computed and proposes a direction, a setup and its levels, citing the figures it used | compute a number, size a trade, touch an order or a key, loosen a limit | the structure lead, with a blind confirmer and a flow specialist when you declare the team; validators when you declare them |
+| **A reasoning model** | reads figures code computed and proposes a direction, a setup and its levels, citing the figures it used | compute a number, size a trade, touch an order or a key, loosen a limit | the structure lead, with a blind confirmer and a flow specialist when you declare the team; reviewers when you declare them |
 | **A fast typed judge** | turns dated text into typed events with probabilities, screens text for instructions to a machine, and from 0.13 checks a model's claims against its brief | decide a direction from numbers, size, or reach an order | optional, behind a vendor-neutral port (`[judge]`): the archived headlines into the text features |
 
 ```mermaid
@@ -287,7 +287,7 @@ like it would have had to win just to break even:
 
 Then the data the cycle used and how old it was, the series the readings read, the stop and
 take profit it would have placed, and which agents answered. A cycle that goes further adds what
-each validator argued, how conviction weighed the voices, the risk at the stop and the targets:
+each reviewer argued, how conviction weighed the voices, the risk at the stop and the targets:
 
 ![data, series, exits and agents](assets/one-cycle.png)
 
@@ -300,7 +300,7 @@ the two reading lines are printed as 0.11 prints them, where the run itself stil
 model's label:
 
 ```
-cycle 2026-09-29T02-59-16Z BTCUSDT: 5.344s of agents, 15.042s of validators
+cycle 2026-09-29T02-59-16Z BTCUSDT: 5.344s of agents, 15.042s of reviewers
   funding        ccxt:bybit         age 4.267s
   ohlcv          ccxt:bybit         age 32.746s
   orderbook      ccxt:bybit         age 7.544s
@@ -308,8 +308,8 @@ macro      read by code: bullish (risk-on)
 sentiment  read by code: bullish (positive)
 lead:      long on range_reversion at 0.65 over 5 bars: the close is stretched low in the window
 read: zscore=-0.587, vwap_gap_bps=-3.99, ret_1_bps=1.59
-validator contra   oppose on 2 cited figure(s)
-validator pro      support on 3 cited figure(s)
+reviewer contra   oppose on 2 cited figure(s)
+reviewer pro      support on 3 cited figure(s)
 conviction: 0.800 of 1.0 (macro 1.0, sentiment 0.5, structure_lead 1.300)
 risk: 8.29 bps of equity at the stop against the declared 50 bps, size 0.010
 cost: 12.87 bps round trip, 2.00 of it estimated
@@ -336,7 +336,7 @@ flowchart TD
     tech["structure lead, alone or with its team<br/>a blind confirmer that must agree, a flow specialist<br/>a direction, a confidence, a horizon"] --> price["the system prices the round trip<br/>fee, spread, impact, funding, slippage"]
     price --> exits{"the stop and the target<br/>the analyst's levels, held inside your bounds<br/>does the trade break even at half its kind winning?"}
     exits -- "no" --> refused
-    exits -- "yes" --> round2["validators, as many as you declare<br/>a claim that cites no figure is thrown away"]
+    exits -- "yes" --> round2["reviewers, as many as you declare<br/>a claim that cites no figure is thrown away"]
     round2 --> matrix{"confluence<br/>do your declared states agree with the direction?"}
     matrix -- "no" --> refused["a refusal that names its figure"]
     matrix -- "yes" --> size["conviction<br/>how much, from your ladder"]
@@ -356,8 +356,8 @@ Who does what:
 | flow specialist (optional) | the book, the spread, funding and open interest, which then leave the analyst's brief | a side and a confidence, with the figures it rests on | name a level or a size; it is one voice in conviction |
 | macro, on-chain and sentiment readings (code, not agents) | dated rates and levels, chain and derivatives figures, scores and notes you curate | a declared state and a graded score: each series against the lines you drew | ask a model, or propose a direction |
 | market screener | what the system measured for each admitted instrument: move, spread, regime, volume, correlation to BTC | which instruments to take, in what order, citing their figures | add an instrument the system did not admit |
-| validators: pro and contra | the proposal and the figures behind it, each without the other's case | the strongest case for or against, as cited claims | see the other side's case, or cite a figure it wasn't given |
-| validator: neutral, as judge | the same, and both cases once code has checked every claim | support, oppose or abstain, the one verdict that counts | see the advocates' verdicts, or count claims instead of weighing them |
+| reviewers: pro and contra | the proposal and the figures behind it, each without the other's case | the strongest case for or against, as cited claims | see the other side's case, or cite a figure it wasn't given |
+| reviewer: neutral, as judge | the same, and both cases once code has checked every claim | support, oppose or abstain, the one verdict that counts | see the advocates' verdicts, or count claims instead of weighing them |
 | risk manager | what the run recorded: round trips, the losing streak, your limits, the alarm that woke it | continue, cut the size of new entries, pause instruments, or halt, each for a stated number of hours | loosen a limit you set, or add size |
 | technology and quant auditors | the cycles this desk recorded | findings and proposed changes | change anything |
 
@@ -369,8 +369,8 @@ or any paid vendor that answers JSON over https). `tra sources show` lists every
 came from and how old its last value is, and a value older than its `max_age` is shown as stale and
 never counted. [Data sources](https://docs.bijectivelabs.dev/opensource/sources) has the details.
 
-Which validators run is yours to declare. A vote never decides on its own: it moves conviction by
-the weight you give it (`[conviction].validator_weight`), and a stance counts for what it says beyond
+Which reviewers run is yours to declare. A vote never decides on its own: it moves conviction by
+the weight you give it (`[conviction].reviewer_weight`), and a stance counts for what it says beyond
 its assignment, since a pro that supports is expected to.
 
 Voices are allowed to disagree. Each reading becomes a score between -1 and 1, computed from
@@ -459,7 +459,7 @@ effort = "medium"                    # minimal | low | medium | high | xhigh | m
                                      # vendor takes it; left out, the vendor's default applies
 fallback = ["google:gemini-flash-latest", "anthropic:claude-opus-5-5"]
 
-[agents.roles.validator]             # a role can run on its own model
+[agents.roles.reviewer]             # a role can run on its own model
 model = "a-cheaper-model"
 effort = "low"
 ```

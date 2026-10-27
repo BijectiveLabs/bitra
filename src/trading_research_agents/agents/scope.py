@@ -26,7 +26,7 @@ from typing import Any
 
 from trading_research_agents.agents import blind_confirmer, flow_specialist, structure_lead
 
-VALIDATOR = "validator"
+REVIEWER = "reviewer"
 SCREENER = "market_screener"
 TECH_AUDITOR = "tech_auditor"
 QUANT_AUDITOR = "quant_auditor"
@@ -47,7 +47,7 @@ NOT_YOURS: dict[str, tuple[str, ...]] = {
     ),
     "a size": ("position size", "size up", "size down", "leverage", "risk per trade"),
     "an exit": ("stop loss", "stop-loss", "take profit", "take-profit", "price target"),
-    "another role": ("risk manager", "the executor", "the validator", "the structure lead"),
+    "another role": ("risk manager", "the executor", "the reviewer", "the structure lead"),
 }
 # No role is told the desk's rules, so a rule one states is a rule it made up. Every role, the one
 # that decides included, is held to this: recorded beside the answer, which code never reads.
@@ -174,8 +174,8 @@ SCOPES: dict[str, Scope] = {
         decides="nothing; it writes proposals an operator applies or does not",
         prose=("summary",),
     ),
-    VALIDATOR: Scope(
-        role=VALIDATOR,
+    REVIEWER: Scope(
+        role=REVIEWER,
         reads=("instrument", "stance", "proposal", "figures", "case_for", "case_against"),
         answers=("stance", "claims", "verdict", "reason"),
         decides="one vote, and only through claims that cite a figure it was given",
@@ -220,10 +220,10 @@ def crossings(role: str, said: Mapping[str, Any]) -> tuple[str, ...]:
         # by describing the mechanism, so only an invented rule is looked for here.
         forbidden: dict[str, tuple[str, ...]] = dict([INVENTED_RULE])
     else:
-        # A validator's whole job is to review a proposal another role made, so naming that role is
+        # A reviewer's whole job is to review a proposal another role made, so naming that role is
         # not a crossing for it. An order, a size and an exit still are.
         forbidden = {
-            k: v for k, v in NOT_YOURS.items() if not (role == VALIDATOR and k == "another role")
+            k: v for k, v in NOT_YOURS.items() if not (role == REVIEWER and k == "another role")
         }
         forbidden[INVENTED_RULE[0]] = INVENTED_RULE[1]
     for key in allowed.prose:

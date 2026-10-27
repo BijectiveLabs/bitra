@@ -40,7 +40,7 @@ trading_research_agents/
   readings/    macro, on-chain and sentiment: the operator's series against the
                operator's thresholds, a declared state and a graded score; no model -> data
   agents/      the research roles at layers 0, 2 and 3; the session roles; the
-               cycle and its analyst, validators and screener                   -> everything above, llm, store, surface, readings
+               cycle and its analyst, reviewers and screener                   -> everything above, llm, store, surface, readings
   mcp/         the gates as MCP tools                                            -> everything except agent
   market_data/ one-minute flow and book bars, derivatives and liquidations, dated
                text, gap marks; the verified archive in day files and hour parts,

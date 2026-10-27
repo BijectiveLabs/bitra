@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 
 from trading_research_agents.agents.react import run_tool_loop
-from trading_research_agents.agents.validator import role as validator_role
+from trading_research_agents.agents.reviewer import role as reviewer_role
 from trading_research_agents.llm.completer import FakeCompleter, ProviderError, redact
 from trading_research_agents.llm.form import FormError
 from trading_research_agents.llm.usage import (
@@ -102,7 +102,7 @@ def test_the_hourly_cap_is_the_desks_not_each_roles(tmp_path: Path) -> None:
             clock=lambda: 1000.0,
             window=window,
         )
-        for role in ("structure_lead", "market_screener", "validator")
+        for role in ("structure_lead", "market_screener", "reviewer")
     ]
     roles[0].complete(system="", user="", schema={})
     roles[1].complete(system="", user="", schema={})
@@ -172,10 +172,10 @@ def test_a_venue_message_loses_the_hands_own_key() -> None:
     assert "abcd1234efgh" not in said and "[redacted]" in said
 
 
-def test_a_malformed_validator_answer_is_a_form_error() -> None:
+def test_a_malformed_reviewer_answer_is_a_form_error() -> None:
     answer = {"stance": "pro", "claims": "none", "verdict": "support", "reason": "r"}
     with pytest.raises(FormError, match="claims must be a list"):
-        validator_role.parse(json.dumps(answer))
+        reviewer_role.parse(json.dumps(answer))
 
 
 def test_a_short_retry_after_is_waited_for_once_on_the_same_provider() -> None:
@@ -213,7 +213,7 @@ def test_a_short_retry_after_is_waited_for_once_on_the_same_provider() -> None:
     slept: list[float] = []
     primary = Limited()
     chain = CompleterChain(
-        role="validator",
+        role="reviewer",
         links=[Link("groq:m", lambda: primary), Link("google:m", Spare)],
         max_wait_s=15,
         sleep=slept.append,
@@ -223,7 +223,7 @@ def test_a_short_retry_after_is_waited_for_once_on_the_same_provider() -> None:
 
     # Asked to wait longer than the declared bound, it moves to the next link at once.
     impatient = CompleterChain(
-        role="validator",
+        role="reviewer",
         links=[Link("groq:m", Limited), Link("google:m", Spare)],
         max_wait_s=5,
         sleep=slept.append,
@@ -255,7 +255,7 @@ def test_a_spent_quota_rests_the_link_and_answers_name_who_gave_them() -> None:
 
     def ask() -> Completion:
         return CompleterChain(
-            role="validator",
+            role="reviewer",
             links=[
                 Link("google:gemini-flash-latest", Spent),
                 Link("groq:openai/gpt-oss-120b", Spare),

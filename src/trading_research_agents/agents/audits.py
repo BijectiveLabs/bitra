@@ -104,7 +104,8 @@ def agent_health(cycles: Cycles) -> dict[str, Any]:
     for record in cycles:
         rounds = [
             *(record.get("agents") or {}).get("agents", []),
-            *((record.get("validators") or {}) or {}).get("agents", []),
+            # A record written before 0.12 keeps the reviewers' round under `validators`.
+            *(record.get("reviewers") or record.get("validators") or {}).get("agents", []),
         ]
         for row in rounds:
             name = str(row.get("agent", "unknown"))

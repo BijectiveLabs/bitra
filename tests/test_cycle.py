@@ -219,7 +219,7 @@ class Scripted:
 class ByStance:
     """One role asked three times: the answer depends on the stance in the brief, not on the order.
 
-    A queue cannot do this. The three validators go out on threads, and which one reaches the
+    A queue cannot do this. The three reviewers go out on threads, and which one reaches the
     completer first is not ours to decide, so the fake reads the question like a model would.
     """
 
@@ -240,7 +240,7 @@ class ByStance:
         )
 
 
-def validator_answer(stance: str, verdict: str, *, figure: str = "zscore", value: str = "") -> str:
+def reviewer_answer(stance: str, verdict: str, *, figure: str = "zscore", value: str = "") -> str:
     return json.dumps(
         {
             "stance": stance,
@@ -771,15 +771,15 @@ def test_the_round_trip_count_comes_from_the_intents_already_written(
     assert any("1 intent(s) already written today" in r for r in result.refusals)
 
 
-def test_the_validators_argue_and_only_cited_claims_reach_the_matrix(
+def test_the_reviewers_argue_and_only_cited_claims_reach_the_matrix(
     tmp_path: Path, envelope: Envelope
 ) -> None:
     from trading_research_agents.execution.confluence import Matrix
 
     stances = ByStance(
         {
-            "pro": validator_answer("pro", "support"),
-            "contra": validator_answer("contra", "oppose", figure="made_up", value="1"),
+            "pro": reviewer_answer("pro", "support"),
+            "contra": reviewer_answer("contra", "oppose", figure="made_up", value="1"),
         }
     )
     fake = Scripted({"structure_lead": analyst_answer()})
@@ -789,7 +789,7 @@ def test_the_validators_argue_and_only_cited_claims_reach_the_matrix(
 
     def completer_for(role: str) -> MeteredCompleter:
         if role not in metered:
-            inner = stances if role == "validator" else fake.for_role(role)
+            inner = stances if role == "reviewer" else fake.for_role(role)
             metered[role] = MeteredCompleter(
                 inner,
                 role=role,
@@ -813,32 +813,32 @@ def test_the_validators_argue_and_only_cited_claims_reach_the_matrix(
         magnitude_bps=Decimal("40"),
         clock=lambda: datetime(2026, 9, 27, 10, 0, tzinfo=UTC),
         lookback_bars=5,
-        validators=("pro", "contra"),
+        reviewers=("pro", "contra"),
         matrix=Matrix(min_support=1, max_opposition=0),
     )
     result = run_cycle(cfg)
 
     # The contra stance cited a figure that was not in the brief, so its claim and its vote went.
-    assert result.context["validator_pro"]["verdict"] == "support"
-    assert result.context["validator_contra"]["verdict"] == "abstain"
+    assert result.context["reviewer_pro"]["verdict"] == "support"
+    assert result.context["reviewer_contra"]["verdict"] == "abstain"
     assert any("discarded a claim, 'made_up' is not a figure" in r for r in result.refusals)
     assert result.confluence is not None and result.confluence.admitted
     assert result.confluence.support == 1 and result.confluence.opposition == 0
     assert result.acted
 
     where = Path(str(result.path))
-    assert (where / "briefs" / "validator_pro.json").is_file()
-    assert (where / "answers" / "validator_contra.json").is_file()
+    assert (where / "briefs" / "reviewer_pro.json").is_file()
+    assert (where / "answers" / "reviewer_contra.json").is_file()
     summary = json.loads((where / "cycle.json").read_text("utf-8"))
-    assert summary["validators"]["agents"][0]["agent"].startswith("validator_")
+    assert summary["reviewers"]["agents"][0]["agent"].startswith("reviewer_")
 
 
-def test_a_validator_that_opposes_can_stop_a_cycle_the_cost_gate_would_have_passed(
+def test_a_reviewer_that_opposes_can_stop_a_cycle_the_cost_gate_would_have_passed(
     tmp_path: Path, envelope: Envelope
 ) -> None:
     from trading_research_agents.execution.confluence import Matrix
 
-    stances = ByStance({"contra": validator_answer("contra", "oppose")})
+    stances = ByStance({"contra": reviewer_answer("contra", "oppose")})
     fake = Scripted({"structure_lead": analyst_answer()})
     usage = UsageLedger(tmp_path / "usage.jsonl")
     limits = BudgetLimits(token_budget=500_000, max_calls_per_hour=1000, min_interval_s=0)
@@ -846,7 +846,7 @@ def test_a_validator_that_opposes_can_stop_a_cycle_the_cost_gate_would_have_pass
 
     def completer_for(role: str) -> MeteredCompleter:
         if role not in metered:
-            inner = stances if role == "validator" else fake.for_role(role)
+            inner = stances if role == "reviewer" else fake.for_role(role)
             metered[role] = MeteredCompleter(
                 inner, role=role, provider="fake", limits=limits, ledger=usage, clock=lambda: 0.0
             )
@@ -865,22 +865,22 @@ def test_a_validator_that_opposes_can_stop_a_cycle_the_cost_gate_would_have_pass
         magnitude_bps=Decimal("40"),
         clock=lambda: datetime(2026, 9, 27, 10, 0, tzinfo=UTC),
         lookback_bars=5,
-        validators=("contra",),
+        reviewers=("contra",),
         matrix=Matrix(max_opposition=0),
     )
     result = run_cycle(cfg)
 
     assert not result.acted
-    assert any("1 validator(s) oppose it" in r for r in result.refusals)
+    assert any("1 reviewer(s) oppose it" in r for r in result.refusals)
 
 
 def test_a_stance_asked_twice_is_refused_when_the_cycle_is_configured(
     tmp_path: Path, envelope: Envelope
 ) -> None:
     with pytest.raises(CycleError, match="each stance is asked once"):
-        cycle_config(tmp_path, envelope, [analyst_answer()], validators=("pro", "pro"))
+        cycle_config(tmp_path, envelope, [analyst_answer()], reviewers=("pro", "pro"))
     with pytest.raises(CycleError, match="is not a stance"):
-        cycle_config(tmp_path, envelope, [analyst_answer()], validators=("bullish",))
+        cycle_config(tmp_path, envelope, [analyst_answer()], reviewers=("bullish",))
 
 
 def conviction_rule(**overrides: Any) -> Any:
@@ -1270,25 +1270,25 @@ def test_the_account_sets_the_equity_and_a_day_of_losses_stops_new_entries(
     assert not stopped.acted and usage.tokens == 0
 
 
-def test_a_declared_validator_that_never_answers_refuses_the_trade_by_default(
+def test_a_declared_reviewer_that_never_answers_refuses_the_trade_by_default(
     tmp_path: Path, envelope: Envelope
 ) -> None:
-    # The validator role is scripted once, so one of the two stances gets no answer at all.
+    # The reviewer role is scripted once, so one of the two stances gets no answer at all.
     answers = {
         "structure_lead": analyst_answer(),
-        "validator": validator_answer("pro", "support"),
+        "reviewer": reviewer_answer("pro", "support"),
     }
-    cfg, _, _ = cycle_config(tmp_path, envelope, answers, validators=("pro", "contra"))
+    cfg, _, _ = cycle_config(tmp_path, envelope, answers, reviewers=("pro", "contra"))
     refused = run_cycle(cfg)
     assert not refused.acted and refused.stopped_by is not None
-    assert "did not answer" in refused.stopped_by and "on_missing_validator" in refused.stopped_by
+    assert "did not answer" in refused.stopped_by and "on_missing_reviewer" in refused.stopped_by
 
     cfg, _, _ = cycle_config(
         tmp_path / "continue",
         envelope,
         dict(answers),
-        validators=("pro", "contra"),
-        on_missing_validator="continue",
+        reviewers=("pro", "contra"),
+        on_missing_reviewer="continue",
     )
     carried_on = run_cycle(cfg)
     assert carried_on.acted
@@ -1429,7 +1429,7 @@ def judged_cycle(
 
     def completer_for(role: str) -> MeteredCompleter:
         if role not in metered:
-            inner = stances if role == "validator" else fake.for_role(role)
+            inner = stances if role == "reviewer" else fake.for_role(role)
             metered[role] = MeteredCompleter(
                 inner, role=role, provider="fake", limits=limits, ledger=usage, clock=lambda: 0.0
             )
@@ -1448,7 +1448,7 @@ def judged_cycle(
         magnitude_bps=Decimal("40"),
         clock=lambda: datetime(2026, 9, 27, 10, 0, tzinfo=UTC),
         lookback_bars=5,
-        validators=("pro", "contra", "neutral"),
+        reviewers=("pro", "contra", "neutral"),
         matrix=Matrix(min_support=1),
     )
     return run_cycle(cfg), stances
@@ -1457,15 +1457,15 @@ def judged_cycle(
 def test_neutral_judges_both_cases_and_only_its_verdict_counts(
     tmp_path: Path, envelope: Envelope
 ) -> None:
-    pro = json.loads(validator_answer("pro", "support"))
+    pro = json.loads(reviewer_answer("pro", "support"))
     pro["claims"].append({"figure": "made_up", "value": "1", "says": "an invented figure"})
     result, stances = judged_cycle(
         tmp_path,
         envelope,
         {
             "pro": json.dumps(pro),
-            "contra": validator_answer("contra", "oppose"),
-            "neutral": validator_answer("neutral", "oppose"),
+            "contra": reviewer_answer("contra", "oppose"),
+            "neutral": reviewer_answer("neutral", "oppose"),
         },
     )
     # The advocates first, apart; the judge last, with both cases as code checked them.
@@ -1477,7 +1477,7 @@ def test_neutral_judges_both_cases_and_only_its_verdict_counts(
     # It weighs the evidence, not the advocates' votes.
     assert "verdict" not in json.dumps(judge["case_for"]) and "reason" not in judge["case_for"][0]
     assert stances.calls[2].system != stances.calls[0].system
-    assert result.context["validator_neutral"]["judged"] == "neutral"
+    assert result.context["reviewer_neutral"]["judged"] == "neutral"
     # Pro supported, but the judge opposed, and only the judge counts: min_support 1 is not met.
     assert result.confluence is not None and result.confluence.support == 0
     assert not result.acted
@@ -1490,12 +1490,12 @@ def test_a_case_nobody_answers_is_decided_by_code_without_asking_the_judge(
         tmp_path,
         envelope,
         {
-            "pro": validator_answer("pro", "support"),
-            "contra": validator_answer("contra", "oppose", figure="made_up", value="1"),
+            "pro": reviewer_answer("pro", "support"),
+            "contra": reviewer_answer("contra", "oppose", figure="made_up", value="1"),
         },
     )
     assert len(stances.calls) == 2
-    judged = result.context["validator_neutral"]
+    judged = result.context["reviewer_neutral"]
     assert judged["verdict"] == "support" and judged["judged"] == "code"
     assert "neutral was not asked" in judged["reason"]
     assert result.confluence is not None and result.confluence.support == 1

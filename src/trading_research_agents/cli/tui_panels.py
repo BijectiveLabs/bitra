@@ -1,4 +1,4 @@
-"""The panels of one cycle on a terminal: the head, data, series, cost, validators, confluence,
+"""The panels of one cycle on a terminal: the head, data, series, cost, reviewers, confluence,
 conviction, risk, targets and agents.
 """
 
@@ -149,15 +149,16 @@ def _cost_table(record: Mapping[str, Any]) -> list[Any]:
     return parts
 
 
-def _validator_table(record: Mapping[str, Any]) -> list[Any]:
+def _reviewer_table(record: Mapping[str, Any]) -> list[Any]:
     parts: list[Any] = []
     votes = {
         role: said
         for role, said in (record.get("context") or {}).items()
-        if role.startswith("validator")
+        # A record written before 0.12 names the reviewers validators.
+        if role.startswith(("reviewer", "validator"))
     }
     if votes:
-        panel = Table(box=box.SIMPLE_HEAD, show_edge=False, pad_edge=False, title="validators")
+        panel = Table(box=box.SIMPLE_HEAD, show_edge=False, pad_edge=False, title="reviewers")
         for name in ("stance", "verdict", "cited", "discarded", "reason"):
             panel.add_column(name)
         colours = {"support": "green", "oppose": "red", "abstain": "yellow"}
@@ -275,7 +276,8 @@ def _agents_table(record: Mapping[str, Any]) -> list[Any]:
         who = Table(box=box.SIMPLE_HEAD, show_edge=False, pad_edge=False, title="agents")
         for name in ("agent", "state", "seconds"):
             who.add_column(name)
-        rounds = [*agents["agents"], *((record.get("validators") or {}).get("agents") or [])]
+        debate = record.get("reviewers") or record.get("validators") or {}
+        rounds = [*agents["agents"], *(debate.get("agents") or [])]
         said = record.get("context") or {}
         for row in rounds:
             state = "reused" if row.get("reused") else ("ok" if row.get("ok") else "failed")

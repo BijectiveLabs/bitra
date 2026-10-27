@@ -1,4 +1,4 @@
-"""The schema a validator fills and the object the gate gets. Form only; no decision here."""
+"""The schema a reviewer fills and the object the gate gets. Form only; no decision here."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import Any
 from trading_research_agents.execution.confluence import STANCES, VOTES
 from trading_research_agents.llm.form import FormError, _enum, _text, parse_object
 
-ROLE = "validator"
+ROLE = "reviewer"
 SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -36,7 +36,7 @@ SCHEMA: dict[str, Any] = {
 
 @dataclass(frozen=True)
 class Claim:
-    """One thing a validator says, tied to a figure it was given and that figure's value."""
+    """One thing a reviewer says, tied to a figure it was given and that figure's value."""
 
     figure: str
     value: str
@@ -47,19 +47,19 @@ class Claim:
 
 
 @dataclass(frozen=True)
-class Validator:
+class Reviewer:
     stance: str
     claims: tuple[Claim, ...]
     verdict: str
     reason: str
 
 
-def parse(text: str) -> Validator:
+def parse(text: str) -> Reviewer:
     data = parse_object(text, SCHEMA)
     claims = data.get("claims")
     if not isinstance(claims, list):
         raise FormError("claims must be a list")
-    return Validator(
+    return Reviewer(
         stance=_enum(data.get("stance"), "stance", STANCES),
         claims=tuple(_claim(row, number) for number, row in enumerate(claims, start=1)),
         verdict=_enum(data.get("verdict"), "verdict", VOTES),

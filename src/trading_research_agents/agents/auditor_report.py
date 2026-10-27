@@ -5,7 +5,7 @@ carrying a proposal, and a proposal may name one configuration key with a value 
 Nothing is applied. An auditor writes a report; a person decides.
 
 Two checks run over every finding before it reaches the report. Each citation has to name a figure
-the brief actually carried, with its value - the same rule the validators are held to. And a
+the brief actually carried, with its value - the same rule the reviewers are held to. And a
 proposed change has to name a table the project's own configuration has, and a setting that table
 accepts, so an auditor cannot propose a rule the software does not have. What fails either check
 is discarded and the reason is kept beside the report, because a discarded finding is itself worth

@@ -14,7 +14,7 @@ shape or is listed here with what we do instead.
 There is no LangChain, LangGraph, CrewAI or agent framework in the dependency tree. The fan-out is
 forty lines: a thread pool, an answer written to a file the moment it arrives, and `--resume` to
 reuse the answers already on disk. A cycle is at most three rounds - the structure lead, then the
-two advocating validators together, then the judge - and the order is in one function you can read
+two advocating reviewers together, then the judge - and the order is in one function you can read
 top to bottom.
 
 The criteria that would make us adopt a graph framework were written down before the decision and
@@ -61,14 +61,14 @@ Three checks stand between a model's text and anything that reads it.
    names a figure the brief does not carry, or a different value, is discarded, and a deciding
    answer with none left is refused. On the OKX demo desk, from 2026-10-12 to 2026-10-16, no
    citation was discarded across 44 structure lead answers, 132 answers of the reading analysts
-   that existed until 0.11, and 17 validator answers. Between 2026-10-08 and 2026-10-11 those
+   that existed until 0.11, and 17 reviewer answers. Between 2026-10-08 and 2026-10-11 those
    reading analysts had 27 discarded, all of them names the brief did not use, such as
    `fear_greed_zscore` for `series.fear_greed.zscore_vs_recent`.
 
 ## How much a role is given
 
 Measured on the same desk (342 calls, `openai/gpt-oss-120b` and `-20b` on Groq, before 0.11): a
-call carries a median of about 1,950 tokens for the structure lead, 1,390 for a validator and
+call carries a median of about 1,950 tokens for the structure lead, 1,390 for a reviewer and
 1,540 for the screener, system prompt included; the macro, on-chain and sentiment analysts of the
 time took 1,950, 1,730 and 1,350, and since 0.11 they are readings that ask no model. The
 largest was 2,915. Each call starts from a fresh context, so nothing accumulates across a cycle or a
@@ -88,7 +88,7 @@ provider = "groq"
 model = "openai/gpt-oss-120b"
 fallback = ["google:gemini-flash-latest", "anthropic:claude-opus-5-5"]
 
-[agents.roles.validator]
+[agents.roles.reviewer]
 model = "openai/gpt-oss-20b"
 fallback = ["groq:openai/gpt-oss-120b"]     # this role's own order, instead of the one above
 ```
@@ -121,14 +121,14 @@ What happens next depends on the role, and none of it can make a trade larger:
 | structure lead | the cycle stops; no trade | it is the role that proposes a direction |
 | blind confirmer | no trade | the team trades only when both reads agree |
 | flow specialist | its voice is absent; the cycle goes on | a voice that said nothing neither helps nor hurts |
-| validator | the trade is refused (`[agents].on_missing_validator = "refuse"`, the default); with `"continue"` it goes on with the votes that came back | a check you declared that did not happen is not a check |
+| reviewer | the trade is refused (`[agents].on_missing_reviewer = "refuse"`, the default); with `"continue"` it goes on with the votes that came back | a check you declared that did not happen is not a check |
 | market screener | the instruments the system admitted go on unfiltered | the screener can only remove, never add |
 | auditor | a line in the report | auditors never act |
 
 Every failure is a refusal line in `cycle.json` with the vendor's own message, and a provider
 failure wakes the technical auditor (`[audit].on_alarm`). The way to make all of this rarer is
 capacity, not code: a provider tier whose tokens-per-minute covers a whole cycle (the screener,
-the analysts and two validators measured 9,200 to 10,200 tokens inside one minute on the demo
+the analysts and two reviewers measured 9,200 to 10,200 tokens inside one minute on the demo
 desk before 0.11, against a free tier's 8,000; the readings no longer ask a model), roles split across vendors with `[agents.roles.<role>]`, and a
 fallback from a different vendor.
 A pass also stops asking anyone when the desk is already at `[desk].max_open_positions`, so a full
@@ -228,7 +228,7 @@ Undeclared, the field is left out of the request entirely, which matters: most s
 sent nothing. A level a vendor cannot take is mapped rather than refused, because a fallback chain
 that dies on a spelling is a chain that does not help on the day it is needed.
 
-Roles that read a table the system already computed (the screener and the validators) take `low`
+Roles that read a table the system already computed (the screener and the reviewers) take `low`
 when `[agents].effort` is declared and their own role table does not say otherwise; the structure
 lead keeps `[agents].effort`. With nothing declared, no role is sent an effort at all, for the
 reason above.
@@ -240,7 +240,7 @@ the thresholds you declared, and that declared state is what confluence and conv
 0.11 a model also labelled each of them, and no decision ever rested on the label, so the calls
 were retired.
 
-Two more things keep calls from being wasted. The validators are not asked when the system is certain to
+Two more things keep calls from being wasted. The reviewers are not asked when the system is certain to
 refuse whatever they say: the desk with nothing added, the day's round trips, the declared reward to
 risk, or an edge that fails against the part of the round trip that does not grow with size. And
 briefs are sent as JSON without spaces, which are tokens that carry nothing.

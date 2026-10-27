@@ -147,7 +147,7 @@ def record(**kw: Any) -> dict[str, Any]:
         ),
         ({"stopped_by": "cost at 0.01: depth"}, "cost"),
         ({"refusals": ["data funding: stale", "cost gate: net below zero"]}, "cost"),
-        ({"refusals": ["validator_pro: no model answered"]}, "validators"),
+        ({"refusals": ["reviewer_pro: no model answered"]}, "reviewers"),
         (
             {"refusals": ["macro usd_broad: shown, not counted", "regime: fading a trend"]},
             "regime",

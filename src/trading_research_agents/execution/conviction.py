@@ -1,7 +1,7 @@
 """How much capital a cycle puts behind an idea, decided by a rule the operator wrote.
 
 The matrix answers whether the context agrees with the direction. This answers the other half of
-the question a desk actually has: how much. An analyst, three readings and three validators are
+the question a desk actually has: how much. An analyst, three readings and three reviewers are
 only worth their cost if what they say changes the size of the trade, and not merely whether it
 happens.
 
@@ -9,7 +9,7 @@ The rule is code, and the weights are the operator's. That is deliberate. A mode
 confident are you, and how big should this be" will answer differently on Tuesday than on Monday
 from the same figures, and a size that depends on which sentence was written last cannot be
 backtested, reproduced or audited. So a score is computed from what each reading declared, what
-the validators voted after their claims were checked, and the deciding analyst's own confidence; the
+the reviewers voted after their claims were checked, and the deciding analyst's own confidence; the
 score picks a tier off a ladder the operator wrote; the tier multiplies the base size; and every cap
 in the project still applies afterwards. Nothing here can make a trade larger than the operator
 already allowed - it can only make it smaller.
@@ -64,7 +64,7 @@ class Conviction:
     """[conviction]: what each voice is worth, the floor, and the ladder from score to size."""
 
     weights: Mapping[str, Decimal] = field(default_factory=dict)
-    validator_weight: Decimal = Decimal(0)
+    reviewer_weight: Decimal = Decimal(0)
     min_score: Decimal = Decimal(0)
     ladder: tuple[Tier, ...] = ()
     max_leverage: Decimal | None = None
@@ -73,8 +73,8 @@ class Conviction:
         for role, weight in self.weights.items():
             if weight <= 0:
                 raise ConvictionError(f"[conviction].weights.{role} is positive")
-        if self.validator_weight < 0:
-            raise ConvictionError("[conviction].validator_weight is not negative")
+        if self.reviewer_weight < 0:
+            raise ConvictionError("[conviction].reviewer_weight is not negative")
         if not Decimal(0) <= self.min_score <= Decimal(1):
             raise ConvictionError("[conviction].min_score sits between 0 and 1")
         if self.max_leverage is not None and self.max_leverage <= 0:
@@ -97,7 +97,7 @@ class Conviction:
     def record(self) -> dict[str, Any]:
         return {
             "weights": {role: str(w) for role, w in sorted(self.weights.items())},
-            "validator_weight": str(self.validator_weight),
+            "reviewer_weight": str(self.reviewer_weight),
             "min_score": str(self.min_score),
             "ladder": [t.record() for t in self.ladder],
             "max_leverage": None if self.max_leverage is None else str(self.max_leverage),
@@ -185,7 +185,7 @@ def score_of(
 
     Every voice is a signed figure. The deciding analyst brings its weight times its confidence. A
     reading brings its weight times its graded score - how far its series sit past the
-    operator's lines, between -1 and 1 - pointed with or against the direction. A validator brings
+    operator's lines, between -1 and 1 - pointed with or against the direction. A reviewer brings
     its weight for or against. The score is what they add up to, over the weight they actually
     expressed: a macro reading barely past its line moves the score a little either way, a reading
     a full band past it moves it a lot, and a voice that said nothing neither helps nor dilutes.
@@ -222,15 +222,15 @@ def score_of(
 
     support = sum(1 for vote in votes if vote == "support")
     opposition = sum(1 for vote in votes if vote == "oppose")
-    if rule.validator_weight > 0 and votes:
-        possible += rule.validator_weight * (support + opposition)
-        raw += rule.validator_weight * (support - opposition)
-        parts.append(("validators", str(rule.validator_weight * (support - opposition))))
+    if rule.reviewer_weight > 0 and votes:
+        possible += rule.reviewer_weight * (support + opposition)
+        raw += rule.reviewer_weight * (support - opposition)
+        parts.append(("reviewers", str(rule.reviewer_weight * (support - opposition))))
 
     full = [(role, str(weight)) for role, weight in sorted(rule.weights.items())]
-    if rule.validator_weight > 0 and support + opposition:
+    if rule.reviewer_weight > 0 and support + opposition:
         # What the votes that said something could have moved; a silent vote weighs nothing.
-        full.append(("validators", str(rule.validator_weight * (support + opposition))))
+        full.append(("reviewers", str(rule.reviewer_weight * (support + opposition))))
     if possible <= 0:
         return Score(score=Decimal(0), raw=raw, possible=Decimal(0), weights=tuple(full))
     share = max(raw, Decimal(0)) / possible

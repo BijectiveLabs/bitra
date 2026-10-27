@@ -335,7 +335,7 @@ required = []
 long_states = ["bullish"]
 short_states = ["bearish"]
 on_missing = "refuse"
-min_support = 0                    # validators that must support it; needs [agents].validators
+min_support = 0                    # reviewers that must support it; needs [agents].reviewers
 
 [conviction]
 # What each voice is worth, and how much of the base size their agreement buys. With nothing on the

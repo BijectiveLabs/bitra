@@ -37,7 +37,7 @@ falsification count. They are counted and shown separately: `tra agent refusals`
 A defect of form goes back to the model with the gate's own error text, up to
 `max_revisions` times (default 2): a memo with two sentences, a cost model missing a term, a
 kill threshold that is not a number. The text the model sees is the text the gate produced;
-there is no second validator.
+there is no second reviewer.
 
 A fact about the idea is final: its bound is below the floor, or nobody can be named who is
 forced to lose after the revisions are spent. Returning that kind would invite the model to

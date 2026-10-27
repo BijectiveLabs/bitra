@@ -25,8 +25,8 @@ from trading_research_agents.agents.cycle.config import (
 )
 from trading_research_agents.agents.cycle.record import budget_spent, manifest
 from trading_research_agents.agents.cycle.result import CycleResult
+from trading_research_agents.agents.cycle.reviewers import judge_mode
 from trading_research_agents.agents.cycle.run import run_cycle
-from trading_research_agents.agents.cycle.validators import judge_mode
 
 __all__ = [
     "CONTRACT_KINDS",

@@ -67,9 +67,11 @@ All notable changes to this project are recorded here. The format follows
 
 - The seats that decide are named for what they answer for: `structure_lead` (was
   `technical_analyst`), `blind_confirmer` (was `technical_peer`), `flow_specialist` (was
-  `flow_analyst`) and `outcome_assessor` (was `event_analyst`). A desk written with the old names
-  runs unchanged and `tra check` names the new ones; a cycle folder written before keeps its
-  `technical.json`, and every reader takes either name.
+  `flow_analyst`), `outcome_assessor` (was `event_analyst`) and `reviewer` (was `validator`, with
+  `[agents].reviewers`, `[agents].on_missing_reviewer` and `[conviction].reviewer_weight`). A desk
+  written with the old names runs unchanged and `tra check` names the new ones; a cycle folder
+  written before keeps its `technical.json` and `validator_*` entries, and every reader takes
+  either name.
 - A venue error at the create call is classified: a refusal by the venue raises as before, and
   anything else (a timeout, a dropped connection, a duplicate client id) is read back by the
   order's client id instead of being recorded as `sent: false`.

@@ -33,7 +33,7 @@ def _cycle_steps(cfg: Any) -> list[str]:
     # Every reading has a row, read or not; the row says which.
     steps.extend(["macro", "onchain", "sentiment"])
     steps.extend(["cost", "exit"])
-    steps.extend(f"validator_{stance}" for stance in cfg.validators)
+    steps.extend(f"reviewer_{stance}" for stance in cfg.reviewers)
     if not cfg.matrix.idle:
         steps.append("confluence")
     if not cfg.conviction.idle:
@@ -97,11 +97,11 @@ def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], l
     payload["out"] = str(result.path)
     spent = f"{result.fan.seconds}s of agents"
     if result.debate is not None:
-        spent += f", {result.debate.seconds}s of validators"
+        spent += f", {result.debate.seconds}s of reviewers"
     lines = [f"cycle {result.cycle} {result.instrument}: {spent}"]
     lines.extend(_data_lines(result))
     lines.extend(_voice_lines(result))
-    lines.extend(_validator_lines(result))
+    lines.extend(_reviewer_lines(result))
     lines.extend(_sizing_lines(result))
     lines.extend(_exit_lines(result))
     lines.extend(_target_lines(result))
@@ -162,10 +162,10 @@ def _voice_lines(result: Any) -> list[str]:
     return lines
 
 
-def _validator_lines(result: Any) -> list[str]:
+def _reviewer_lines(result: Any) -> list[str]:
     lines: list[str] = []
     for role, said in sorted(result.context.items()):
-        if not role.startswith("validator"):
+        if not role.startswith("reviewer"):
             continue
         verdict = said.get("verdict") or f"failed: {said.get('error', '')}"
         cited = len(said.get("claims") or ())

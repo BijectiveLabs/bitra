@@ -22,10 +22,10 @@ from trading_research_agents.agents.scope import (
 from trading_research_agents.readings import READINGS
 
 LATER = ("equity", "size", "max_position", "stop_frac", "take_profit")
-ASKED = ("structure_lead", "validator", "market_screener")
+ASKED = ("structure_lead", "reviewer", "market_screener")
 
 
-@pytest.mark.parametrize("role", ("validator", "market_screener"))
+@pytest.mark.parametrize("role", ("reviewer", "market_screener"))
 def test_a_reviewing_role_is_never_handed_a_figure_from_a_later_step(role: str) -> None:
     allowed = scope_of(role)
     for key in LATER:
@@ -52,10 +52,10 @@ def test_the_filter_removes_what_is_not_this_roles_to_read() -> None:
         "equity": "10000",
         "size": "0.01",
     }
-    kept = brief_for("validator", brief)
+    kept = brief_for("reviewer", brief)
 
     assert set(kept) == {"instrument", "stance", "proposal"}
-    assert dropped("validator", brief) == ("equity", "size")
+    assert dropped("reviewer", brief) == ("equity", "size")
 
 
 def test_the_technical_analyst_keeps_a_family_of_figures_but_not_the_size() -> None:
@@ -72,7 +72,7 @@ def test_a_role_with_no_declared_scope_is_refused_rather_than_guessed() -> None:
 
 def test_prose_that_reaches_into_a_later_step_is_recorded() -> None:
     said = {"verdict": "oppose", "reason": "I would go long here and set a stop loss below"}
-    found = crossings("validator", said)
+    found = crossings("reviewer", said)
 
     assert any("an order" in f for f in found) and any("an exit" in f for f in found)
     # Nothing about the finding changes the verdict: the record is what the check is for.
@@ -85,7 +85,7 @@ def test_the_vocabulary_leaves_ordinary_market_language_alone() -> None:
         "reason": "the central bank said it would buy bonds; risk-off names the regime, and "
         "positioning is long into the release",
     }
-    assert crossings("validator", said) == ()
+    assert crossings("reviewer", said) == ()
 
 
 def test_the_deciding_analyst_is_not_checked_for_the_words_of_its_own_job() -> None:
@@ -93,17 +93,17 @@ def test_the_deciding_analyst_is_not_checked_for_the_words_of_its_own_job() -> N
     assert crossings("structure_lead", said) == ()
 
 
-def test_a_validator_may_name_the_role_whose_proposal_it_reviews() -> None:
+def test_a_reviewer_may_name_the_role_whose_proposal_it_reviews() -> None:
     said = {"reason": "the structure lead's figure holds, and the burst is not finished"}
-    assert crossings("validator", said) == ()
+    assert crossings("reviewer", said) == ()
 
     reaching = {"reason": "the position size should be halved"}
-    assert crossings("validator", reaching)
+    assert crossings("reviewer", reaching)
 
 
 def test_a_rule_no_role_was_told_is_recorded_for_every_role() -> None:
     invented = {"reason": "the desk requires a reward to risk of 3 before any entry"}
-    for role in ("structure_lead", "validator"):
+    for role in ("structure_lead", "reviewer"):
         found = crossings(role, invented)
         assert any("a rule of the desk" in f for f in found), role
     # Describing the market's own numbers is not stating a rule.
