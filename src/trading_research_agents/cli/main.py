@@ -61,7 +61,12 @@ from trading_research_agents.cli.arena import add_arena_command, arena_report
 from trading_research_agents.cli.console import HISTORY_FILE
 from trading_research_agents.cli.market import add_bars_command, data_bars, verify_market
 from trading_research_agents.cli.record import add_record_command, record_report, record_status
-from trading_research_agents.cli.text import add_text_command, judge_lines, text_judge
+from trading_research_agents.cli.text import (
+    add_text_command,
+    desk_judge,
+    judge_lines,
+    text_judge,
+)
 from trading_research_agents.data import (
     NORMALISER_VERSION,
     ArchiveError,
@@ -107,6 +112,7 @@ from trading_research_agents.llm.providers import (
     providers,
 )
 from trading_research_agents.llm.providers.anthropic import DEFAULT_MODEL
+from trading_research_agents.readings import READINGS
 from trading_research_agents.records import append_line, read_lines, write_json
 from trading_research_agents.strategy import ExitError
 from trading_research_agents.trading import (
@@ -3758,6 +3764,8 @@ def run_cycle_command(args: argparse.Namespace) -> int:
         series=series,
         news=news,
         readings=readings,
+        team=a.team,
+        judge=desk_judge(args.data_config),
     )
     schedule = Schedule(every_s=args.every, cycles=args.cycles, kill_switch=cfg.kill_switch)
     spine = _cycle_steps(cycle_cfg)
@@ -4464,6 +4472,10 @@ def _cycle_steps(cfg: Any) -> list[str]:
     if cfg.account is not None:
         steps.append("capital")
     steps.extend(["regime", "technical"])
+    # The members beside the analyst, by the names their rows report under.
+    steps.extend({"technical_peer": "technical_peer", "flow_analyst": "flow"}[m] for m in cfg.team)
+    if cfg.judge is not None:
+        steps.append("judge")
     # Every reading has a row, read or not; the row says which.
     steps.extend(["macro", "onchain", "sentiment"])
     steps.extend(["cost", "exit"])
@@ -4511,6 +4523,29 @@ def _cycle_view(payload: Mapping[str, Any]) -> Any:
     return _ui().cycle_view(payload)
 
 
+def _team_lines(context: Mapping[str, Any]) -> list[str]:
+    """The members beside the analyst, and the judge's reading of each structure reason."""
+    lines = []
+    peer = context.get("technical_peer")
+    if isinstance(peer, Mapping) and peer.get("target"):
+        lines.append(
+            f"peer:      {peer['target']} on {peer.get('setup')} at {peer.get('confidence')}: "
+            f"{peer.get('reason')}"
+        )
+    flow = context.get("flow_analyst")
+    if isinstance(flow, Mapping):
+        said = flow.get("error") or f"{flow.get('target')} at {flow.get('confidence')}"
+        lines.append(f"flow:      {said}" + (f": {flow['reason']}" if flow.get("reason") else ""))
+    for member in ("technical_analyst", "technical_peer"):
+        check = context.get(f"{member}_check")
+        if isinstance(check, Mapping):
+            lines.append(
+                f"judge:     {member} describes the measurements at {check.get('describes')} "
+                f"({check.get('model')})"
+            )
+    return lines
+
+
 def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], list[str]]:
     """One cycle as a record and as the lines a person reads."""
     payload = result.record()
@@ -4531,13 +4566,14 @@ def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], l
     for name, why in sorted((result.briefs.get("not_read") or {}).items()):
         lines.append(f"{name:<10} {why}")
     for name, said in sorted(result.context.items()):
-        if name.startswith("validator"):
+        if name not in READINGS:
             continue
         declared = said.get("declared_state") or {}
         word = declared.get("declared", "undeclared")
         spoken = declared.get("in_its_words")
         state = f"{word} ({spoken})" if spoken else word
         lines.append(f"{name:<10} read by code: {state}")
+    lines.extend(_team_lines(result.context))
     if result.analyst is not None:
         lines.append(
             f"technical: {result.analyst.target} on {result.analyst.setup} at "
@@ -5532,8 +5568,8 @@ def _span_s(seconds: float) -> str:
 
 def _load_notes(a: Any, roster: tuple[str, ...], screener: bool = False) -> list[str]:
     """How a cycle's calls land on providers, and what happens when one of them says no."""
-    # The readings are read by code; only the role that proposes asks a model.
-    asked = ["technical_analyst"]
+    # The readings are read by code; the analyst and its team are the models a cycle asks.
+    asked = ["technical_analyst", *a.team]
     reading = [name for name in (a.readings or roster) if name != "technical_analyst"]
     roles = [
         *asked,
@@ -5554,6 +5590,14 @@ def _load_notes(a: Any, roster: tuple[str, ...], screener: bool = False) -> list
             f"readers: {', '.join(reading)} are read by code against your thresholds and ask no "
             "model"
         )
+    if "technical_peer" in a.team:
+        lead, peer = a.for_role("technical_analyst"), a.for_role("technical_peer")
+        if (lead.provider, lead.model) == (peer.provider, peer.model):
+            said.append(
+                "team: technical_peer runs on the same model as the technical analyst, and two "
+                "reads from one model err together; give it another family in "
+                "[agents.roles.technical_peer]"
+            )
     # Vendors meter per model, so two models on one provider are two sets of limits.
     pairs = sorted({f"{a.for_role(r).provider}:{a.for_role(r).model}" for r in roles})
     if len(pairs) == 1 and calls >= 4:

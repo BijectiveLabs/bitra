@@ -54,7 +54,7 @@ def test_table_readers_think_low_only_where_an_effort_is_declared() -> None:
 
 
 def test_briefs_go_to_the_model_without_spaces() -> None:
-    from trading_research_agents.agents.cycle import _ask
+    from trading_research_agents.agents.cycle.asking import _ask
     from trading_research_agents.llm.completer import FakeCompleter
 
     fake = FakeCompleter(['{"x": 1}'])
@@ -71,7 +71,7 @@ def test_briefs_go_to_the_model_without_spaces() -> None:
 def test_a_quote_cap_holds_every_instrument_to_the_same_money() -> None:
     from types import SimpleNamespace
 
-    from trading_research_agents.agents.cycle import _position_cap
+    from trading_research_agents.agents.cycle.pricing import _position_cap
 
     # 800 USDT of DOGE at 0.2 is 4,000 units; a 10-unit cap written for BTC must not apply.
     doge = SimpleNamespace(max_position=None, max_position_quote=Decimal(800), size_step=Decimal(1))

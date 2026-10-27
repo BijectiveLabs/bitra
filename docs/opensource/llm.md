@@ -118,7 +118,9 @@ What happens next depends on the role, and none of it can make a trade larger:
 
 | Role | If no model answers | Why |
 |---|---|---|
-| technical analyst | the cycle stops; no trade | it is the only role that proposes a direction |
+| technical analyst | the cycle stops; no trade | it is the role that proposes a direction |
+| technical peer | no trade | the team trades only when both reads agree |
+| flow analyst | its voice is absent; the cycle goes on | a voice that said nothing neither helps nor hurts |
 | validator | the trade is refused (`[agents].on_missing_validator = "refuse"`, the default); with `"continue"` it goes on with the votes that came back | a check you declared that did not happen is not a check |
 | market screener | the instruments the system admitted go on unfiltered | the screener can only remove, never add |
 | auditor | a line in the report | auditors never act |

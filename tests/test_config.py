@@ -423,3 +423,25 @@ def test_a_setting_that_no_longer_does_anything_is_read_and_named_by_check() -> 
     both = agent_raw(agents={**AGENTS, "analysts": ["technical_analyst"], "readings": []})
     with pytest.raises(ConfigError, match="one of the two"):
         parse_strategy_config(both)
+
+
+def test_the_technical_team_is_declared_and_its_members_take_their_own_models() -> None:
+    cfg = parse_strategy_config(
+        agent_raw(
+            agents={
+                **AGENTS,
+                "team": ["technical_peer", "flow_analyst"],
+                "roles": {"technical_peer": {"provider": "google", "model": "other-family"}},
+            },
+            conviction={"weights": {"technical_analyst": Decimal(1), "flow_analyst": Decimal(1)}},
+            confluence={"required": ["flow_analyst"]},
+        )
+    )
+    assert cfg.agents is not None and cfg.agents.team == ("technical_peer", "flow_analyst")
+    assert cfg.agents.for_role("technical_peer").model == "other-family"
+    assert cfg.conviction.weights["flow_analyst"] == Decimal(1)
+    assert cfg.confluence.required == ("flow_analyst",)
+    assert parse_strategy_config(agent_raw()).agents.team == ()  # type: ignore[union-attr]
+    for team, message in ((["astrologer"], "is not one of"), (["flow_analyst"] * 2, "twice")):
+        with pytest.raises(ConfigError, match=message):
+            parse_strategy_config(agent_raw(agents={**AGENTS, "team": team}))

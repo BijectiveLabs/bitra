@@ -108,3 +108,15 @@ def test_check_names_the_judge_and_a_missing_key(tmp_path: Path) -> None:
     path.write_text('[judge]\nprovider = "typesafe"\nmodel = "jev-latest"\n', encoding="utf-8")
     good, bad = judge_lines(path, {})
     assert "pinned" in bad[0]
+
+
+def test_a_desk_with_a_judge_table_hands_its_cycles_the_cached_judge(tmp_path: Path) -> None:
+    from trading_research_agents.cli.text import desk_judge
+
+    path = tmp_path / "data.toml"
+    path.write_text(DATA_TOML, encoding="utf-8")
+    judge = desk_judge(path)
+    assert judge is not None and judge.model == "jev-1.14.0"
+    path.write_text("[record]\nvenue = 'bybit'\n", encoding="utf-8")
+    assert desk_judge(path) is None
+    assert desk_judge(tmp_path / "absent.toml") is None

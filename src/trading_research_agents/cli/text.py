@@ -92,6 +92,16 @@ def judge_lines(path: Path, env: Mapping[str, str]) -> tuple[list[str], list[str
     return [f"judge: {named}; text features read its verdicts"], []
 
 
+def desk_judge(path: Path) -> Judge | None:
+    """The judge `[judge]` declares for a desk, behind its cache in the desk's `data/judge`."""
+    if not path.is_file():
+        return None
+    cfg = load_judge_config(path)
+    if cfg is None:
+        return None
+    return build_judge(cfg, path.resolve().parent / "data" / "judge")
+
+
 def _feeds(out: Path, declared: Sequence[str]) -> list[str]:
     if declared and declared != (ALL,):
         return list(declared)
@@ -126,4 +136,4 @@ def _report(cfg: JudgeConfig, assets: list[str], feeds: list[str], seen: Perceiv
     return payload, lines, 0
 
 
-__all__ = ["add_text_command", "judge_lines", "text_judge"]
+__all__ = ["add_text_command", "desk_judge", "judge_lines", "text_judge"]

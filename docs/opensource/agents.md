@@ -30,6 +30,29 @@ fill, a parser that refuses anything outside it, and a prompt that names venues 
 role talks to another. The session hands each one what the system computed plus what earlier roles
 wrote, and records every answer as a numbered file in the session directory.
 
+## The technical team
+
+The technical analyst can work alone, as it does on a desk that declares nothing, or with a team
+(`[agents].team`). The members answer in parallel, none seeing another's answer, and code combines
+them.
+
+| Member | Reads | Answers | How it counts |
+|---|---|---|---|
+| `technical_analyst` (lead) | price, path, structure, the regime on every timeframe, levels, its own last reading | target, setup, confidence, horizon, stop and target prices | its levels are the trade's |
+| `technical_peer` | the lead's brief, blind to the lead's answer | the same schema | the two must name the same side, or there is no trade; the lower confidence counts |
+| `flow_analyst` | the book, the spread, funding and open interest, which leave the lead's brief | a side, a confidence, cited figures | a declared state that `[conviction].weights.flow_analyst` weighs and `[confluence].required` may require |
+
+Why this shape and not a debate: several models talking a question over do not reliably beat
+independent answers combined, while models that see different evidence, or are different models,
+do; and the errors of one model are correlated with its own errors. So each member reads its own
+evidence or is another model, answers once, and code compares. `tra check` says when the peer runs
+on the same model as the lead.
+
+When a typed judge is declared (`[judge]` in `data.toml`), it reads each structure answer's reason
+beside the labels code measured (the regime, the structure, the regime on each timeframe) and says
+how likely the reason describes the market that way. Below one half there is no trade. A judge that
+does not answer leaves the check absent, never a "no", and numbers and dates are never asked of it.
+
 ## Readings are not agents
 
 Macro, on-chain and sentiment are readings, not roles. Each is code in
@@ -190,6 +213,8 @@ What a role's answer does differs:
 | Role | What its answer decides |
 |---|---|
 | `technical_analyst` | the side, the setup and the levels; every gate after it works on these |
+| `technical_peer` | nothing on its own: without its agreement on the side there is no trade |
+| `flow_analyst` | a voice in conviction, and in confluence when required; never a level |
 | validators | one vote each in conviction, after their claims are checked |
 | `market_screener` | which instruments, from code's own order, get a cycle; it may drop, never add |
 | `risk_manager` | between cycles: size cuts, pauses, a halt; never a loosening |
@@ -359,6 +384,9 @@ A question worth answering plainly, because it decides where the token bill goes
 |---|---|---|
 | read one class of data against your lines | a reading, in code | a declared state and a graded score, from the figures against the operator's lines |
 | propose a direction and a horizon | the technical analyst | one target, one confidence, one reason |
+| read the same brief again, blind | the technical peer, when declared | agree on the side, or there is no trade |
+| read the book, funding and open interest | the flow analyst, when declared | one side and one confidence, weighed in conviction |
+| check a reason against the measured regime | the typed judge, when declared | below one half, no trade |
 | argue for or against that proposal | pro and contra, apart | claims that cite figures from the brief; the system discards the rest |
 | judge the two cases | neutral | one verdict from the claims that survived, weighed on the premise of the setup |
 | decide whether the context agrees | the confluence matrix, in the system | admit or refuse, from declared states and vote counts |

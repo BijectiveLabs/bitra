@@ -44,6 +44,12 @@ All notable changes to this project are recorded here. The format follows
 - The `forecast` arena row: a logistic model per side fitted walk-forward on settled outcomes only,
   calibrated (Platt or isotonic, chosen on held-out halves), and one expected-value decision net of
   the round trip. In the arena only, beside the baselines, until it is shown to be better.
+- The technical team (`[agents].team`): a `technical_peer` that reads the technical analyst's
+  brief blind and must agree on the side, at the lower of the two confidences, and a `flow_analyst`
+  that reads the book, the spread, funding and open interest (which then leave the analyst's brief)
+  as a voice in `[conviction]` and `[confluence]`. Members answer in parallel; each has its own
+  `[agents.roles.<role>]`; `tra check` says when the peer is the same model as the lead. With a
+  `[judge]` declared, each structure reason is checked against the measured regime and structure.
 - Bybit's long/short ratio history, asked by the venue's own period names and windows; it was
   unreachable through ccxt's unified call.
 

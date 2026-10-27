@@ -206,7 +206,7 @@ flowchart LR
     subgraph now["the cycle today"]
         direction TB
         f1["features and briefs, by code"] --> r1["readings, by code"]
-        r1 --> m1["technical analyst<br/>the one model call"]
+        r1 --> m1["technical team<br/>lead, peer, flow; code combines"]
         m1 --> g1["gates: cost, exits,<br/>confluence, conviction"]
     end
     subgraph next["the decision being built: in the arena today, live in 0.13"]
