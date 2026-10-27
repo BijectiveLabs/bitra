@@ -406,3 +406,60 @@ def test_the_analyst_answer_carries_levels_or_none() -> None:
         parse(json.dumps({**base, "stop_price": -1, "target_price": None}))
     levels = parse(json.dumps({**base, "stop_price": 99.5, "target_price": 103}))
     assert levels.stop_price == Decimal("99.5") and levels.target_price == Decimal("103")
+
+
+def walked(n: int) -> list[Candle]:
+    """A random walk of candles, each opening at the last close and reaching a little past it."""
+    import math
+    import random
+
+    rng = random.Random(5)  # noqa: S311 - a test fixture, not a secret
+    out, close = [], 100.0
+    for i in range(n):
+        new = close * math.exp(rng.gauss(0, 0.004))
+        reach = abs(rng.gauss(0, 0.002))
+        high, low = max(close, new) * (1 + reach), min(close, new) * (1 - reach)
+        out.append(
+            Candle(
+                start_ns=i * MINUTE_NS,
+                open=Decimal(f"{close:.4f}"),
+                high=Decimal(f"{high:.4f}"),
+                low=Decimal(f"{low:.4f}"),
+                close=Decimal(f"{new:.4f}"),
+                volume=Decimal(1),
+            )
+        )
+        close = new
+    return out
+
+
+def test_a_stop_measured_from_the_paths_sits_where_the_paths_reach_against_the_side() -> None:
+    candles = walked(300)
+    paths = VolatilityExit(measure="paths", max_stop_frac=Decimal("0.2"))
+    near = paths.place(candles, horizon_bars=4, side="long")
+    far = paths.place(candles, horizon_bars=36, side="long")
+    assert near.measured_frac < far.measured_frac
+    looser = VolatilityExit(
+        measure="paths", paths_quantile=Decimal("0.6"), max_stop_frac=Decimal("0.2")
+    )
+    assert looser.place(candles, horizon_bars=36, side="long").measured_frac < far.measured_frac
+    assert far.take_frac == far.stop_frac * paths.reward_to_risk
+    # Measured the same way twice, from the same candles.
+    assert paths.place(candles, horizon_bars=36, side="long") == far
+
+
+def test_a_paths_measure_that_cannot_measure_refuses_rather_than_falls_back() -> None:
+    with pytest.raises(StopError, match='measure = "paths"'):
+        VolatilityExit(measure="paths").place(walked(20), horizon_bars=4, side="long")
+    with pytest.raises(StopError, match="measure is one of"):
+        VolatilityExit(measure="median")
+    with pytest.raises(StopError, match="paths_quantile"):
+        VolatilityExit(measure="paths", paths_quantile=Decimal("0.999"))
+
+
+def test_the_config_reads_the_paths_measure() -> None:
+    cfg = parse_strategy_config(
+        agent_raw(exit={"mode": "volatility", "measure": "paths", "paths_quantile": Decimal("0.8")})
+    )
+    rule = cfg.exit_rule.volatility
+    assert rule is not None and rule.measure == "paths" and rule.paths_quantile == Decimal("0.8")

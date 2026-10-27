@@ -241,7 +241,15 @@ EXIT_KEYS = (
 )
 
 
-VOLATILITY_KEYS = ("stop_atr", "reward_to_risk", "min_stop_frac", "max_stop_frac", "atr_bars")
+VOLATILITY_KEYS = (
+    "stop_atr",
+    "reward_to_risk",
+    "min_stop_frac",
+    "max_stop_frac",
+    "atr_bars",
+    "measure",
+    "paths_quantile",
+)
 
 
 ANALYST_KEYS = ("min_reward_to_risk", "max_reward_to_risk", "min_stop_atr")
@@ -287,6 +295,8 @@ def _volatility_exit(exit_raw: dict[str, Any]) -> VolatilityExit | None:
             min_reward_to_risk=number("min_reward_to_risk"),
             max_reward_to_risk=number("max_reward_to_risk"),
             min_stop_atr=number("min_stop_atr"),
+            measure=str(exit_raw.get("measure", plain.measure)),
+            paths_quantile=number("paths_quantile"),
         )
     except StopError as exc:
         raise ConfigError(str(exc)) from exc

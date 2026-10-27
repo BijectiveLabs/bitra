@@ -20,9 +20,13 @@ from itertools import pairwise
 from typing import Any
 
 from trading_research_agents.data.schema import Candle
+from trading_research_agents.forecast.paths import PathError, adverse_bps
 
 BPS = Decimal(10_000)
 MODES = ("fixed", "volatility", "analyst")
+
+
+MEASURES = ("atr", "paths")
 
 
 class StopError(ValueError):
@@ -42,6 +46,10 @@ class VolatilityExit:
     min_reward_to_risk: Decimal = Decimal("1.5")
     max_reward_to_risk: Decimal = Decimal("4.0")
     min_stop_atr: Decimal = Decimal("1.0")
+    # How the stop distance is measured: "atr", stop_atr x ATR x sqrt(hold); or "paths", where
+    # the instrument's own paths reach against the side inside the hold, at `paths_quantile`.
+    measure: str = "atr"
+    paths_quantile: Decimal = Decimal("0.9")
 
     def __post_init__(self) -> None:
         for label in (
@@ -69,6 +77,10 @@ class VolatilityExit:
             raise StopError("[exit].max_stop_frac is a fraction of price, below 1")
         if not isinstance(self.atr_bars, int) or self.atr_bars < 2:
             raise StopError("[exit].atr_bars is a whole number of bars, at least 2")
+        if self.measure not in MEASURES:
+            raise StopError(f"[exit].measure is one of {list(MEASURES)}, not {self.measure!r}")
+        if not Decimal("0.5") <= self.paths_quantile <= Decimal("0.99"):
+            raise StopError("[exit].paths_quantile is between 0.5 and 0.99")
         if not isinstance(self.min_stop_atr, Decimal) or not self.min_stop_atr.is_finite():
             raise StopError(f"[exit].min_stop_atr is a number, got {self.min_stop_atr!r}")
         if self.min_stop_atr < 0:
@@ -90,7 +102,7 @@ class VolatilityExit:
     ) -> Placement:
         atr = average_true_range(candles, self.atr_bars)
         last = candles[-1].close
-        measured = self.stop_atr * atr / last * Decimal(max(horizon_bars, 1)).sqrt()
+        measured = self._measured(candles, atr / last, horizon_bars, side)
         stop, clamped = self._held(measured)
         take = stop * self.reward_to_risk
         source, proposed, notes, named_target = "measured", None, [], False
@@ -132,6 +144,25 @@ class VolatilityExit:
             notes=tuple(notes),
             target_named=named_target,
         )
+
+    def _measured(
+        self, candles: Sequence[Candle], atr_frac: Decimal, horizon_bars: int, side: str | None
+    ) -> Decimal:
+        hold = max(horizon_bars, 1)
+        if self.measure == "atr":
+            return self.stop_atr * atr_frac * Decimal(hold).sqrt()
+        ohlc = [[float(c.open), float(c.high), float(c.low), float(c.close)] for c in candles]
+        try:
+            reach = adverse_bps(
+                ohlc,
+                side=side if side in ("long", "short") else "long",
+                horizon_bars=hold,
+                quantile=float(self.paths_quantile),
+            )
+        except PathError as exc:
+            # A declared way of measuring that cannot measure is not replaced by another one.
+            raise StopError(f'[exit].measure = "paths": {exc}') from exc
+        return Decimal(f"{reach:.6f}") / BPS
 
     def _held(self, frac: Decimal) -> tuple[Decimal, str | None]:
         if frac < self.min_stop_frac:

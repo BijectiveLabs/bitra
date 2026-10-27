@@ -19,11 +19,15 @@ trading_research_agents/
   extras.py    how to add a missing optional dependency, worded once            depends on nothing
   ledger/      verdict vocabulary, axes, transferability, kill-ledger rows      depends on nothing
   envelope/    operator parameters: fees per channel, latency, venue access     depends on nothing
+  forecast/    the instrument's own candles drawn forward and read at a trade's
+               levels; a logistic fit, Platt and isotonic calibration, the
+               expected value of a side; numerics only                          depends on nothing
   data/        any trade data to Parquet, dataset audit, manifest; venue
                archive plugins in data/venues, column maps for the rest      -> ledger, envelope
   chain/       falsification chain, layers 0 to 5                               -> ledger, envelope, data
   execution/   cost identity, fills after latency, trade-through matching,
-               fill probability, markout, orders whose send went unanswered     -> ledger, envelope, data, chain
+               fill probability, markout, orders whose send went unanswered,
+               stops measured by ATR or by the paths                            -> ledger, envelope, data, chain, forecast
   risk/        the gate every new order passes: hard caps, the loss at the stop
                recomputed, switches, unanswered sends, today's trades and losses;
                signs the intent it approves                                     -> execution
@@ -39,11 +43,8 @@ trading_research_agents/
                (listed on the MCP page); shared by mcp and agents                -> everything above
   readings/    macro, on-chain and sentiment: the operator's series against the
                operator's thresholds, a declared state and a graded score; no model -> data
-  forecast/    the instrument's own candles drawn forward and read at a trade's
-               levels; a logistic fit, Platt and isotonic calibration, the
-               expected value of a side; numerics only                          depends on nothing
   agents/      the research roles at layers 0, 2 and 3; the session roles; the
-               cycle and its seats, reviewers and screener                      -> everything above, llm, store, surface, readings, forecast
+               cycle and its seats, reviewers and screener                      -> everything above, llm, store, surface, readings
   mcp/         the gates as MCP tools                                            -> everything except agent
   market_data/ one-minute flow and book bars, derivatives and liquidations, dated
                text, gap marks; the verified archive in day files and hour parts,

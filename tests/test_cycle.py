@@ -1522,6 +1522,7 @@ def test_with_a_judge_declared_the_judge_weighs_the_two_cases_with_probabilities
     assert neutral["verdict"] == "oppose" and neutral["judged"] == "judge"
     assert neutral["model"] == "jev-1.14.0" and neutral["probabilities"]["oppose"] == 0.7
     state = next(s for s, q in judge.asked if "verdict" in q)
+    assert isinstance(state, dict)
     assert "zscore = 1.403" in state["case_for"][0] and state["case_against"]
     assert result.confluence is not None and result.confluence.support == 0
 

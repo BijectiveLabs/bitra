@@ -932,6 +932,20 @@ one-minute candles on 2026-10-10 with the defaults and a five-bar horizon:
 | FILUSDT | 10.8 bps | 36 bps | 72 bps |
 | FILUSDT, 30 bars | 10.8 bps | 88 bps | 177 bps |
 
+`measure = "paths"` measures the stop from the instrument's own paths instead (see
+[the paths](#the-paths)): where they reach against the side inside the hold, wicks included, at
+`paths_quantile` (0.9 by default, so one path in ten touches the stop on noise alone). It suits a
+market whose wicks the square root of time understates. The same floor, ceiling and reward to risk
+apply, and a reading that cannot be made (fewer than 30 closed candles, a market that did not move)
+refuses the trade rather than falling back to the ATR.
+
+```toml
+[exit]
+mode = "volatility"
+measure = "paths"            # "atr", the default, or "paths"
+paths_quantile = 0.9         # the share of paths the stop sits beyond, 0.5 to 0.99
+```
+
 A wider stop does not mean a bigger loss. `[controls].max_risk_per_trade_bps` cuts the size until
 the loss at the stop fits, so a volatile coin with a wide stop puts the same share of equity at risk
 as BTC with a tight one, on a smaller position. The cycle record keeps the ATR, the horizon, the

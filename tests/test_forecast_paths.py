@@ -101,3 +101,17 @@ def test_a_reading_refuses_what_it_cannot_carry() -> None:
         read_paths(walk(100), side="flat", take_bps=50, stop_bps=50, horizon_bars=5)
     with pytest.raises(PathError, match="positive distance"):
         read_paths(walk(100), side="long", take_bps=0, stop_bps=50, horizon_bars=5)
+
+
+def test_the_adverse_reach_widens_with_the_hold_and_the_quantile() -> None:
+    from trading_research_agents.forecast.paths import adverse_bps
+
+    bars = walk(500)
+    short_hold = adverse_bps(bars, side="long", horizon_bars=4, quantile=0.9, settings=SETTINGS)
+    long_hold = adverse_bps(bars, side="long", horizon_bars=36, quantile=0.9, settings=SETTINGS)
+    looser = adverse_bps(bars, side="long", horizon_bars=36, quantile=0.5, settings=SETTINGS)
+    assert 0 < short_hold < long_hold and looser < long_hold
+    # A random walk's reach grows roughly with the square root of the hold.
+    assert 2.0 < long_hold / short_hold < 4.5
+    with pytest.raises(PathError, match="between 0 and 1"):
+        adverse_bps(bars, side="long", horizon_bars=4, quantile=1.0)
