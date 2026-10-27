@@ -24,8 +24,8 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Protocol
 
+from trading_research_agents.data.dated_text import Event, NewsSpec, read_events
 from trading_research_agents.data.schema import Side, Trade, scale_of
-from trading_research_agents.data.series import Event, NewsSpec, read_events
 from trading_research_agents.data.sources.resolve import resolve
 from trading_research_agents.market_data.bars import MarketDataError
 from trading_research_agents.market_data.book import BookSample

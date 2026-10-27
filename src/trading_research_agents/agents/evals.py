@@ -19,7 +19,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from trading_research_agents.agents.session import SessionError, replay_instrument
+from trading_research_agents.agents.session import SessionError
+from trading_research_agents.agents.session_replay import replay_instrument
 from trading_research_agents.agents.strategy import AgentStrategy
 from trading_research_agents.envelope.model import Envelope
 from trading_research_agents.llm.completer import Completer

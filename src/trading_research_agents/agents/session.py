@@ -32,15 +32,16 @@ from trading_research_agents.agents.market_screener.tools import ScreenFigures, 
 from trading_research_agents.agents.react import ToolLoopError, run_tool_loop
 from trading_research_agents.agents.risk_manager.tools import risk_brief
 from trading_research_agents.agents.roles import RoleError, prompt
+from trading_research_agents.agents.session_replay import _report_from_disk, replay_instrument
 from trading_research_agents.agents.strategy import MAX_FAILURES_IN_A_ROW, AgentStrategy
 from trading_research_agents.chain import cost_floor, load_observation, observe
+from trading_research_agents.data.dated_text import read_events
 from trading_research_agents.data.parquet import read_trades
-from trading_research_agents.data.series import SeriesError, load_all, read_events
+from trading_research_agents.data.series import SeriesError, load_all
 from trading_research_agents.envelope.model import Envelope
-from trading_research_agents.execution.cost import FundingSchedule
 from trading_research_agents.llm.completer import Completer
 from trading_research_agents.llm.usage import BudgetSpentError, UsageLedger
-from trading_research_agents.readings import MACRO, ONCHAIN
+from trading_research_agents.readings import MACRO
 from trading_research_agents.readings.macro import macro_brief, returns_from_closes
 from trading_research_agents.readings.onchain import onchain_brief
 from trading_research_agents.readings.state import declared_state
@@ -59,15 +60,10 @@ from trading_research_agents.surface.actions import (
 )
 from trading_research_agents.surface.confine import confine_all, roots_of
 from trading_research_agents.trading import (
-    Controls,
     KillSwitch,
     Ladder,
-    RecordedFeed,
     RunReport,
-    SimulatedVenue,
     StrategyConfig,
-    TradingConfig,
-    run,
 )
 from trading_research_agents.trading.controls import Limits
 
@@ -585,161 +581,3 @@ class _Session:
         except RoleError as exc:
             self.refusals.append(f"auditor: {exc}")
             return None
-
-
-def replay_instrument(
-    s: StrategyConfig,
-    channel: Any,
-    *,
-    instrument: str,
-    path: Path,
-    core: Any,
-    limits: Limits,
-    kill_file: Path | None,
-    out: Path,
-    label: str,
-) -> RunReport:
-    """The replay every session and eval runs: recorded prints, simulated venue, one core."""
-    config = TradingConfig(
-        feed=RecordedFeed.from_parquet(path, instrument=instrument),
-        venue=SimulatedVenue(
-            channel=channel,
-            funding=s.funding or FundingSchedule(interval_s=s.run.settlement_interval_s, rates={}),
-            latency_ns=int(s.run.latency_ms * 1_000_000),
-            slippage_bps=s.run.slippage_bps,
-        ),
-        strategy=core,
-        exit_rule=s.exit_rule,
-        controls=Controls(limits, KillSwitch(kill_file)),
-        out_dir=out,
-        bar_interval_ns=s.run.bar_interval_s * 1_000_000_000,
-        size=s.run.fixed_size(),
-        spread_cost_bps=s.run.spread_cost_bps,
-        equity=s.run.equity,
-        label=label,
-    )
-    return run(config)
-
-
-def _report_from_disk(out: Path, instrument: str) -> RunReport:
-    summary = json.loads((out / "run.json").read_text("utf-8"))
-    report = RunReport(
-        label=str(summary.get("label", "session-replay")),
-        instrument=instrument,
-        started_at=datetime.fromisoformat(str(summary["started_at"])),
-    )
-    report.finished_at = datetime.fromisoformat(str(summary["finished_at"]))
-    for key in ("prints", "bars", "intents", "refused", "fills", "round_trips"):
-        setattr(report, key, int(summary.get(key, 0)))
-    report.net_bps_total = Decimal(str(summary.get("net_bps_total", "0")))
-    report.stopped_by = summary.get("stopped_by")
-    report.open_position = summary.get("open_position")
-    return report
-
-
-def run_session(cfg: SessionConfig) -> SessionResult:
-    s = _Session(cfg)
-    venue = cfg.strategy.run.venue_key.partition("/")[0]
-
-    def tell(step: str, status: str, summary: str = "") -> None:
-        if cfg.on_step is not None:
-            cfg.on_step(step, status, summary)
-
-    tell("figures", "running", f"{len(cfg.datasets)} datasets")
-    figures = [
-        figures_for(
-            name,
-            path,
-            cfg.envelope,
-            venue,
-            cfg.magnitude_bps,
-            screen=cfg.screen,
-            observation=cfg.observation,
-        )
-        for name, path in cfg.datasets.items()
-    ]
-    (s.out / "figures.json").write_text(
-        json.dumps([f.record() for f in figures], indent=2, sort_keys=True) + "\n", "utf-8"
-    )
-    tell("figures", "done", f"{len(figures)} measured")
-    tell("market_screener", "running")
-    kept, excluded = s.screen(figures)
-    tell("market_screener", "done", f"{len(kept)} kept, {len(excluded)} excluded")
-    reference = next(iter(cfg.datasets.values()))
-    macro = s.context(MACRO, cfg.macro_series, reference)
-    tell(MACRO, *_read_by_code(macro))
-    onchain = s.context(ONCHAIN, cfg.onchain_series, reference)
-    tell(ONCHAIN, *_read_by_code(onchain))
-    limits = cfg.strategy.limits
-    ladder = Ladder(cfg.ladder_path)
-    reports: dict[str, RunReport] = {}
-    for k in kept:
-        if s.stopped_by is not None:
-            break
-        name = str(k["instrument"])
-        tell(f"run:{name}", "running")
-        reports[name] = s.analyse(name, Path(cfg.datasets[name]), limits)
-        r = reports[name]
-        tell(f"run:{name}", "done", f"{r.round_trips} round trips, net {r.net_bps_total} bps")
-    tell("risk_manager", "running" if reports else "skipped")
-    risk, limits_after = s.risk(reports, limits, ladder) if reports else (None, limits)
-    if reports:
-        tell("risk_manager", "done", "refused" if risk is None else str(risk.decision))
-    tell("executor", "running")
-    allocation = s.allocate(kept, limits_after)
-    tell("executor", "done", f"{len(allocation)} allocations")
-    tell("auditor", "running")
-    audit = s.audit(reports, risk, allocation, ladder)
-    tell("auditor", "done", "refused" if audit is None else str(audit.get("verdict")))
-    result = SessionResult(
-        session_id=s.session_id,
-        figures=figures,
-        kept=kept,
-        excluded=excluded,
-        macro=macro,
-        onchain=onchain,
-        reports=reports,
-        risk=None if risk is None else risk.__dict__,
-        limits_after=limits_after,
-        allocation=allocation,
-        audit=audit,
-        refusals=s.refusals,
-        stopped_by=s.stopped_by,
-    )
-    summary = {
-        "session_id": result.session_id,
-        "started_at": s.started.isoformat(),
-        "finished_at": cfg.clock().isoformat(),
-        "kept": kept,
-        "excluded": excluded,
-        "macro": result.macro,
-        "onchain": result.onchain,
-        "runs": {
-            name: {"round_trips": r.round_trips, "net_bps_total": str(r.net_bps_total)}
-            for name, r in reports.items()
-        },
-        "risk": result.risk,
-        "limits_after": {
-            "max_risk_per_trade_bps": str(limits_after.max_risk_per_trade_bps),
-            "max_position": str(limits_after.max_position),
-            "max_orders_per_minute": limits_after.max_orders_per_minute,
-            "daily_loss_limit_bps": str(limits_after.daily_loss_limit_bps),
-        },
-        "allocation": allocation,
-        "audit_verdict": None if audit is None else audit["verdict"],
-        "tokens_total": cfg.usage.tokens,
-        "cost_total": str(cfg.usage.cost),
-        "refusals": s.refusals,
-        "stopped_by": s.stopped_by,
-    }
-    (s.out / "session.json").write_text(
-        json.dumps(summary, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
-    )
-    return result
-
-
-def _read_by_code(said: dict[str, Any] | None) -> tuple[str, str]:
-    """The progress row of a reading: skipped without a series, else what code declared."""
-    if said is None:
-        return "skipped", ""
-    return "done", f"read by code: {said['declared_state']['declared']}"

@@ -14,14 +14,9 @@ from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 from typing import Any
 
-from trading_research_agents.data.series import (
-    Event,
-    Series,
-    correlation,
-    lead_lag,
-    threshold_state,
-    upcoming,
-)
+from trading_research_agents.data.dated_text import Event, upcoming
+from trading_research_agents.data.series import Series
+from trading_research_agents.data.series_measures import correlation, lead_lag, threshold_state
 
 NS_PER_S = 1_000_000_000
 

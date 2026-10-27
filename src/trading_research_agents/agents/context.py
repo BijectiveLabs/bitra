@@ -25,11 +25,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from trading_research_agents.data.series import (
-    SeriesError,
-    load_news_map,
-    load_series_map,
-)
+from trading_research_agents.data.dated_text import load_news_map
+from trading_research_agents.data.series import SeriesError, load_series_map
 from trading_research_agents.readings import MACRO, ONCHAIN, SENTIMENT
 
 SOURCES_DIR = "sources"

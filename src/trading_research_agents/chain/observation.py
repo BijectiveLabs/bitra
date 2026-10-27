@@ -27,8 +27,8 @@ from pathlib import Path
 from typing import Any
 
 from trading_research_agents.data.candles import CandleError, candles_of
+from trading_research_agents.data.dated_text import read_events
 from trading_research_agents.data.schema import Candle, Trade
-from trading_research_agents.data.series import read_events
 from trading_research_agents.ledger.entry import LedgerEntry
 from trading_research_agents.ledger.vocabulary import Axis, Transferability, Verdict
 

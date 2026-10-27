@@ -21,15 +21,9 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
 
+from trading_research_agents.data.dated_text import Event, NewsSpec, read_events
 from trading_research_agents.data.pull import Getter, Pulled, PullError, request
-from trading_research_agents.data.series import (
-    NS_PER_S,
-    TIME_UNITS,
-    Event,
-    NewsSpec,
-    SeriesError,
-    read_events,
-)
+from trading_research_agents.data.series import NS_PER_S, TIME_UNITS, SeriesError
 
 NEWS_KEYS = (
     "from",

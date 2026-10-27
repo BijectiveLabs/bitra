@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from trading_research_agents.data.series import Event
+from trading_research_agents.data.dated_text import Event
 from trading_research_agents.market_data.compact import compact_day
 from trading_research_agents.market_data.days import DAY_NS, NS_PER_MINUTE, midnight_ns
 from trading_research_agents.market_data.text import (

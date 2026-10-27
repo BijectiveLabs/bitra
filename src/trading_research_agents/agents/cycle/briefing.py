@@ -26,14 +26,8 @@ from trading_research_agents.agents.progress import (
     SKIPPED,
     announce,
 )
-from trading_research_agents.data.series import (
-    Event,
-    Series,
-    SeriesError,
-    load_news,
-    load_readable,
-    read_events,
-)
+from trading_research_agents.data.dated_text import Event, load_news, read_events
+from trading_research_agents.data.series import Series, SeriesError, load_readable
 from trading_research_agents.data.sources.base import Fetched
 from trading_research_agents.data.sources.chain import ChainExhaustedError
 from trading_research_agents.execution.outcome import BPS

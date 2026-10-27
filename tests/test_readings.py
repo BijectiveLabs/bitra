@@ -10,8 +10,9 @@ from typing import Any
 import pytest
 
 from trading_research_agents.agents.briefs import BriefError, reading_brief, reference_returns
+from trading_research_agents.data.dated_text import read_events
 from trading_research_agents.data.schema import Candle
-from trading_research_agents.data.series import load_all, read_events
+from trading_research_agents.data.series import load_all
 from trading_research_agents.data.sources import Fetched
 from trading_research_agents.readings import MACRO, ONCHAIN, SENTIMENT
 from trading_research_agents.readings.sentiment import sentiment_brief

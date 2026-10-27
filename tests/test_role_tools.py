@@ -24,7 +24,8 @@ from trading_research_agents.agents.risk_manager.tools import (
     refusal_pattern,
     risk_brief,
 )
-from trading_research_agents.agents.session import ScreenSettings, SessionConfig, run_session
+from trading_research_agents.agents.session import ScreenSettings, SessionConfig
+from trading_research_agents.agents.session_run import run_session
 from trading_research_agents.agents.technical_analyst.tools import features
 from trading_research_agents.cli.main import main
 from trading_research_agents.data import Side, Trade

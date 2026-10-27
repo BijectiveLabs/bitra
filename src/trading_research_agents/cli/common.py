@@ -362,9 +362,10 @@ PLACEHOLDER_PROVIDER = "your-provider"
 
 def _refresh_news(path: Path, now: datetime, *, every: bool = False) -> list[str]:
     """Fetch each feed a news declaration names, when it is due or `every` says so."""
+    from trading_research_agents.data.dated_text import load_news_map
     from trading_research_agents.data.news import news_due, pull_news
     from trading_research_agents.data.pull import PullError
-    from trading_research_agents.data.series import SeriesError, load_news_map
+    from trading_research_agents.data.series import SeriesError
 
     try:
         specs = load_news_map(path)

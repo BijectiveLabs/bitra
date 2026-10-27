@@ -17,13 +17,9 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from trading_research_agents.data.series import (
-    Event,
-    Series,
-    correlation,
-    threshold_state,
-    zscore,
-)
+from trading_research_agents.data.dated_text import Event
+from trading_research_agents.data.series import Series
+from trading_research_agents.data.series_measures import correlation, threshold_state, zscore
 
 NS_PER_S = 1_000_000_000
 
