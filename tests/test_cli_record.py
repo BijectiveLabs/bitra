@@ -10,7 +10,8 @@ from typing import Any
 
 import pytest
 
-from trading_research_agents.cli.main import HANDLERS, build_parser
+from trading_research_agents.cli.main import HANDLERS
+from trading_research_agents.cli.parser import build_parser
 from trading_research_agents.cli.record import record_report, record_status
 from trading_research_agents.data.schema import Side, Trade
 from trading_research_agents.market_data.archive import SourceFile, write_flow_part

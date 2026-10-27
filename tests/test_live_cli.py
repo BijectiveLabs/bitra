@@ -13,7 +13,8 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
-from trading_research_agents.cli.main import main, read_env_file
+from trading_research_agents.cli.common import read_env_file
+from trading_research_agents.cli.main import main
 from trading_research_agents.data import Side, Trade
 from trading_research_agents.data.venues import archive_venue, register
 from trading_research_agents.data.venues.bybit import Bybit
@@ -509,7 +510,7 @@ def test_blank_fees_are_read_from_the_account_and_written_ones_are_checked(
     from trading_research_agents.cli import main as package_main  # noqa: F401
     from trading_research_agents.envelope.load import load_envelope
 
-    cli = __import__("importlib").import_module("trading_research_agents.cli.main")
+    cli = __import__("importlib").import_module("trading_research_agents.cli.fees")
     envelope = tmp_path / "envelope.toml"
     envelope.write_text(
         "\n".join(
@@ -568,7 +569,7 @@ def test_a_standard_tier_fee_is_replaced_by_the_accounts_own_once_it_reports_one
 
     from trading_research_agents.envelope.load import load_envelope
 
-    cli = __import__("importlib").import_module("trading_research_agents.cli.main")
+    cli = __import__("importlib").import_module("trading_research_agents.cli.fees")
     envelope = tmp_path / "envelope.toml"
     envelope.write_text(
         '[[channel]]\nvenue = "okx"\nname = "taker-taker"\nentry_fee_bps =\nexit_fee_bps =\n',
@@ -602,7 +603,7 @@ def test_spot_fees_are_checked_against_the_spot_pair_and_base_fees_against_the_p
     from datetime import UTC, datetime
     from types import SimpleNamespace
 
-    cli = __import__("importlib").import_module("trading_research_agents.cli.main")
+    cli = __import__("importlib").import_module("trading_research_agents.cli.fees")
     envelope = tmp_path / "envelope.toml"
     envelope.write_text(
         '[[channel]]\nvenue = "bybit"\nname = "taker-taker"\nentry_fee_bps = 5.5\n'
@@ -649,7 +650,7 @@ def test_a_spot_only_desk_does_not_hold_a_channels_unused_base_fees_to_the_spot_
     from datetime import UTC, datetime
     from types import SimpleNamespace
 
-    cli = __import__("importlib").import_module("trading_research_agents.cli.main")
+    cli = __import__("importlib").import_module("trading_research_agents.cli.fees")
     envelope = tmp_path / "envelope.toml"
     envelope.write_text(
         '[[channel]]\nvenue = "bybit"\nname = "taker-taker"\nentry_fee_bps = 5.5\n'
@@ -677,7 +678,7 @@ def test_a_spot_only_desk_does_not_hold_a_channels_unused_base_fees_to_the_spot_
 def test_a_desk_changes_venue_in_one_line_and_never_prices_on_another_venue(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from trading_research_agents.cli.main import _desk_data
+    from trading_research_agents.cli.common import _desk_data
     from trading_research_agents.data.sources import DataConfigError
     from trading_research_agents.trading.config import load_strategy_config
 

@@ -12,7 +12,8 @@ from typing import Any
 import pytest
 
 from test_config import agent_raw
-from trading_research_agents.cli.main import held_back_by, losing_streak_today, main
+from trading_research_agents.cli.main import main
+from trading_research_agents.cli.run_command import held_back_by, losing_streak_today
 from trading_research_agents.trading.config import ConfigError, parse_strategy_config
 
 NOW = datetime(2026, 10, 18, 12, 0, tzinfo=UTC)

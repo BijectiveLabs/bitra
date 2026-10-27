@@ -190,7 +190,7 @@ def test_the_config_names_the_same_team_the_cycle_runs() -> None:
 def test_the_report_and_the_live_table_name_every_member(
     tmp_path: Path, envelope: Envelope
 ) -> None:
-    from trading_research_agents.cli.main import _cycle_report, _cycle_steps
+    from trading_research_agents.cli.cycle_report import _cycle_report, _cycle_steps
 
     judge = FakeJudge({"describes": Checked(0.9)}, model="jev-1.14.0")
     cfg, _, usage = cycle_config(
@@ -217,7 +217,7 @@ def test_the_report_and_the_live_table_name_every_member(
 
 def test_check_says_when_the_peer_is_the_same_model_as_the_lead() -> None:
     from test_config import AGENTS, agent_raw
-    from trading_research_agents.cli.main import _load_notes
+    from trading_research_agents.cli.check_load import _load_notes
     from trading_research_agents.trading.config import parse_strategy_config
 
     same = parse_strategy_config(agent_raw(agents={**AGENTS, "team": ["technical_peer"]}))

@@ -9,7 +9,7 @@ from rich.console import Console
 
 from test_cycle import analyst_answer, cycle_config
 from trading_research_agents.agents.cycle import run_cycle
-from trading_research_agents.cli.tui import cycle_view, screen_view
+from trading_research_agents.cli.tui_cycle import cycle_view, screen_view
 from trading_research_agents.envelope.model import Envelope
 
 

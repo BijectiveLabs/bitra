@@ -9,7 +9,8 @@ from typing import Any
 import pytest
 
 from trading_research_agents.cli import market
-from trading_research_agents.cli.main import HANDLERS, build_parser
+from trading_research_agents.cli.main import HANDLERS
+from trading_research_agents.cli.parser import build_parser
 from trading_research_agents.data.parquet import write_trades
 from trading_research_agents.data.schema import Side, Trade
 from trading_research_agents.market_data.archive import DERIV, FLOW, day_file

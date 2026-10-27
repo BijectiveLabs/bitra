@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 from rich.console import Console
 
-from trading_research_agents.cli import tui
+from trading_research_agents.cli import tui, tui_cycle, tui_desk
 from trading_research_agents.cli.main import main
 from trading_research_agents.trading import RunReport
 
@@ -104,7 +104,7 @@ def test_views_render_the_figures(recorded: Console, tmp_path: Path) -> None:
         "bars_held": 2,
         "last_price": "99",
     }
-    tui.show(tui.run_panel(report, "runs/x"))
+    tui.show(tui_desk.run_panel(report, "runs/x"))
     text = recorded.export_text()
     assert "replay AAAUSDT" in text and "3 (1 refused)" in text and "-8.50 bps" in text
     assert "short 0.01 at 100, 2 bars held, last 99" in text and "kill switch" in text
@@ -141,19 +141,19 @@ def test_views_render_the_figures(recorded: Console, tmp_path: Path) -> None:
         audit={"verdict": "sound", "summary": "fine"},
         refusals=["executor: x"],
     )
-    tui.show(tui.session_report(result, Usage(), "runs/s"))
+    tui.show(tui_desk.session_report(result, Usage(), "runs/s"))
     text = recorded.export_text()
     assert "kept" in text and "excluded" in text and "tighten: one loss" in text
     assert "sound: fine" in text and "1200 (cost 0.01)" in text and "executor: x" in text
 
-    with tui.SessionView(Usage()) as view:
+    with tui_desk.SessionView(Usage()) as view:
         view.on_step("market_screener", "done", "1 kept")
         view.on_step("run:AAAUSDT", "running", "")
         assert view.order.index("run:AAAUSDT") < view.order.index("risk_manager")
     text = recorded.export_text()
     assert "market_screener" in text and "run:AAAUSDT" in text
 
-    with tui.RunView("runs/x") as live:
+    with tui_desk.RunView("runs/x") as live:
         live.observe(report, None)
         assert live.bars == 8
 
@@ -180,7 +180,7 @@ def test_views_render_the_figures(recorded: Console, tmp_path: Path) -> None:
         stopped_by=None,
         out=tmp_path,
     )
-    tui.show(tui.eval_table([row], "AAAUSDT", "d.parquet"))
+    tui.show(tui_desk.eval_table([row], "AAAUSDT", "d.parquet"))
     text = recorded.export_text()
     assert "p:m" in text and "120" in text and "same bars, same controls" in text
 
@@ -194,12 +194,12 @@ def test_views_render_the_figures(recorded: Console, tmp_path: Path) -> None:
         market=[Event("t", "fill", "A", "open long")],
         roles=[Event("01", "answer", "screener", "kept")],
     )
-    tui.show(tui.trace_view(t))
+    tui.show(tui_desk.trace_view(t))
     text = recorded.export_text()
     assert "A: round_trips: 1" in text and "error: ProviderError" in text and "open long" in text
 
     tui.show(
-        tui.ledger_table(
+        tui_desk.ledger_table(
             [
                 {
                     "entry_id": "H-1",
@@ -223,7 +223,7 @@ def test_views_render_the_figures(recorded: Console, tmp_path: Path) -> None:
     assert "H-1" in text and "cost" in text and "power" in text and "CLOSED 1" in text
 
     tui.show(
-        tui.ladder_table(
+        tui_desk.ladder_table(
             "0 REPLAY",
             [
                 {
@@ -293,7 +293,7 @@ def test_a_cycle_refused_at_its_exits_says_what_it_never_reached() -> None:
         "exits": {"stop_pnl_bps": "-40"},
         "refusals": ["exit: the analyst's target is 1.42x its stop"],
     }
-    said = tui._not_reached(record)
+    said = tui_cycle._not_reached(record)
     # The round trip was priced and the exits placed before the refusal; neither is "not reached".
     assert said.startswith("conviction, risk per trade, desk, cost gate, targets, intent")
     assert said.endswith("the cycle ended at exit")

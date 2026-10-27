@@ -82,7 +82,8 @@ def test_a_name_that_could_be_two_markets_is_refused() -> None:
 def test_a_step_with_no_declaration_is_what_the_venue_states_in_the_base() -> None:
     from types import SimpleNamespace
 
-    cli = import_module("trading_research_agents.cli.main")
+    cli = import_module("trading_research_agents.cli.run_command")
+    clients = import_module("trading_research_agents.cli.venue_access")._EXECUTION_CLIENTS
 
     btc = {**market("BTC-USDT-SWAP", "BTC", "USDT"), "precision": {"amount": 0.01}}
     btc["contractSize"] = 0.01
@@ -92,7 +93,7 @@ def test_a_step_with_no_declaration_is_what_the_venue_states_in_the_base() -> No
         markets_by_id={btc["id"]: [btc]},
         load_markets=lambda: None,
     )
-    cli._EXECUTION_CLIENTS[("okx", "testnet")] = client
+    clients[("okx", "testnet")] = client
     try:
         cfg = SimpleNamespace(
             execution=SimpleNamespace(venue="okx", environment="testnet"),
@@ -102,4 +103,4 @@ def test_a_step_with_no_declaration_is_what_the_venue_states_in_the_base() -> No
         assert cli._venue_step(cfg, "BTCUSDT") == Decimal("0.0001")
         assert cli._venue_step(cfg, "NOPEUSDT") is None
     finally:
-        cli._EXECUTION_CLIENTS.pop(("okx", "testnet"), None)
+        clients.pop(("okx", "testnet"), None)

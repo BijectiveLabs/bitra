@@ -6,7 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from trading_research_agents.cli.main import HANDLERS, build_parser
+from trading_research_agents.cli.main import HANDLERS
+from trading_research_agents.cli.parser import build_parser
 from trading_research_agents.cli.text import text_judge
 from trading_research_agents.features.text import KINDS
 from trading_research_agents.llm.judge import Checked, FakeJudge, Picked
