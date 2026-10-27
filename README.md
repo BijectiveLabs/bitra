@@ -100,7 +100,7 @@ Three kinds of work, kept apart because they fail differently.
 | | Does | Never does | Today |
 |---|---|---|---|
 | **Code** | records the market, computes every figure, reads your own series against your lines (the macro, on-chain and sentiment readings), prices the round trip, applies your limits, sizes, sends one order with its exits, settles every replayed idea | guess, or carry a stale value forward as current | everything around the model call |
-| **A reasoning model** | reads figures code computed and proposes a direction, a setup and its levels, citing the figures it used | compute a number, size a trade, touch an order or a key, loosen a limit | one call per cycle, the technical analyst; validators when you declare them |
+| **A reasoning model** | reads figures code computed and proposes a direction, a setup and its levels, citing the figures it used | compute a number, size a trade, touch an order or a key, loosen a limit | the technical analyst, with a blind peer and a flow analyst when you declare the team; validators when you declare them |
 | **A fast typed judge** | turns dated text into typed events with probabilities, screens text for instructions to a machine, and from 0.13 checks a model's claims against its brief | decide a direction from numbers, size, or reach an order | optional, behind a vendor-neutral port (`[judge]`): the archived headlines into the text features |
 
 ```mermaid
@@ -117,12 +117,12 @@ flowchart LR
         bars["tra data bars<br/>the same builder over the archive"]
         store[("verified archive<br/>Parquet, sha256 per file<br/>flow, book, derivatives, text")]
     end
-    subgraph decide["decision: code around one model call"]
+    subgraph decide["decision: code around the technical team"]
         direction TB
         judge["typed judge, optional<br/>headlines into typed events"]
         features["features<br/>41 figures known at the bar's close"]
         readings["readings: macro, on-chain, sentiment<br/>your series against your lines, no model"]
-        analyst["technical analyst<br/>proposes, cites figures"]
+        analyst["technical team<br/>lead, blind peer, flow analyst<br/>propose, cite figures"]
         gates["gates<br/>cost, exits, confluence, conviction"]
     end
     shelf[("sources/<br/>dated series you declare")]
@@ -333,7 +333,7 @@ flowchart TD
     pick -- "taken" --> briefs
     briefs["the system writes the briefs<br/>each role sees only the figures its job needs"] --> readers
     readers["readings, by code, no model<br/>macro, on-chain, sentiment against your lines"] --> tech
-    tech["technical analyst: the one model call<br/>a direction, a confidence, a horizon"] --> price["the system prices the round trip<br/>fee, spread, impact, funding, slippage"]
+    tech["technical analyst, alone or with its team<br/>a blind peer that must agree, a flow analyst<br/>a direction, a confidence, a horizon"] --> price["the system prices the round trip<br/>fee, spread, impact, funding, slippage"]
     price --> exits{"the stop and the target<br/>the analyst's levels, held inside your bounds<br/>does the trade break even at half its kind winning?"}
     exits -- "no" --> refused
     exits -- "yes" --> round2["validators, as many as you declare<br/>a claim that cites no figure is thrown away"]
@@ -352,6 +352,8 @@ Who does what:
 | Role | Reads | Answers | Can never |
 |---|---|---|---|
 | technical analyst | candles, spread, funding, book imbalance, open interest change, and the regime on its timeframe and the higher ones you declare | a direction, a setup from a fixed list, a confidence, a horizon, and where its stop and target sit | size the trade, place a level outside your `[exit]` bounds, run a trend setup in a range, or fade a market that is not a measured range |
+| technical peer (optional) | the technical analyst's own brief, blind to its answer, ideally on another model family | the same schema, independently | trade alone: the two reads must name the same side, and the lower confidence counts |
+| flow analyst (optional) | the book, the spread, funding and open interest, which then leave the analyst's brief | a side and a confidence, with the figures it rests on | name a level or a size; it is one voice in conviction |
 | macro, on-chain and sentiment readings (code, not agents) | dated rates and levels, chain and derivatives figures, scores and notes you curate | a declared state and a graded score: each series against the lines you drew | ask a model, or propose a direction |
 | market screener | what the system measured for each admitted instrument: move, spread, regime, volume, correlation to BTC | which instruments to take, in what order, citing their figures | add an instrument the system did not admit |
 | validators: pro and contra | the proposal and the figures behind it, each without the other's case | the strongest case for or against, as cited claims | see the other side's case, or cite a figure it wasn't given |

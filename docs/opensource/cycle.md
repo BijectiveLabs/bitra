@@ -105,7 +105,8 @@ the universe (system: one data pull each, the trigger per instrument, ordered by
   -> trigger             (system: has anything moved? nothing below here runs if not)
   -> briefs (system, each role's own sections only)
   -> readings           (system: your thresholds over macro, on-chain, sentiment series)
-  -> technical analyst   (the one model call that proposes a direction)
+  -> technical analyst   (proposes a direction; with a team, a blind peer must agree and a flow
+                          analyst reads the book, funding and open interest)
   -> the round trip priced (system)
   -> the stop and the target (the analyst's levels, held in your [exit] bounds; break-even checked)
   -> validators          (when configured: pro and contra apart, then neutral judges both)
@@ -384,7 +385,9 @@ One model is asked. Everything else beside the market is read by code.
 
 | Step | Reads | Gives | When |
 |---|---|---|---|
-| `technical_analyst` (a model) | the closed candles of the snapshot, the spread, the funding rate, the regime on each timeframe, the book imbalance, the open interest change; none of the readings | a target, a named setup, a confidence, a horizon, a reason, and the figures it read | every cycle; it is the one model call, the role that proposes |
+| `technical_analyst` (a model) | the closed candles of the snapshot, the spread, the funding rate, the regime on each timeframe, the book imbalance, the open interest change; none of the readings | a target, a named setup, a confidence, a horizon, a reason, and the figures it read | every cycle; the role that proposes |
+| `technical_peer` (a model, optional) | the technical analyst's brief, blind to its answer | the same, independently; the side must agree | when `[agents].team` names it |
+| `flow_analyst` (a model, optional) | the spread, the book imbalance, funding and open interest, which then leave the analyst's brief | a side and a confidence | when `[agents].team` names it |
 | `macro` (code) | macro series and the dated text of `news.toml` | the declared state of your thresholds and its graded score | when `sources/macro.toml` or `sources/news.toml` declares something, or `--macro` / `--news` names a file |
 | `onchain` (code) | chain figures and derivative figures, read side by side | the declared state and its graded score | when `sources/onchain.toml` or `sources/derivatives.toml` declares something, or `--onchain` / `--derivatives` |
 | `sentiment` (code) | dated scores, plus the same dated text as notes | the declared state and its graded score; `undeclared` when nothing crosses a line | when `sources/sentiment.toml` declares something, or `--sentiment` |
