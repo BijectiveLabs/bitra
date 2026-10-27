@@ -29,7 +29,8 @@ from trading_research_agents.agents.technical_analyst.tools import trend_strengt
 from trading_research_agents.data.sources.base import BookLevel, Fetched, OrderBook
 from trading_research_agents.envelope.model import Envelope
 from trading_research_agents.execution.regime import RegimeError, RegimeRule, label, misfit
-from trading_research_agents.trading.config import ConfigError, parse_strategy_config
+from trading_research_agents.trading.config import parse_strategy_config
+from trading_research_agents.trading.config_values import ConfigError
 
 RULE = RegimeRule()
 

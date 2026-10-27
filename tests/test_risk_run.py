@@ -82,7 +82,7 @@ def test_the_brief_is_what_the_run_recorded(tmp_path: Path) -> None:
 def asked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reply: str, kill: Path | None) -> Any:
     import importlib
 
-    from trading_research_agents.trading.config import AuditPolicy
+    from trading_research_agents.trading.config_gates import AuditPolicy
 
     cli = importlib.import_module("trading_research_agents.cli.auditing")
 

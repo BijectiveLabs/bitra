@@ -19,7 +19,8 @@ from trading_research_agents.data import Side, Trade
 from trading_research_agents.data.venues import archive_venue, register
 from trading_research_agents.data.venues.bybit import Bybit
 from trading_research_agents.trading import Ladder, LadderError, Tier
-from trading_research_agents.trading.config import load_funding, load_strategy_config
+from trading_research_agents.trading.config import load_strategy_config
+from trading_research_agents.trading.config_venue import load_funding
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
 MINUTE = 60 * 1_000_000_000

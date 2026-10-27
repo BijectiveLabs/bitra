@@ -182,7 +182,7 @@ def test_a_judge_that_does_not_answer_is_absent_not_a_no(
 
 def test_the_config_names_the_same_team_the_cycle_runs() -> None:
     from trading_research_agents.agents.cycle.config import TEAM
-    from trading_research_agents.trading import config
+    from trading_research_agents.trading import config_agents as config
 
     assert config.TEAM == TEAM
 

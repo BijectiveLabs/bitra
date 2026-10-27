@@ -21,7 +21,8 @@ from typing import Any
 
 from trading_research_agents.agents.cited import cites
 from trading_research_agents.llm.form import _enum, _text, parse_object
-from trading_research_agents.trading.config import KNOWN_ROLES, SETTINGS
+from trading_research_agents.trading.config import SETTINGS
+from trading_research_agents.trading.config_agents import KNOWN_ROLES
 
 KEY = re.compile(r"^\[(?P<table>[a-z_]+(?:\.[a-z_<>]+)*)\](?:\.(?P<field>[a-z_]+))?$")
 CONFIDENCE = ("low", "medium", "high")

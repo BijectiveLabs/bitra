@@ -502,7 +502,8 @@ def test_a_signed_client_starts_with_the_builder_fee_off(monkeypatch: pytest.Mon
 
 
 def test_ccxt_options_are_a_table_and_never_carry_a_credential() -> None:
-    from trading_research_agents.trading.config import ConfigError, _ccxt_options
+    from trading_research_agents.trading.config_values import ConfigError
+    from trading_research_agents.trading.config_venue import _ccxt_options
 
     assert _ccxt_options({}) == {}
     assert _ccxt_options({"ccxt_options": {"builderFee": True}}) == {"builderFee": True}

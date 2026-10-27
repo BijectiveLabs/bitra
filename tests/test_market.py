@@ -198,7 +198,8 @@ def test_the_same_decision_on_the_same_market_sends_the_same_order() -> None:
 
 
 def test_the_market_types_a_desk_sends_to_are_one_setting() -> None:
-    from trading_research_agents.trading.config import ConfigError, _mandate
+    from trading_research_agents.trading.config_values import ConfigError
+    from trading_research_agents.trading.config_venue import _mandate
 
     def read(execution: dict[str, Any]) -> tuple[str, ...]:
         return _mandate({"execution": execution}, "bybit/taker-taker").markets

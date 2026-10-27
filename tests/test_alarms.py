@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 
 from trading_research_agents.agents.alarms import DATA, PROVIDER, STOPPED, VENUE, Watch, alarms_of
-from trading_research_agents.trading.config import ConfigError
+from trading_research_agents.trading.config_values import ConfigError
 
 
 def record(**fields: Any) -> dict[str, Any]:
@@ -105,7 +105,7 @@ def test_the_policy_is_read_from_the_project(tmp_path: Path) -> None:
 
 def test_the_scheduler_asks_the_right_auditor_for_the_right_reason(tmp_path: Path) -> None:
     from trading_research_agents.cli.auditing import Auditing
-    from trading_research_agents.trading.config import AuditPolicy
+    from trading_research_agents.trading.config_gates import AuditPolicy
 
     clock = [1000.0]
     audits = Auditing(
@@ -131,7 +131,7 @@ def test_the_scheduler_asks_the_right_auditor_for_the_right_reason(tmp_path: Pat
 
 def test_an_auditor_that_cannot_run_is_a_line_not_the_end_of_the_run(tmp_path: Path) -> None:
     from trading_research_agents.cli.auditing import Auditing
-    from trading_research_agents.trading.config import AuditPolicy
+    from trading_research_agents.trading.config_gates import AuditPolicy
 
     audits = Auditing(
         policy=AuditPolicy(on_alarm=True),
@@ -145,7 +145,7 @@ def test_an_auditor_that_cannot_run_is_a_line_not_the_end_of_the_run(tmp_path: P
 
 def auditing(tmp_path: Path, clock: list[float], **policy: Any) -> Any:
     from trading_research_agents.cli.auditing import Auditing
-    from trading_research_agents.trading.config import AuditPolicy
+    from trading_research_agents.trading.config_gates import AuditPolicy
 
     return Auditing(
         policy=AuditPolicy(**{"risk_manager": False, **policy}),

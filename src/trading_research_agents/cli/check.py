@@ -62,7 +62,7 @@ def _env_file_used(env_file: Path | None, beside: Path | None) -> Path | None:
 
 def _renamed(path: Path) -> tuple[str, ...]:
     """What the desk's file still calls by a name from before 0.11, and the name to write now."""
-    from trading_research_agents.trading.config import renamed_in
+    from trading_research_agents.trading.config_agents import renamed_in
 
     return renamed_in(tomllib.loads(path.read_text(encoding="utf-8"), parse_float=Decimal))
 

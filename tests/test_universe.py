@@ -28,7 +28,7 @@ from trading_research_agents.execution.universe import (
     take,
 )
 from trading_research_agents.store.snapshot import cycle_id
-from trading_research_agents.trading.config import ConfigError
+from trading_research_agents.trading.config_values import ConfigError
 
 NOW = datetime(2026, 9, 27, 10, 0, tzinfo=UTC)
 
