@@ -26,6 +26,7 @@ from trading_research_agents.cli.common import (
     CLEARED,
     REFUSED,
     _completer_for_role,
+    _cycle_ui,
     _desk_data,
     _load_env,
     _refresh_news,
@@ -558,7 +559,7 @@ def _one_cycle(cfg: Any, usage: Any, spine: list[str], args: argparse.Namespace)
 
     if args.json or not _watching():
         return run_cycle(cfg)
-    with _ui().CycleView(usage, spine) as view:
+    with _cycle_ui().CycleView(usage, spine) as view:
         return run_cycle(replace(cfg, watch=view.on_step))
 
 

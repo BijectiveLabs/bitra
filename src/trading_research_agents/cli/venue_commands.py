@@ -20,10 +20,10 @@ from trading_research_agents.cli.common import (
     PLACEHOLDER_PROVIDER,
     REFUSED,
     _declared_environment,
+    _desk_ui,
     _environment,
     _has_live_plugin,
     _load_env,
-    _ui,
     _watching,
     emit,
 )
@@ -115,10 +115,10 @@ def watch_desk(args: argparse.Namespace) -> int:
             for row in payload["decisions"]
         ]
         lines.append(f"reading {out}; this view only reads, and changes nothing")
-        emit(payload, args.json, lines, lambda: _ui().watch_view(payload))
+        emit(payload, args.json, lines, lambda: _desk_ui().watch_view(payload))
         return CLEARED
 
-    with _ui().WatchView(desk, every_s=args.every) as view:
+    with _desk_ui().WatchView(desk, every_s=args.every) as view:
         try:
             while True:
                 sleep(args.every)
@@ -207,7 +207,7 @@ def show_keys(args: argparse.Namespace) -> int:
     )
     if not probe and out.rows:
         lines.append("`tra keys --probe` proves each one works: no prompt is sent, no order placed")
-    emit(out.record(), args.json, lines, lambda: _ui().keys_table(out.record()))
+    emit(out.record(), args.json, lines, lambda: _desk_ui().keys_table(out.record()))
     return CLEARED if out.ready else REFUSED
 
 

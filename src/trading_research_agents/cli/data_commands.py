@@ -22,10 +22,10 @@ from trading_research_agents.agents.context import (
 from trading_research_agents.cli.common import (
     CLEARED,
     REFUSED,
+    _cycle_ui,
     _desk_data,
     _load_env,
     _refresh_news,
-    _ui,
     emit,
     parse_month,
 )
@@ -492,7 +492,7 @@ def data_pull(args: argparse.Namespace) -> int:
     if snapshot.stale:
         lines.append(f"stale, and used because the config allows it: {', '.join(snapshot.stale)}")
     lines.append(f"snapshot.json in {out.parent}")
-    emit(payload, args.json, lines, lambda: _ui().snapshot_view(payload))
+    emit(payload, args.json, lines, lambda: _cycle_ui().snapshot_view(payload))
     return CLEARED if snapshot.usable else REFUSED
 
 

@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import Any
 
 from trading_research_agents.cli.common import (
-    _ui,
+    _cycle_ui,
 )
 from trading_research_agents.readings import READINGS
 
@@ -64,7 +64,7 @@ def order_outcome(placed: Mapping[str, Any]) -> str:
 
 
 def _cycle_view(payload: Mapping[str, Any]) -> Any:
-    return _ui().cycle_view(payload)
+    return _cycle_ui().cycle_view(payload)
 
 
 def _team_lines(context: Mapping[str, Any]) -> list[str]:

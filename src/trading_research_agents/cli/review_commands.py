@@ -16,9 +16,9 @@ from trading_research_agents.cli.common import (
     REPORT_HEADROOM,
     _audit_lines,
     _desk_data,
+    _desk_ui,
     _load_env,
     _metered_roles,
-    _ui,
     emit,
 )
 from trading_research_agents.cli.record import record_report, record_status
@@ -64,7 +64,7 @@ def run_audit_command(args: argparse.Namespace) -> int:
     )
     payload = result.record()
     payload["out"] = str(result.path)
-    emit(payload, args.json, _audit_lines(result, raised), lambda: _ui().audit_view(payload))
+    emit(payload, args.json, _audit_lines(result, raised), lambda: _desk_ui().audit_view(payload))
     return CLEARED
 
 

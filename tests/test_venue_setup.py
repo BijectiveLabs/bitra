@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from trading_research_agents.agents.progress import Step
-from trading_research_agents.cli import tui
+from trading_research_agents.cli import tui_cycle
 from trading_research_agents.cli.venue_info import venue_setup
 from trading_research_agents.data.sources.capability import Capability
 from trading_research_agents.trading.dispatch import DispatchError, VenueHand, credentials_for
@@ -86,7 +86,7 @@ def test_the_setup_says_when_you_carry_the_exits_or_when_only_data_is_possible()
 
 def test_the_live_cycle_view_names_who_is_working_and_for_how_long() -> None:
     now = [100.0]
-    view = tui.CycleView(
+    view = tui_cycle.CycleView(
         SimpleNamespace(tokens=0, cost=Decimal(0)), ["data", "technical"], clock=lambda: now[0]
     )
     view.on_step(Step(name="technical", state="running"))

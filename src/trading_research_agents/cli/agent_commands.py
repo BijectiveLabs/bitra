@@ -15,8 +15,8 @@ from trading_research_agents.cli.common import (
     REFUSED,
     _data_dir,
     _datasets,
+    _desk_ui,
     _load_env,
-    _ui,
     _watching,
     emit,
 )
@@ -109,7 +109,7 @@ def agent_session(args: argparse.Namespace) -> int:
         )
 
     if _watching(args.json):
-        with _ui().SessionView(usage) as view:
+        with _desk_ui().SessionView(usage) as view:
             result = session(view.on_step)
     else:
         result = session(None)
@@ -143,7 +143,7 @@ def agent_session(args: argparse.Namespace) -> int:
         "stopped_by": result.stopped_by,
         "out": str(args.out),
     }
-    emit(payload, args.json, lines, lambda: _ui().session_report(result, usage, str(args.out)))
+    emit(payload, args.json, lines, lambda: _desk_ui().session_report(result, usage, str(args.out)))
     # A session that never reached its audit verdict (a role refused, a vendor limit) is not
     # cleared, whatever the runs earned.
     return CLEARED if result.stopped_by is None and result.audit is not None else REFUSED
@@ -207,7 +207,7 @@ def agent_eval(args: argparse.Namespace) -> int:
         "rows": [r.record() for r in rows],
         "out": str(args.out),
     }
-    emit(payload, args.json, lines, lambda: _ui().eval_table(rows, instrument, str(dataset)))
+    emit(payload, args.json, lines, lambda: _desk_ui().eval_table(rows, instrument, str(dataset)))
     return CLEARED
 
 
@@ -216,7 +216,7 @@ def agent_trace(args: argparse.Namespace) -> int:
     from trading_research_agents.agents.trace import trace
 
     t = trace(args.path)
-    emit(t.record(), args.json, trace_lines(t), lambda: _ui().trace_view(t))
+    emit(t.record(), args.json, trace_lines(t), lambda: _desk_ui().trace_view(t))
     return CLEARED
 
 

@@ -209,7 +209,7 @@ def test_a_reading_nobody_declared_data_for_is_shown_as_not_read(
 
     from test_cycle import analyst_answer, cycle_config
     from trading_research_agents.agents.cycle import run_cycle
-    from trading_research_agents.cli.tui import cycle_view
+    from trading_research_agents.cli.tui_cycle import cycle_view
 
     cfg, _, _ = cycle_config(tmp_path, envelope, [analyst_answer()])
     record = run_cycle(cfg).record()

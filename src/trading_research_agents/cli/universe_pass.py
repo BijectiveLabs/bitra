@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from trading_research_agents.cli.common import (
-    _ui,
+    _cycle_ui,
     _watching,
 )
 from trading_research_agents.cli.venue_access import (
@@ -110,7 +110,7 @@ def _sweep(
         # A pass pulls one snapshot per instrument before any cycle starts; on a slow venue that
         # is seconds per name, and a blank terminal for that long reads as a hung process.
         steps = [*universe.instruments, *(["market_screener"] if universe.screener else [])]
-        with _ui().CycleView(cycle_cfg.usage, steps, title="screen") as view:
+        with _cycle_ui().CycleView(cycle_cfg.usage, steps, title="screen") as view:
             screened = look(view.on_step)
     screened.discovered = discovered
     screened.refusals[:0] = discovery_said
@@ -158,7 +158,7 @@ def _screen_report(screened: Any) -> tuple[dict[str, Any], list[str]]:
 
 
 def _screen_view(payload: Mapping[str, Any]) -> Any:
-    return _ui().screen_view(payload)
+    return _cycle_ui().screen_view(payload)
 
 
 def _keeper(

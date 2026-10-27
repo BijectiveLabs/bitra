@@ -24,7 +24,7 @@ from trading_research_agents.cli.common import (
     REFUSED,
     _data_dir,
     _datasets,
-    _ui,
+    _desk_ui,
     emit,
 )
 from trading_research_agents.data import (
@@ -122,7 +122,7 @@ def chain_observe(args: argparse.Namespace) -> int:
         write_report(report, args.out)
         lines.append(f"observation.json in {args.out.parent}")
     payload = {**report.record(), "recorded": recorded}
-    emit(payload, args.json, lines, lambda: _ui().observe_view(payload))
+    emit(payload, args.json, lines, lambda: _desk_ui().observe_view(payload))
     return CLEARED if report.recurs else REFUSED
 
 

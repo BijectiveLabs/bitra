@@ -243,7 +243,7 @@ def test_the_exits_travel_as_prices_and_distances_for_the_panel(
 ) -> None:
     from rich.console import Console
 
-    from trading_research_agents.cli.tui import cycle_view
+    from trading_research_agents.cli.tui_cycle import cycle_view
 
     cfg, _, _ = cycle_config(
         tmp_path,
@@ -267,7 +267,7 @@ def test_a_short_reads_its_exits_as_gains_and_losses_to_the_position(
 ) -> None:
     from rich.console import Console
 
-    from trading_research_agents.cli.tui import cycle_view
+    from trading_research_agents.cli.tui_cycle import cycle_view
     from trading_research_agents.execution.targets import Targets
 
     cfg, _, _ = cycle_config(

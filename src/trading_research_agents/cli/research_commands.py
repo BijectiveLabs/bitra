@@ -18,8 +18,8 @@ from trading_research_agents.cli.common import (
     REFUSED,
     _data_dir,
     _datasets,
+    _desk_ui,
     _environment,
-    _ui,
     _watching,
     emit,
 )
@@ -181,7 +181,7 @@ def _report(args: argparse.Namespace, report: Any) -> int:
         "open_position": report.open_position,
         "out": str(args.out),
     }
-    emit(payload, args.json, lines, lambda: _ui().run_panel(report, str(args.out)))
+    emit(payload, args.json, lines, lambda: _desk_ui().run_panel(report, str(args.out)))
     return CLEARED if report.stopped_by is None else REFUSED
 
 
@@ -189,7 +189,7 @@ def _run_watched(args: argparse.Namespace, build: Callable[[Any], TradingConfig]
     """Run a trading config; when a person is watching, a live panel follows every bar."""
     if not _watching(args.json):
         return run_trading(build(None))
-    with _ui().RunView(str(args.out)) as view:
+    with _desk_ui().RunView(str(args.out)) as view:
         return run_trading(build(view.observe))
 
 
@@ -325,7 +325,7 @@ def ladder_show(args: argparse.Namespace) -> int:
         {"tier": ladder.tier.name, "history": list(ladder.history)},
         args.json,
         lines,
-        lambda: _ui().ladder_table(f"{ladder.tier.value} {ladder.tier.name}", ladder.history),
+        lambda: _desk_ui().ladder_table(f"{ladder.tier.value} {ladder.tier.name}", ladder.history),
     )
     return CLEARED
 
@@ -366,6 +366,6 @@ def ledger_show(args: argparse.Namespace) -> int:
         payload,
         args.json,
         lines,
-        lambda: _ui().ledger_table(payload["rows"], payload["counts"]),
+        lambda: _desk_ui().ledger_table(payload["rows"], payload["counts"]),
     )
     return CLEARED

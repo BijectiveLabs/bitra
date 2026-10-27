@@ -171,6 +171,19 @@ def _ui() -> Any:
     return tui
 
 
+def _cycle_ui() -> Any:
+    # Imported when drawn: a command that prints plain lines never loads the terminal library.
+    from trading_research_agents.cli import tui_cycle
+
+    return tui_cycle
+
+
+def _desk_ui() -> Any:
+    from trading_research_agents.cli import tui_desk
+
+    return tui_desk
+
+
 def _data_dir(config: Path) -> Path:
     return config.resolve().parent / "data"
 
