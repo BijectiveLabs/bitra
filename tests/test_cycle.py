@@ -1418,7 +1418,7 @@ def test_each_reading_sees_its_own_series_and_the_analyst_sees_none_of_them(
 
 
 def judged_cycle(
-    tmp_path: Path, envelope: Envelope, answers: dict[str, str]
+    tmp_path: Path, envelope: Envelope, answers: dict[str, str], judge: Any = None
 ) -> tuple[CycleResult, ByStance]:
     from trading_research_agents.execution.confluence import Matrix
 
@@ -1451,6 +1451,7 @@ def judged_cycle(
         lookback_bars=5,
         reviewers=("pro", "contra", "neutral"),
         matrix=Matrix(min_support=1),
+        judge=judge,
     )
     return run_cycle(cfg), stances
 
@@ -1501,6 +1502,41 @@ def test_a_case_nobody_answers_is_decided_by_code_without_asking_the_judge(
     assert "neutral was not asked" in judged["reason"]
     assert result.confluence is not None and result.confluence.support == 1
     assert result.acted
+
+
+def test_with_a_judge_declared_the_judge_weighs_the_two_cases_with_probabilities(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    from trading_research_agents.llm.judge import Checked, FakeJudge, Picked
+
+    weighed = Picked("oppose", 0.4, {"support": 0.2, "oppose": 0.7, "abstain": 0.1})
+    judge = FakeJudge({"verdict": weighed, "describes": Checked(0.9)}, model="jev-1.14.0")
+    answers = {
+        "pro": reviewer_answer("pro", "support"),
+        "contra": reviewer_answer("contra", "oppose"),
+    }
+    result, stances = judged_cycle(tmp_path, envelope, answers, judge=judge)
+    # Two advocates asked of a model; the neutral verdict asked of the judge, never of a model.
+    assert len(stances.calls) == 2
+    neutral = result.context["reviewer_neutral"]
+    assert neutral["verdict"] == "oppose" and neutral["judged"] == "judge"
+    assert neutral["model"] == "jev-1.14.0" and neutral["probabilities"]["oppose"] == 0.7
+    state = next(s for s, q in judge.asked if "verdict" in q)
+    assert "zscore = 1.403" in state["case_for"][0] and state["case_against"]
+    assert result.confluence is not None and result.confluence.support == 0
+
+
+def test_a_judge_unsure_of_its_verdict_abstains(tmp_path: Path, envelope: Envelope) -> None:
+    from trading_research_agents.llm.judge import Checked, FakeJudge, Picked
+
+    unsure = Picked("support", 0.1, {"support": 0.45, "oppose": 0.35, "abstain": 0.2})
+    judge = FakeJudge({"verdict": unsure, "describes": Checked(0.9)}, model="jev-1.14.0")
+    answers = {
+        "pro": reviewer_answer("pro", "support"),
+        "contra": reviewer_answer("contra", "oppose"),
+    }
+    result, _ = judged_cycle(tmp_path, envelope, answers, judge=judge)
+    assert result.context["reviewer_neutral"]["verdict"] == "abstain"
 
 
 RANGE_THEN_BREAK = [str(100 + (i % 4) * 0.5) for i in range(56)] + ["101", "101.5", "102", "102"]

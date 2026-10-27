@@ -11,6 +11,7 @@ from trading_research_agents.agents import (
 )
 from trading_research_agents.agents.cycle.asking import JUDGE_PROMPT, _ask_readable, _within_scope
 from trading_research_agents.agents.cycle.config import CycleConfig
+from trading_research_agents.agents.cycle.judged_review import judge_the_cases
 from trading_research_agents.agents.cycle.pricing import _held
 from trading_research_agents.agents.cycle.record import budget_spent
 from trading_research_agents.agents.cycle.result import CycleResult
@@ -221,6 +222,12 @@ def _judge(
             "judged": "code",
         }
         announce(cfg.watch, name, DONE, f"{verdict}: {decided}")
+        return
+    if cfg.judge is not None:
+        # Weighing two checked cases is a closed choice: the typed judge's job, not a model's.
+        judge_the_cases(
+            cfg, result, proposal=proposal, case_for=case_for, case_against=case_against
+        )
         return
     brief = _within_scope(
         reviewer.ROLE,
