@@ -116,7 +116,7 @@ def test_a_malformed_answer_is_asked_for_once_more() -> None:
     from types import SimpleNamespace
 
     from trading_research_agents.agents import validator
-    from trading_research_agents.agents.cycle import _ask_readable
+    from trading_research_agents.agents.cycle.asking import _ask_readable
     from trading_research_agents.llm.completer import FakeCompleter
 
     good = {"stance": "contra", "claims": [], "verdict": "abstain", "reason": "nothing settles it"}
@@ -164,7 +164,7 @@ def test_an_answer_that_came_back_unreadable_is_not_shown_as_ok() -> None:
 def test_a_validator_counts_for_what_it_says_beyond_its_stance() -> None:
     from types import SimpleNamespace
 
-    from trading_research_agents.agents.cycle import _informative_votes
+    from trading_research_agents.agents.cycle.validators import _informative_votes
 
     def votes(pro: str, contra: str, neutral: str) -> tuple[str, ...]:
         context = {
