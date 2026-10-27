@@ -155,7 +155,7 @@ def test_init_with_an_agent_makes_the_analyst_the_core(
     out = capsys.readouterr().out
     assert "put DEEPSEEK_API_KEY in .env" in out
     text = (project / "strategy.toml").read_text("utf-8")
-    assert 'agent = "technical_analyst"' in text and 'provider = "deepseek"' in text
+    assert 'agent = "structure_lead"' in text and 'provider = "deepseek"' in text
     assert "[agents.pricing.deepseek-flash]" in text and "magnitude_bps = 20" in text
     from trading_research_agents.trading import load_strategy_config
 

@@ -30,7 +30,7 @@ RULE = Conviction(
         "macro": Decimal(1),
         "onchain": Decimal("1.5"),
         "sentiment": Decimal("0.5"),
-        "technical_analyst": Decimal(2),
+        "structure_lead": Decimal(2),
     },
     validator_weight=Decimal(1),
     min_score=Decimal("0.4"),
@@ -86,7 +86,7 @@ def test_one_leg_pointing_the_other_way_costs_size() -> None:
         votes=("support", "oppose", "abstain"),
     )
 
-    assert score.agreed == ("macro", "sentiment", "technical_analyst")
+    assert score.agreed == ("macro", "sentiment", "structure_lead")
     assert score.against == ("onchain",)
     # A full band of opposition from the heaviest reading voice, and a validator against: 0.2.
     assert score.score == Decimal("0.200")
@@ -120,7 +120,7 @@ def test_silence_is_never_counted_as_agreement() -> None:
     # nor diluted it. A reading barely past its line moves it barely, and silence is the limit of
     # that, so the two cannot be treated differently without a jump at zero.
     assert quiet.score == Decimal("0.800")
-    assert quiet.agreed == ("technical_analyst",)
+    assert quiet.agreed == ("structure_lead",)
 
 
 def test_a_short_reads_the_declarations_the_other_way_round() -> None:
@@ -169,7 +169,7 @@ def test_a_size_that_cannot_reach_one_step_is_refused_rather_than_rounded_up() -
 
 def test_a_score_no_rung_covers_is_refused_by_name() -> None:
     rule = Conviction(
-        weights={"technical_analyst": Decimal(1)},
+        weights={"structure_lead": Decimal(1)},
         ladder=(Tier(Decimal("0.95"), Decimal(1)),),
     )
     score = score_of(rule, target="long", states={}, confidence=0.5)
@@ -186,7 +186,7 @@ def test_a_score_no_rung_covers_is_refused_by_name() -> None:
 
 def test_the_ladder_is_read_from_the_top_however_it_was_written() -> None:
     rule = Conviction(
-        weights={"technical_analyst": Decimal(1)},
+        weights={"structure_lead": Decimal(1)},
         ladder=(Tier(Decimal("0.3"), Decimal("0.25")), Tier(Decimal("0.8"), Decimal(1))),
     )
     assert [str(t.at_least) for t in rule.ladder] == ["0.8", "0.3"]

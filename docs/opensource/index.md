@@ -57,7 +57,7 @@ flowchart TD
     pick -- "taken" --> briefs
     briefs["the system writes the briefs<br/>each role sees only the figures its job needs"] --> readers
     readers["readings, by code, no model<br/>macro, on-chain, sentiment against your lines"] --> tech
-    tech["technical analyst, alone or with its team<br/>a blind peer that must agree, a flow analyst<br/>a direction, a confidence, a horizon"] --> price["the system prices the round trip<br/>fee, spread, impact, funding, slippage"]
+    tech["structure lead, alone or with its team<br/>a blind confirmer that must agree, a flow specialist<br/>a direction, a confidence, a horizon"] --> price["the system prices the round trip<br/>fee, spread, impact, funding, slippage"]
     price --> exits{"the stop and the target<br/>the analyst's levels, held inside your bounds<br/>does the trade break even at half its kind winning?"}
     exits -- "no" --> refused
     exits -- "yes" --> round2["validators, as many as you declare<br/>a claim that cites no figure is thrown away"]
@@ -75,9 +75,9 @@ flowchart TD
 
 | Role | Reads | Answers | Can never |
 |---|---|---|---|
-| technical analyst | candles, spread, funding, book imbalance, open interest change, and the regime on its timeframe and the higher ones you declare | a direction, a setup from a fixed list, a confidence, a horizon, and where its stop and target sit | size the trade, place a level outside your `[exit]` bounds, run a trend setup in a range, or fade a market that is not a measured range |
-| technical peer (optional) | the technical analyst's own brief, blind to its answer, ideally on another model family | the same schema, independently | trade alone: the two reads must name the same side, and the lower confidence counts |
-| flow analyst (optional) | the book, the spread, funding and open interest, which then leave the analyst's brief | a side and a confidence, with the figures it rests on | name a level or a size; it is one voice in conviction |
+| structure lead | candles, spread, funding, book imbalance, open interest change, and the regime on its timeframe and the higher ones you declare | a direction, a setup from a fixed list, a confidence, a horizon, and where its stop and target sit | size the trade, place a level outside your `[exit]` bounds, run a trend setup in a range, or fade a market that is not a measured range |
+| blind confirmer (optional) | the structure lead's own brief, blind to its answer, ideally on another model family | the same schema, independently | trade alone: the two reads must name the same side, and the lower confidence counts |
+| flow specialist (optional) | the book, the spread, funding and open interest, which then leave the analyst's brief | a side and a confidence, with the figures it rests on | name a level or a size; it is one voice in conviction |
 | macro, on-chain and sentiment readings (code, not agents) | dated rates and levels, chain and derivatives figures, scores and notes you curate | a declared state and a graded score: each series against the lines you drew | ask a model, or propose a direction |
 | market screener | what the system measured for each admitted instrument: move, spread, regime, volume, correlation to BTC | which instruments to take, in what order, citing their figures | add an instrument the system did not admit |
 | validators: pro and contra | the proposal and the figures behind it, each without the other's case | the strongest case for or against, as cited claims | see the other side's case, or cite a figure it wasn't given |
@@ -98,7 +98,7 @@ Today, through one order path and the same gates:
 | Linear perpetuals (USDT- or USDC-margined swaps) | long and short, with the leverage and margin mode you declare; the default | end to end on the demo or testnet APIs of Bybit, OKX, Bitget, BingX, Binance and Gate |
 | Spot pairs | long only, paid in full; list `spot` in `[execution].markets` | the order path and a desk cycle on the Bybit and OKX demos |
 | Stock perpetuals and tokenized stocks | a perpetual and a spot pair to the venue, entered only while the underlying's session trades | a stock perpetual on the OKX demo, a tokenized stock on the Bybit demo |
-| Prediction market outcomes | long only, decided on a probability by the event analyst and priced to resolution; list `prediction` | sandbox cycles on live data; the order path is tested against ccxt's shapes |
+| Prediction market outcomes | long only, decided on a probability by the outcome assessor and priced to resolution; list `prediction` | sandbox cycles on live data; the order path is tested against ccxt's shapes |
 
 Every exchange ccxt supports is reached through that same path, and any other can have its run on
 its demo or testnet API at any time ([Venues](/opensource/venues),

@@ -6,7 +6,7 @@
 # decides on come through data.toml, from the venue, with their age attached. Keeping them apart is
 # what stops a stale daily file from standing in for a number that has to be fresh.
 
-# The series here on the traded instrument's asset also reach the technical analyst, as
+# The series here on the traded instrument's asset also reach the structure lead, as
 # `positioning`: last value, change over the last hour, age, declared state.
 #
 # Free, from the venues themselves, no key, five-minute steps (set `asset`, and the symbol in

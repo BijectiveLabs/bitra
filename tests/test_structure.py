@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from decimal import Decimal
 
-from trading_research_agents.agents.technical_analyst.tools import features
+from trading_research_agents.agents.structure_lead.tools import features
 from trading_research_agents.execution.regime import misfit
 from trading_research_agents.execution.structure import against, read, swings
 from trading_research_agents.strategy import Bar

@@ -10,13 +10,13 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from trading_research_agents.agents.briefs import BriefError, technical_brief
+from trading_research_agents.agents.briefs import BriefError, structure_brief
 from trading_research_agents.execution.regime import RegimeRule
 from trading_research_agents.records import read_gzip_json, recent, sha256_of
-from trading_research_agents.store.cycles import SUMMARY
+from trading_research_agents.store.cycles import BRIEFS, SUMMARY, lead_file
 from trading_research_agents.store.snapshot import INPUTS, read_inputs
 
-# The figures a technical brief carries that follow from the inputs alone. Ages depend on when the
+# The figures a structure brief carries that follow from the inputs alone. Ages depend on when the
 # brief was built, and the readings and open interest on files outside the cycle.
 FIGURES = (
     "bars",
@@ -87,7 +87,7 @@ def verify_cycle(folder: Path, row: Mapping[str, Any] | None = None) -> Checked:
             listed = name in files or name == SUMMARY or path.name.startswith(".")
             if path.is_file() and not listed:
                 out.problems.append(f"{name} was added after the cycle ended")
-    if (folder / INPUTS).is_file() and (folder / "briefs" / "technical.json").is_file():
+    if (folder / INPUTS).is_file() and lead_file(folder, BRIEFS).is_file():
         out.recomputed = True
         out.problems.extend(_recompute(folder))
     return out
@@ -96,12 +96,12 @@ def verify_cycle(folder: Path, row: Mapping[str, Any] | None = None) -> Checked:
 def _recompute(folder: Path) -> list[str]:
     try:
         snapshot, context, settings = read_inputs(read_gzip_json(folder / INPUTS))
-        stored = json.loads((folder / "briefs" / "technical.json").read_text(encoding="utf-8"))
+        stored = json.loads(lead_file(folder, BRIEFS).read_text(encoding="utf-8"))
     except (OSError, ValueError, KeyError, TypeError) as exc:
         return [f"the inputs cannot be read back: {exc}"]
     regime = settings.get("regime") or {}
     try:
-        brief = technical_brief(
+        brief = structure_brief(
             snapshot,
             mechanism=str(settings.get("mechanism", "")),
             interval_s=int(settings["interval_s"]),
@@ -117,9 +117,9 @@ def _recompute(folder: Path) -> list[str]:
             context=context,
         ).record()
     except (BriefError, KeyError, ValueError) as exc:
-        return [f"the technical brief cannot be rebuilt from the inputs: {exc}"]
+        return [f"the structure brief cannot be rebuilt from the inputs: {exc}"]
     problems = [
-        f"technical brief {name} is {stored.get(name)!r}; the inputs give {brief.get(name)!r}"
+        f"structure brief {name} is {stored.get(name)!r}; the inputs give {brief.get(name)!r}"
         for name in FIGURES
         if name in stored and stored.get(name) != brief.get(name)
     ]
@@ -132,7 +132,7 @@ def _recompute(folder: Path) -> list[str]:
                 continue
             if rebuilt.get(name) != value:
                 problems.append(
-                    f"technical brief timeframes.{frame}.{name} is {value!r}; the inputs give "
+                    f"structure brief timeframes.{frame}.{name} is {value!r}; the inputs give "
                     f"{rebuilt.get(name)!r}"
                 )
     return problems

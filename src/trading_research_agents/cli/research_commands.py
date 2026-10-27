@@ -65,7 +65,7 @@ def _channel(args: argparse.Namespace, cfg: Any) -> Any:
 
 
 def _agent_core(cfg: Any, out_dir: Path) -> Any:
-    """The technical analyst as the core: a metered completer over the declared provider."""
+    """The structure lead as the core: a metered completer over the declared provider."""
     from trading_research_agents.agents.strategy import AgentStrategy
     from trading_research_agents.llm.usage import (
         BudgetLimits,

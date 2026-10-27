@@ -1,8 +1,8 @@
-"""The technical team: who reads which figures, how their answers are checked, how they combine.
+"""The deciding team: who reads which figures, how their answers are checked, how they combine.
 
-The lead is the technical analyst. A peer, when declared, reads the lead's brief blind and answers
+The lead is the structure lead. A peer, when declared, reads the lead's brief blind and answers
 in the lead's schema; the two must name the same side, and the team's confidence is the lower of
-theirs. A flow analyst, when declared, reads the flow figures, which then leave the technical
+theirs. A flow specialist, when declared, reads the flow figures, which then leave the technical
 brief; its side and confidence become a declared state that conviction and confluence weigh. Every
 answer's citations are checked by code against the brief that member was given.
 
@@ -18,7 +18,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import replace
 from typing import Any
 
-from trading_research_agents.agents import flow_analyst, technical_peer
+from trading_research_agents.agents import blind_confirmer, flow_specialist
 from trading_research_agents.agents.cited import survived
 from trading_research_agents.agents.cycle.asking import _ask_readable, _within_scope
 from trading_research_agents.agents.cycle.record import _finish
@@ -32,7 +32,7 @@ from trading_research_agents.agents.validator.tools import figures_of
 from trading_research_agents.llm.judge import Check, JudgeError
 from trading_research_agents.records import write_json
 
-PEER, FLOW_ANALYST = technical_peer.ROLE, flow_analyst.ROLE
+PEER, FLOW_SEAT = blind_confirmer.ROLE, flow_specialist.ROLE
 DESCRIBES = Check(
     "Does the analyst's reason describe the market's trend and regime the way the measured "
     "labels in this state do?"
@@ -43,7 +43,7 @@ WORDS = {"long": "bullish", "short": "bearish"}
 
 def split(shown: Mapping[str, Any], team: tuple[str, ...]) -> tuple[dict[str, Any], dict[str, Any]]:
     """The structure brief and the flow brief; each flow figure has one reader."""
-    if FLOW_ANALYST not in team:
+    if FLOW_SEAT not in team:
         return dict(shown), {}
     flow = {k: shown[k] for k in FLOW_READS if k in shown}
     return {k: v for k, v in shown.items() if k not in FLOW}, flow
@@ -55,11 +55,11 @@ def tasks(p: Pass) -> list[Task]:
     out = []
     members: list[tuple[str, str, Mapping[str, Any], Any]] = []
     if PEER in cfg.team:
-        members.append(("technical_peer", PEER, p.asked, technical_peer))
-    if FLOW_ANALYST in cfg.team:
-        flow = _within_scope(FLOW_ANALYST, p.flow_brief, p.result)
+        members.append(("blind_confirmer", PEER, p.asked, blind_confirmer))
+    if FLOW_SEAT in cfg.team:
+        flow = _within_scope(FLOW_SEAT, p.flow_brief, p.result)
         p.flow_brief = flow
-        members.append(("flow", FLOW_ANALYST, flow, flow_analyst))
+        members.append(("flow_specialist", FLOW_SEAT, flow, flow_specialist))
     for name, role, brief, package in members:
         write_json(p.where.brief(name), brief)
         out.append(
@@ -81,15 +81,15 @@ def _asker(p: Pass, role: str, brief: Mapping[str, Any], package: Any) -> Callab
 
 def combine(p: Pass) -> bool:
     """The flow read recorded as a voice; the peer's read held against the lead's."""
-    p.team_reads = {"technical_analyst": p.analyst.target} if p.cfg.team else {}
-    if FLOW_ANALYST in p.cfg.team:
+    p.team_reads = {"structure_lead": p.analyst.target} if p.cfg.team else {}
+    if FLOW_SEAT in p.cfg.team:
         _read_flow(p)
     if PEER not in p.cfg.team:
         return True
-    peer = _usable(p, "technical_peer", PEER, technical_peer.parse, p.asked)
+    peer = _usable(p, "blind_confirmer", PEER, blind_confirmer.parse, p.asked)
     if peer is None:
         why = (
-            "technical_peer: no usable answer, and the team trades only when both reads agree; "
+            "blind_confirmer: no usable answer, and the team trades only when both reads agree; "
             "no trade"
         )
         return _refuse(p, why, PEER, "no usable answer")
@@ -98,8 +98,8 @@ def combine(p: Pass) -> bool:
     lead = p.analyst
     if peer.target != lead.target:
         why = (
-            f"technical: the lead reads {lead.target} and the peer {peer.target}; the structure "
-            "reads disagree, so there is no trade"
+            f"structure_lead: the lead reads {lead.target} and the blind confirmer "
+            f"{peer.target}; the structure reads disagree, so there is no trade"
         )
         return _refuse(p, why, PEER, "the reads disagree")
     p.analyst = replace(lead, confidence=min(lead.confidence, peer.confidence))
@@ -109,22 +109,22 @@ def combine(p: Pass) -> bool:
 
 
 def _read_flow(p: Pass) -> None:
-    flow = _usable(p, "flow", FLOW_ANALYST, flow_analyst.parse, p.flow_brief)
+    flow = _usable(p, "flow_specialist", FLOW_SEAT, flow_specialist.parse, p.flow_brief)
     if flow is None:
-        p.result.context[FLOW_ANALYST] = {"read_by": FLOW_ANALYST, "error": "no usable answer"}
+        p.result.context[FLOW_SEAT] = {"read_by": FLOW_SEAT, "error": "no usable answer"}
         return
     sign = {"long": 1, "short": -1}.get(flow.target, 0)
     state = {"declared": WORDS.get(flow.target, "undeclared"), "score": str(sign * flow.confidence)}
-    p.result.context[FLOW_ANALYST] = {
+    p.result.context[FLOW_SEAT] = {
         "declared_state": state,
-        "read_by": FLOW_ANALYST,
+        "read_by": FLOW_SEAT,
         "target": flow.target,
         "confidence": flow.confidence,
         "reason": flow.reason,
         "cited": [figure.record() for figure in flow.figures_used],
     }
-    p.team_reads[FLOW_ANALYST] = flow.target
-    announce(p.cfg.watch, "flow", DONE, f"{flow.target} at {flow.confidence}")
+    p.team_reads[FLOW_SEAT] = flow.target
+    announce(p.cfg.watch, "flow_specialist", DONE, f"{flow.target} at {flow.confidence}")
 
 
 def _usable(
@@ -166,7 +166,7 @@ def check_reasons(p: Pass) -> bool:
         "market_structure": p.asked.get("market_structure"),
         "timeframes": p.asked.get("timeframes"),
     }
-    reasons = {"technical_analyst": p.analyst.reason}
+    reasons = {"structure_lead": p.analyst.reason}
     peer = p.result.context.get(PEER)
     if isinstance(peer, Mapping) and peer.get("reason"):
         reasons[PEER] = str(peer["reason"])

@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
-from trading_research_agents.agents.technical_analyst.tools import Features, features
+from trading_research_agents.agents.structure_lead.tools import Features, features
 from trading_research_agents.data.dated_text import Event
 from trading_research_agents.data.schema import Candle, Direction
 from trading_research_agents.data.series import Series
@@ -105,7 +105,7 @@ def data_brief(snapshot: Snapshot, *, now: float | None = None) -> DataBrief:
 
 @dataclass(frozen=True)
 class TechnicalBrief:
-    """The figures the technical analyst decides from, and the market state around them."""
+    """The figures the structure lead decides from, and the market state around them."""
 
     instrument: str
     interval_s: int
@@ -141,7 +141,7 @@ class TechnicalBrief:
         return out
 
 
-def technical_brief(
+def structure_brief(
     snapshot: Snapshot,
     *,
     mechanism: str,

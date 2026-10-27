@@ -315,7 +315,7 @@ def _outcome_cycle(tmp_path: Path, answer: dict[str, Any], **overrides: Any) -> 
     }
     settings.update(overrides)
     cfg, fake, _ = cycle_config(
-        tmp_path, envelope, {"event_analyst": json.dumps(answer)}, **settings
+        tmp_path, envelope, {"outcome_assessor": json.dumps(answer)}, **settings
     )
     return run_cycle(cfg), fake
 

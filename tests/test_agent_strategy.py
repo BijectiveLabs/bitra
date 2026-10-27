@@ -1,4 +1,4 @@
-"""The technical analyst as a decision core, through the same runtime as any code core."""
+"""The structure lead as a decision core, through the same runtime as any code core."""
 
 from __future__ import annotations
 
@@ -94,7 +94,7 @@ def test_a_spent_budget_ends_the_session_flat(envelope: Envelope, tmp_path: Path
     ledger = UsageLedger(tmp_path / "usage.jsonl")
     metered = MeteredCompleter(
         scripted,
-        role="technical_analyst",
+        role="structure_lead",
         provider="fake",
         limits=BudgetLimits(token_budget=300, max_calls_per_hour=100, min_interval_s=0),
         ledger=ledger,
@@ -130,7 +130,7 @@ def test_a_spent_budget_ends_the_session_flat(envelope: Envelope, tmp_path: Path
     assert report.stopped_by is not None and "token budget spent" in report.stopped_by
     assert report.open_position is None and report.round_trips == 1
     rows = UsageLedger.read(tmp_path / "usage.jsonl")
-    assert len(rows) == 1 and rows[0]["role"] == "technical_analyst"
+    assert len(rows) == 1 and rows[0]["role"] == "structure_lead"
     assert core.halt is not None
 
 
@@ -189,19 +189,19 @@ def agent_config(tmp_path: Path, strategy_table: str) -> Path:
 
 
 def test_the_config_declares_the_agent_core_and_its_budget(tmp_path: Path) -> None:
-    cfg = load_strategy_config(agent_config(tmp_path, '[strategy]\nagent = "technical_analyst"\n'))
+    cfg = load_strategy_config(agent_config(tmp_path, '[strategy]\nagent = "structure_lead"\n'))
     assert cfg.agents is not None and cfg.agents.provider == "ollama"
     assert cfg.agents.token_budget == 200000
     assert cfg.agents.decide_every_bars == 5 and cfg.agents.max_output_tokens == 512
     assert cfg.agents.pricing["local-model"] == (Decimal(0), Decimal(0))
     assert cfg.strategy.name == "agent-pending"
-    with pytest.raises(ConfigError, match="only technical_analyst decides"):
+    with pytest.raises(ConfigError, match="only structure_lead decides"):
         load_strategy_config(agent_config(tmp_path, '[strategy]\nagent = "auditor"\n'))
     with pytest.raises(ConfigError, match="not both"):
         load_strategy_config(
-            agent_config(tmp_path, '[strategy]\nagent = "technical_analyst"\nimport = "x:Y"\n')
+            agent_config(tmp_path, '[strategy]\nagent = "structure_lead"\nimport = "x:Y"\n')
         )
-    bare = agent_config(tmp_path, '[strategy]\nagent = "technical_analyst"\n')
+    bare = agent_config(tmp_path, '[strategy]\nagent = "structure_lead"\n')
     bare.write_text(bare.read_text("utf-8").split("[agents]")[0], "utf-8")
     with pytest.raises(ConfigError, match=r"\[agents\] is required"):
         load_strategy_config(bare)
@@ -222,7 +222,7 @@ def test_backtest_with_an_agent_core_refuses_before_any_call_when_the_key_is_mis
     ]
     parquet = tmp_path / "btc.parquet"
     write_trades(rows, parquet, price_scale=2, qty_scale=3)
-    config = agent_config(tmp_path, '[strategy]\nagent = "technical_analyst"\n')
+    config = agent_config(tmp_path, '[strategy]\nagent = "structure_lead"\n')
     config.write_text(
         config.read_text("utf-8").replace('provider = "ollama"', 'provider = "groq"'), "utf-8"
     )

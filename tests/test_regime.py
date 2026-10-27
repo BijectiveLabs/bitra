@@ -1,4 +1,4 @@
-"""Regime, higher timeframes, book imbalance and open interest in the technical brief."""
+"""Regime, higher timeframes, book imbalance and open interest in the structure brief."""
 
 from __future__ import annotations
 
@@ -22,10 +22,10 @@ from trading_research_agents.agents.briefs import (
     book_imbalance,
     interval_name,
     open_interest_change,
-    technical_brief,
+    structure_brief,
 )
 from trading_research_agents.agents.cycle import run_cycle
-from trading_research_agents.agents.technical_analyst.tools import trend_strength
+from trading_research_agents.agents.structure_lead.tools import trend_strength
 from trading_research_agents.data.sources.base import BookLevel, Fetched, OrderBook
 from trading_research_agents.envelope.model import Envelope
 from trading_research_agents.execution.regime import RegimeError, RegimeRule, label, misfit
@@ -104,7 +104,7 @@ def frame(closes: list[str], seconds: int) -> Fetched:
 def test_the_brief_carries_the_regime_on_every_timeframe_it_was_given() -> None:
     snap = snapshot_with(closes=["100", "101", "99", "100", "102"])
     rising = [str(100 + i) for i in range(20)]
-    brief = technical_brief(
+    brief = structure_brief(
         snap,
         mechanism="reversion",
         interval_s=60,
@@ -196,7 +196,9 @@ def test_the_cycle_reads_context_timeframes_and_the_last_open_interest(
     stub = cfg.chains["ohlcv"].sources[0]
     assert any(seen.get("interval_s") == 900 for seen in stub.seen)  # type: ignore[attr-defined]
     assert "15m" in result.briefs["context"]
-    brief = json.loads((Path(str(result.path)) / "briefs" / "technical.json").read_text("utf-8"))
+    brief = json.loads(
+        (Path(str(result.path)) / "briefs" / "structure_lead.json").read_text("utf-8")
+    )
     assert "timeframes" in brief and brief["regime"] == "ranging"
 
 
@@ -234,7 +236,7 @@ def test_the_live_table_lists_capital_and_regime_where_they_happen(
     steps = _cycle_steps(cfg)
     # Seen live: capital was announced but missing from the table, so it was drawn last.
     assert steps.index("data") < steps.index("capital") < steps.index("regime")
-    assert steps.index("regime") < steps.index("technical")
+    assert steps.index("regime") < steps.index("structure_lead")
     plain, _, _ = cycle_config(tmp_path / "plain", envelope, [analyst_answer()])
     assert "capital" not in _cycle_steps(plain)
 
@@ -327,7 +329,7 @@ def test_a_fade_needs_a_measured_range_as_a_trend_setup_needs_a_trend() -> None:
 
 
 def test_the_variance_ratio_tells_moves_given_back_from_moves_carried_on() -> None:
-    from trading_research_agents.agents.technical_analyst.tools import variance_ratio
+    from trading_research_agents.agents.structure_lead.tools import variance_ratio
 
     back = [100.0 + (1.0 if i % 2 else 0.0) for i in range(60)]
     on: list[float] = [100.0]

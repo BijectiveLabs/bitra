@@ -121,7 +121,7 @@ AGENTS = {
 
 
 def agent_raw(**tables: Any) -> dict[str, Any]:
-    out = raw({"agent": "technical_analyst"})
+    out = raw({"agent": "structure_lead"})
     out["agents"] = dict(AGENTS)
     out.update(tables)
     return out
@@ -153,7 +153,7 @@ def test_a_declared_matrix_carries_the_readings_and_the_policy() -> None:
 
 def test_a_matrix_that_names_something_that_reads_nothing_is_refused() -> None:
     with pytest.raises(ConfigError, match="is not one of"):
-        parse_strategy_config(agent_raw(confluence={"required": ["technical_analyst"]}))
+        parse_strategy_config(agent_raw(confluence={"required": ["structure_lead"]}))
     # A desk written before 0.11 runs unchanged: the old name is read as the reading it became.
     old = parse_strategy_config(agent_raw(confluence={"required": ["macro_analyst"]}))
     assert old.confluence.required == ("macro",)
@@ -238,10 +238,10 @@ def test_effort_is_declared_once_and_overridden_per_role() -> None:
         )
     )
     assert cfg.agents is not None
-    assert cfg.agents.for_role("technical_analyst").effort == "high"
+    assert cfg.agents.for_role("structure_lead").effort == "high"
     assert cfg.agents.for_role("validator").effort == "low"
     plain = parse_strategy_config(agent_raw()).agents
-    assert plain is not None and plain.for_role("technical_analyst").effort is None
+    assert plain is not None and plain.for_role("structure_lead").effort is None
     with pytest.raises(ConfigError, match="effort is one of"):
         parse_strategy_config(agent_raw(agents={**AGENTS, "effort": "ludicrous"}))
     with pytest.raises(ConfigError, match="effort is one of"):
@@ -266,7 +266,7 @@ def test_conviction_is_absent_until_declared_and_reads_its_ladder_from_the_top()
     cfg = parse_strategy_config(
         agent_raw(
             conviction={
-                "weights": {"technical_analyst": Decimal(2), "macro": Decimal(1)},
+                "weights": {"structure_lead": Decimal(2), "macro": Decimal(1)},
                 "validator_weight": Decimal(1),
                 "min_score": Decimal("0.4"),
                 "max_leverage": Decimal(3),
@@ -280,7 +280,7 @@ def test_conviction_is_absent_until_declared_and_reads_its_ladder_from_the_top()
     rule = cfg.conviction
     assert not rule.idle and rule.max_leverage == Decimal(3)
     assert [str(t.at_least) for t in rule.ladder] == ["0.8", "0.4"]
-    assert rule.weights["technical_analyst"] == Decimal(2)
+    assert rule.weights["structure_lead"] == Decimal(2)
 
 
 def test_a_conviction_rule_that_cannot_be_applied_is_refused() -> None:
@@ -401,7 +401,7 @@ def test_a_setting_that_no_longer_does_anything_is_read_and_named_by_check() -> 
     desk = agent_raw(
         agents={
             **AGENTS,
-            "analysts": ["technical_analyst", "sentiment_analyst"],
+            "analysts": ["structure_lead", "sentiment_analyst"],
             "reuse_reading_for": "1h",
             "roles": {"macro_analyst": {"model": "m"}, "validator": {"model": "v"}},
         },
@@ -420,7 +420,7 @@ def test_a_setting_that_no_longer_does_anything_is_read_and_named_by_check() -> 
     # A label weight changed the size; with no label left, reading on would size differently.
     with pytest.raises(ConfigError, match="no longer gives a label"):
         parse_strategy_config(agent_raw(conviction={"reader_labels": Decimal("0.5")}))
-    both = agent_raw(agents={**AGENTS, "analysts": ["technical_analyst"], "readings": []})
+    both = agent_raw(agents={**AGENTS, "analysts": ["structure_lead"], "readings": []})
     with pytest.raises(ConfigError, match="one of the two"):
         parse_strategy_config(both)
 
@@ -430,18 +430,18 @@ def test_the_technical_team_is_declared_and_its_members_take_their_own_models() 
         agent_raw(
             agents={
                 **AGENTS,
-                "team": ["technical_peer", "flow_analyst"],
-                "roles": {"technical_peer": {"provider": "google", "model": "other-family"}},
+                "team": ["blind_confirmer", "flow_specialist"],
+                "roles": {"blind_confirmer": {"provider": "google", "model": "other-family"}},
             },
-            conviction={"weights": {"technical_analyst": Decimal(1), "flow_analyst": Decimal(1)}},
-            confluence={"required": ["flow_analyst"]},
+            conviction={"weights": {"structure_lead": Decimal(1), "flow_specialist": Decimal(1)}},
+            confluence={"required": ["flow_specialist"]},
         )
     )
-    assert cfg.agents is not None and cfg.agents.team == ("technical_peer", "flow_analyst")
-    assert cfg.agents.for_role("technical_peer").model == "other-family"
-    assert cfg.conviction.weights["flow_analyst"] == Decimal(1)
-    assert cfg.confluence.required == ("flow_analyst",)
+    assert cfg.agents is not None and cfg.agents.team == ("blind_confirmer", "flow_specialist")
+    assert cfg.agents.for_role("blind_confirmer").model == "other-family"
+    assert cfg.conviction.weights["flow_specialist"] == Decimal(1)
+    assert cfg.confluence.required == ("flow_specialist",)
     assert parse_strategy_config(agent_raw()).agents.team == ()  # type: ignore[union-attr]
-    for team, message in ((["astrologer"], "is not one of"), (["flow_analyst"] * 2, "twice")):
+    for team, message in ((["astrologer"], "is not one of"), (["flow_specialist"] * 2, "twice")):
         with pytest.raises(ConfigError, match=message):
             parse_strategy_config(agent_raw(agents={**AGENTS, "team": team}))

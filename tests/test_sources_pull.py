@@ -162,7 +162,7 @@ def test_the_cycle_names_a_stale_series_and_skips_a_reading_with_nothing_current
     cfg, _, _ = cycle_config(
         tmp_path,
         envelope,
-        {"technical_analyst": analyst_answer()},
+        {"structure_lead": analyst_answer()},
         series={"macro": (path,)},
         readings=("macro",),
     )

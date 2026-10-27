@@ -88,11 +88,11 @@ def test_the_setup_says_when_you_carry_the_exits_or_when_only_data_is_possible()
 def test_the_live_cycle_view_names_who_is_working_and_for_how_long() -> None:
     now = [100.0]
     view = tui_cycle.CycleView(
-        SimpleNamespace(tokens=0, cost=Decimal(0)), ["data", "technical"], clock=lambda: now[0]
+        SimpleNamespace(tokens=0, cost=Decimal(0)), ["data", "structure_lead"], clock=lambda: now[0]
     )
-    view.on_step(Step(name="technical", state="running"))
+    view.on_step(Step(name="structure_lead", state="running"))
     view.on_step(Step(name="macro", state="running"))
     now[0] = 104.0
-    assert view.status() == "4s | working: technical, macro | 0 tokens"
-    view.on_step(Step(name="technical", state="done", seconds=3.2))
+    assert view.status() == "4s | working: structure lead, macro | 0 tokens"
+    view.on_step(Step(name="structure_lead", state="done", seconds=3.2))
     assert "working: macro |" in view.status()

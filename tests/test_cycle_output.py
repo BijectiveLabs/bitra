@@ -210,7 +210,7 @@ def test_a_record_written_before_the_readings_still_shows_what_was_not_read() ->
                 "source": "operator export",
             }
         ],
-        "agents": {"agents": [{"agent": "technical", "ok": True, "seconds": 2.0}]},
+        "agents": {"agents": [{"agent": "structure_lead", "ok": True, "seconds": 2.0}]},
         "not_asked": {"onchain_analyst": "nothing declared in sources/onchain.toml, so not asked"},
     }
     text = shown(cycle_view(record))

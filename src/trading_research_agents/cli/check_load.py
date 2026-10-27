@@ -17,8 +17,8 @@ def _span_s(seconds: float) -> str:
 def _load_notes(a: Any, roster: tuple[str, ...], screener: bool = False) -> list[str]:
     """How a cycle's calls land on providers, and what happens when one of them says no."""
     # The readings are read by code; the analyst and its team are the models a cycle asks.
-    asked = ["technical_analyst", *a.team]
-    reading = [name for name in (a.readings or roster) if name != "technical_analyst"]
+    asked = ["structure_lead", *a.team]
+    reading = [name for name in (a.readings or roster) if name != "structure_lead"]
     roles = [
         *asked,
         *(["validator"] if a.validators else []),
@@ -38,13 +38,13 @@ def _load_notes(a: Any, roster: tuple[str, ...], screener: bool = False) -> list
             f"readers: {', '.join(reading)} are read by code against your thresholds and ask no "
             "model"
         )
-    if "technical_peer" in a.team:
-        lead, peer = a.for_role("technical_analyst"), a.for_role("technical_peer")
+    if "blind_confirmer" in a.team:
+        lead, peer = a.for_role("structure_lead"), a.for_role("blind_confirmer")
         if (lead.provider, lead.model) == (peer.provider, peer.model):
             said.append(
-                "team: technical_peer runs on the same model as the technical analyst, and two "
+                "team: blind_confirmer runs on the same model as the structure lead, and two "
                 "reads from one model err together; give it another family in "
-                "[agents.roles.technical_peer]"
+                "[agents.roles.blind_confirmer]"
             )
     # Vendors meter per model, so two models on one provider are two sets of limits.
     pairs = sorted({f"{a.for_role(r).provider}:{a.for_role(r).model}" for r in roles})
@@ -278,7 +278,7 @@ def _spend_notes(cfg: Any) -> list[str]:
         )
     else:
         roles = (
-            "technical_analyst",
+            "structure_lead",
             "validator",
             "market_screener",
         )
@@ -293,7 +293,7 @@ def _spend_notes(cfg: Any) -> list[str]:
     free = sorted(m for m, (i, o) in a.pricing.items() if i == 0 and o == 0)
     used = {
         a.for_role(role).model or "default"
-        for role in ("technical_analyst", "validator", "market_screener")
+        for role in ("structure_lead", "validator", "market_screener")
     }
     used |= {name.partition(":")[2] for name in a.fallback}
     unpriced = sorted(m for m in used if m not in a.pricing and m != "default")

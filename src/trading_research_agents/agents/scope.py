@@ -24,7 +24,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-from trading_research_agents.agents import flow_analyst, technical_analyst, technical_peer
+from trading_research_agents.agents import blind_confirmer, flow_specialist, structure_lead
 
 VALIDATOR = "validator"
 SCREENER = "market_screener"
@@ -47,7 +47,7 @@ NOT_YOURS: dict[str, tuple[str, ...]] = {
     ),
     "a size": ("position size", "size up", "size down", "leverage", "risk per trade"),
     "an exit": ("stop loss", "stop-loss", "take profit", "take-profit", "price target"),
-    "another role": ("risk manager", "the executor", "the validator", "the technical analyst"),
+    "another role": ("risk manager", "the executor", "the validator", "the structure lead"),
 }
 # No role is told the desk's rules, so a rule one states is a rule it made up. Every role, the one
 # that decides included, is held to this: recorded beside the answer, which code never reads.
@@ -91,14 +91,14 @@ class Scope:
         return key in self.reads or any(key.startswith(f) for f in self.families)
 
 
-# What the flow analyst reads. With it on the team these leave the technical briefs, so each figure
-# has one reader.
+# What the flow specialist reads. With it on the team these leave the structure briefs, so each
+# figure has one reader.
 FLOW = ("spread_bps", "book_imbalance", "funding_rate", "open_interest")
 FLOW_READS = ("instrument", "interval_s", "age_s", "close", *FLOW)
 
 SCOPES: dict[str, Scope] = {
-    technical_analyst.ROLE: Scope(
-        role=technical_analyst.ROLE,
+    structure_lead.ROLE: Scope(
+        role=structure_lead.ROLE,
         reads=(
             "instrument",
             "interval_s",
@@ -144,8 +144,8 @@ SCOPES: dict[str, Scope] = {
         prose=("reason",),
         families=("ret_",),
     ),
-    flow_analyst.ROLE: Scope(
-        role=flow_analyst.ROLE,
+    flow_specialist.ROLE: Scope(
+        role=flow_specialist.ROLE,
         reads=FLOW_READS,
         answers=("target", "confidence", "reason", "figures_used"),
         decides="one voice in conviction, signed by the side it reads; never a level or a size",
@@ -184,7 +184,7 @@ SCOPES: dict[str, Scope] = {
 }
 
 # The peer is handed the lead's brief and held to the lead's edges.
-SCOPES[technical_peer.ROLE] = replace(SCOPES[technical_analyst.ROLE], role=technical_peer.ROLE)
+SCOPES[blind_confirmer.ROLE] = replace(SCOPES[structure_lead.ROLE], role=blind_confirmer.ROLE)
 
 
 def scope_of(role: str) -> Scope:
@@ -214,7 +214,7 @@ def crossings(role: str, said: Mapping[str, Any]) -> tuple[str, ...]:
     """Where an answer's prose reached into a later step. Recorded, never used to silence it."""
     allowed = scope_of(role)
     found: list[str] = []
-    if role in (technical_analyst.ROLE, technical_peer.ROLE):
+    if role in (structure_lead.ROLE, blind_confirmer.ROLE):
         # The direction and the horizon are this role's job, and the vocabulary of an entry is the
         # vocabulary it is paid to use. Sizing and exits are still not its own, but it names them
         # by describing the mechanism, so only an invented rule is looked for here.

@@ -13,7 +13,7 @@ shape or is listed here with what we do instead.
 
 There is no LangChain, LangGraph, CrewAI or agent framework in the dependency tree. The fan-out is
 forty lines: a thread pool, an answer written to a file the moment it arrives, and `--resume` to
-reuse the answers already on disk. A cycle is at most three rounds - the technical analyst, then the
+reuse the answers already on disk. A cycle is at most three rounds - the structure lead, then the
 two advocating validators together, then the judge - and the order is in one function you can read
 top to bottom.
 
@@ -28,7 +28,7 @@ between an operator and the reason their trade was refused.
 | What people mean by memory | What this project uses |
 |---|---|
 | conversation history in a thread | Nothing. Each role call is stateless: one system prompt, one brief built by the system. |
-| what it said last time | The technical analyst's brief carries its own last reading of the instrument, when there is one inside the window it reads (`previous`): how long ago, the target, setup, confidence and levels it gave, the close then and how far it has moved since. Code builds it from the record. What became of that reading (traded, refused, won, lost) is left out, since that would tell a proposing role the desk's rules. |
+| what it said last time | The structure lead's brief carries its own last reading of the instrument, when there is one inside the window it reads (`previous`): how long ago, the target, setup, confidence and levels it gave, the close then and how far it has moved since. Code builds it from the record. What became of that reading (traded, refused, won, lost) is left out, since that would tell a proposing role the desk's rules. |
 | what happened in earlier cycles | The record on disk: `runs/cycles/*/cycle.json`, the intents, `usage.jsonl`, the ledger. The auditors read exactly that. |
 | one store the roles share | The cycle directory. Every brief and every answer is a file in it, written atomically (a temporary file, then a rename), and an index per day finds them again. |
 | a vector store of past decisions | Not used. A decision is retrieved by reading the cycle it belongs to, which is a file with a timestamp in its name. |
@@ -60,7 +60,7 @@ Three checks stand between a model's text and anything that reads it.
 3. **Every figure a role cites is checked against its brief**, by name and value. A citation that
    names a figure the brief does not carry, or a different value, is discarded, and a deciding
    answer with none left is refused. On the OKX demo desk, from 2026-10-12 to 2026-10-16, no
-   citation was discarded across 44 technical analyst answers, 132 answers of the reading analysts
+   citation was discarded across 44 structure lead answers, 132 answers of the reading analysts
    that existed until 0.11, and 17 validator answers. Between 2026-10-08 and 2026-10-11 those
    reading analysts had 27 discarded, all of them names the brief did not use, such as
    `fear_greed_zscore` for `series.fear_greed.zscore_vs_recent`.
@@ -68,7 +68,7 @@ Three checks stand between a model's text and anything that reads it.
 ## How much a role is given
 
 Measured on the same desk (342 calls, `openai/gpt-oss-120b` and `-20b` on Groq, before 0.11): a
-call carries a median of about 1,950 tokens for the technical analyst, 1,390 for a validator and
+call carries a median of about 1,950 tokens for the structure lead, 1,390 for a validator and
 1,540 for the screener, system prompt included; the macro, on-chain and sentiment analysts of the
 time took 1,950, 1,730 and 1,350, and since 0.11 they are readings that ask no model. The
 largest was 2,915. Each call starts from a fresh context, so nothing accumulates across a cycle or a
@@ -118,9 +118,9 @@ What happens next depends on the role, and none of it can make a trade larger:
 
 | Role | If no model answers | Why |
 |---|---|---|
-| technical analyst | the cycle stops; no trade | it is the role that proposes a direction |
-| technical peer | no trade | the team trades only when both reads agree |
-| flow analyst | its voice is absent; the cycle goes on | a voice that said nothing neither helps nor hurts |
+| structure lead | the cycle stops; no trade | it is the role that proposes a direction |
+| blind confirmer | no trade | the team trades only when both reads agree |
+| flow specialist | its voice is absent; the cycle goes on | a voice that said nothing neither helps nor hurts |
 | validator | the trade is refused (`[agents].on_missing_validator = "refuse"`, the default); with `"continue"` it goes on with the votes that came back | a check you declared that did not happen is not a check |
 | market screener | the instruments the system admitted go on unfiltered | the screener can only remove, never add |
 | auditor | a line in the report | auditors never act |
@@ -142,7 +142,7 @@ reports it. Groq reported a cached prefix on 14 of the 342 calls above (12 of th
 Both figures are written to `usage.jsonl` per call:
 
 ```json
-{"role": "technical_analyst", "input_tokens": 1180, "cached_tokens": 0, "cache_write_tokens": 0}
+{"role": "structure_lead", "input_tokens": 1180, "cached_tokens": 0, "cache_write_tokens": 0}
 ```
 
 Read that column before believing in the saving. Caching pays when the stable prefix is large, and
@@ -229,9 +229,9 @@ sent nothing. A level a vendor cannot take is mapped rather than refused, becaus
 that dies on a spelling is a chain that does not help on the day it is needed.
 
 Roles that read a table the system already computed (the screener and the validators) take `low`
-when `[agents].effort` is declared and their own role table does not say otherwise; the technical
-analyst keeps `[agents].effort`. With nothing declared, no
-role is sent an effort at all, for the reason above.
+when `[agents].effort` is declared and their own role table does not say otherwise; the structure
+lead keeps `[agents].effort`. With nothing declared, no role is sent an effort at all, for the
+reason above.
 
 ## Not paying twice for the same reading
 

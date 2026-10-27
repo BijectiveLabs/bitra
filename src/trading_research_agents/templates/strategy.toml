@@ -22,7 +22,7 @@ slip_bps = 5.0
 instrument = "BTCUSDT"
 venue_key = "bybit/taker-taker"    # a channel declared in envelope.toml
 bar_interval_s = 60
-# context_intervals = ["15m", "1h"] # higher timeframes the technical analyst reads as context
+# context_intervals = ["15m", "1h"] # higher timeframes the structure lead reads as context
 size = 0.01                        # base units; or size_quote = 100 in quote currency, not both
 size_step = 0.001                  # the venue's size increment; sizes round down to it
 # size_step = { BTCUSDT = 0.001, ETHUSDT = 0.01 }   # one per instrument, for a desk on several
@@ -62,8 +62,8 @@ kill_switch = "KILL"               # `tra kill` sets it: flatten and stop; `tra 
 # session_loss_limit_bps = 100
 # max_session_minutes = 120
 
-# ---- the technical analyst as the core instead of a scripted strategy (docs.bijectivelabs.dev/opensource/agents). Replace the
-# [strategy] table with `agent = "technical_analyst"` and declare the budget:
+# ---- the structure lead as the core instead of a scripted strategy (docs.bijectivelabs.dev/opensource/agents). Replace the
+# [strategy] table with `agent = "structure_lead"` and declare the budget:
 # [agents]
 # provider = "deepseek"            # any registered provider (docs.bijectivelabs.dev/opensource/providers)
 # model = "deepseek-flash"
@@ -100,15 +100,15 @@ kill_switch = "KILL"               # `tra kill` sets it: flatten and stop; `tra 
 # The readings, when you want to name them outright. Left out, a cycle reads whichever readings
 # have something declared on the shelf: sources/macro.toml, sources/onchain.toml,
 # sources/derivatives.toml, sources/sentiment.toml, sources/news.toml. A reading is code over your
-# series and your thresholds; it asks no model. The technical analyst is always asked.
+# series and your thresholds; it asks no model. The structure lead is always asked.
 # readings = ["macro", "sentiment"]
 #
-# The team beside the technical analyst, each answering without seeing the others. A peer reads
-# the analyst's own brief blind, and the two must name the same side or there is no trade; give
-# it another model family below, since two reads from one model err together. A flow analyst
-# reads the book, funding and open interest, which then leave the analyst's brief, and is a voice
-# in [conviction]. Each member is one more call per cycle.
-# team = ["technical_peer", "flow_analyst"]
+# The team beside the structure lead, each answering without seeing the others. The blind
+# confirmer reads the lead's own brief without its answer, and the two must name the same side or
+# there is no trade; give it another model family below, since two reads from one model err
+# together. A flow specialist reads the book, funding and open interest, which then leave the
+# lead's brief, and is a voice in [conviction]. Each member is one more call per cycle.
+# team = ["blind_confirmer", "flow_specialist"]
 #
 # The stances that argue about a proposal once there is one. Each stance is one more call, so this
 # is off until you ask for it. Pro argues for, contra argues against, neutral weighs both. Every
@@ -123,7 +123,7 @@ kill_switch = "KILL"               # `tra kill` sets it: flatten and stop; `tra 
 # line per role is usually all it takes. No vendor is assumed anywhere: provider, model and effort
 # are yours on every row. A whole cycle is several calls inside a minute. On a tier that limits tokens per minute, put the
 # validators on a second vendor so the calls split across two limits:
-# [agents.roles.technical_peer]
+# [agents.roles.blind_confirmer]
 # provider = "google"
 # model = "gemini-pro-latest"
 #
@@ -160,7 +160,7 @@ kill_switch = "KILL"               # `tra kill` sets it: flatten and stop; `tra 
 # case refuses the trade. docs.bijectivelabs.dev/opensource/cycle works four cases through. Nothing here can make a trade
 # larger than [controls] and [run].size already allow - it can only make it smaller.
 # [conviction]
-# weights = { technical_analyst = 2.0, flow_analyst = 1.0, onchain = 1.5, macro = 1.0, sentiment = 0.5 }
+# weights = { structure_lead = 2.0, flow_specialist = 1.0, onchain = 1.5, macro = 1.0, sentiment = 0.5 }
 # validator_weight = 1.0
 # min_score = 0.4                  # below this the desk does not trade, whatever the matrix said
 # max_leverage = 3.0               # notional against [run].equity; a ceiling, never a target

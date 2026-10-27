@@ -22,7 +22,7 @@ from trading_research_agents.agents.scope import (
 from trading_research_agents.readings import READINGS
 
 LATER = ("equity", "size", "max_position", "stop_frac", "take_profit")
-ASKED = ("technical_analyst", "validator", "market_screener")
+ASKED = ("structure_lead", "validator", "market_screener")
 
 
 @pytest.mark.parametrize("role", ("validator", "market_screener"))
@@ -60,7 +60,7 @@ def test_the_filter_removes_what_is_not_this_roles_to_read() -> None:
 
 def test_the_technical_analyst_keeps_a_family_of_figures_but_not_the_size() -> None:
     brief = {"instrument": "BTCUSDT", "ret_1_bps": -12.0, "ret_20_bps": 3.0, "size": "0.01"}
-    kept = brief_for("technical_analyst", brief)
+    kept = brief_for("structure_lead", brief)
 
     assert set(kept) == {"instrument", "ret_1_bps", "ret_20_bps"}
 
@@ -90,11 +90,11 @@ def test_the_vocabulary_leaves_ordinary_market_language_alone() -> None:
 
 def test_the_deciding_analyst_is_not_checked_for_the_words_of_its_own_job() -> None:
     said = {"target": "long", "reason": "the mechanism resolves long from here"}
-    assert crossings("technical_analyst", said) == ()
+    assert crossings("structure_lead", said) == ()
 
 
 def test_a_validator_may_name_the_role_whose_proposal_it_reviews() -> None:
-    said = {"reason": "the technical analyst's figure holds, and the burst is not finished"}
+    said = {"reason": "the structure lead's figure holds, and the burst is not finished"}
     assert crossings("validator", said) == ()
 
     reaching = {"reason": "the position size should be halved"}
@@ -103,12 +103,12 @@ def test_a_validator_may_name_the_role_whose_proposal_it_reviews() -> None:
 
 def test_a_rule_no_role_was_told_is_recorded_for_every_role() -> None:
     invented = {"reason": "the desk requires a reward to risk of 3 before any entry"}
-    for role in ("technical_analyst", "validator"):
+    for role in ("structure_lead", "validator"):
         found = crossings(role, invented)
         assert any("a rule of the desk" in f for f in found), role
     # Describing the market's own numbers is not stating a rule.
     plain = {"reason": "the move clears its recent range and the spread stays tight"}
-    assert crossings("technical_analyst", plain) == ()
+    assert crossings("structure_lead", plain) == ()
 
 
 def test_the_vocabulary_is_small_and_says_which_step_it_belongs_to() -> None:

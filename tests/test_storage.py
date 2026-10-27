@@ -37,7 +37,7 @@ def test_a_cycle_keeps_its_inputs_a_hash_of_every_file_and_an_index_line(
     folder = Path(str(result.path))
     summary = json.loads((folder / "cycle.json").read_text(encoding="utf-8"))
 
-    assert INPUTS in summary["files"] and "briefs/technical.json" in summary["files"]
+    assert INPUTS in summary["files"] and "briefs/structure_lead.json" in summary["files"]
     assert all(sha256_of(folder / name) == digest for name, digest in summary["files"].items())
     [row] = list(recent(cfg.root))
     assert row["cycle_id"] == result.cycle and row["intent"] == result.intent
@@ -56,7 +56,7 @@ def test_verify_names_a_file_changed_after_the_cycle_ended(
 ) -> None:
     cfg, _, _ = cycle_config(tmp_path, envelope, [analyst_answer()])
     folder = Path(str(run_cycle(cfg).path))
-    brief = folder / "briefs" / "technical.json"
+    brief = folder / "briefs" / "structure_lead.json"
     edited = json.loads(brief.read_text(encoding="utf-8"))
     edited["zscore"] = 3.0
     brief.write_text(json.dumps(edited), encoding="utf-8")
@@ -65,9 +65,9 @@ def test_verify_names_a_file_changed_after_the_cycle_ended(
     found = verify_runs(cfg.root)
     [failed] = found["failed"]
     said = " ".join(failed["problems"])
-    assert "briefs/technical.json differs from the hash" in said
+    assert "briefs/structure_lead.json differs from the hash" in said
     assert "note.txt was added after the cycle ended" in said
-    assert "technical brief zscore is 3.0; the inputs give" in said
+    assert "structure brief zscore is 3.0; the inputs give" in said
 
 
 def test_a_figure_a_later_release_retired_is_not_a_failure(
@@ -77,7 +77,7 @@ def test_a_figure_a_later_release_retired_is_not_a_failure(
 
     cfg, _, _ = cycle_config(tmp_path, envelope, [analyst_answer()])
     folder = Path(str(run_cycle(cfg).path))
-    brief = folder / "briefs" / "technical.json"
+    brief = folder / "briefs" / "structure_lead.json"
     stored = json.loads(brief.read_text(encoding="utf-8"))
     stored["timeframes"] = {"15m": {"net_bps": 29.18}}
     brief.write_text(json.dumps(stored), encoding="utf-8")

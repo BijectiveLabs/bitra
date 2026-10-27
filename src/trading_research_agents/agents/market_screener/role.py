@@ -7,7 +7,7 @@ from typing import Any
 
 from trading_research_agents.agents.cited import FIGURES_SCHEMA, Figure, figures_used
 from trading_research_agents.agents.roles import RoleError
-from trading_research_agents.agents.technical_analyst.role import SETUPS
+from trading_research_agents.agents.structure_lead.role import SETUPS
 from trading_research_agents.llm.form import (
     _enum,
     _list,
@@ -15,7 +15,7 @@ from trading_research_agents.llm.form import (
     parse_object,
 )
 
-# The setups a pick may name: the technical analyst's own list, without its refusal.
+# The setups a pick may name: the structure lead's own list, without its refusal.
 PICKABLE = tuple(s for s in SETUPS if s != "no_setup")
 
 ROLE = "market_screener"

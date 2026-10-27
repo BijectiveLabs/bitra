@@ -394,7 +394,7 @@ def test_the_analyst_mode_is_read_and_is_the_agent_desk_default() -> None:
 def test_the_analyst_answer_carries_levels_or_none() -> None:
     import json
 
-    from trading_research_agents.agents.technical_analyst.role import parse
+    from trading_research_agents.agents.structure_lead.role import parse
     from trading_research_agents.llm.form import FormError
 
     base = json.loads(analyst_answer())

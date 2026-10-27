@@ -7,7 +7,7 @@ from decimal import Decimal
 
 import pytest
 
-from trading_research_agents.agents.technical_analyst.tools import features as v1_features
+from trading_research_agents.agents.structure_lead.tools import features as v1_features
 from trading_research_agents.execution.regime import RegimeRule, label
 from trading_research_agents.features.core import Absent, Inputs
 from trading_research_agents.features.price import (

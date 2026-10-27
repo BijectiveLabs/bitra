@@ -95,7 +95,7 @@ def test_one_cycle_reads_as_what_became_of_it(tmp_path: Path) -> None:
     gate = decision_of({"instrument": "BTCUSDT", "refusals": ["conviction: below the floor"]})
     assert gate.outcome == "refused" and gate.detail == "conviction: below the floor"
 
-    stopped = decision_of({"instrument": "BTCUSDT", "stopped_by": "technical: ProviderError"})
+    stopped = decision_of({"instrument": "BTCUSDT", "stopped_by": "structure_lead: ProviderError"})
     assert stopped.outcome == "stopped"
 
 
@@ -121,7 +121,7 @@ def test_what_broke_is_pulled_out_of_the_refusals(tmp_path: Path) -> None:
             "data funding: every source refused",
             "venue: OrderRejected",
         ],
-        stopped_by="technical: ProviderError: 429",
+        stopped_by="structure_lead: ProviderError: 429",
     )
     desk = look(cycles, now=NOW)
     # A gate saying no is not an alarm; a chain running out and a venue refusing are.

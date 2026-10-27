@@ -119,7 +119,7 @@ the company corrected it.
 **What the software does.** No limit here is a sentence a model is asked to respect. Every one is
 code that runs after the model has answered, and no model is in that path.
 
-- The rules are not in the deciding role's brief. The technical analyst is not told what a trade
+- The rules are not in the deciding role's brief. The structure lead is not told what a trade
   costs, what it has to clear, the size or the limits, so there is nothing to argue with or around.
 - An answer is a closed schema. Code reads its fields, a value outside its list is refused, and no
   sentence a model writes is read to decide anything.
@@ -172,7 +172,7 @@ mentions:
 | A demo API served an order book 3.2 hours old, 35 bps from where its own trades printed | orders are refused against a book older than 30 seconds |
 | A library reported a fee the venue charged as a rebate | fees are read as the venue charged them |
 | A venue's leverage call answered "success" while the setting stayed where it was | leverage and margin mode are confirmed by reading them back |
-| The technical analyst could see the other analysts' conclusions | the technical analyst reads only its own market; code weighs the readings once |
+| The structure lead could see the other analysts' conclusions | the structure lead reads only its own market; code weighs the readings once |
 | An auditor could propose a change to a setting that does not exist, as long as its table did | a proposed setting has to be one its table accepts |
 
 The details are on [Venues](/opensource/venues), [Agents](/opensource/agents) and

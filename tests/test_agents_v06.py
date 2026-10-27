@@ -16,7 +16,7 @@ from trading_research_agents.agents import (
     executor,
     market_screener,
     risk_manager,
-    technical_analyst,
+    structure_lead,
 )
 from trading_research_agents.agents.roles import prompt
 from trading_research_agents.llm import Completion, FakeCompleter
@@ -40,7 +40,7 @@ from trading_research_agents.llm.usage import (
 
 ROLES = (
     market_screener,
-    technical_analyst,
+    structure_lead,
     risk_manager,
     executor,
     auditor,
@@ -165,7 +165,7 @@ def test_every_role_has_a_prompt_a_schema_and_a_parser() -> None:
     ("role", "good", "bad", "message"),
     [
         (
-            technical_analyst,
+            structure_lead,
             {
                 "target": "long",
                 "setup": "range_reversion",
@@ -185,7 +185,7 @@ def test_every_role_has_a_prompt_a_schema_and_a_parser() -> None:
             "target must be one of",
         ),
         (
-            technical_analyst,
+            structure_lead,
             {
                 "target": "flat",
                 "setup": "no_setup",
@@ -266,7 +266,7 @@ def test_every_call_is_written_down_and_the_budget_refuses_before_the_call(
     inner = FakeCompleter(['{"a": 1}', '{"a": 2}', '{"a": 3}'])
     metered = MeteredCompleter(
         inner,
-        role="technical_analyst",
+        role="structure_lead",
         provider="fake",
         limits=BudgetLimits(token_budget=40, max_calls_per_hour=2, min_interval_s=10),
         ledger=ledger,
@@ -283,16 +283,16 @@ def test_every_call_is_written_down_and_the_budget_refuses_before_the_call(
     with pytest.raises(BudgetSpentError, match="calls this hour"):
         metered.complete(system="s", user="u", schema={})
     rows = UsageLedger.read(tmp_path / "usage.jsonl")
-    assert len(rows) == 2 and rows[0]["role"] == "technical_analyst"
+    assert len(rows) == 2 and rows[0]["role"] == "structure_lead"
     assert rows[0]["input_tokens"] == 10 and rows[0]["output_tokens"] == 8
     assert Decimal(rows[0]["cost"]) == (Decimal(3) * 10 + Decimal(15) * 8) / Decimal(1_000_000)
-    assert ledger.by_role()["technical_analyst"]["calls"] == 2
+    assert ledger.by_role()["structure_lead"]["calls"] == 2
     assert ledger.tokens == 36 and len(inner.calls) == 2
 
     clock[0] += 3600
     exhausted = MeteredCompleter(
         inner,
-        role="technical_analyst",
+        role="structure_lead",
         provider="fake",
         limits=BudgetLimits(token_budget=1, max_calls_per_hour=10, min_interval_s=0),
         ledger=ledger,

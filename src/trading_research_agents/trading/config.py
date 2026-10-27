@@ -100,7 +100,7 @@ class RunSettings:
     # differently, and a size off the venue's step is either refused there or quietly rounded by
     # the client library - neither of which the cost gate priced.
     size_steps: Mapping[str, Decimal] = field(default_factory=dict)
-    # Higher timeframes the technical analyst reads as context, in seconds. The decision, the
+    # Higher timeframes the structure lead reads as context, in seconds. The decision, the
     # trigger and the exits stay on bar_interval_s.
     context_intervals: tuple[int, ...] = ()
 

@@ -7,8 +7,8 @@ from collections.abc import Callable, Mapping
 from typing import Any
 
 from trading_research_agents.agents import (
-    technical_analyst,
-    technical_peer,
+    blind_confirmer,
+    structure_lead,
 )
 from trading_research_agents.agents.cycle.config import CycleConfig
 from trading_research_agents.agents.cycle.result import CycleResult
@@ -21,9 +21,9 @@ from trading_research_agents.records import (
 # A desk picks its setup from the market in front of it; the research core trades one registered
 # mechanism. Same role and schema, so only the instructions differ.
 LIVE_PROMPTS = {
-    technical_analyst.ROLE: "technical_analyst_live",
+    structure_lead.ROLE: "structure_lead_live",
     # The peer is a second read of the same brief, under the same instructions.
-    technical_peer.ROLE: "technical_analyst_live",
+    blind_confirmer.ROLE: "structure_lead_live",
 }
 
 

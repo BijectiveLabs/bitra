@@ -25,9 +25,9 @@ def _cycle_steps(cfg: Any) -> list[str]:
         steps.append("size")
     if cfg.account is not None:
         steps.append("capital")
-    steps.extend(["regime", "technical"])
-    # The members beside the analyst, by the names their rows report under.
-    steps.extend({"technical_peer": "technical_peer", "flow_analyst": "flow"}[m] for m in cfg.team)
+    steps.extend(["regime", "structure_lead"])
+    # The members beside the lead report under their seat names.
+    steps.extend(cfg.team)
     if cfg.judge is not None:
         steps.append("judge")
     # Every reading has a row, read or not; the row says which.
@@ -68,19 +68,19 @@ def _cycle_view(payload: Mapping[str, Any]) -> Any:
 
 
 def _team_lines(context: Mapping[str, Any]) -> list[str]:
-    """The members beside the analyst, and the judge's reading of each structure reason."""
+    """The members beside the lead, and the judge's reading of each structure reason."""
     lines = []
-    peer = context.get("technical_peer")
-    if isinstance(peer, Mapping) and peer.get("target"):
+    confirmer = context.get("blind_confirmer")
+    if isinstance(confirmer, Mapping) and confirmer.get("target"):
         lines.append(
-            f"peer:      {peer['target']} on {peer.get('setup')} at {peer.get('confidence')}: "
-            f"{peer.get('reason')}"
+            f"confirmer: {confirmer['target']} on {confirmer.get('setup')} at "
+            f"{confirmer.get('confidence')}: {confirmer.get('reason')}"
         )
-    flow = context.get("flow_analyst")
+    flow = context.get("flow_specialist")
     if isinstance(flow, Mapping):
         said = flow.get("error") or f"{flow.get('target')} at {flow.get('confidence')}"
         lines.append(f"flow:      {said}" + (f": {flow['reason']}" if flow.get("reason") else ""))
-    for member in ("technical_analyst", "technical_peer"):
+    for member in ("structure_lead", "blind_confirmer"):
         check = context.get(f"{member}_check")
         if isinstance(check, Mapping):
             lines.append(
@@ -145,7 +145,7 @@ def _voice_lines(result: Any) -> list[str]:
     lines.extend(_team_lines(result.context))
     if result.analyst is not None:
         lines.append(
-            f"technical: {result.analyst.target} on {result.analyst.setup} at "
+            f"lead:      {result.analyst.target} on {result.analyst.setup} at "
             f"{result.analyst.confidence:.2f} over {result.analyst.horizon_bars} bars: "
             f"{result.analyst.reason}"
         )

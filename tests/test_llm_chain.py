@@ -40,7 +40,7 @@ class Model:
 
 def chain_of(*models: Model, **kwargs: Any) -> CompleterChain:
     return CompleterChain(
-        role="technical_analyst",
+        role="structure_lead",
         links=[Link(m.name, (lambda m=m: m)) for m in models],  # type: ignore[misc]
         **kwargs,
     )
@@ -71,7 +71,7 @@ def test_a_provider_that_cannot_be_reached_hands_over_to_the_next() -> None:
     assert [a.outcome for a in chain.attempts] == ["failed", "answered"]
     assert "429" in chain.attempts[0].detail
     # The attempt is reported as it happens, so a cycle can write it down beside the answer.
-    assert [role for role, _ in seen] == ["technical_analyst", "technical_analyst"]
+    assert [role for role, _ in seen] == ["structure_lead", "structure_lead"]
     assert chain.record()["links"] == ["groq:a", "google:b"]
 
 
@@ -108,7 +108,7 @@ def test_a_link_is_built_once_and_only_when_it_is_needed() -> None:
         return make
 
     chain = CompleterChain(
-        role="technical_analyst",
+        role="structure_lead",
         links=[Link("groq:a", build("groq:a")), Link("google:b", build("google:b"))],
     )
     ask(chain)
@@ -121,7 +121,7 @@ def test_the_budget_stops_the_chain_rather_than_falling_through(tmp_path: Any) -
     ledger = UsageLedger(tmp_path / "usage.jsonl")
     spent = MeteredCompleter(
         Model("groq:a"),
-        role="technical_analyst",
+        role="structure_lead",
         provider="groq",
         limits=BudgetLimits(token_budget=1, max_calls_per_hour=100, min_interval_s=0),
         ledger=ledger,
@@ -129,7 +129,7 @@ def test_the_budget_stops_the_chain_rather_than_falling_through(tmp_path: Any) -
     )
     spare = Model("google:b")
     chain = CompleterChain(
-        role="technical_analyst",
+        role="structure_lead",
         links=[Link("groq:a", lambda: spent), Link("google:b", lambda: spare)],
     )
 
@@ -142,7 +142,7 @@ def test_the_budget_stops_the_chain_rather_than_falling_through(tmp_path: Any) -
 
 def test_a_chain_refuses_to_be_declared_wrong() -> None:
     with pytest.raises(ChainError, match="at least one model"):
-        CompleterChain(role="technical_analyst", links=[])
+        CompleterChain(role="structure_lead", links=[])
     with pytest.raises(ChainError, match="named twice"):
         chain_of(Model("groq:a"), Model("groq:a"))
 
@@ -171,7 +171,7 @@ def test_what_a_provider_cached_is_recorded_rather_than_assumed(tmp_path: Any) -
     ledger = UsageLedger(tmp_path / "usage.jsonl")
     metered = MeteredCompleter(
         Cached(),
-        role="technical_analyst",
+        role="structure_lead",
         provider="anthropic",
         limits=BudgetLimits(token_budget=100_000, max_calls_per_hour=10, min_interval_s=0),
         ledger=ledger,

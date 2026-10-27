@@ -90,7 +90,7 @@ a supervisor, not in a window.
 
 
 `tra init my-desk --profile autonomous` is the short way in. It writes the same project as
-`tra init`, with these differences: the technical analyst is the core, deciding on 15-minute bars
+`tra init`, with these differences: the structure lead is the core, deciding on 15-minute bars
 with the hour and four hours as context and naming its own stop and target; the confluence matrix,
 the conviction ladder and the targets are live tables rather than commented ones;
 `[execution].mode` is `sandbox`; and the project's README opens with what is still yours before a
@@ -115,10 +115,10 @@ the universe (system: one data pull each, the trigger per instrument, ordered by
   -> trigger             (system: has anything moved? nothing below here runs if not)
   -> briefs (system, each role's own sections only)
   -> readings           (system: your thresholds over macro, on-chain, sentiment series)
-  -> technical analyst   (proposes a direction; with a team, a blind peer must agree and a flow
-                          analyst reads the book, funding and open interest)
+  -> structure lead      (proposes a direction; with a team, a blind confirmer must agree and a
+                          flow specialist reads the book, funding and open interest)
   -> the round trip priced (system)
-  -> the stop and the target (the analyst's levels, held in your [exit] bounds; break-even checked)
+  -> the stop and the target (the lead's levels, held in your [exit] bounds; break-even checked)
   -> validators          (when configured: pro and contra apart, then neutral judges both)
   -> confluence matrix   (system: declared states and votes)   -> whether to trade at all
   -> conviction          (system: the same voices, weighted)    -> how much the desk wants on
@@ -190,7 +190,7 @@ instruments where the mechanism has the best chance now, best first, naming the 
 and citing the figures behind each pick. The system checks every pick: it must be an instrument the system
 admitted, and at least one citation from that instrument's own row must hold, or the pick is
 thrown away. The screener cannot add an instrument, and it says nothing about direction or size;
-the technical analyst decides those later from a fuller brief. A screener that cannot answer leaves
+the structure lead decides those later from a fuller brief. A screener that cannot answer leaves
 the system's order, the move against the spread, in place.
 
 Both orders are kept in `runs/screens/<time>.json` (`code_order` and each candidate's `pick_rank`),
@@ -241,18 +241,23 @@ the cycle, so a reader can tell a forced cycle from a natural one.
 
 ```
 runs/cycles/2026-09-27T14-51-23Z-BTCUSDT/
-  snapshot.json          every value the engine fetched, with source, tier and age
-  inputs.json.gz         the raw inputs: candles on every timeframe, the book levels, funding,
-                         open interest, and the settings the briefs were computed with
-  briefs/technical.json  the figures the analyst was given, computed here, not by the model
-  briefs/cost.json       what a round trip would cost, per component
-  briefs/validator_pro.json   the proposal and the figures a validator was given
-  answers/technical.json what the model answered, as it answered it
-  intents.jsonl          the intent, if the gate admitted one
-  placed.json            what the venue did with it, in venue mode
-  cycle.json             the whole cycle in one file, with a sha256 of every file above
+  snapshot.json                 every value the engine fetched, with source, tier and age
+  inputs.json.gz                the raw inputs: candles on every timeframe, the book levels,
+                                funding, open interest, and the settings the briefs were
+                                computed with
+  briefs/structure_lead.json    the figures the lead was given, computed here, not by the model
+  briefs/cost.json              what a round trip would cost, per component
+  briefs/risk_gate.json         every check the risk gate ran, and why it refused if it did
+  briefs/validator_pro.json     the proposal and the figures a validator was given
+  answers/structure_lead.json   what the model answered, as it answered it
+  intents.jsonl                 the intent, if the gates and the risk gate admitted one
+  placed.json                   what the venue did with it, in venue mode
+  cycle.json                    the whole cycle in one file, with a sha256 of every file above
 runs/cycles/index/2026-09-27.jsonl   one line per cycle that day, with the hash of its cycle.json
 ```
+
+A cycle written before 0.12 names the lead's brief and answer `technical.json`. Everything that
+reads them, `tra runs verify` and the lead's own `previous` reading included, takes either name.
 
 A cycle that refuses writes the same files minus the intent. That is the point: a refusal is a
 result, and it is as readable as a trade.
@@ -265,7 +270,7 @@ to run, and every record can be read with a text editor.
 | Concern | What the desk does |
 |---|---|
 | a crash in the middle of a write | appends end with a newline guard, so a torn line costs only itself; order, position and equity records wait for the disk; whole files are written beside and renamed into place |
-| a brief nobody can check | `inputs.json.gz` keeps what the brief was computed from; `tra runs verify` computes the technical figures again and compares them |
+| a brief nobody can check | `inputs.json.gz` keeps what the brief was computed from; `tra runs verify` computes the lead's figures again and compares them |
 | a record changed after the fact | `cycle.json` holds a sha256 of every file in the cycle, and the day's index line holds the hash of `cycle.json`; `tra runs verify` checks both |
 | a desk that has run for months | the trigger, the targets, the desk limits and the position keeper read the day index, not every directory, so a cycle costs the same on day 300 as on day 1 |
 | disk use | `tra runs prune --keep 90d` says what it would remove; `--yes` removes it, `--archive` zips each month first; the index and the logs are kept, so the desk's memory of its own past does not change |
@@ -276,7 +281,7 @@ read from its directory, so an order it sent is never missing from what the desk
 
 ## Briefs: the model does no arithmetic
 
-The technical brief carries returns over several horizons, the close as a z-score of its window,
+The structure brief carries returns over several horizons, the close as a z-score of its window,
 the distance from VWAP, the volume and range ratios, where the close sits in the window's range,
 the current spread, the funding rate that stands, and the age of the candles it was built from.
 The model receives those numbers and answers with a target, a confidence, a horizon and a
@@ -376,7 +381,7 @@ The fade has been held to the same standard as the trend setups since 0.6.4. Bef
 `range_reversion` was refused only in a trend, so in a mixed market it was the one regime-bound
 setup still allowed.
 
-**The analyst picks the setup; the mechanism does not.** In `tra run` the technical analyst reads
+**The analyst picks the setup; the mechanism does not.** In `tra run` the structure lead reads
 the regime and the higher timeframes first and names the setup the market supports. A mixed market
 takes `range_breakout`, `momentum_exhaustion`, `volatility_expansion` or flat.
 `[agents].mechanism` is your thesis: the setups you favour when the market offers them. It never
@@ -387,9 +392,9 @@ trade a single idea. The research core in `tra backtest` and `tra agent session`
 trades one registered mechanism, by design.
 
 The macro reading's regime is a different thing: risk-on or risk-off is about the world outside
-the chart, and it can disagree with what price is doing. Both are kept, apart: the technical analyst
+the chart, and it can disagree with what price is doing. Both are kept, apart: the structure lead
 does not see the macro state, and conviction weighs the macro reading's graded score against the
-technical analyst's proposal after it has answered.
+structure lead's proposal after it has answered.
 
 ## Who is asked, and what is read
 
@@ -397,9 +402,9 @@ One model is asked. Everything else beside the market is read by code.
 
 | Step | Reads | Gives | When |
 |---|---|---|---|
-| `technical_analyst` (a model) | the closed candles of the snapshot, the spread, the funding rate, the regime on each timeframe, the book imbalance, the open interest change; none of the readings | a target, a named setup, a confidence, a horizon, a reason, and the figures it read | every cycle; the role that proposes |
-| `technical_peer` (a model, optional) | the technical analyst's brief, blind to its answer | the same, independently; the side must agree | when `[agents].team` names it |
-| `flow_analyst` (a model, optional) | the spread, the book imbalance, funding and open interest, which then leave the analyst's brief | a side and a confidence | when `[agents].team` names it |
+| `structure_lead` (a model) | the closed candles of the snapshot, the spread, the funding rate, the regime on each timeframe, the book imbalance, the open interest change; none of the readings | a target, a named setup, a confidence, a horizon, a reason, and the figures it read | every cycle; the role that proposes |
+| `blind_confirmer` (a model, optional) | the structure lead's brief, blind to its answer | the same, independently; the side must agree | when `[agents].team` names it |
+| `flow_specialist` (a model, optional) | the spread, the book imbalance, funding and open interest, which then leave the analyst's brief | a side and a confidence | when `[agents].team` names it |
 | `macro` (code) | macro series and the dated text of `news.toml` | the declared state of your thresholds and its graded score | when `sources/macro.toml` or `sources/news.toml` declares something, or `--macro` / `--news` names a file |
 | `onchain` (code) | chain figures and derivative figures, read side by side | the declared state and its graded score | when `sources/onchain.toml` or `sources/derivatives.toml` declares something, or `--onchain` / `--derivatives` |
 | `sentiment` (code) | dated scores, plus the same dated text as notes | the declared state and its graded score; `undeclared` when nothing crosses a line | when `sources/sentiment.toml` declares something, or `--sentiment` |
@@ -431,7 +436,7 @@ my-run/
 
 A vendor is a line inside one of those files, so replacing one with another is an edit in one place
 and nothing else in the project moves. `tra init` writes all five as forms with every entry
-commented out, and a form declares nothing: an untouched project asks only the technical analyst
+commented out, and a form declares nothing: an untouched project asks only the structure lead
 and reads nothing else. Fill one in and its reading joins the roster on the next run. Two classes
 can feed one reading, which is why the on-chain reading takes chain and derivative figures
 together.
@@ -513,7 +518,7 @@ sentence carry no authority and leave a mark when it tries to.
 
 The same check looks for a rule a role made up. No role is told the desk's rules, so an answer that
 says "the desk requires" or names a desk minimum is stating one that does not exist. That is
-recorded for every role, the technical analyst included, and changes nothing: the rules that apply
+recorded for every role, the structure lead included, and changes nothing: the rules that apply
 are the ones in your configuration, run by code after the answer.
 
 ## The confluence matrix
@@ -619,7 +624,7 @@ strong each side is, so every voice counts as strong as it actually is.
 
 ```toml
 [conviction]
-weights = { technical_analyst = 2.0, onchain = 1.5, macro = 1.0, sentiment = 0.5 }
+weights = { structure_lead = 2.0, onchain = 1.5, macro = 1.0, sentiment = 0.5 }
 validator_weight = 1.0
 min_score = 0.4                  # below this the desk does not trade
 max_leverage = 3.0               # notional against [run].equity; a ceiling, never a target
@@ -865,7 +870,7 @@ move does to the position.
 `[exit].mode` picks one of three ways. The analyst proposes, the system bounds, and you set the bounds.
 
 **Analyst** is what `tra init --agent` writes, and what an agent desk uses when `[exit]` is left
-out. The technical analyst names two prices with its decision: `stop_price`, where its reading is
+out. The structure lead names two prices with its decision: `stop_price`, where its reading is
 wrong (beyond the swing or the range edge the setup leans on), and `target_price`, where the
 mechanism is done. It is handed the window's `range_high`, `range_low` and `atr` to name them
 from. The system then:
@@ -1029,7 +1034,7 @@ cycle 2026-09-27T14-51-23Z BTCUSDT: 8.46s of agents
   funding        ccxt:bybit         age 0.764s
   ohlcv          ccxt:bybit         age 35.705s
   orderbook      ccxt:bybit         age 5.303s
-technical: long at 0.68 over 3 bars: short-horizon reversion of the close against its window
+lead:      long at 0.68 over 3 bars: short-horizon reversion of the close against its window
            triggered by a zscore of -2.197, vwap_gap_bps of -24.21 and volume_ratio 2.392
 cost: 13.48 bps round trip, 2.00 of it estimated
 gate: 25.0000 bps claimed clears 13.4800 bps cost plus 0.0000 bps margin
@@ -1096,7 +1101,7 @@ step      | state    | detail
 ----------+----------+---------------------
 data      | done     | 4 kind(s) (1.2s)
 trigger   | done     | moved 41.20 bps
-technical | done     | 5.3s
+structure_lead | done     | 5.3s
 macro     | running  |
 cost      | pending  |
 risk      | pending  |
@@ -1248,12 +1253,12 @@ open two.
 | Refusal | What it means |
 |---|---|
 | `data <kind>: ...` | a chain was exhausted; see [The data gate](/opensource/data), and give that kind a longer `ttl` or another source |
-| `no technical brief: ...` | there were not enough closed candles in the snapshot to compute features |
+| `no structure brief: ...` | there were not enough closed candles in the snapshot to compute features |
 | `trigger: the mid has moved ...` | nothing happened worth paying a model to look at; no tokens were spent |
-| `technical: flat` | the analyst saw nothing worth pricing |
-| `technical: ... with no setup named` | a direction nobody could name the shape of is not a trade |
-| `technical: not one figure ... survived` | the direction could not point at a figure in its own brief |
-| `technical: confidence ... below` | the answer was under `[agents].min_confidence` |
+| `structure_lead: flat` | the analyst saw nothing worth pricing |
+| `structure_lead: ... with no setup named` | a direction nobody could name the shape of is not a trade |
+| `structure_lead: not one figure ... survived` | the direction could not point at a figure in its own brief |
+| `structure_lead: confidence ... below` | the answer was under `[agents].min_confidence` |
 | `exit: ... closed candle(s); an average true range over ... needs ...` | volatility mode could not measure a range; raise `[agents].lookback_bars` or lower `[exit].atr_bars` |
 | `exit: the take profit is ... a winner would lose money` | the take profit sits inside the round trip cost |
 | `exit: ...% of trades like this would have to reach the take profit ...` | the break even is above `[targets].max_break_even_win_rate` |

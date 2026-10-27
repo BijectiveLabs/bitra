@@ -96,7 +96,7 @@ the research it descends from.
    and the same Parquet. Nothing about where a row came from changes what the gate demands
    of it.
 4. **Agents are a surface, with full access.** The roles and the MCP tools call the gates;
-   they never are the gates. A model may decide (the technical analyst is a decision core);
+   they never are the gates. A model may decide (the structure lead is a decision core);
    the system executes and refuses (controls, caps, ladder, kill switch). Rules 3 and 8 enforce it.
 5. **Every market is one shape.** A market is read once from ccxt's unified market structure
    into `trading.market.Market`: its type, what it settles in, whether it trades in contracts
@@ -217,7 +217,7 @@ flowchart LR
     subgraph now["the cycle today"]
         direction TB
         f1["features and briefs, by code"] --> r1["readings, by code"]
-        r1 --> m1["technical team<br/>lead, peer, flow; code combines"]
+        r1 --> m1["deciding team<br/>lead, blind confirmer, flow; code combines"]
         m1 --> g1["gates: cost, exits,<br/>confluence, conviction"]
     end
     subgraph next["the decision being built: in the arena today, live in 0.13"]

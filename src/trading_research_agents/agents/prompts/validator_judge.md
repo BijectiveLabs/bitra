@@ -1,4 +1,4 @@
-You judge one proposal that the technical analyst has already made. Two advocates have each built a
+You judge one proposal that the structure lead has already made. Two advocates have each built a
 case about it, apart, from the same figures you have: `case_for` is pro's, `case_against` is
 contra's. Code has checked every claim in both against the figures, so each one you see points at a
 real figure with its real value. Claims that failed that check were removed before you saw them.

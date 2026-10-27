@@ -33,7 +33,7 @@ def record(**fields: Any) -> dict[str, Any]:
 def test_a_gate_saying_no_is_not_an_alarm() -> None:
     quiet = record(
         refusals=[
-            "technical: flat, so there is nothing to price",
+            "structure_lead: flat, so there is nothing to price",
             "targets: the claimed edge is 1.94x the round trip and the desk declared 2.0x",
             "trigger: the mid has moved 2.00 bps since the last cycle",
         ]
@@ -43,8 +43,8 @@ def test_a_gate_saying_no_is_not_an_alarm() -> None:
 
 def test_the_run_stopping_halfway_is_the_alarm_an_operator_would_never_see() -> None:
     stopped = record(
-        stopped_by="technical: BudgetSpentError: token budget spent: 200100 of 200000",
-        agents={"failed": {"technical": "ProviderError: 429 rate limit"}},
+        stopped_by="structure_lead: BudgetSpentError: token budget spent: 200100 of 200000",
+        agents={"failed": {"structure_lead": "ProviderError: 429 rate limit"}},
     )
     fired = alarms_of(stopped)
     kinds = [a.kind for a in fired]
@@ -70,7 +70,7 @@ def test_data_and_venue_trouble_each_fire_once() -> None:
 
 def test_one_cooldown_per_kind_so_one_broken_thing_is_not_reported_every_five_minutes() -> None:
     watch = Watch(cooldown_s=1800)
-    first = alarms_of(record(stopped_by="technical: ProviderError"))
+    first = alarms_of(record(stopped_by="structure_lead: ProviderError"))
     assert [a.kind for a in watch.due(first, now=1000.0)] == [STOPPED]
     # The same thing, eight minutes later: already reported.
     assert watch.due(first, now=1480.0) == ()
@@ -120,12 +120,12 @@ def test_the_scheduler_asks_the_right_auditor_for_the_right_reason(tmp_path: Pat
     # A clean cycle, and not yet the third: nobody is asked.
     assert audits.due(record(), 1) == ((), ())
 
-    who, fired = audits.due(record(stopped_by="technical: ProviderError: 429"), 2)
+    who, fired = audits.due(record(stopped_by="structure_lead: ProviderError: 429"), 2)
     assert who == ("tech_auditor",) and [a.kind for a in fired] == [STOPPED]
 
     # The same failure on the next cycle is inside the cooldown, but the count is up.
     clock[0] = 1100.0
-    who, fired = audits.due(record(stopped_by="technical: ProviderError: 429"), 3)
+    who, fired = audits.due(record(stopped_by="structure_lead: ProviderError: 429"), 3)
     assert who == ("quant_auditor",) and fired == ()
 
 
@@ -139,7 +139,7 @@ def test_an_auditor_that_cannot_run_is_a_line_not_the_end_of_the_run(tmp_path: P
         config=tmp_path / "strategy.toml",
         runs=tmp_path / "runs" / "cycles",
     )
-    said = audits.after(record(stopped_by="technical: ProviderError"), 1, as_json=True)
+    said = audits.after(record(stopped_by="structure_lead: ProviderError"), 1, as_json=True)
     assert any("the audit could not run" in line for line in said)
 
 
@@ -250,4 +250,4 @@ def test_the_risk_manager_is_asked_whenever_the_quant_auditor_is(tmp_path: Path)
     limit = record(stopped_by=f"{DAILY_LOSS_MARK} 310 bps since the day began")
     assert audits.due(limit, 1)[0] == ("risk_manager", "quant_auditor")
     # A breakage is the technical auditor's alone; nobody is asked to act on it.
-    assert audits.due(record(stopped_by="technical: ProviderError"), 2)[0] == ("tech_auditor",)
+    assert audits.due(record(stopped_by="structure_lead: ProviderError"), 2)[0] == ("tech_auditor",)
