@@ -90,7 +90,8 @@ def _venue_hand(
 ) -> Any:
     """What venue mode sends with, built only after everything standing in the way is cleared."""
     from trading_research_agents.execution.mandate import blocking
-    from trading_research_agents.trading.dispatch import credentials_for, hand_for
+    from trading_research_agents.trading.dispatch import hand_for
+    from trading_research_agents.trading.hand_state import credentials_for
 
     mandate = cfg.execution
     env = _environment(getattr(args, "env_file", None))

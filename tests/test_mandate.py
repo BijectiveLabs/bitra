@@ -25,7 +25,8 @@ from trading_research_agents.execution.mandate import (
     digest,
     signed_in,
 )
-from trading_research_agents.trading.dispatch import DispatchError, VenueHand, hand_for
+from trading_research_agents.trading.dispatch import VenueHand, hand_for
+from trading_research_agents.trading.hand_state import DispatchError
 
 # What a cycle hands the venue: the size the conviction rule chose, the touch it priced on, and the
 # exits code computed from [exit]. Everything the hand needs, and nothing a model wrote.
@@ -632,7 +633,7 @@ def test_a_venue_that_will_not_say_its_contract_size_is_not_guessed() -> None:
 
 
 def test_the_environment_orders_go_to_is_declared_where_orders_are() -> None:
-    from trading_research_agents.trading.config import _mandate
+    from trading_research_agents.trading.config_venue import _mandate
 
     raw = {"execution": {"mode": "venue", "venue": "okx", "environment": "testnet"}}
     assert _mandate(raw, "okx/taker-taker").environment == "testnet"
@@ -727,7 +728,7 @@ def test_a_venue_that_raises_for_no_position_is_read_as_flat() -> None:
 
 
 def test_the_client_order_id_is_letters_and_digits_within_thirty_two() -> None:
-    from trading_research_agents.trading.dispatch import _client_id
+    from trading_research_agents.trading.hand_state import _client_id
 
     made = _client_id({"at": "2026-10-07T16-30-47Z-1000PEPEUSDT", "instrument": "1000PEPEUSDT"})
     assert made == "tra20261007T163047Z1000PEPEUSDT"[:32] and made.isalnum() and len(made) <= 32
@@ -1023,3 +1024,18 @@ def test_a_decision_older_than_its_bound_is_not_sent_and_a_fresh_one_is_measured
     assert placed["decision_age_s"] is not None and placed["decision_age_s"] < 60
     # Filled at 100000.5 against a mid of 100000: half a basis point paid on a buy.
     assert placed["slippage_bps"] == "0.05"
+
+
+def test_a_taker_order_with_no_book_to_protect_it_is_not_sent() -> None:
+    venue = FakeExchange()
+    hand = VenueHand(
+        venue="bybit",
+        symbol="BTC/USDT:USDT",
+        max_notional=Decimal(2000),
+        keys=("BYBIT_API_KEY", "BYBIT_API_SECRET"),
+        client=venue,
+    )
+    refused = hand({k: v for k, v in LONG.items() if k not in ("bid", "ask")})
+
+    assert refused["sent"] is False and "no book to protect" in refused["refused"]
+    assert venue.orders == []

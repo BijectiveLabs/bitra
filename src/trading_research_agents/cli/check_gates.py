@@ -41,203 +41,16 @@ def _gate_lines(
     A gate that can never pass is worth saying out loud here, before a cycle spends a token finding
     out: a required role nobody asks, or a vote count nobody can cast.
     """
-    good: list[str] = []
     bad: list[str] = []
-    matrix = cfg.confluence
-    stances = () if cfg.agents is None else cfg.agents.validators
-    if stances:
-        from trading_research_agents.agents.cycle import judge_mode
-
-        weight = cfg.conviction.validator_weight
-        how = (
-            "; the advocates build their cases apart and neutral judges them, its verdict the one "
-            "that counts; with a case on one side only, code decides without asking it"
-            if judge_mode(stances)
-            else ""
-        )
-        good.append(
-            f"validators: {', '.join(stances)}; asked once there is a proposal and the system "
-            "has not already refused it"
-            + how
-            + (f"; each counted vote moves conviction by {weight}" if weight > 0 else "")
-        )
-    if matrix.idle:
-        good.append("confluence: not declared; the context is recorded but gates nothing")
-    else:
-        good.append(
-            f"confluence: needs {', '.join(matrix.required) or 'no role'}; "
-            f"long {list(matrix.long_states)}, short {list(matrix.short_states)}; "
-            f"a missing state means {matrix.on_missing}"
-        )
-        absent = sorted(set(matrix.required) - set(roster))
-        if absent:
-            bad.append(
-                f"[confluence].required names {absent}, which the roster does not read; "
-                "declare their sources or the cycle refuses every time"
-            )
-        if matrix.min_support > len(stances):
-            bad.append(
-                f"[confluence].min_support is {matrix.min_support} but "
-                f"{len(stances)} validator(s) are asked; no cycle can clear it"
-            )
-    from trading_research_agents.execution.mandate import blocking
-
-    mandate = cfg.execution
-    if entry_role in ("maker", "taker"):
-        crosses = "crosses the book at once" if entry_role == "taker" else "rests on the book"
-        good.append(
-            f"channel: {cfg.run.venue_key} enters as a {entry_role}, priced at that fee; "
-            f"an order {crosses}"
-        )
-    if not mandate.places_orders:
-        good.append(
-            f"execution: {mandate.mode}; nothing leaves the machine"
-            if mandate.mode == "sandbox"
-            else "execution: signals; intents are written for your own executor"
-        )
-    else:
-        from trading_research_agents.trading.dispatch import credentials_for, key_hint
-
-        keys = tuple(credentials_for(mandate.venue).values())
-        stops = blocking(
-            mandate,
-            project=project,
-            tier=tier,
-            missing_keys=[k for k in keys if not env.get(k)],
-            practice=_declared_environment(cfg) in ("demo", "testnet"),
-        )
-        if stops:
-            bad.extend(f"execution: {stop}" for stop in stops)
-            hint = key_hint([k for k in keys if not env.get(k)], keys, env)
-            if hint:
-                bad.append(f"execution: {hint}")
-        else:
-            good.append(
-                f"execution: venue {mandate.venue}, signed by {mandate.acknowledged_by} on "
-                f"{mandate.acknowledged_on}, at most {mandate.max_notional} per order"
-            )
-            # Two declarations that only meet at the last gate, after a cycle has been paid for.
-            # The price where they stop agreeing is arithmetic, and it can be said here instead.
-            if mandate.max_notional is not None:
-                _size_against_cap(cfg, mandate.max_notional, good, bad)
-            good.extend(_capital_notes(cfg))
-            if mandate.exits == "attached":
-                good.append(
-                    "execution: the stop and the take profit go to the venue with the entry, so a "
-                    "fill is never left unattended"
-                )
-            elif mandate.exits == "separate":
-                good.append(
-                    "execution: the stop and the take profit go to the venue as reduce-only orders "
-                    "right after the fill; a fill they cannot be placed for is closed at once"
-                )
-            else:
-                bad.append(
-                    '[execution].exits is "none": a fill would sit at the venue with no stop and '
-                    "no take profit, and only you would be carrying them"
-                )
-            if entry_role == "maker":
-                good.append(
-                    "execution: an order that has not filled is cancelled after "
-                    f"{mandate.limit_timeout_s}s; nothing is chased across the spread"
-                )
-            elif entry_role == "undeclared":
-                bad.append(
-                    f"channel {cfg.run.venue_key!r} does not say whether entry is maker or taker; "
-                    "the fee you priced depends on it"
-                )
-    if cfg.agents is not None and cfg.agents.fallback:
-        unknown = []
-        for name in cfg.agents.fallback:
-            named, _ = parse_link(name)
-            if named not in providers():
-                unknown.append(name)
-        if unknown:
-            bad.append(f"[agents].fallback names {unknown}, which no provider is registered for")
-        else:
-            good.append(
-                f"models: fallback {', '.join(cfg.agents.fallback)}; "
-                "tried in order when a provider cannot be reached"
-            )
+    good = _validator_notes(cfg)
+    good.extend(_confluence_notes(cfg, roster, bad))
+    good.extend(_execution_notes(cfg, project, tier, env, entry_role, bad))
+    good.extend(_fallback_notes(cfg, bad))
     if cfg.agents is not None:
         good.extend(_load_notes(cfg.agents, roster, screener=cfg.universe.screener))
     good.append(_regime_note(cfg))
-    rule = cfg.conviction
-    if rule.idle:
-        good.append("conviction: not declared; every admitted cycle trades the base size")
-    else:
-        rungs = ", ".join(f"{t.at_least}+ -> {t.size_multiple}x" for t in rule.ladder)
-        good.append(
-            f"conviction: floor {rule.min_score}; ladder {rungs or 'none'}"
-            + (
-                f"; notional at most {rule.max_leverage}x the equity (a cap on exposure, not the "
-                "venue's leverage, which is [execution].leverage)"
-                if rule.max_leverage
-                else ""
-            )
-        )
-        good.append(
-            "conviction: every voice counts as strong as it is - the deciding analyst by its "
-            "confidence, a reading by how far its series sit past your lines - and the "
-            "score is their net over what they expressed; opposition shrinks the size, and only "
-            "opposition that outweighs the case refuses the trade"
-        )
-        if not rule.ladder:
-            bad.append(
-                "[conviction] has no ladder, so no score can size a trade; "
-                "declare [[conviction.ladder]] rungs or drop the table"
-            )
-        above = [t for t in rule.ladder if t.size_multiple > 1]
-        if above:
-            good.append(
-                f"conviction: {len(above)} rung(s) above 1x let agreement add size beyond the "
-                "base; the risk per trade still caps the loss at the stop, and `tra hindsight` "
-                "says whether the score has separated good trades from bad before you rely on it"
-            )
-        unweighted = sorted(set(roster) - set(rule.weights))
-        if unweighted:
-            good.append(
-                f"conviction: {unweighted} is on the roster but carries no weight; "
-                "it explains without moving the size"
-            )
-    asked = cfg.agents.validators if cfg.agents is not None else ()
-    gated = cfg.confluence.min_support > 0 or cfg.confluence.max_opposition is not None
-    if asked and not gated and rule.validator_weight <= 0:
-        bad.append(
-            f"validators: {', '.join(asked)} are asked every cycle and their votes move nothing; "
-            "give them [conviction].validator_weight, or [confluence].min_support / "
-            "max_opposition, or stop asking them"
-        )
-    targets = cfg.targets
-    if targets.idle:
-        good.append(
-            "targets: not declared; only the cost gate stands between a claim and an intent"
-        )
-    else:
-        said = []
-        if targets.min_net_bps is not None:
-            said.append(f"at least {targets.min_net_bps} bps net")
-        if targets.min_edge_multiple is not None:
-            said.append(f"at least {targets.min_edge_multiple}x the round trip")
-        if targets.min_reward_risk is not None:
-            said.append(f"reward-to-risk {targets.min_reward_risk}")
-        if targets.max_research_bps is not None:
-            said.append(f"at most {targets.max_research_bps} bps of notional in model calls")
-        if targets.max_round_trips_per_day is not None:
-            said.append(f"at most {targets.max_round_trips_per_day} round trips a day")
-        good.append("targets: " + "; ".join(said))
-    if targets.min_edge_multiple is None:
-        good.append(
-            "targets: no edge multiple declared, so a trade worth two basis points more than it "
-            "costs can still pass; [targets].min_edge_multiple is what stops that"
-        )
-    priced = cfg.agents is not None and any(i > 0 or o > 0 for i, o in cfg.agents.pricing.values())
-    if targets.max_research_bps is not None and not priced:
-        bad.append(
-            "[targets].max_research_bps is declared and no model price is, so the research cost "
-            "reads as zero whatever the models spend; put what you were quoted in "
-            "[agents.pricing.<model>] or drop the target"
-        )
+    good.extend(_conviction_notes(cfg, roster, bad))
+    good.extend(_target_notes(cfg, bad))
     good.extend(_exit_notes(cfg, bad))
     good.extend(_risk_notes(cfg, bad))
     good.extend(_trigger_notes(cfg))
@@ -252,6 +65,235 @@ def _gate_lines(
         "provider and the venue itself, sends no prompt and places no order"
     )
     return good, bad
+
+
+def _validator_notes(cfg: Any) -> list[str]:
+    stances = () if cfg.agents is None else cfg.agents.validators
+    if not stances:
+        return []
+    from trading_research_agents.agents.cycle import judge_mode
+
+    weight = cfg.conviction.validator_weight
+    how = (
+        "; the advocates build their cases apart and neutral judges them, its verdict the one "
+        "that counts; with a case on one side only, code decides without asking it"
+        if judge_mode(stances)
+        else ""
+    )
+    return [
+        f"validators: {', '.join(stances)}; asked once there is a proposal and the system "
+        "has not already refused it"
+        + how
+        + (f"; each counted vote moves conviction by {weight}" if weight > 0 else "")
+    ]
+
+
+def _confluence_notes(cfg: Any, roster: tuple[str, ...], bad: list[str]) -> list[str]:
+    matrix = cfg.confluence
+    if matrix.idle:
+        return ["confluence: not declared; the context is recorded but gates nothing"]
+    stances = () if cfg.agents is None else cfg.agents.validators
+    absent = sorted(set(matrix.required) - set(roster))
+    if absent:
+        bad.append(
+            f"[confluence].required names {absent}, which the roster does not read; "
+            "declare their sources or the cycle refuses every time"
+        )
+    if matrix.min_support > len(stances):
+        bad.append(
+            f"[confluence].min_support is {matrix.min_support} but "
+            f"{len(stances)} validator(s) are asked; no cycle can clear it"
+        )
+    return [
+        f"confluence: needs {', '.join(matrix.required) or 'no role'}; "
+        f"long {list(matrix.long_states)}, short {list(matrix.short_states)}; "
+        f"a missing state means {matrix.on_missing}"
+    ]
+
+
+def _execution_notes(
+    cfg: Any,
+    project: Path,
+    tier: str,
+    env: Mapping[str, str],
+    entry_role: str,
+    bad: list[str],
+) -> list[str]:
+    from trading_research_agents.execution.mandate import blocking
+    from trading_research_agents.trading.hand_state import credentials_for, key_hint
+
+    good: list[str] = []
+    mandate = cfg.execution
+    if entry_role in ("maker", "taker"):
+        crosses = "crosses the book at once" if entry_role == "taker" else "rests on the book"
+        good.append(
+            f"channel: {cfg.run.venue_key} enters as a {entry_role}, priced at that fee; "
+            f"an order {crosses}"
+        )
+    if not mandate.places_orders:
+        good.append(
+            f"execution: {mandate.mode}; nothing leaves the machine"
+            if mandate.mode == "sandbox"
+            else "execution: signals; intents are written for your own executor"
+        )
+        return good
+    keys = tuple(credentials_for(mandate.venue).values())
+    stops = blocking(
+        mandate,
+        project=project,
+        tier=tier,
+        missing_keys=[k for k in keys if not env.get(k)],
+        practice=_declared_environment(cfg) in ("demo", "testnet"),
+    )
+    if not stops:
+        return good + _venue_notes(cfg, entry_role, bad)
+    bad.extend(f"execution: {stop}" for stop in stops)
+    hint = key_hint([k for k in keys if not env.get(k)], keys, env)
+    if hint:
+        bad.append(f"execution: {hint}")
+    return good
+
+
+def _venue_notes(cfg: Any, entry_role: str, bad: list[str]) -> list[str]:
+    """What a signed venue desk will do with an order, once nothing stands in its way."""
+    mandate = cfg.execution
+    good = [
+        f"execution: venue {mandate.venue}, signed by {mandate.acknowledged_by} on "
+        f"{mandate.acknowledged_on}, at most {mandate.max_notional} per order"
+    ]
+    # Two declarations that only meet at the last gate, after a cycle has been paid for. The price
+    # where they stop agreeing is arithmetic, and it can be said here instead.
+    if mandate.max_notional is not None:
+        _size_against_cap(cfg, mandate.max_notional, good, bad)
+    good.extend(_capital_notes(cfg))
+    if mandate.exits == "attached":
+        good.append(
+            "execution: the stop and the take profit go to the venue with the entry, so a "
+            "fill is never left unattended"
+        )
+    elif mandate.exits == "separate":
+        good.append(
+            "execution: the stop and the take profit go to the venue as reduce-only orders "
+            "right after the fill; a fill they cannot be placed for is closed at once"
+        )
+    else:
+        bad.append(
+            '[execution].exits is "none": a fill would sit at the venue with no stop and '
+            "no take profit, and only you would be carrying them"
+        )
+    if entry_role == "maker":
+        good.append(
+            "execution: an order that has not filled is cancelled after "
+            f"{mandate.limit_timeout_s}s; nothing is chased across the spread"
+        )
+    elif entry_role == "undeclared":
+        bad.append(
+            f"channel {cfg.run.venue_key!r} does not say whether entry is maker or taker; "
+            "the fee you priced depends on it"
+        )
+    return good
+
+
+def _fallback_notes(cfg: Any, bad: list[str]) -> list[str]:
+    if cfg.agents is None or not cfg.agents.fallback:
+        return []
+    unknown = [name for name in cfg.agents.fallback if parse_link(name)[0] not in providers()]
+    if unknown:
+        bad.append(f"[agents].fallback names {unknown}, which no provider is registered for")
+        return []
+    return [
+        f"models: fallback {', '.join(cfg.agents.fallback)}; "
+        "tried in order when a provider cannot be reached"
+    ]
+
+
+def _conviction_notes(cfg: Any, roster: tuple[str, ...], bad: list[str]) -> list[str]:
+    rule = cfg.conviction
+    if rule.idle:
+        good = ["conviction: not declared; every admitted cycle trades the base size"]
+    else:
+        good = _conviction_rule(rule, roster, bad)
+    asked = cfg.agents.validators if cfg.agents is not None else ()
+    gated = cfg.confluence.min_support > 0 or cfg.confluence.max_opposition is not None
+    if asked and not gated and rule.validator_weight <= 0:
+        bad.append(
+            f"validators: {', '.join(asked)} are asked every cycle and their votes move nothing; "
+            "give them [conviction].validator_weight, or [confluence].min_support / "
+            "max_opposition, or stop asking them"
+        )
+    return good
+
+
+def _conviction_rule(rule: Any, roster: tuple[str, ...], bad: list[str]) -> list[str]:
+    rungs = ", ".join(f"{t.at_least}+ -> {t.size_multiple}x" for t in rule.ladder)
+    good = [
+        f"conviction: floor {rule.min_score}; ladder {rungs or 'none'}"
+        + (
+            f"; notional at most {rule.max_leverage}x the equity (a cap on exposure, not the "
+            "venue's leverage, which is [execution].leverage)"
+            if rule.max_leverage
+            else ""
+        ),
+        "conviction: every voice counts as strong as it is - the deciding analyst by its "
+        "confidence, a reading by how far its series sit past your lines - and the "
+        "score is their net over what they expressed; opposition shrinks the size, and only "
+        "opposition that outweighs the case refuses the trade",
+    ]
+    if not rule.ladder:
+        bad.append(
+            "[conviction] has no ladder, so no score can size a trade; "
+            "declare [[conviction.ladder]] rungs or drop the table"
+        )
+    above = [t for t in rule.ladder if t.size_multiple > 1]
+    if above:
+        good.append(
+            f"conviction: {len(above)} rung(s) above 1x let agreement add size beyond the "
+            "base; the risk per trade still caps the loss at the stop, and `tra hindsight` "
+            "says whether the score has separated good trades from bad before you rely on it"
+        )
+    unweighted = sorted(set(roster) - set(rule.weights))
+    if unweighted:
+        good.append(
+            f"conviction: {unweighted} is on the roster but carries no weight; "
+            "it explains without moving the size"
+        )
+    return good
+
+
+def _target_notes(cfg: Any, bad: list[str]) -> list[str]:
+    targets = cfg.targets
+    if targets.idle:
+        good = ["targets: not declared; only the cost gate stands between a claim and an intent"]
+    else:
+        good = ["targets: " + "; ".join(_targets_said(targets))]
+    if targets.min_edge_multiple is None:
+        good.append(
+            "targets: no edge multiple declared, so a trade worth two basis points more than it "
+            "costs can still pass; [targets].min_edge_multiple is what stops that"
+        )
+    priced = cfg.agents is not None and any(i > 0 or o > 0 for i, o in cfg.agents.pricing.values())
+    if targets.max_research_bps is not None and not priced:
+        bad.append(
+            "[targets].max_research_bps is declared and no model price is, so the research cost "
+            "reads as zero whatever the models spend; put what you were quoted in "
+            "[agents.pricing.<model>] or drop the target"
+        )
+    return good
+
+
+def _targets_said(targets: Any) -> list[str]:
+    said = []
+    if targets.min_net_bps is not None:
+        said.append(f"at least {targets.min_net_bps} bps net")
+    if targets.min_edge_multiple is not None:
+        said.append(f"at least {targets.min_edge_multiple}x the round trip")
+    if targets.min_reward_risk is not None:
+        said.append(f"reward-to-risk {targets.min_reward_risk}")
+    if targets.max_research_bps is not None:
+        said.append(f"at most {targets.max_research_bps} bps of notional in model calls")
+    if targets.max_round_trips_per_day is not None:
+        said.append(f"at most {targets.max_round_trips_per_day} round trips a day")
+    return said
 
 
 def _limit_line(cfg: Any) -> str:

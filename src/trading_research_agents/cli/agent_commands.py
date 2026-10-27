@@ -39,7 +39,8 @@ from trading_research_agents.trading import (
 
 
 def agent_session(args: argparse.Namespace) -> int:
-    from trading_research_agents.agents.session import ScreenSettings, SessionConfig, run_session
+    from trading_research_agents.agents.session import ScreenSettings, SessionConfig
+    from trading_research_agents.agents.session_run import run_session
     from trading_research_agents.llm.usage import (
         BudgetLimits,
         MeteredCompleter,

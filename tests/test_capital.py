@@ -20,7 +20,8 @@ from trading_research_agents.trading.capital import (
     read_account,
     sizing_equity,
 )
-from trading_research_agents.trading.dispatch import OrderRate, VenueHand
+from trading_research_agents.trading.dispatch import VenueHand
+from trading_research_agents.trading.hand_state import OrderRate
 from trading_research_agents.trading.positions import ROUND_TRIPS, Keeper, finished_orders
 
 LONG: dict[str, Any] = {
@@ -613,7 +614,7 @@ def test_order_status_is_found_in_the_lists_when_no_single_read_exists() -> None
 
 
 def test_every_credential_a_venue_signs_with_is_asked_for_by_name() -> None:
-    from trading_research_agents.trading.dispatch import credentials_for
+    from trading_research_agents.trading.hand_state import credentials_for
 
     class Orderly:
         requiredCredentials = {"apiKey": True, "secret": True, "accountId": True}  # noqa: N815

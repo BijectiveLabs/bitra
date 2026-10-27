@@ -9,7 +9,8 @@ from typing import Any
 
 import pytest
 
-from trading_research_agents.agents.session import SessionConfig, SessionError, run_session
+from trading_research_agents.agents.session import SessionConfig, SessionError
+from trading_research_agents.agents.session_run import run_session
 from trading_research_agents.data import Side, Trade
 from trading_research_agents.envelope import Envelope, load_envelope
 from trading_research_agents.llm import FakeCompleter

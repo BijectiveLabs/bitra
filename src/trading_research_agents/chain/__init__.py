@@ -29,17 +29,9 @@ from trading_research_agents.chain.preregistration import (
 )
 from trading_research_agents.chain.requirements import Requirements, check_requirements
 from trading_research_agents.chain.seal import EraLeakageError, Seal, SealError, research_only
-from trading_research_agents.chain.validation import (
-    Decision,
-    Interval,
-    NullMode,
-    NullReport,
-    TradeRecord,
-    Validation,
-    ValidationError,
-    read_trades,
-    validate,
-)
+from trading_research_agents.chain.trade_record import TradeRecord, ValidationError
+from trading_research_agents.chain.validation import Decision, Validation, read_trades, validate
+from trading_research_agents.chain.validation_stats import Interval, NullMode, NullReport
 
 __all__ = [
     "COST_TERMS",

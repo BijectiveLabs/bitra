@@ -47,7 +47,7 @@ from trading_research_agents.trading import (
 )
 from trading_research_agents.trading import run as run_trading
 from trading_research_agents.trading.canary import CanaryGuard
-from trading_research_agents.trading.config import load_funding
+from trading_research_agents.trading.config_venue import load_funding
 from trading_research_agents.trading.feeds import live_feed
 from trading_research_agents.trading.venues import (
     LiveVenueSettings,

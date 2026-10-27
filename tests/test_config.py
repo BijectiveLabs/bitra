@@ -396,7 +396,7 @@ def test_the_exit_fractions_read_under_their_names_and_the_old_ones(tmp_path: Pa
 
 
 def test_a_setting_that_no_longer_does_anything_is_read_and_named_by_check() -> None:
-    from trading_research_agents.trading.config import renamed_in
+    from trading_research_agents.trading.config_agents import renamed_in
 
     desk = agent_raw(
         agents={

@@ -29,16 +29,15 @@ from trading_research_agents.chain import (
 )
 from trading_research_agents.chain.requirements import to_entry as requirements_entry
 from trading_research_agents.chain.seal import day_end_ns, day_start_ns, era_of
-from trading_research_agents.chain.validation import (
-    NetTrade,
+from trading_research_agents.chain.trade_record import NetTrade
+from trading_research_agents.chain.validation import to_entry, to_record
+from trading_research_agents.chain.validation_stats import (
     anchor_robustness,
     benjamini_hochberg,
     block_bootstrap_ci,
     collapse,
     permutation_null,
     subperiod_means,
-    to_entry,
-    to_record,
 )
 from trading_research_agents.data import Direction, Manifest, Source
 from trading_research_agents.ledger import Axis, Transferability, Verdict

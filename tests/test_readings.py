@@ -10,8 +10,9 @@ from typing import Any
 import pytest
 
 from trading_research_agents.agents.briefs import BriefError, reading_brief, reference_returns
+from trading_research_agents.data.dated_text import read_events
 from trading_research_agents.data.schema import Candle
-from trading_research_agents.data.series import load_all, read_events
+from trading_research_agents.data.series import load_all
 from trading_research_agents.data.sources import Fetched
 from trading_research_agents.readings import MACRO, ONCHAIN, SENTIMENT
 from trading_research_agents.readings.sentiment import sentiment_brief
@@ -146,7 +147,7 @@ def test_figures_are_read_for_each_reading(tmp_path: Path) -> None:
 
 def test_a_role_may_run_on_its_own_model(tmp_path: Path) -> None:
     from trading_research_agents.trading import load_strategy_config
-    from trading_research_agents.trading.config import ConfigError
+    from trading_research_agents.trading.config_values import ConfigError
 
     examples = Path(__file__).resolve().parent.parent / "examples"
     text = (examples / "strategy.toml").read_text("utf-8")
@@ -184,7 +185,7 @@ def test_a_role_may_run_on_its_own_model(tmp_path: Path) -> None:
 
 def test_the_readings_can_be_named_in_the_config(tmp_path: Path) -> None:
     from trading_research_agents.trading import load_strategy_config
-    from trading_research_agents.trading.config import ConfigError
+    from trading_research_agents.trading.config_values import ConfigError
 
     examples = Path(__file__).resolve().parent.parent / "examples"
     text = (examples / "strategy.toml").read_text("utf-8")
@@ -336,6 +337,6 @@ def test_the_declared_state_carries_the_net_graded_score() -> None:
 
 def test_the_config_names_the_same_readings_the_package_reads() -> None:
     from trading_research_agents.readings import READINGS, RETIRED
-    from trading_research_agents.trading import config
+    from trading_research_agents.trading import config_agents as config
 
     assert config.READINGS == READINGS and config.RETIRED_READERS == RETIRED

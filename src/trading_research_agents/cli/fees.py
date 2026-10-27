@@ -34,7 +34,8 @@ def _read_fees(
     account on a better tier pays less than the gate prices, never more.
     """
     from trading_research_agents.data.sources.resolve import ResolveError, resolve
-    from trading_research_agents.trading.dispatch import DispatchError, account_fees, hand_for
+    from trading_research_agents.trading.dispatch import account_fees, hand_for
+    from trading_research_agents.trading.hand_state import DispatchError
 
     missing = [k for k in keys if not env.get(k)]
     why = f"{', '.join(missing)} not set" if missing else ""
@@ -114,7 +115,7 @@ def _fill_account_fees(
     A channel's base fees are checked against the perpetual, and its `[channel.spot]` fees against
     the spot pair; a desk that trades spot alone is checked against the spot pair throughout.
     """
-    from trading_research_agents.trading.dispatch import credentials_for
+    from trading_research_agents.trading.hand_state import credentials_for
 
     if not envelope.is_file() or cfg is None:
         return [], []

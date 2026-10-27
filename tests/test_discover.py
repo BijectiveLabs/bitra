@@ -111,7 +111,8 @@ def test_a_venue_that_cannot_answer_is_named() -> None:
 
 def test_the_universe_declares_discovery_and_needs_a_quote_size() -> None:
     from test_config import agent_raw
-    from trading_research_agents.trading.config import ConfigError, parse_strategy_config
+    from trading_research_agents.trading.config import parse_strategy_config
+    from trading_research_agents.trading.config_values import ConfigError
 
     raw = agent_raw(universe={"discover": True, "top": 15, "exclude": ["pumpfunusdt"]})
     with pytest.raises(ConfigError, match=r"needs \[controls\]\.max_position_quote"):

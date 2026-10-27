@@ -16,8 +16,9 @@ from decimal import Decimal
 from typing import Any
 
 from trading_research_agents.agents.technical_analyst.tools import Features, features
+from trading_research_agents.data.dated_text import Event
 from trading_research_agents.data.schema import Candle, Direction
-from trading_research_agents.data.series import Event, Series
+from trading_research_agents.data.series import Series
 from trading_research_agents.data.sources.base import Fetched, OrderBook
 from trading_research_agents.envelope.model import Channel
 from trading_research_agents.execution.pretrade import (

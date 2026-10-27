@@ -6,19 +6,16 @@ import argparse
 import os
 import sys
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from functools import partial
 from pathlib import Path
-from time import sleep
-from time import time as wall_clock
 from typing import Any
 
 from trading_research_agents.agents.context import (
     declared_in,
 )
-from trading_research_agents.agents.cycle import budget_spent
 from trading_research_agents.agents.risk_manager.run import Overrides as RiskOverrides
 from trading_research_agents.cli import shutdown
 from trading_research_agents.cli.auditing import Auditing
@@ -36,6 +33,7 @@ from trading_research_agents.cli.common import (
 )
 from trading_research_agents.cli.cycle_report import _cycle_report, _cycle_steps, _cycle_view
 from trading_research_agents.cli.fees import _fill_account_fees
+from trading_research_agents.cli.schedule import Schedule, held_back_by
 from trading_research_agents.cli.text import (
     desk_judge,
 )
@@ -54,7 +52,6 @@ from trading_research_agents.cli.venue_access import (
     _venue_hand,
 )
 from trading_research_agents.envelope import load_envelope
-from trading_research_agents.records import read_lines
 from trading_research_agents.trading import (
     ConfigError,
     load_strategy_config,
@@ -62,147 +59,8 @@ from trading_research_agents.trading import (
 from trading_research_agents.trading.config import RunSettings
 
 
-def held_back_by(cfg: Any, out: Path, now: datetime) -> str:
-    """Why this pass takes no new entry and asks no model, or empty. Each is the client's own line,
-    counted per UTC day from the records on disk, so a restart cannot reset it."""
-    from trading_research_agents.execution.targets import intents_today
-    from trading_research_agents.llm.usage import spent_since
-
-    if cfg.pause_switch is not None and cfg.pause_switch.exists():
-        why = cfg.pause_switch.read_text(encoding="utf-8", errors="replace").strip()
-        return (
-            f"paused by {cfg.pause_switch}"
-            + (f" ({why[:120]})" if why else "")
-            + ("; `tra pause --off` resumes")
-        )
-    midnight = datetime(now.year, now.month, now.day, tzinfo=UTC)
-    a = cfg.agents
-    if a is not None and (a.daily_token_budget or a.daily_cost_budget):
-        ledgers = (out / "usage.jsonl", out.parent / "audits" / "usage.jsonl")
-        tokens, cost = spent_since(ledgers, midnight.timestamp())
-        if a.daily_token_budget and tokens >= a.daily_token_budget:
-            return f"daily token budget spent: {tokens} of {a.daily_token_budget} since 00:00 UTC"
-        if a.daily_cost_budget and cost >= a.daily_cost_budget:
-            return f"daily cost budget spent: {cost:.4f} of {a.daily_cost_budget} since 00:00 UTC"
-    cap = cfg.limits.max_trades_per_day
-    if cap is not None:
-        sent = intents_today(out, at=now, instrument=None)
-        if sent >= cap:
-            return (
-                f"{sent} trade(s) today across every instrument; [controls].max_trades_per_day "
-                f"is {cap}"
-            )
-    streak_cap = cfg.limits.max_losing_streak
-    if streak_cap is not None:
-        streak = losing_streak_today(out / "round_trips.jsonl", midnight)
-        if streak >= streak_cap:
-            return (
-                f"{streak} losing round trips in a row today; [controls].max_losing_streak is "
-                f"{streak_cap}"
-            )
-    return ""
-
-
-def losing_streak_today(path: Path, midnight: datetime) -> int:
-    """Losing round trips in a row, newest first, closed since `midnight`. A trip with no result is
-    passed over; a winner ends the count."""
-
-    streak = 0
-    for trip in reversed(read_lines(path) if path.is_file() else []):
-        try:
-            closed = datetime.fromisoformat(str(trip.get("at")))
-        except ValueError:
-            continue
-        if closed < midnight:
-            break
-        if trip.get("net") is None:
-            continue
-        if Decimal(str(trip["net"])) >= 0:
-            break
-        streak += 1
-    return streak
-
-
-@dataclass
-class Schedule:
-    """When the next cycle runs, and what ends the run.
-
-    A desk does not want a cycle every few seconds; it wants one when a bar has closed and the
-    figures have changed. So the wait lands on the interval's own boundary, and everything that
-    should end a run - the budget, the kill switch, the count asked for, a keyboard - ends it by
-    name rather than by the process stopping quietly.
-    """
-
-    every_s: float | None = None
-    cycles: int | None = None
-    kill_switch: Path | None = None
-    clock: Callable[[], float] = wall_clock
-    rest: Callable[[float], None] = sleep
-
-    @property
-    def looping(self) -> bool:
-        return self.every_s is not None
-
-    @property
-    def every_label(self) -> str:
-        every = int(self.every_s or 0)
-        for size, unit in ((3600, "h"), (60, "m")):
-            if every >= size and every % size == 0:
-                return f"{every // size}{unit}"
-        return f"{every}s"
-
-    def stop_reason(self, result: Any, ran: int) -> str:
-        if not self.looping:
-            return "one cycle"
-        # A pass that chose nothing has no result to read, and that is not a reason to stop.
-        stopped = getattr(result, "stopped_by", None)
-        if stopped and budget_spent(str(stopped)):
-            return f"the budget: {stopped}"
-        if self.kill_switch is not None and self.kill_switch.exists():
-            return f"the kill switch at {self.kill_switch}"
-        if self.cycles is not None and ran >= self.cycles:
-            return f"the {self.cycles} pass(es) asked for"
-        return ""
-
-    def left(self) -> float:
-        """Seconds to the next boundary, so a cycle reads a bar that has finished happening."""
-        every = self.every_s or 0.0
-        if every <= 0:
-            return 0.0
-        return round(every - (self.clock() % every), 3)
-
-    def announce(self, left: float) -> str:
-        """The wait as an operator reads it: when it ends on the clock, and why it is short."""
-        ends = datetime.fromtimestamp(self.clock() + left, tz=UTC).strftime("%H:%M:%S")
-        minutes, seconds = divmod(int(left + 0.999), 60)
-        hours, minutes = divmod(minutes, 60)
-        shown = f"{hours}h {minutes:02d}m" if hours else f"{minutes}m {seconds:02d}s"
-        return (
-            f"scheduler: next pass at {ends} UTC, in {shown}. "
-            f"Passes land on the clock, every {self.every_label}, "
-            "not a full interval after the last one"
-        )
-
-    def wait(self) -> float:
-        """Sleep to the next boundary and say how long that was."""
-        left = self.left()
-        if left > 0:
-            self.rest(left)
-        return left
-
-
 def run_cycle_command(args: argparse.Namespace) -> int:
     """One cycle, end to end, from the files in the project."""
-    from trading_research_agents.agents.cycle import CycleConfig
-    from trading_research_agents.execution.targets import reward_risk
-    from trading_research_agents.llm.usage import (
-        BudgetLimits,
-        MeteredCompleter,
-        Pricing,
-        RateWindow,
-        UsageLedger,
-    )
-
     _load_env(args)
     cfg = load_strategy_config(args.config)
     if cfg.agents is None:
@@ -210,44 +68,105 @@ def run_cycle_command(args: argparse.Namespace) -> int:
     filled, _ = _fill_account_fees(args.envelope, cfg, dict(os.environ), datetime.now(UTC))
     if filled and not args.json:
         sys.stdout.write("\n".join(filled) + "\n")
-    a = cfg.agents
-    magnitude = a.magnitude_bps
-    if magnitude is None:
+    if cfg.agents.magnitude_bps is None:
         raise ConfigError("the claimed edge: [agents].magnitude_bps in strategy.toml")
+    desk = _open_desk(args, cfg)
+    cycle_cfg = _cycle_config(desk)
+    schedule = Schedule(every_s=args.every, cycles=args.cycles, kill_switch=cfg.kill_switch)
+    spine = _cycle_steps(cycle_cfg)
+    # The auditors keep their own ledger, so what the desk spent deciding stays separable from what
+    # it spent looking at itself.
+    audits = Auditing(
+        policy=cfg.audit,
+        settings=cfg.agents,
+        config=args.config,
+        runs=desk.out,
+        limits=cfg.limits,
+        kill_switch=cfg.kill_switch,
+    )
+    return _DeskRun(desk, cycle_cfg, schedule, spine, audits).run()
+
+
+@dataclass
+class _Desk:
+    """What a run is built from, read once before its first pass."""
+
+    args: argparse.Namespace
+    cfg: Any
+    instrument: str
+    mode: str
+    out: Path
+    beside: Path
+    data_cfg: Any
+    chains: dict[str, Any]
+    declared: Any
+    hand: Any
+    rate: Any
+    keeper: Any
+    usage: Any
+    completer_for: Callable[[str], Any]
+
+
+def _open_desk(args: argparse.Namespace, cfg: Any) -> _Desk:
+    """The desk's data, its declared sources, its order log and its metered models."""
+    from trading_research_agents.llm.usage import UsageLedger
+    from trading_research_agents.trading.hand_state import OrderRate
+
+    mode = args.mode or cfg.execution.mode
     data_cfg = _desk_data(args.data_config, cfg, args.mode or cfg.execution.mode)
     chains = {declared.kind: data_cfg.chain(declared.kind) for declared in data_cfg.kinds}
     instrument = args.instrument or cfg.run.instrument
     out = args.out or Path("runs") / "cycles"
     beside = args.config.resolve().parent
-    overrides = {
-        name: path
-        for name, path in (
-            ("macro", args.macro),
-            ("onchain", args.onchain),
-            ("sentiment", args.sentiment),
-            ("derivatives", args.derivatives),
-            ("news", args.news),
-        )
-        if path is not None
-    }
-    declared = declared_in(beside, overrides=overrides)
-    series = {role: tuple(paths) for role, paths in declared.series.items()}
-    news = tuple(declared.text)
-    if not news and (beside / "events.csv").is_file():
-        news = (beside / "events.csv",)
-    # A declared roster wins; otherwise every reading with something to read is read.
-    readings = a.readings or declared.readings
-    mode = args.mode or cfg.execution.mode
+    declared = declared_in(beside, overrides=_overrides(args))
     # A hand for the instrument this run starts on, so a misconfigured mandate is refused before any
     # data is pulled. A pass over a universe builds another one for whichever instrument it chose:
     # one hand per instrument, because a hand carries the symbol an order goes out under.
     hand = _venue_hand(args, cfg, beside, instrument) if mode == "venue" else None
     # One order log for the whole run, so [controls].max_orders_per_minute is the desk's.
-    from trading_research_agents.trading.dispatch import OrderRate
-
     rate = OrderRate(cfg.limits.max_orders_per_minute)
     keeper = _keeper(args, cfg, beside, out, instrument, rate) if mode == "venue" else None
     usage = UsageLedger(out / "usage.jsonl")
+    return _Desk(
+        args=args,
+        cfg=cfg,
+        instrument=instrument,
+        mode=mode,
+        out=out,
+        beside=beside,
+        data_cfg=data_cfg,
+        chains=chains,
+        declared=declared,
+        hand=hand,
+        rate=rate,
+        keeper=keeper,
+        usage=usage,
+        completer_for=_metered_completers(cfg.agents, usage),
+    )
+
+
+def _overrides(args: argparse.Namespace) -> dict[str, Path]:
+    """The source files named on the command line, in place of the ones beside strategy.toml."""
+    named = (
+        ("macro", args.macro),
+        ("onchain", args.onchain),
+        ("sentiment", args.sentiment),
+        ("derivatives", args.derivatives),
+        ("news", args.news),
+    )
+    return {name: path for name, path in named if path is not None}
+
+
+def _metered_completers(a: Any, usage: Any) -> Callable[[str], Any]:
+    """One budget and one rate window for the whole desk, one client per role: a role may run on a
+    cheaper model without the others paying for it."""
+    from trading_research_agents.llm.usage import (
+        BudgetLimits,
+        MeteredCompleter,
+        Pricing,
+        RateWindow,
+    )
+
     limits = BudgetLimits(
         token_budget=a.token_budget,
         max_calls_per_hour=a.max_calls_per_hour,
@@ -259,8 +178,6 @@ def run_cycle_command(args: argparse.Namespace) -> int:
     window = RateWindow()
 
     def completer_for(role: str) -> MeteredCompleter:
-        # One budget and one rate window for the whole desk, one client per role: a role may run
-        # on a cheaper model without the others paying for it.
         if role not in metered:
             settings = a.for_role(role)
             metered[role] = MeteredCompleter(
@@ -274,19 +191,31 @@ def run_cycle_command(args: argparse.Namespace) -> int:
             )
         return metered[role]
 
-    facts = _market_facts(cfg, beside, instrument, hand)
-    cycle_cfg = CycleConfig(
-        instrument=instrument,
+    return completer_for
+
+
+def _cycle_config(desk: _Desk) -> Any:
+    """The cycle as the desk declared it, for the instrument the run starts on."""
+    from trading_research_agents.agents.cycle import CycleConfig
+    from trading_research_agents.execution.targets import reward_risk
+
+    args, cfg, a, mode = desk.args, desk.cfg, desk.cfg.agents, desk.mode
+    news = tuple(desk.declared.text)
+    if not news and (desk.beside / "events.csv").is_file():
+        news = (desk.beside / "events.csv",)
+    facts = _market_facts(cfg, desk.beside, desk.instrument, desk.hand)
+    return CycleConfig(
+        instrument=desk.instrument,
         envelope=load_envelope(args.envelope),
         venue_key=cfg.run.venue_key,
-        chains=chains,
-        completer_for=completer_for,
-        usage=usage,
-        root=out,
+        chains=desk.chains,
+        completer_for=desk.completer_for,
+        usage=desk.usage,
+        root=desk.out,
         mechanism=a.mechanism,
         size=cfg.run.size,
         size_quote=cfg.run.size_quote,
-        magnitude_bps=magnitude,
+        magnitude_bps=a.magnitude_bps,
         bar_interval_s=cfg.run.bar_interval_s,
         lookback_bars=a.lookback_bars,
         interval_s=cfg.run.bar_interval_s,
@@ -295,7 +224,7 @@ def run_cycle_command(args: argparse.Namespace) -> int:
         margin_bps=args.margin if args.margin is not None else Decimal(0),
         min_confidence=a.min_confidence,
         mode=mode,
-        place=hand,
+        place=desk.hand,
         spot=facts[0],
         asset_class=facts[1],
         market=facts[2],
@@ -306,7 +235,7 @@ def run_cycle_command(args: argparse.Namespace) -> int:
         max_position=cfg.limits.max_position,
         max_position_quote=cfg.limits.max_position_quote,
         equity=cfg.run.equity,
-        size_step=cfg.run.step_for(instrument),
+        size_step=cfg.run.step_for(desk.instrument),
         validators=a.validators,
         on_missing_validator=a.on_missing_validator,
         context_intervals=cfg.run.context_intervals,
@@ -315,7 +244,7 @@ def run_cycle_command(args: argparse.Namespace) -> int:
         regime=cfg.regime,
         targets=cfg.targets,
         desk=cfg.desk,
-        held=_held_reader(cfg, out, mode, args, beside),
+        held=_held_reader(cfg, desk.out, mode, args, desk.beside),
         wait_while_open=mode == "venue" and not cfg.execution.adopt_open_position,
         daily_loss_limit_bps=cfg.limits.daily_loss_limit_bps if mode == "venue" else None,
         max_drawdown_bps=cfg.limits.max_drawdown_bps if mode == "venue" else None,
@@ -332,197 +261,237 @@ def run_cycle_command(args: argparse.Namespace) -> int:
         stop_frac=cfg.exit_rule.stop_frac,
         take_frac=cfg.exit_rule.take_profit_frac,
         volatility_exit=cfg.exit_rule.volatility,
-        data_options={declared.kind: dict(declared.options) for declared in data_cfg.kinds},
-        series=series,
+        data_options={declared.kind: dict(declared.options) for declared in desk.data_cfg.kinds},
+        series={role: tuple(paths) for role, paths in desk.declared.series.items()},
         news=news,
-        readings=readings,
+        # A declared roster wins; otherwise every reading with something to read is read.
+        readings=a.readings or desk.declared.readings,
         team=a.team,
         judge=desk_judge(args.data_config),
     )
-    schedule = Schedule(every_s=args.every, cycles=args.cycles, kill_switch=cfg.kill_switch)
-    spine = _cycle_steps(cycle_cfg)
-    # The auditors keep their own ledger, so what the desk spent deciding stays separable from what
-    # it spent looking at itself.
-    audits = Auditing(
-        policy=cfg.audit,
-        settings=a,
-        config=args.config,
-        runs=out,
-        limits=cfg.limits,
-        kill_switch=cfg.kill_switch,
-    )
-    ran = 0
-    cleared = CLEARED
+
+
+@dataclass
+class _DeskRun:
+    """Passes over the universe until the schedule, the budget, the kill switch or a signal ends
+    the run. Every way out is said by name and written to the journal."""
+
+    desk: _Desk
+    cycle_cfg: Any
+    schedule: Schedule
+    spine: list[str]
+    audits: Auditing
+    ran: int = 0
+    passes: int = 0
+    cleared: int = CLEARED
+    mid_cycle: bool = False
     # What the models have already cost since this desk last wrote an intent, per instrument. A
     # refused cycle's tokens are not free: they are carried forward and charged to whatever trade
     # that instrument eventually produces.
-    carried: dict[str, Decimal] = {}
-    mid_cycle = False
-    passes = 0
-    lock = shutdown.claim(out) if mode == "venue" else None
-    shutdown.journal(
-        out,
-        "started",
-        every_s=args.every,
-        cycles=args.cycles,
-        mode=mode,
-        instruments=list(cfg.universe.instruments) or [instrument],
-    )
-    try:
-        with shutdown.as_interrupt():
-            while True:
-                if keeper is not None:
-                    armed = cfg.kill_switch is not None and cfg.kill_switch.exists()
-                    kept = keeper.run(kill=armed)
-                    if kept and not args.json:
-                        sys.stdout.write("\n".join(kept) + "\n")
-                        sys.stdout.flush()
-                    if armed:
-                        stop = f"the kill switch at {cfg.kill_switch}, after flattening"
-                        emit(
-                            {"cycles": ran, "passes": passes, "stopped_by": stop},
-                            args.json,
-                            [f"scheduler: stopped by {stop}"],
-                        )
-                        shutdown.journal(out, "stopped", stopped_by=stop, cycles=ran)
-                        return cleared
-                refreshed = _refresh_sources(declared.classes.values())
-                if refreshed and not args.json:
-                    sys.stdout.write("\n".join(refreshed) + "\n")
-                    sys.stdout.flush()
-                held_back = held_back_by(cfg, out, datetime.now(UTC))
-                chosen: tuple[str, ...] = ()
-                screened: Any = None
-                if held_back:
-                    emit(
-                        {"held_back": held_back},
-                        args.json,
-                        [f"desk: {held_back}; open positions keep their exits, nothing is asked"],
-                    )
-                else:
-                    chosen, screened = _sweep(
-                        cfg, cycle_cfg, args, chains=chains, out=out, ask=completer_for
-                    )
-                if screened is not None:
-                    found, said = _screen_report(screened)
-                    emit(found, args.json, said, partial(_screen_view, found))
-                result: Any = None
-                stop = ""
-                for instrument in chosen:
-                    moment = datetime.now(UTC)
-                    guard = RiskOverrides.load(out, moment)
-                    paused = guard.pause_of(instrument, moment)
-                    if paused is not None:
-                        emit(
-                            {"instrument": instrument, "paused_until": paused.isoformat()},
-                            args.json,
-                            [f"risk manager: {instrument} paused until {paused:%H:%M}Z; not asked"],
-                        )
-                        continue
-                    multiple = guard.multiple(moment)
-                    before = usage.cost
-                    held = carried.get(instrument, Decimal(0))
-                    sends = (
-                        _venue_hand(args, cfg, beside, instrument, rate)
-                        if mode == "venue"
-                        else None
-                    )
-                    mid_cycle = True
-                    chosen_facts = _market_facts(cfg, beside, instrument, sends)
-                    result = _one_cycle(
-                        replace(
-                            cycle_cfg,
-                            instrument=instrument,
-                            spot=chosen_facts[0],
-                            asset_class=chosen_facts[1],
-                            market=chosen_facts[2],
-                            size_step=_step_for(cfg, instrument),
-                            # The risk manager's cut, if one is in force; the client's caps apply
-                            # after it as always.
-                            size=cycle_cfg.size * multiple,
-                            size_quote=(
-                                None
-                                if cycle_cfg.size_quote is None
-                                else cycle_cfg.size_quote * multiple
-                            ),
-                            # A unit cap was written for [run].instrument; with a quote cap
-                            # declared, other instruments are held to that one alone.
-                            max_position=(
-                                cfg.limits.max_position
-                                if instrument == cfg.run.instrument
-                                or cfg.limits.max_position_quote is None
-                                else None
-                            ),
-                            carried_spend=held,
-                            place=sends,
-                            account=None if sends is None else sends.account,
-                        ),
-                        usage,
-                        spine,
-                        args,
-                    )
-                    mid_cycle = False
-                    carried[instrument] = (
-                        Decimal(0) if result.acted else held + (usage.cost - before)
-                    )
-                    payload, lines = _cycle_report(result, usage, mode)
-                    emit(payload, args.json, lines, partial(_cycle_view, payload))
-                    ran += 1
-                    audits.after(payload, ran, as_json=args.json)
-                    cleared = CLEARED if result.stopped_by is None else REFUSED
-                    # Inside a pass only the budget and the kill switch end the run.
-                    stop = schedule.stop_reason(result, 0)
-                    if stop:
-                        break
-                # A pass counts whether or not the trigger let a cycle through: on a quiet market
-                # `--cycles 6` would otherwise run for as long as the market stays quiet.
-                passes += 1
-                if not stop:
-                    stop = schedule.stop_reason(result, passes)
-                if stop:
-                    if keeper is not None and stop.startswith("the kill switch"):
-                        # The switch exists to get flat, not only to stop deciding.
-                        kept = keeper.run(kill=True)
-                        if kept and not args.json:
-                            sys.stdout.write("\n".join(kept) + "\n")
-                    if schedule.looping:
-                        emit(
-                            {"cycles": ran, "passes": passes, "stopped_by": stop},
-                            args.json,
-                            [
-                                f"scheduler: stopped by {stop}, after {passes} pass(es) and "
-                                f"{ran} cycle(s)"
-                            ],
-                        )
-                    shutdown.journal(out, "stopped", stopped_by=stop, cycles=ran, passes=passes)
-                    return cleared
-                # Said before the wait, not after it: an operator looking at the screen in the
-                # meantime needs to know the desk is waiting rather than stuck.
-                left = schedule.left()
-                if not args.json:
-                    sys.stdout.write(schedule.announce(left) + "\n")
-                    sys.stdout.flush()
-                if _watching(args.json) and left > 0:
-                    _ui().countdown(left)
-                else:
-                    schedule.rest(left)
-    except KeyboardInterrupt as exc:
+    carried: dict[str, Decimal] = field(default_factory=dict)
+
+    def run(self) -> int:
+        desk = self.desk
+        lock = shutdown.claim(desk.out) if desk.mode == "venue" else None
+        shutdown.journal(
+            desk.out,
+            "started",
+            every_s=desk.args.every,
+            cycles=desk.args.cycles,
+            mode=desk.mode,
+            instruments=list(desk.cfg.universe.instruments) or [desk.instrument],
+        )
+        try:
+            with shutdown.as_interrupt():
+                while True:
+                    ended = self._pass()
+                    if ended is not None:
+                        return ended
+        except KeyboardInterrupt as exc:
+            return self._interrupted(exc)
+        finally:
+            if lock is not None:
+                shutdown.release(lock)
+
+    def _pass(self) -> int | None:
+        """One pass: keep the open positions, choose, run a cycle per instrument, then wait."""
+        if self._flattened_by_kill_switch():
+            return self.cleared
+        self._say(_refresh_sources(self.desk.declared.classes.values()))
+        chosen, screened = self._choose()
+        if screened is not None:
+            found, said = _screen_report(screened)
+            emit(found, self.desk.args.json, said, partial(_screen_view, found))
+        result, stop = self._cycles(chosen)
+        # A pass counts whether or not the trigger let a cycle through: on a quiet market
+        # `--cycles 6` would otherwise run for as long as the market stays quiet.
+        self.passes += 1
+        if not stop:
+            stop = self.schedule.stop_reason(result, self.passes)
+        if stop:
+            return self._stopped(stop)
+        self._wait()
+        return None
+
+    def _say(self, lines: list[str]) -> None:
+        if lines and not self.desk.args.json:
+            sys.stdout.write("\n".join(lines) + "\n")
+            sys.stdout.flush()
+
+    def _flattened_by_kill_switch(self) -> bool:
+        desk = self.desk
+        if desk.keeper is None:
+            return False
+        armed = desk.cfg.kill_switch is not None and desk.cfg.kill_switch.exists()
+        self._say(desk.keeper.run(kill=armed))
+        if not armed:
+            return False
+        stop = f"the kill switch at {desk.cfg.kill_switch}, after flattening"
+        emit(
+            {"cycles": self.ran, "passes": self.passes, "stopped_by": stop},
+            desk.args.json,
+            [f"scheduler: stopped by {stop}"],
+        )
+        shutdown.journal(desk.out, "stopped", stopped_by=stop, cycles=self.ran)
+        return True
+
+    def _choose(self) -> tuple[tuple[str, ...], Any]:
+        desk = self.desk
+        held_back = held_back_by(desk.cfg, desk.out, datetime.now(UTC))
+        if held_back:
+            emit(
+                {"held_back": held_back},
+                desk.args.json,
+                [f"desk: {held_back}; open positions keep their exits, nothing is asked"],
+            )
+            return (), None
+        return _sweep(
+            desk.cfg,
+            self.cycle_cfg,
+            desk.args,
+            chains=desk.chains,
+            out=desk.out,
+            ask=desk.completer_for,
+        )
+
+    def _cycles(self, chosen: tuple[str, ...]) -> tuple[Any, str]:
+        result: Any = None
+        for instrument in chosen:
+            ran = self._cycle(instrument)
+            if ran is None:
+                continue
+            result = ran
+            # Inside a pass only the budget and the kill switch end the run.
+            stop = self.schedule.stop_reason(result, 0)
+            if stop:
+                return result, stop
+        return result, ""
+
+    def _cycle(self, instrument: str) -> Any:
+        """One cycle on one instrument, or nothing when the risk manager has paused it."""
+        desk = self.desk
+        moment = datetime.now(UTC)
+        guard = RiskOverrides.load(desk.out, moment)
+        paused = guard.pause_of(instrument, moment)
+        if paused is not None:
+            emit(
+                {"instrument": instrument, "paused_until": paused.isoformat()},
+                desk.args.json,
+                [f"risk manager: {instrument} paused until {paused:%H:%M}Z; not asked"],
+            )
+            return None
+        multiple = guard.multiple(moment)
+        before = desk.usage.cost
+        held = self.carried.get(instrument, Decimal(0))
+        sends = (
+            _venue_hand(desk.args, desk.cfg, desk.beside, instrument, desk.rate)
+            if desk.mode == "venue"
+            else None
+        )
+        self.mid_cycle = True
+        cfg = self._config_for(instrument, multiple, held, sends)
+        result = _one_cycle(cfg, desk.usage, self.spine, desk.args)
+        self.mid_cycle = False
+        self.carried[instrument] = Decimal(0) if result.acted else held + (desk.usage.cost - before)
+        payload, lines = _cycle_report(result, desk.usage, desk.mode)
+        emit(payload, desk.args.json, lines, partial(_cycle_view, payload))
+        self.ran += 1
+        self.audits.after(payload, self.ran, as_json=desk.args.json)
+        self.cleared = CLEARED if result.stopped_by is None else REFUSED
+        return result
+
+    def _config_for(self, instrument: str, multiple: Decimal, held: Decimal, sends: Any) -> Any:
+        cfg = self.desk.cfg
+        base = self.cycle_cfg
+        facts = _market_facts(cfg, self.desk.beside, instrument, sends)
+        return replace(
+            base,
+            instrument=instrument,
+            spot=facts[0],
+            asset_class=facts[1],
+            market=facts[2],
+            size_step=_step_for(cfg, instrument),
+            # The risk manager's cut, if one is in force; the client's caps apply after it as
+            # always.
+            size=base.size * multiple,
+            size_quote=None if base.size_quote is None else base.size_quote * multiple,
+            # A unit cap was written for [run].instrument; with a quote cap declared, other
+            # instruments are held to that one alone.
+            max_position=(
+                cfg.limits.max_position
+                if instrument == cfg.run.instrument or cfg.limits.max_position_quote is None
+                else None
+            ),
+            carried_spend=held,
+            place=sends,
+            account=None if sends is None else sends.account,
+        )
+
+    def _stopped(self, stop: str) -> int:
+        desk = self.desk
+        if desk.keeper is not None and stop.startswith("the kill switch"):
+            # The switch exists to get flat, not only to stop deciding.
+            kept = desk.keeper.run(kill=True)
+            if kept and not desk.args.json:
+                sys.stdout.write("\n".join(kept) + "\n")
+        if self.schedule.looping:
+            emit(
+                {"cycles": self.ran, "passes": self.passes, "stopped_by": stop},
+                desk.args.json,
+                [
+                    f"scheduler: stopped by {stop}, after {self.passes} pass(es) and "
+                    f"{self.ran} cycle(s)"
+                ],
+            )
+        shutdown.journal(desk.out, "stopped", stopped_by=stop, cycles=self.ran, passes=self.passes)
+        return self.cleared
+
+    def _wait(self) -> None:
+        # Said before the wait, not after it: an operator looking at the screen in the meantime
+        # needs to know the desk is waiting rather than stuck.
+        left = self.schedule.left()
+        if not self.desk.args.json:
+            sys.stdout.write(self.schedule.announce(left) + "\n")
+            sys.stdout.flush()
+        if _watching(self.desk.args.json) and left > 0:
+            _ui().countdown(left)
+        else:
+            self.schedule.rest(left)
+
+    def _interrupted(self, exc: KeyboardInterrupt) -> int:
         # Ctrl-C, a service manager's SIGTERM, a dropped SSH session: one way out, said by name and
         # written down. Whatever a cycle had already put on disk stays there.
         why = shutdown.stopped_by(exc)
-        if mid_cycle:
+        if self.mid_cycle:
             why = f"{why}, in the middle of a cycle"
         emit(
-            {"cycles": ran, "stopped_by": why},
-            args.json,
-            [f"scheduler: stopped by {why}, after {ran} cycle(s)"],
+            {"cycles": self.ran, "stopped_by": why},
+            self.desk.args.json,
+            [f"scheduler: stopped by {why}, after {self.ran} cycle(s)"],
         )
-        shutdown.journal(out, "stopped", stopped_by=why, cycles=ran)
+        shutdown.journal(self.desk.out, "stopped", stopped_by=why, cycles=self.ran)
         # Stopping between cycles is the ordinary way a desk ends; stopping inside one is not.
-        return REFUSED if mid_cycle else cleared
-    finally:
-        if lock is not None:
-            shutdown.release(lock)
+        return REFUSED if self.mid_cycle else self.cleared
 
 
 def _step_for(cfg: Any, instrument: str) -> Decimal:

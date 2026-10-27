@@ -15,15 +15,10 @@ from typing import Any
 
 import pytest
 
+from trading_research_agents.data.dated_text import NewsSpec, load_news_map
 from trading_research_agents.data.news import news_due, plain, pull_news
 from trading_research_agents.data.pull import PullError, plan, pull
-from trading_research_agents.data.series import (
-    NewsSpec,
-    SeriesError,
-    SeriesSpec,
-    Threshold,
-    load_news_map,
-)
+from trading_research_agents.data.series import SeriesError, SeriesSpec, Threshold
 
 NOW = datetime(2026, 10, 18, 3, 0, tzinfo=UTC)
 NOW_NS = int(NOW.timestamp() * 1_000_000_000)

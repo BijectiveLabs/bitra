@@ -1004,7 +1004,7 @@ class Stopped:
 
 
 def test_the_schedule_runs_once_unless_an_interval_is_asked_for() -> None:
-    from trading_research_agents.cli.run_command import Schedule
+    from trading_research_agents.cli.schedule import Schedule
 
     once = Schedule()
     assert not once.looping and once.stop_reason(Stopped(), 1) == "one cycle"
@@ -1012,7 +1012,7 @@ def test_the_schedule_runs_once_unless_an_interval_is_asked_for() -> None:
 
 
 def test_the_schedule_lands_on_the_next_boundary(tmp_path: Path) -> None:
-    from trading_research_agents.cli.run_command import Schedule
+    from trading_research_agents.cli.schedule import Schedule
 
     slept: list[float] = []
     # Twelve seconds past a five-minute boundary: the next cycle is 288 seconds away, not 300.
@@ -1021,7 +1021,7 @@ def test_the_schedule_lands_on_the_next_boundary(tmp_path: Path) -> None:
 
 
 def test_the_schedule_says_when_the_wait_ends_on_the_clock() -> None:
-    from trading_research_agents.cli.run_command import Schedule
+    from trading_research_agents.cli.schedule import Schedule
 
     # 1_800_000_000 is 2027-01-15 08:00:00 UTC; ten minutes into a half hour leaves twenty.
     plan = Schedule(every_s=1800.0, clock=lambda: 1_800_000_600.0)
@@ -1031,7 +1031,7 @@ def test_the_schedule_says_when_the_wait_ends_on_the_clock() -> None:
 
 
 def test_a_loop_ends_on_the_budget_the_kill_switch_or_the_count(tmp_path: Path) -> None:
-    from trading_research_agents.cli.run_command import Schedule
+    from trading_research_agents.cli.schedule import Schedule
 
     kill = tmp_path / "KILL"
     plan = Schedule(every_s=60.0, cycles=3, kill_switch=kill, rest=lambda s: None)

@@ -14,7 +14,8 @@ from trading_research_agents.agents.cycle import run_cycle
 from trading_research_agents.data.schema import Candle
 from trading_research_agents.envelope.model import Envelope
 from trading_research_agents.execution.stops import StopError, VolatilityExit, average_true_range
-from trading_research_agents.trading.config import ConfigError, parse_strategy_config
+from trading_research_agents.trading.config import parse_strategy_config
+from trading_research_agents.trading.config_values import ConfigError
 
 
 def bar(i: int, high: str, low: str, close: str) -> Candle:

@@ -18,8 +18,8 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
+from trading_research_agents.data.dated_text import Event
 from trading_research_agents.data.schema import Trade
-from trading_research_agents.data.series import Event
 from trading_research_agents.market_data.archive import HOUR_NS
 from trading_research_agents.market_data.book import BookSample
 from trading_research_agents.market_data.compact import compact_day

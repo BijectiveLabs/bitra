@@ -5,8 +5,8 @@ from collections.abc import Iterable
 from decimal import Decimal
 from typing import Any
 
+from trading_research_agents.data.dated_text import Event
 from trading_research_agents.data.schema import Side, Trade
-from trading_research_agents.data.series import Event
 from trading_research_agents.market_data.book import BookSample
 from trading_research_agents.market_data.deriv import DerivPoint
 from trading_research_agents.market_data.record_config import RecordConfig

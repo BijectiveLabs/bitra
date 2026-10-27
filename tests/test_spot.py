@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 
 from trading_research_agents.trading.dispatch import VenueHand
-from trading_research_agents.trading.positions import _fee_in_quote
+from trading_research_agents.trading.round_trip import _fee_in_quote
 
 SPOT_LONG: dict[str, Any] = {
     "target": "long",
@@ -210,3 +210,10 @@ def test_attached_exits_kept_as_algo_orders_are_cancelled_before_a_spot_sale() -
     closed = hand(venue, venue="okx").close_position("held past its limit")
     assert venue.cancelled == ["algo-1"] and venue.cancel_params == [{"trigger": True}]
     assert closed["closed"] is True and venue.orders[0]["amount"] == 0.28
+
+
+def test_separate_exits_are_refused_on_a_coin_balance_before_anything_is_cancelled() -> None:
+    venue = SpotVenue(resting=1)
+    placed = hand(venue, exits="separate")(dict(SPOT_LONG))
+    assert placed["sent"] is False and "a coin balance does not take" in placed["refused"]
+    assert venue.orders == [] and venue.cancelled == []

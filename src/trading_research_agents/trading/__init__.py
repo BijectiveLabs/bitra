@@ -6,11 +6,11 @@ order path. Every intent, every refusal and every fill is written down as it hap
 """
 
 from trading_research_agents.trading.config import (
-    ConfigError,
     StrategyConfig,
     load_strategy_config,
     parse_strategy_config,
 )
+from trading_research_agents.trading.config_values import ConfigError
 from trading_research_agents.trading.controls import (
     Admission,
     ControlError,

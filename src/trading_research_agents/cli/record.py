@@ -17,8 +17,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from trading_research_agents.data.dated_text import NewsSpec, load_news_map
 from trading_research_agents.data.news import pull_news
-from trading_research_agents.data.series import NewsSpec, load_news_map
 from trading_research_agents.data.sources.ccxt_client import build
 from trading_research_agents.data.sources.config import parse_duration
 from trading_research_agents.extras import install_hint

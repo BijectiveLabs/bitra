@@ -360,7 +360,8 @@ def test_a_hand_refuses_an_intent_about_another_instrument() -> None:
 
 def test_a_hand_reaches_the_environment_it_was_told_and_refuses_to_guess() -> None:
     """Demo and testnet are two places with two accounts; a key for one is rejected by the other."""
-    from trading_research_agents.trading.dispatch import DispatchError, VenueHand, hand_for
+    from trading_research_agents.trading.dispatch import VenueHand, hand_for
+    from trading_research_agents.trading.hand_state import DispatchError
 
     class Client:
         def __init__(self) -> None:
@@ -469,7 +470,7 @@ def test_a_cancel_the_venue_refuses_is_recorded_as_what_it_is() -> None:
 
 
 def test_a_signed_client_starts_with_the_builder_fee_off(monkeypatch: pytest.MonkeyPatch) -> None:
-    from trading_research_agents.trading import dispatch
+    from trading_research_agents.trading import dispatch, hand_state, hand_terms
 
     seen: list[dict[str, Any]] = []
 
@@ -484,8 +485,9 @@ def test_a_signed_client_starts_with_the_builder_fee_off(monkeypatch: pytest.Mon
         seen.append(config)
         return Signed()
 
-    monkeypatch.setattr(dispatch, "build_client", build)
-    monkeypatch.setattr(dispatch, "exchange_class", lambda venue: Signed)
+    monkeypatch.setattr(hand_terms, "build_client", build)
+    monkeypatch.setattr(hand_terms, "exchange_class", lambda venue: Signed)
+    monkeypatch.setattr(hand_state, "exchange_class", lambda venue: Signed)
     env = {"SOMEVENUE_API_KEY": "k", "SOMEVENUE_API_SECRET": "s"}
     dispatch.hand_for(venue="somevenue", symbol="ETH/USDT:USDT", max_notional=Decimal(200), env=env)
     dispatch.hand_for(
@@ -502,7 +504,8 @@ def test_a_signed_client_starts_with_the_builder_fee_off(monkeypatch: pytest.Mon
 
 
 def test_ccxt_options_are_a_table_and_never_carry_a_credential() -> None:
-    from trading_research_agents.trading.config import ConfigError, _ccxt_options
+    from trading_research_agents.trading.config_values import ConfigError
+    from trading_research_agents.trading.config_venue import _ccxt_options
 
     assert _ccxt_options({}) == {}
     assert _ccxt_options({"ccxt_options": {"builderFee": True}}) == {"builderFee": True}

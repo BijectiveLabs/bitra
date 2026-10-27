@@ -27,7 +27,7 @@ from trading_research_agents.execution.desk import (
 )
 from trading_research_agents.execution.trigger import Trigger
 from trading_research_agents.execution.universe import Universe
-from trading_research_agents.trading.config import ConfigError
+from trading_research_agents.trading.config_values import ConfigError
 
 NOW = datetime(2026, 9, 27, 10, 0, tzinfo=UTC)
 

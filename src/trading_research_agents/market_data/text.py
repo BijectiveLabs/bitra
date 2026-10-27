@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 
-from trading_research_agents.data.series import Event
+from trading_research_agents.data.dated_text import Event
 from trading_research_agents.market_data.archive import (
     HOUR_NS,
     META,

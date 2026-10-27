@@ -118,7 +118,8 @@ def test_the_operator_can_trade_an_equity_at_any_hour_deliberately(
 
 
 def test_the_equity_settings_are_read_and_checked() -> None:
-    from trading_research_agents.trading.config import ConfigError, _mandate
+    from trading_research_agents.trading.config_values import ConfigError
+    from trading_research_agents.trading.config_venue import _mandate
 
     mandate = _mandate(
         {"execution": {"equity_closed": ["2026-11-26"], "equities": ["tslausdt"]}},

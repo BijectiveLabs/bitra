@@ -50,7 +50,7 @@ def init_project(args: argparse.Namespace) -> int:
         )
         starter = found.group(1) if found else ""
         from trading_research_agents.data.sources.capability import capability_of
-        from trading_research_agents.trading.dispatch import credentials_for
+        from trading_research_agents.trading.hand_state import credentials_for
 
         able = capability_of(args.venue)
         keys = list(credentials_for(able.venue).values())

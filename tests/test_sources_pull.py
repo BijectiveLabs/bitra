@@ -10,7 +10,8 @@ from pathlib import Path
 import pytest
 
 from trading_research_agents.data.pull import PullError, describe, due, plan, pull, where_from
-from trading_research_agents.data.series import load_all, load_series_map, threshold_state
+from trading_research_agents.data.series import load_all, load_series_map
+from trading_research_agents.data.series_measures import threshold_state
 from trading_research_agents.envelope.model import Envelope
 
 NOW = datetime(2026, 10, 5, 12, 0, tzinfo=UTC)
@@ -237,7 +238,7 @@ def test_one_missing_file_leaves_its_neighbours_readable(tmp_path: Path) -> None
 
 
 def test_a_daily_figure_is_not_correlated_with_minute_returns() -> None:
-    from trading_research_agents.data.series import correlation
+    from trading_research_agents.data.series_measures import correlation
 
     path_rows = "2026-10-03,4.10\n2026-10-04,4.30\n"
     folder = Path(__import__("tempfile").mkdtemp())

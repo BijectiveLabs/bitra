@@ -13,8 +13,8 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from trading_research_agents.data.series import (
-    Series,
+from trading_research_agents.data.series import Series
+from trading_research_agents.data.series_measures import (
     correlation,
     net_flow,
     threshold_state,

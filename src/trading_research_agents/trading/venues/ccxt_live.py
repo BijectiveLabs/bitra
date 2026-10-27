@@ -23,13 +23,8 @@ from typing import Any
 from trading_research_agents.data.schema import Direction, Trade
 from trading_research_agents.execution.cost import CostBreakdown, funding_accrual_bps
 from trading_research_agents.execution.fill import BPS
-from trading_research_agents.trading.dispatch import (
-    ENVIRONMENTS,
-    DispatchError,
-    VenueHand,
-    credentials_for,
-    hand_for,
-)
+from trading_research_agents.trading.dispatch import VenueHand, hand_for
+from trading_research_agents.trading.hand_state import ENVIRONMENTS, DispatchError, credentials_for
 from trading_research_agents.trading.venue import Fill, Intent, VenueError
 from trading_research_agents.trading.venues.accounts import account_refusal, key_refusal
 from trading_research_agents.trading.venues.limits import client_id_prefix

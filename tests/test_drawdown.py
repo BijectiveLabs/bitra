@@ -15,7 +15,8 @@ from trading_research_agents.agents.alarms import DRAWDOWN, alarms_of
 from trading_research_agents.agents.cycle import run_cycle
 from trading_research_agents.envelope.model import Envelope
 from trading_research_agents.trading.capital import EQUITY_PEAK, Account, drawdown_bps
-from trading_research_agents.trading.config import ConfigError, parse_strategy_config
+from trading_research_agents.trading.config import parse_strategy_config
+from trading_research_agents.trading.config_values import ConfigError
 
 NOW = datetime(2026, 10, 10, 9, 0, tzinfo=UTC)
 

@@ -29,7 +29,8 @@ from trading_research_agents.execution.montecarlo import (
     nearest_rank,
     simulate,
 )
-from trading_research_agents.trading.config import ConfigError, parse_strategy_config
+from trading_research_agents.trading.config import parse_strategy_config
+from trading_research_agents.trading.config_values import ConfigError
 
 D = Decimal
 

@@ -198,7 +198,8 @@ def test_the_same_decision_on_the_same_market_sends_the_same_order() -> None:
 
 
 def test_the_market_types_a_desk_sends_to_are_one_setting() -> None:
-    from trading_research_agents.trading.config import ConfigError, _mandate
+    from trading_research_agents.trading.config_values import ConfigError
+    from trading_research_agents.trading.config_venue import _mandate
 
     def read(execution: dict[str, Any]) -> tuple[str, ...]:
         return _mandate({"execution": execution}, "bybit/taker-taker").markets
@@ -232,7 +233,7 @@ def test_a_built_market_type_the_desk_did_not_list_is_refused() -> None:
 
 
 def test_a_round_trip_is_counted_in_the_markets_settlement_currency() -> None:
-    from trading_research_agents.trading.positions import _settlement
+    from trading_research_agents.trading.round_trip import _settlement
 
     class Described:
         symbol = "BTC/USD:BTC"

@@ -22,8 +22,8 @@ from trading_research_agents.chain import (
     validate,
 )
 from trading_research_agents.chain.preregistration import from_record as prereg_from_record
-from trading_research_agents.chain.validation import NullMode
 from trading_research_agents.chain.validation import to_record as validation_record
+from trading_research_agents.chain.validation_stats import NullMode
 from trading_research_agents.data import (
     archive_venue,
     audit,

@@ -23,133 +23,68 @@ process dying.
 
 from __future__ import annotations
 
-import hashlib
 import os
-import re
-import time
-from collections.abc import Callable, Mapping, Sequence
-from contextlib import suppress
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
-from trading_research_agents.data.sources.ccxt_client import (
-    SIGNED_DEFAULTS,
-    exchange_class,
-    market_of,
-)
-from trading_research_agents.data.sources.ccxt_client import build as build_client
 from trading_research_agents.execution.mandate import DEFAULT_MARKETS, MARKETS
-from trading_research_agents.extras import install_hint
-from trading_research_agents.trading.capital import (
-    CapitalError,
-    liquidation_estimate,
-    maintenance_rate,
-    margin_needed,
-    read_account,
+from trading_research_agents.trading.hand_state import (
+    BPS,
+    MAX_BOOK_AGE_S,
+    SIDES,
+    UNDESCRIBED,
+    DispatchError,
+    OrderRate,
+    _client_id,
+    _decision_age_s,
+    _drift_bps,
+    _slippage_bps,
+    credentials_for,
 )
-from trading_research_agents.trading.market import Market, MarketError
+from trading_research_agents.trading.hand_upkeep import HandUpkeep
+from trading_research_agents.trading.market import Market
 from trading_research_agents.trading.venues.accounts import account_refusal
-from trading_research_agents.trading.venues.exits import exit_cancel_params, exit_reads
+from trading_research_agents.trading.venues.exits import exit_cancel_params
 from trading_research_agents.trading.venues.limits import (
     client_id_max,
     client_id_prefix,
-    price_band,
 )
-from trading_research_agents.trading.venues.margin import (
-    AccountSettings,
-    account_settings,
-    leverage_params,
-    route,
-)
-
-SIDES = {"long": "buy", "short": "sell"}
-# Read from ccxt 4.5 on 2026-09-29: a venue reaches its demo environment through
-# `enable_demo_trading` and its testnet through `set_sandbox_mode`, and the library refuses to have
-# both at once. Mainnet is the client's own default and is never switched into.
-ENVIRONMENTS = ("demo", "testnet", "mainnet")
-ROLES = ("maker", "taker")
-EXITS = ("attached", "separate", "none")
-# A venue that does not describe its markets through ccxt is let through: the size, margin and
-# exit checks that follow still read the account, and refuse on what they find there.
-UNDESCRIBED = "unknown"
-# Order states in which the venue has finished with an order without it being fully filled.
-ENDED = ("canceled", "cancelled", "rejected", "expired")
-BPS = Decimal(10_000)
-# The same bound a live session holds itself to. ccxt signs with a wider receive window, so a clock
-# past this still works until the day it drifts a little further, mid-order.
-MAX_CLOCK_SKEW_MS = 1000
-# A venue's book stamped older than this is not the market an order is about to meet. Seen on
-# 2026-10-20: a demo API served a book 3.2 hours old, 35 bps from where its own trades printed.
-MAX_BOOK_AGE_S = 30.0
-
-
-# ccxt's credential fields, and the suffix of the environment variable each is read from. Most
-# venues want a key and a secret; some add a passphrase, and some sign with a wallet instead.
-CREDENTIAL_ENV = {
-    "apiKey": "API_KEY",
-    "secret": "API_SECRET",
-    "password": "API_PASSPHRASE",
-    "uid": "API_UID",
-    "walletAddress": "WALLET_ADDRESS",
-    "privateKey": "PRIVATE_KEY",
-    # Some venues sign for an account id beside the key and secret.
-    "accountId": "ACCOUNT_ID",
-}
-PLAIN_PAIR = ("apiKey", "secret")
-
-
-class DispatchError(ValueError):
-    """The order cannot be sent as configured, or the venue refused it."""
 
 
 @dataclass
-class OrderRate:
-    """The orders the desk sent in the last minute, against [controls].max_orders_per_minute."""
+class _Send:
+    """One intent on its way to the venue: what each check has read so far, in the order read."""
 
-    per_minute: int
-    sent: list[float] = field(default_factory=list)
+    intent: Mapping[str, Any]
+    market: Market | None = None
+    kind: str = ""
+    target: str = ""
+    side: str = ""
+    derivative: bool = False
+    size: Decimal = Decimal(0)
+    mid: Decimal = Decimal(0)
+    notional: Decimal = Decimal(0)
+    age: float | None = None
+    standing: Decimal | None = None
+    swept: int = 0
+    unit: Decimal = Decimal(1)
+    contracts: Decimal = Decimal(0)
+    drift: Decimal | None = None
+    fresh: dict[str, Any] | None = None
+    carried: dict[str, str] = field(default_factory=dict)
+    order_id: str = ""
+    params: dict[str, Any] = field(default_factory=dict)
+    price: Decimal | None = None
 
-    def admit(self, now: float) -> str:
-        self.sent = [at for at in self.sent if now - at < 60]
-        if len(self.sent) >= self.per_minute:
-            return (
-                f"{len(self.sent)} orders in the last minute and [controls].max_orders_per_minute "
-                f"is {self.per_minute}"
-            )
-        self.sent.append(now)
-        return ""
 
-
-def _namespace_missing() -> bool:
-    try:
-        import ccxt  # noqa: F401
-    except ImportError:
-        return True
-    return False
-
-
-def credentials_for(venue: str, client: Any = None) -> dict[str, str]:
-    """What this venue signs with, as ccxt field -> environment variable.
-
-    Read from ccxt's own `requiredCredentials`, so a venue that needs a passphrase is asked for one
-    by name before anything is sent rather than refused at the venue with a signature error.
-    """
-    prefix = venue.strip().upper()
-    if not prefix:
-        return {}
-    required: dict[str, Any] = {}
-    if client is None:
-        factory = exchange_class(venue)
-        client = factory() if factory is not None else None
-    if client is not None:
-        required = dict(getattr(client, "requiredCredentials", None) or {})
-    fields = [name for name in CREDENTIAL_ENV if required.get(name)] or list(PLAIN_PAIR)
-    return {name: f"{prefix}_{CREDENTIAL_ENV[name]}" for name in fields}
+def _refused(why: str, **seen: Any) -> dict[str, Any]:
+    return {"sent": False, "refused": why, **seen}
 
 
 @dataclass
-class VenueHand:
+class VenueHand(HandUpkeep):
     """What a cycle in venue mode sends with: one venue, one instrument, one cap, one role.
 
     The client is built here from the environment, so the key is read in one place and never
@@ -157,388 +92,284 @@ class VenueHand:
     client into the venue's own sandbox, which is the only way this should ever be tried first.
     """
 
-    venue: str
-    symbol: str
-    max_notional: Decimal
-    # ccxt field -> environment variable. A plain (key, secret) pair is accepted and read as such.
-    keys: Mapping[str, str] | tuple[str, ...]
-    # The instrument this hand's symbol stands for. A hand is built for one instrument, and an
-    # intent about another one is refused rather than sent under this symbol.
-    instrument: str = ""
-    role: str = "taker"
-    exits: str = "attached"
-    environment: str = "demo"
-    limit_timeout_s: float = 30.0
-    price_offset_bps: Decimal = Decimal(0)
-    adopt_open_position: bool = False
-    params: Mapping[str, Any] = field(default_factory=dict)
-    max_drift_bps: Decimal | None = None
-    max_decision_age_s: float = 120.0
-    leverage: Decimal | None = None
-    margin_mode: str = "isolated"
-    max_slippage_bps: Decimal = Decimal(20)
-    max_margin_share: Decimal = Decimal("0.5")
-    liquidation_buffer_bps: Decimal = Decimal(50)
-    markets: tuple[str, ...] = DEFAULT_MARKETS
-    # Shared by every hand in a run: [controls].max_orders_per_minute is the desk's, not a hand's.
-    rate: OrderRate | None = None
-    client: Any = None
-    env: Mapping[str, str] = field(default_factory=lambda: os.environ)
-    options: Mapping[str, Any] = field(default_factory=dict)
-    clock: Callable[[], float] = time.time
-    sleep: Callable[[float], None] = time.sleep
-    skew_checked: bool = False
-    account_checked: bool = False
-    leverage_set: bool = False
-    # Set when the venue applied the leverage but ccxt has no way to read it back.
-    leverage_by_reply: bool = False
-    sent_count: int = 0
-    book_age_s: float | None = None
-
-    def __post_init__(self) -> None:
-        if self.max_notional <= 0:
-            raise DispatchError("a venue hand needs a positive notional cap")
-        if self.role not in ROLES:
-            raise DispatchError(
-                f"the channel does not say whether entry is maker or taker; name it "
-                f"<entry>-<exit> in the envelope, one of {list(ROLES)}"
-            )
-        if self.limit_timeout_s <= 0:
-            raise DispatchError("[execution].limit_timeout_s is positive")
-        if self.exits not in EXITS:
-            raise DispatchError(f"[execution].exits is one of {list(EXITS)}")
-        if self.client is None:
-            self.client = self._build()
-        options = getattr(self.client, "options", None)
-        if isinstance(options, dict):
-            # ccxt reads the margin mode for orders, leverage and its read-back from here when a
-            # call does not name one. Left out, a venue that defaults to cross margin
-            # would trade cross while the operator declared isolated.
-            options.setdefault("defaultMarginMode", self.margin_mode)
-
-    def _build(self) -> Any:
-        wanted = self.credentials
-        held = {field: self.env.get(name, "") for field, name in wanted.items()}
-        missing = [wanted[field] for field, value in held.items() if not value]
-        if missing:
-            hint = key_hint(missing, tuple(wanted.values()), self.env)
-            raise DispatchError(
-                f"{' and '.join(missing)} not set: not in the shell and not in the .env beside "
-                "strategy.toml, the only two places keys are read from"
-                + (f"; {hint}" if hint else "")
-            )
-        if exchange_class(self.venue) is None:
-            if _namespace_missing():  # pragma: no cover - exercised only without the extra
-                raise DispatchError(f"ccxt is not installed; {install_hint('ccxt')}")
-            raise DispatchError(f"ccxt has no exchange named {self.venue!r}")
-        config = {**held, "enableRateLimit": True, **self.options}
-        config["options"] = {**SIGNED_DEFAULTS, **dict(config.get("options") or {})}
-        client = build_client(self.venue, config)
-        self.to_environment(client)
-        route(self.venue, client, self.symbol)
-        return client
-
-    def to_environment(self, client: Any) -> None:
-        """Point the client at the environment the operator declared, or refuse to guess.
-
-        A venue's demo and its testnet are two different places with two different accounts, and a
-        key for one is rejected by the other. They are reached through two different switches, so a
-        client that has one of them does not necessarily have the other. Anything this cannot route
-        exactly is refused rather than sent somewhere close, because the environment nobody checked
-        is the one holding real capital.
-        """
-        if self.environment not in ENVIRONMENTS:
-            raise DispatchError(
-                f"[live].environment {self.environment!r} is not one of {sorted(ENVIRONMENTS)}"
-            )
-        if self.environment == "mainnet":
-            return
-        method = "enable_demo_trading" if self.environment == "demo" else "set_sandbox_mode"
-        turn = getattr(client, method, None)
-        refusal = (
-            f"{self.venue} has no {self.environment} environment through ccxt; name an "
-            "environment this venue has, deliberately (`tra venues` lists them)"
-        )
-        if turn is None:
-            raise DispatchError(refusal)
-        try:
-            turn(True)
-        except Exception as exc:
-            # ccxt's base class defines both switches and raises NotSupported from the ones a
-            # venue does not implement, so the method existing proves nothing.
-            raise DispatchError(f"{refusal}: {exc.__class__.__name__}") from exc
-
-    @property
-    def credentials(self) -> dict[str, str]:
-        """ccxt field -> environment variable, whichever way the keys were given."""
-        if isinstance(self.keys, Mapping):
-            return dict(self.keys)
-        return dict(zip(PLAIN_PAIR, self.keys, strict=True))
-
-    def ready(self) -> str:
-        """Read the account through the same client an order would go through. No order is sent.
-
-        The point is the path, not the answer: a preflight that proves a key works somewhere else
-        proves nothing about the place the order is about to be sent to.
-        """
-        try:
-            skew = self.clock_skew()
-            if skew:
-                return skew
-            market = self.market()
-            derivative = not (market.held_as_balance or market.outcome)
-            hedged = self.hedged() if derivative else ""
-            if hedged:
-                return hedged
-            setting = account_refusal(self.venue, self.client, derivative=derivative)
-            if setting:
-                return setting
-            self._open_orders()
-            self.position()
-            self._touch_now()
-            if self.book_age_s is not None and self.book_age_s > MAX_BOOK_AGE_S:
-                return (
-                    f"the venue's book for {self.symbol} is stamped {self.book_age_s:.0f}s ago; "
-                    "every order would be refused until it is current"
-                )
-        except DispatchError as exc:
-            return str(exc)
-        except Exception as exc:
-            return f"{exc.__class__.__name__}: {exc}"
-        return ""
-
     def __call__(self, intent: Mapping[str, Any]) -> dict[str, Any]:
-        """Send it, or say why it was not sent. Either way the caller gets a record."""
-        about = str(intent.get("instrument", ""))
+        """Send it, or say why it was not sent. Either way the caller gets a record.
+
+        The checks run in this order because several of them act on the venue - the clock and
+        account reads, cancelling this desk's earlier exits, setting leverage, taking a slot in
+        the order rate - and each of those is only worth doing once every cheaper check passed.
+        """
+        send = _Send(intent)
+        checks = (
+            self._meant_for_this_hand,
+            self._market_admits,
+            self._sized,
+            self._timely,
+            self._account_admits,
+            self._nothing_resting,
+            self._in_contracts,
+            self._priced_now,
+            self._carried,
+            self._order_terms,
+        )
+        for check in checks:
+            refused = check(send)
+            if refused is not None:
+                return refused
+        return self._send(send)
+
+    def _meant_for_this_hand(self, send: _Send) -> dict[str, Any] | None:
+        about = str(send.intent.get("instrument", ""))
         if self.instrument and about and about != self.instrument:
             # A desk that watches several instruments builds a hand per instrument. Sending this
             # one under another's symbol is the one mistake no record afterwards can undo.
-            return {
-                "sent": False,
-                "refused": (
-                    f"this hand sends {self.instrument} as {self.symbol}; the intent is about "
-                    f"{about}"
-                ),
-            }
+            return _refused(
+                f"this hand sends {self.instrument} as {self.symbol}; the intent is about {about}"
+            )
         if self.sent_count:
             # One decision, one order. A hand asked twice is a wiring fault, not a second trade.
-            return {"sent": False, "refused": "this hand has already sent its one order"}
-        market = self.market()
-        kind = market.label
+            return _refused("this hand has already sent its one order")
+        return None
+
+    def _market_admits(self, send: _Send) -> dict[str, Any] | None:
+        market = send.market = self.market()
+        kind = send.kind = market.label
         if kind not in MARKETS and kind != UNDESCRIBED:
             # A type with no rules here would be priced and protected by another type's rules.
-            return {
-                "sent": False,
-                "refused": (
-                    f"{self.symbol} is a {kind} market; venue mode trades "
-                    f"{', '.join(MARKETS)} markets today, and other market types are not "
-                    "built yet"
-                ),
-            }
+            return _refused(
+                f"{self.symbol} is a {kind} market; venue mode trades "
+                f"{', '.join(MARKETS)} markets today, and other market types are not built yet"
+            )
         if kind not in self.markets and kind != UNDESCRIBED:
-            return {
-                "sent": False,
-                "refused": (
-                    f"{self.symbol} is a {kind} market and [execution].markets lists "
-                    f"{list(self.markets)}"
-                ),
-            }
-        target = str(intent.get("target", ""))
+            return _refused(
+                f"{self.symbol} is a {kind} market and [execution].markets lists "
+                f"{list(self.markets)}"
+            )
+        target = send.target = str(send.intent.get("target", ""))
         if target not in SIDES:
-            return {"sent": False, "refused": f"target {target!r} is not an order"}
+            return _refused(f"target {target!r} is not an order")
         if target == "short" and not market.shortable:
-            return {
-                "sent": False,
-                "refused": (
-                    f"{self.symbol} is a {kind} market; a short there sells coins the account "
-                    "does not hold, which needs a borrow this desk does not take"
-                ),
-            }
-        derivative = not (market.held_as_balance or market.outcome)
-        side = SIDES[target]
-        size = Decimal(str(intent.get("size", "0")))
-        mid = Decimal(str(intent.get("mid", "0")))
-        if size <= 0:
-            return {"sent": False, "refused": "size is not positive"}
-        notional = size * mid
-        if notional > self.max_notional:
-            return {
-                "sent": False,
-                "refused": (
-                    f"notional {notional} is above [execution].max_notional {self.max_notional}"
-                ),
-            }
-        age = _decision_age_s(intent, self.clock())
+            return _refused(
+                f"{self.symbol} is a {kind} market; a short there sells coins the account "
+                "does not hold, which needs a borrow this desk does not take"
+            )
+        return None
+
+    def _sized(self, send: _Send) -> dict[str, Any] | None:
+        market = cast(Market, send.market)
+        send.derivative = not (market.held_as_balance or market.outcome)
+        send.side = SIDES[send.target]
+        send.size = Decimal(str(send.intent.get("size", "0")))
+        send.mid = Decimal(str(send.intent.get("mid", "0")))
+        if send.size <= 0:
+            return _refused("size is not positive")
+        send.notional = send.size * send.mid
+        if send.notional > self.max_notional:
+            return _refused(
+                f"notional {send.notional} is above [execution].max_notional {self.max_notional}"
+            )
+        return None
+
+    def _timely(self, send: _Send) -> dict[str, Any] | None:
+        age = send.age = _decision_age_s(send.intent, self.clock())
         if age is not None and age > self.max_decision_age_s:
-            return {
-                "sent": False,
-                "refused": (
-                    f"the decision is {age:.0f}s old, past [execution].max_decision_age_s "
-                    f"{self.max_decision_age_s:.0f}; its figures are no longer the market's"
-                ),
-                "decision_age_s": round(age, 1),
-            }
+            return _refused(
+                f"the decision is {age:.0f}s old, past [execution].max_decision_age_s "
+                f"{self.max_decision_age_s:.0f}; its figures are no longer the market's",
+                decision_age_s=round(age, 1),
+            )
         if not self.skew_checked:
             skew = self.clock_skew()
             if skew:
-                return {"sent": False, "refused": skew}
+                return _refused(skew)
             self.skew_checked = True
-        hedged = self.hedged() if derivative else ""
+        return None
+
+    def _account_admits(self, send: _Send) -> dict[str, Any] | None:
+        hedged = self.hedged() if send.derivative else ""
         if hedged:
-            return {"sent": False, "refused": hedged}
+            return _refused(hedged)
         if not self.account_checked:
-            setting = account_refusal(self.venue, self.client, derivative=derivative)
+            setting = account_refusal(self.venue, self.client, derivative=send.derivative)
             if setting:
-                return {"sent": False, "refused": setting}
+                return _refused(setting)
             self.account_checked = True
-        standing = self.position()
+        standing = send.standing = self.position()
         if standing and not self.adopt_open_position:
             # Any open position, not only one pointing the other way. A second entry in the same
             # direction is a larger position than the conviction rule sized, and nothing upstream
             # asked for it.
-            way = "the other way" if (standing > 0) != (target == "long") else "the same way"
-            return {
-                "sent": False,
-                "refused": (
-                    f"the account already holds {standing} of {self.symbol} {way}; flatten it, "
-                    "wait for it to close, or set [execution].adopt_open_position"
-                ),
-                "position": str(standing),
-            }
-        if self.exits == "separate" and not derivative:
-            return {
-                "sent": False,
-                "refused": (
-                    f"{self.symbol} is a {kind} market; exits placed after the fill are "
-                    "reduce-only orders, which a coin balance does not take; use "
-                    'exits = "attached" here'
-                ),
-            }
+            way = "the other way" if (standing > 0) != (send.target == "long") else "the same way"
+            return _refused(
+                f"the account already holds {standing} of {self.symbol} {way}; flatten it, "
+                "wait for it to close, or set [execution].adopt_open_position",
+                position=str(standing),
+            )
+        return None
+
+    def _nothing_resting(self, send: _Send) -> dict[str, Any] | None:
+        if self.exits == "separate" and not send.derivative:
+            return _refused(
+                f"{self.symbol} is a {send.kind} market; exits placed after the fill are "
+                "reduce-only orders, which a coin balance does not take; use "
+                'exits = "attached" here'
+            )
         # Only with nothing held: an adopted position keeps the exits that protect it.
-        swept = self._sweep_exits() if self.exits == "separate" and not standing else 0
+        swept = self._sweep_exits() if self.exits == "separate" and not send.standing else 0
         if isinstance(swept, str):
-            return {"sent": False, "refused": swept}
+            return _refused(swept)
+        send.swept = swept
         resting = self._open_orders()
         if resting:
-            return {
-                "sent": False,
-                "refused": (
-                    f"{resting} order(s) are still open on {self.symbol}; a second one would be a "
-                    "second decision on the same position"
-                ),
-                "open_orders": resting,
-            }
+            return _refused(
+                f"{resting} order(s) are still open on {self.symbol}; a second one would be a "
+                "second decision on the same position",
+                open_orders=resting,
+            )
+        return None
 
+    def _in_contracts(self, send: _Send) -> dict[str, Any] | None:
         try:
-            unit = self.contract_size()
+            send.unit = self.contract_size()
         except DispatchError as exc:
-            return {"sent": False, "refused": str(exc)}
-        contracts = size / unit
-        off_step = self.off_step(contracts, size, unit)
-        if off_step:
-            return {"sent": False, "refused": off_step}
+            return _refused(str(exc))
+        send.contracts = send.size / send.unit
+        off_step = self.off_step(send.contracts, send.size, send.unit)
+        return _refused(off_step) if off_step else None
 
+    def _priced_now(self, send: _Send) -> dict[str, Any] | None:
         # The snapshot this was priced on is as old as the analysts and validators were slow -
         # half a minute is ordinary. Seen on 2026-10-04: a post-only order rested at that stale
         # touch was on the wrong side of a market that had moved, and the venue rejected it at once.
         now_bid, now_ask = self._touch_now()
         if self.book_age_s is not None and self.book_age_s > MAX_BOOK_AGE_S:
-            return {
-                "sent": False,
-                "refused": (
-                    f"the venue's book for {self.symbol} is stamped {self.book_age_s:.0f}s ago; "
-                    "an order is not priced against a book that old"
-                ),
-            }
-        drift = _drift_bps(mid, now_bid, now_ask, side)
+            return _refused(
+                f"the venue's book for {self.symbol} is stamped {self.book_age_s:.0f}s ago; "
+                "an order is not priced against a book that old"
+            )
+        drift = send.drift = _drift_bps(send.mid, now_bid, now_ask, send.side)
         if drift is not None and self.max_drift_bps is not None and drift > self.max_drift_bps:
-            return {
-                "sent": False,
-                "refused": (
-                    f"the book moved {drift:.2f} bps against the trade since it was priced, more "
-                    f"than [execution].max_drift_bps {self.max_drift_bps}; the decision is stale"
-                ),
-                "drift_bps": str(drift.quantize(Decimal("0.01"))),
-            }
-        fresh = {"bid": now_bid, "ask": now_ask} if now_bid and now_ask else None
+            return _refused(
+                f"the book moved {drift:.2f} bps against the trade since it was priced, more "
+                f"than [execution].max_drift_bps {self.max_drift_bps}; the decision is stale",
+                drift_bps=str(drift.quantize(Decimal("0.01"))),
+            )
+        send.fresh = {"bid": now_bid, "ask": now_ask} if now_bid and now_ask else None
+        return None
 
-        held_back = self._ensure_leverage() if derivative else ""
+    def _carried(self, send: _Send) -> dict[str, Any] | None:
+        held_back = self._ensure_leverage() if send.derivative else ""
         if held_back:
-            return {"sent": False, "refused": held_back}
+            return _refused(held_back)
+        market = cast(Market, send.market)
         carried = (
-            self._capital(notional, side, mid, intent)
-            if derivative
-            else self._cash(notional, market, size, mid)
+            self._capital(send.notional, send.side, send.mid, send.intent)
+            if send.derivative
+            else self._cash(send.notional, market, send.size, send.mid)
         )
         if isinstance(carried, str):
-            return {"sent": False, "refused": carried}
+            return _refused(carried)
+        send.carried = carried
         if self.rate is not None:
             busy = self.rate.admit(self.clock())
             if busy:
-                return {"sent": False, "refused": busy}
+                return _refused(busy)
+        return None
 
-        order_id = _client_id(intent, client_id_max(self.venue), client_id_prefix(self.venue))
+    def _order_terms(self, send: _Send) -> dict[str, Any] | None:
+        market = cast(Market, send.market)
+        intent = send.intent
+        send.order_id = _client_id(intent, client_id_max(self.venue), client_id_prefix(self.venue))
         # The prediction venues take no client id through ccxt; their orders are matched by the id
         # the venue returns, and one decision still sends one order.
-        params: dict[str, Any] = {} if market.outcome else {"clientOrderId": order_id}
-        if derivative:
+        params = send.params = {} if market.outcome else {"clientOrderId": send.order_id}
+        if send.derivative:
             params.update(self.order_params())
         params.update(self.params)
-        protective = {} if market.outcome else self._protective(intent, target)
+        protective = {} if market.outcome else self._protective(intent, send.target)
         if isinstance(protective, str):
-            return {"sent": False, "refused": protective}
+            return _refused(protective)
         params.update(protective)
-        price = self._resting_price(fresh or intent, side) if self.role == "maker" else None
+        touch = send.fresh or intent
         if self.role == "maker":
-            if price is None:
-                return {"sent": False, "refused": "no book side to rest on; the snapshot had none"}
+            send.price = self._resting_price(touch, send.side)
+            if send.price is None:
+                return _refused("no book side to rest on; the snapshot had none")
             params["postOnly"] = True
             params.setdefault("timeInForce", "GTC")
-        else:
-            # Never a naked market order: a limit that takes what is there within the band and
-            # cancels the rest, so a thin book cannot fill the entry at any price it likes.
-            price = self._protected_price(fresh or intent, side)
-            if price is None:
-                return {"sent": False, "refused": "no book to protect a taker order against"}
-            params.setdefault("timeInForce", "IOC")
+            return None
+        # Never a naked market order: a limit that takes what is there within the band and
+        # cancels the rest, so a thin book cannot fill the entry at any price it likes.
+        send.price = self._protected_price(touch, send.side)
+        if send.price is None:
+            return _refused("no book to protect a taker order against")
+        params.setdefault("timeInForce", "IOC")
+        return None
+
+    def _send(self, send: _Send) -> dict[str, Any]:
+        """The one order, then what the venue said about it and what follows it."""
         began = self.clock()
         try:
             order = self.client.create_order(
                 self.symbol,
                 "limit",
-                side,
-                float(contracts),
-                float(price),
-                params,
+                send.side,
+                float(send.contracts),
+                float(cast(Decimal, send.price)),
+                send.params,
             )
         except Exception as exc:
             raise DispatchError(self.redact(f"{exc.__class__.__name__}: {exc}")) from exc
         send_ms = round((self.clock() - began) * 1000)
-        order = self.in_base(order, unit)
+        order = self.in_base(order, send.unit)
         self.sent_count += 1
+        placed = self._placed(send, order, send_ms)
+        if self.role == "maker":
+            placed.update(self._settle(str(placed["order_id"])))
+        elif placed["filled"] is None or placed["average"] is None:
+            # A reply with a fill and no price is not an execution report (seen on 2026-10-20: a
+            # venue answered a create with its ids alone), so the venue's own order is read.
+            placed.update(self._taken(str(placed["order_id"])))
+        placed["slippage_bps"] = _slippage_bps(placed.get("average"), send.mid, send.side)
+        if send.swept:
+            placed["earlier_exits_cancelled"] = send.swept
+        if self.exits == "separate":
+            placed.update(
+                self._place_exits(placed, send.intent, send.side, send.unit, send.order_id)
+            )
+        if cast(Market, send.market).outcome:
+            placed["exits"] = "bounded"
+            placed.update(self._rest_take(placed, send.intent))
+        return placed
 
-        placed: dict[str, Any] = {
+    def _placed(self, send: _Send, order: Mapping[str, Any], send_ms: int) -> dict[str, Any]:
+        intent, unit, drift, age = send.intent, send.unit, send.drift, send.age
+        return {
             "sent": True,
             "venue": self.venue,
             "instrument": self.instrument,
             "environment": self.environment,
             "symbol": self.symbol,
             "role": self.role,
-            "side": side,
-            "size": str(size),
-            **({"contracts": f"{contracts:f}", "contract_size": f"{unit:f}"} if unit != 1 else {}),
-            "price": None if price is None else str(price),
-            "notional": str(notional),
-            "client_order_id": order_id,
+            "side": send.side,
+            "size": str(send.size),
+            **(
+                {"contracts": f"{send.contracts:f}", "contract_size": f"{unit:f}"}
+                if unit != 1
+                else {}
+            ),
+            "price": None if send.price is None else str(send.price),
+            "notional": str(send.notional),
+            "client_order_id": send.order_id,
             "exits": self.exits,
             "stop_price": str(intent.get("stop_price", "")) or None,
             "take_price": str(intent.get("take_price", "")) or None,
-            "priced_mid": str(mid),
+            "priced_mid": str(send.mid),
             "drift_bps": None if drift is None else str(drift.quantize(Decimal("0.01"))),
             "decision_age_s": None if age is None else round(age, 1),
             "send_ms": send_ms,
-            "rested_at": "the book at send time" if fresh else "the snapshot's touch",
-            "capital": carried,
+            "rested_at": "the book at send time" if send.fresh else "the snapshot's touch",
+            "capital": send.carried,
             **({"leverage_confirmed": "by the venue's reply"} if self.leverage_by_reply else {}),
             "order_id": str(order.get("id", "")),
             # A venue that reports no status reports none: "None" is not a status.
@@ -546,303 +377,6 @@ class VenueHand:
             "filled": None if order.get("filled") is None else str(order["filled"]),
             "average": None if order.get("average") is None else str(order["average"]),
         }
-        if self.role == "maker":
-            placed.update(self._settle(str(placed["order_id"])))
-        elif placed["filled"] is None or placed["average"] is None:
-            # A reply with a fill and no price is not an execution report (seen on 2026-10-20: a
-            # venue answered a create with its ids alone), so the venue's own order is read.
-            placed.update(self._taken(str(placed["order_id"])))
-        placed["slippage_bps"] = _slippage_bps(placed.get("average"), mid, side)
-        if swept:
-            placed["earlier_exits_cancelled"] = swept
-        if self.exits == "separate":
-            placed.update(self._place_exits(placed, intent, side, unit, order_id))
-        if market.outcome:
-            placed["exits"] = "bounded"
-            placed.update(self._rest_take(placed, intent))
-        return placed
-
-    def _rest_take(self, placed: Mapping[str, Any], intent: Mapping[str, Any]) -> dict[str, Any]:
-        """An outcome's exit: what it filled, offered at the take price, resting at the venue.
-
-        An outcome share cannot lose more than it cost, so the stake is the stop; the take profit
-        is the price the analyst's probability says the share is worth, left on the book so it
-        outlives this process the way an attached exit does.
-        """
-        filled = Decimal(str(placed.get("filled") or 0))
-        take = intent.get("take_price")
-        if filled <= 0 or not take:
-            return {"take_order": None}
-        try:
-            order = self.client.create_order(
-                self.symbol,
-                "limit",
-                "sell",
-                float(filled),
-                float(Decimal(str(take))),
-                {**self.params, "timeInForce": "GTC"},
-            )
-        except Exception as exc:
-            return {
-                "take_order": None,
-                "take_refused": self.redact(f"{exc.__class__.__name__}: {exc}")[:200],
-            }
-        return {"take_order": str(order.get("id", "")), "take_size": f"{filled:f}"}
-
-    def _taken(self, order_id: str, tries: int = 4) -> dict[str, Any]:
-        """What an IOC entry actually filled. Some venues answer a create with only an id."""
-        for attempt in range(tries):
-            status = self.order_status(order_id) if order_id else None
-            state = "" if status is None else str(status.get("status", ""))
-            if status is not None and state in ("closed", "filled", *ENDED):
-                average = status.get("average")
-                if average is None and Decimal(str(status.get("filled") or 0)) > 0:
-                    average = self._filled_average(order_id)
-                return {
-                    "status": state,
-                    "filled": str(status.get("filled") or 0),
-                    "average": None if average is None else str(average),
-                }
-            if attempt + 1 < tries:
-                self.sleep(0.5)
-        return {"note": "the venue had not reported a fill when this record was written"}
-
-    def _filled_average(self, order_id: str) -> str | None:
-        """The price an order filled at, from its own fills, where the venue's order omits it.
-
-        Seen on 2026-10-20: Bitget's unified account reports a filled order with no average through
-        ccxt, and without one the slippage of the entry cannot be measured.
-        """
-        fetch = getattr(self.client, "fetch_my_trades", None)
-        if fetch is None:
-            return None
-        try:
-            fills = [f for f in fetch(self.symbol) or [] if str(f.get("order") or "") == order_id]
-            size = sum((Decimal(str(f["amount"])) for f in fills), Decimal(0))
-            paid = sum(
-                (Decimal(str(f["amount"])) * Decimal(str(f["price"])) for f in fills), Decimal(0)
-            )
-        except Exception:
-            return None
-        if size <= 0:
-            return None
-        return f"{(paid / size).quantize(Decimal('0.00000001')).normalize():f}"
-
-    def _protective(self, intent: Mapping[str, Any], target: str) -> dict[str, Any] | str:
-        """The stop and the take profit, attached to the entry so no fill is left unattended.
-
-        They go out with the entry rather than after it. A position that exists for a second
-        without an exit is a position this process can die in the middle of, and the whole point of
-        placing them at the venue is that they outlive us.
-        """
-        if self.exits == "none":
-            return {}
-        stop, take = intent.get("stop_price"), intent.get("take_price")
-        if not stop or not take:
-            return (
-                "no stop and take profit were computed for this intent; declare "
-                "[exit].stop_frac and [exit].take_profit_frac, or say "
-                '[execution].exits = "none" and carry the exits yourself'
-            )
-        low, high = Decimal(str(stop)), Decimal(str(take))
-        if (target == "long" and low >= high) or (target == "short" and low <= high):
-            return f"the stop {stop} and the take profit {take} are the wrong way round"
-        if self.exits == "separate":
-            if not self._can_place_exits():
-                return (
-                    f"{self.venue} cannot take a stop or a take profit as an order of its own "
-                    "through ccxt, so exits placed after the fill are not possible there"
-                )
-            if not exit_reads(self.venue):
-                # Exits placed on their own outlive the position they protect when one leg fires.
-                # Where they rest is read per venue; one not read yet could meet the next entry.
-                return (
-                    f"where {self.venue} keeps a stop placed on its own is not read here yet, so "
-                    "one left from an earlier position could not be taken off before the next "
-                    'entry; use exits = "attached" or "none"'
-                )
-            return {}
-        if not self._can_attach():
-            hint = (
-                '[execution].exits = "separate" places them as reduce-only orders right after '
-                "the fill"
-                if self._can_place_exits()
-                else '[execution].exits = "none" is for a desk carrying the exits itself'
-            )
-            return f"{self.venue} cannot take a stop and a take profit with the entry; {hint}"
-        return {
-            "stopLoss": {"triggerPrice": float(low)},
-            "takeProfit": {"triggerPrice": float(high)},
-        }
-
-    def close_id(self) -> str:
-        """A close's own client id: the venue's prefix, then the moment it was sent."""
-        return f"{client_id_prefix(self.venue)}tra{int(self.clock() * 1000)}c"
-
-    def order_params(self) -> dict[str, Any]:
-        """What a derivatives order on this account carries beyond ccxt's own fields."""
-        found = account_settings(self.venue, self.client)
-        return found.order_params(self.margin_mode) if found is not None else {}
-
-    def redact(self, text: str) -> str:
-        """A venue's message without this hand's key or secret in it, before it is recorded."""
-        for name in self.credentials.values():
-            held = self.env.get(name, "")
-            if len(held) >= 8:
-                text = text.replace(held, "[redacted]")
-        return text
-
-    def hedged(self) -> str:
-        """Why an account in long/short position mode is refused, or nothing when it is one-way.
-
-        In long/short mode a position is two (a long and a short), every order names which side it
-        belongs to, and a reduce-only close means something else. The exits, the position reads and
-        the close here are written for one position per instrument, so this does not guess.
-        """
-        refusal = (
-            f"the {self.venue} account is in long/short position mode; set it to one-way (net) "
-            "mode, because this desk holds one position per instrument"
-        )
-        found = account_settings(self.venue, self.client)
-        has = getattr(self.client, "has", {}) or {}
-        read = getattr(self.client, "fetch_position_mode", None)
-        try:
-            if found is not None:
-                hedged = found.hedged()
-            elif read is not None and has.get("fetchPositionMode"):
-                hedged = (read(self.symbol) or {}).get("hedged")
-            else:
-                return ""
-        except Exception:
-            # Not readable is not the same as hedged; a venue that cannot say refuses at its end.
-            return ""
-        return refusal if hedged is True else ""
-
-    def make_one_way(self) -> str:
-        """Set a hedged practice account to one-way, when nothing on this symbol could be hurt.
-
-        What changed, or why it was not changed; empty when there was nothing to do. A position or
-        a working order in long/short mode means something only its owner can untangle, and on
-        mainnet the setting is the operator's to change at the exchange, never this software's.
-        """
-        if not self.hedged():
-            return ""
-        if self.environment == "mainnet":
-            return "the account is in long/short mode; set it to one-way at the exchange"
-        if self.position() or self._open_orders():
-            return (
-                f"the account is in long/short mode and holds a position or an order on "
-                f"{self.symbol}; flatten it, then run this again"
-            )
-        found = account_settings(self.venue, self.client)
-        try:
-            if found is not None:
-                found.set_one_way()
-            else:
-                self.client.set_position_mode(False, self.symbol)
-        except Exception as exc:
-            return f"the venue would not switch to one-way: {self._answer(exc)}"
-        if self.hedged():
-            return "the venue accepted the switch to one-way but still reads long/short"
-        return "position mode set to one-way on this demo or testnet account"
-
-    def clock_skew(self) -> str:
-        """Empty when this machine's clock agrees with the venue's; otherwise by how much."""
-        fetch = getattr(self.client, "fetch_time", None)
-        if fetch is None:
-            return ""
-        # Three readings, and the one with the shortest round trip is believed. The first request
-        # on a fresh connection carries the TLS handshake, which moved the midpoint by 300 ms and
-        # more on 2026-10-08 (842 ms for the first round trip, 210 ms for the next ones).
-        best: tuple[float, float] | None = None
-        try:
-            for _ in range(3):
-                before = self.clock() * 1000
-                venue_ms = float(fetch())
-                after = self.clock() * 1000
-                if best is None or after - before < best[0]:
-                    best = (after - before, (before + after) / 2 - venue_ms)
-        except Exception:
-            # A venue that will not tell the time is not a reason to refuse; the account read that
-            # follows fails loudly if the signature does.
-            if best is None:
-                return ""
-        if best is None:
-            return ""
-        skew = best[1]
-        if abs(skew) <= MAX_CLOCK_SKEW_MS:
-            return ""
-        return (
-            f"this machine's clock is {skew:+.0f} ms from {self.venue}; more than "
-            f"{MAX_CLOCK_SKEW_MS} ms and a signature can fail mid-order. Sync the clock first"
-        )
-
-    def contract_size(self) -> Decimal:
-        """How much of the base one contract is. 1 for a venue that quotes in the base itself.
-
-        Orders and positions are in contracts, and this package sizes in the base. One venue's
-        Bitcoin contract is 0.01 of a coin, another's is 0.0001, and a meme coin's can be ten
-        million tokens, so sending the base figure as an amount would be a hundred times too small
-        on one and a million times too large on another.
-        """
-        try:
-            return self.market().unit()
-        except MarketError as exc:
-            raise DispatchError(str(exc)) from exc
-
-    @staticmethod
-    def in_base(order: Mapping[str, Any], unit: Decimal) -> dict[str, Any]:
-        """A venue's order with its quantities in the base, so nothing downstream sees contracts."""
-        out = dict(order)
-        if unit != 1:
-            for key in ("filled", "amount", "remaining"):
-                if out.get(key) is not None:
-                    # Fixed-point: Decimal's own str writes 10 contracts of 0.001 as 1E+1.
-                    out[key] = f"{Decimal(str(out[key])) * unit:f}"
-        return out
-
-    def off_step(self, contracts: Decimal, size: Decimal, unit: Decimal) -> str:
-        """Empty when the venue takes this size as it is; otherwise why it would not.
-
-        ccxt rounds an amount to the market's precision before sending it. That is helpful
-        everywhere except here: the cycle priced, risked and recorded one size, and a quietly
-        rounded order is a different trade from the one on disk. So a size off the venue's own step,
-        or under its minimum, is refused with both figures rather than adjusted. The step and the
-        minimum are in contracts, so the size is judged as contracts.
-        """
-        to_step = getattr(self.client, "amount_to_precision", None)
-        if self.market().outcome:
-            to_step = getattr(self.client, "amount_to_prediction_precision", None)
-        if to_step is None:
-            return ""
-        shown = f"{size} ({contracts} contracts of {unit})" if unit != 1 else f"{size}"
-        try:
-            load = getattr(self.client, "load_markets", None)
-            if load is not None:
-                load()
-            stepped = Decimal(str(to_step(self.symbol, float(contracts))))
-            market = self.client.market(self.symbol) if hasattr(self.client, "market") else {}
-        except Exception as exc:
-            said = self.redact(f"{exc.__class__.__name__}: {exc}")[:200]
-            return f"{self.venue} will not take {shown} of {self.symbol}: {said}"
-        if stepped != contracts:
-            return (
-                f"{shown} is off {self.venue}'s step for {self.symbol}, which would send "
-                f"{stepped}; set [run].size_step for this instrument to the venue's increment"
-            )
-        limits = (market or {}).get("limits") or {}
-        least = (limits.get("amount") or {}).get("min")
-        if least is not None and contracts < Decimal(str(least)):
-            return f"{shown} is under {self.venue}'s minimum of {least} for {self.symbol}"
-        return ""
-
-    def _can_attach(self) -> bool:
-        has = getattr(self.client, "has", {}) or {}
-        return bool(has.get("createOrderWithTakeProfitAndStopLoss"))
-
-    def _can_place_exits(self) -> bool:
-        has = getattr(self.client, "has", {}) or {}
-        return bool(has.get("createStopLossOrder")) and bool(has.get("createTakeProfitOrder"))
 
     def _place_exits(
         self,
@@ -896,826 +430,6 @@ class VenueHand:
                 }
             made[leg] = str(order.get("id", ""))
         return {"exit_orders": made}
-
-    def _sweep_exits(self) -> int | str:
-        """Take off exits an earlier position left resting, before a new position can meet them.
-
-        Called with nothing held, so anything found is reduce-only and belongs to a position that
-        is gone. A take profit sized for that one would close part of the next. One that will not
-        come off is a refusal, never a guess.
-        """
-        fetch = getattr(self.client, "fetch_open_orders", None)
-        reads = exit_reads(self.venue)
-        if fetch is None or not reads:
-            return 0
-        extra = exit_cancel_params(self.venue)
-        gone = 0
-        for read in reads:
-            try:
-                found = list(fetch(self.symbol, None, None, dict(read)) or [])
-            except Exception as exc:
-                return self.redact(
-                    f"cannot read the resting exits: {exc.__class__.__name__}: {exc}"
-                )
-            for order in found:
-                why = self._cancel(str(order.get("id", "")), extra)
-                if why:
-                    return (
-                        f"an exit left from an earlier position on {self.symbol} is still resting "
-                        f"and would not come off ({why}); a new entry would meet it"
-                    )
-                gone += 1
-        return gone
-
-    def _open_orders(self) -> int:
-        """How many orders still work on this instrument. A hand that cannot ask does not guess."""
-        fetch = getattr(self.client, "fetch_open_orders", None)
-        if fetch is None:
-            return 0
-        try:
-            return len(list(fetch(self.symbol)))
-        except Exception as exc:
-            raise DispatchError(
-                self.redact(f"cannot read the open orders: {exc.__class__.__name__}: {exc}")
-            ) from exc
-
-    def position(self) -> Decimal | None:
-        """What the account already holds, or nothing when the venue will not say.
-
-        A hand that cannot read the account does not send: an order into a position nobody can see
-        is the one mistake that cannot be undone by reading the record afterwards.
-        """
-        market = self.market()
-        if market.held_as_balance:
-            return self._holding(market)
-        if market.outcome:
-            return self._shares()
-        fetch = getattr(self.client, "fetch_position", None)
-        if fetch is None:
-            return None
-        try:
-            held = fetch(self.symbol)
-        except Exception as exc:
-            if type(exc).__name__ == "NotSupported":
-                # Seen on 2026-10-20: a venue that reads one position only for options through
-                # ccxt reads its futures from the whole list, filtered here.
-                held = self._position_in_list()
-                if held is None:
-                    return None
-            elif type(exc).__name__ == "NullResponse":
-                # The venue answered, with no position in it. Some adapters say that by raising
-                # (seen through ccxt 4.5.84, 2026-10-08) rather than returning an empty one;
-                # it is a read that succeeded and found the account flat, not a failed read.
-                return Decimal(0)
-            else:
-                raise DispatchError(
-                    self.redact(f"cannot read the account: {exc.__class__.__name__}: {exc}")
-                ) from exc
-        if not held:
-            return Decimal(0)
-        contracts = held.get("contracts")
-        if contracts is None:
-            return Decimal(0)
-        signed = Decimal(str(contracts)) * self.contract_size()
-        return -signed if str(held.get("side", "")).lower() == "short" else signed
-
-    def _position_in_list(self) -> Mapping[str, Any] | None:
-        """This symbol's row of the venue's position list: empty when flat, None when unreadable."""
-        fetch = getattr(self.client, "fetch_positions", None)
-        if fetch is None:
-            return None
-        try:
-            rows = list(fetch([self.symbol]) or [])
-        except Exception as exc:
-            raise DispatchError(
-                self.redact(f"cannot read the positions: {exc.__class__.__name__}: {exc}")
-            ) from exc
-        mine = [r for r in rows if r.get("symbol") == self.symbol and r.get("contracts")]
-        if len(mine) > 1:
-            raise DispatchError(
-                f"the venue reports {len(mine)} positions on {self.symbol}; this desk holds one"
-            )
-        return mine[0] if mine else {}
-
-    def _shares(self) -> Decimal:
-        """The shares of this outcome the account holds, as the venue's positions report them.
-
-        A venue that books a binary market as one position reports the NO side as a short on the
-        YES outcome, so a NO handle is also matched against its YES sibling held short.
-        """
-        try:
-            rows = list(self.client.fetch_positions() or [])
-        except Exception as exc:
-            raise DispatchError(
-                self.redact(f"cannot read the positions: {exc.__class__.__name__}: {exc}")
-            ) from exc
-        handle = self.symbol
-        sibling = handle[: -len(":NO")] + ":YES" if handle.upper().endswith(":NO") else ""
-        held = Decimal(0)
-        for row in rows:
-            name = str(row.get("outcome") or "")
-            side = str(row.get("side") or "long").lower()
-            if row.get("resolved"):
-                continue
-            if (name == handle and side == "long") or (
-                sibling and name == sibling and side == "short"
-            ):
-                held += Decimal(str(row.get("contracts") or 0))
-        return held
-
-    def _holding(self, market: Market) -> Decimal:
-        """The base coin the account holds; under the venue's minimum order it is nothing.
-
-        A spot desk's position is coins in the account, and the account is the desk's. An amount
-        too small to sell is fee residue, not a position, and not a reason to refuse an entry.
-        """
-        try:
-            balance = self.client.fetch_balance()
-        except Exception as exc:
-            raise DispatchError(
-                self.redact(f"cannot read the account: {exc.__class__.__name__}: {exc}")
-            ) from exc
-        row = balance.get(market.base) or {}
-        total = Decimal(str(row.get("total") or 0))
-        if total <= 0 or (market.amount_min is not None and total < market.amount_min):
-            return Decimal(0)
-        return total
-
-    def _ensure_leverage(self) -> str:
-        """Apply the declared leverage and margin mode at the venue, then confirm them.
-
-        Setting a value a venue already holds is reported as an error by some venues, so success is
-        judged by reading the setting back rather than by the reply to the request.
-        """
-        if self.leverage is None or self.leverage_set:
-            return ""
-        found = account_settings(self.venue, self.client)
-        if found is not None:
-            return self._ensure_leverage_on(found, self.leverage)
-        # What the venue answered when a setting was refused. Some venues refuse a value they
-        # already hold, so this is only said when the read-back shows the setting did not take.
-        said: list[str] = []
-        set_mode = getattr(self.client, "set_margin_mode", None)
-        if set_mode is not None:
-            try:
-                set_mode(self.margin_mode, self.symbol)
-            except Exception as exc:
-                said.append(f"margin mode: {self._answer(exc)}")
-        set_leverage = getattr(self.client, "set_leverage", None)
-        if set_leverage is None:
-            return f"{self.venue} cannot set leverage through ccxt; set it at the venue and say so"
-        answered = False
-        try:
-            extra = leverage_params(self.venue)
-            if extra:
-                set_leverage(leverage_number(self.leverage), self.symbol, extra)
-            else:
-                set_leverage(leverage_number(self.leverage), self.symbol)
-            answered = True
-        except Exception as exc:
-            said.append(f"leverage: {self._answer(exc)}")
-        now, mode = self._leverage_now()
-        has = getattr(self.client, "has", {}) or {}
-        if now is None and answered and not has.get("fetchLeverage"):
-            # Nothing to read it back with, so the venue's acceptance is the confirmation. A
-            # reply that is an error still refuses below, and the record says which it was.
-            self.leverage_set = self.leverage_by_reply = True
-            return ""
-        why = f" (the venue said {'; '.join(said)})" if said else ""
-        if now is None:
-            return (
-                f"{self.venue} would not confirm the leverage on {self.symbol}{why}; "
-                "nothing was sent"
-            )
-        if now != self.leverage:
-            return (
-                f"{self.symbol} is at {now}x at the venue and [execution].leverage is "
-                f"{self.leverage}x; it could not be changed{why}, so nothing was sent"
-            )
-        if mode and mode != self.margin_mode:
-            return (
-                f"{self.symbol} is in {mode} margin at the venue and [execution].margin_mode is "
-                f"{self.margin_mode}; it could not be changed{why}, so nothing was sent"
-            )
-        self.leverage_set = True
-        return ""
-
-    def _ensure_leverage_on(self, found: AccountSettings, leverage: Decimal) -> str:
-        """The same confirmation on an account whose leverage is kept per margin mode."""
-        said = ""
-        try:
-            found.apply(self.symbol, leverage, self.margin_mode)
-        except Exception as exc:
-            said = f" (the venue said {self._answer(exc)})"
-        try:
-            now = found.leverage(self.symbol, self.margin_mode)
-        except Exception as exc:
-            now, said = None, said or f" (the read said {self._answer(exc)})"
-        if now is None:
-            return (
-                f"{self.venue} would not confirm the leverage on {self.symbol} in "
-                f"{self.margin_mode} margin{said}; nothing was sent"
-            )
-        if now != leverage:
-            shown = now.to_integral_value() if now == now.to_integral_value() else now
-            return (
-                f"{self.symbol} is at {shown}x in {self.margin_mode} margin at the venue and "
-                f"[execution].leverage is {leverage}x; it could not be changed{said}, so nothing "
-                "was sent"
-            )
-        self.leverage_set = True
-        return ""
-
-    def _answer(self, exc: Exception) -> str:
-        return self.redact(f"{exc.__class__.__name__}: {exc}")[:160]
-
-    def _leverage_now(self) -> tuple[Decimal | None, str]:
-        """The leverage and the margin mode the venue reports for the symbol, as far as it says."""
-        fetch = getattr(self.client, "fetch_leverage", None)
-        if fetch is None:
-            return None, ""
-        found: Mapping[str, Any] = {}
-        with suppress(Exception):
-            found = fetch(self.symbol) or {}
-        value = found.get("longLeverage") or found.get("leverage")
-        mode = str(found.get("marginMode") or "").lower()
-        if value is None:
-            # Seen on 2026-10-20: one venue keeps the leverage on the position itself and reads it
-            # nowhere else through ccxt, flat or not; the position list carries it with the mode.
-            row = self._position_row()
-            value, mode = row.get("leverage"), str(row.get("marginMode") or "").lower()
-        elif not mode and (getattr(self.client, "has", {}) or {}).get("fetchMarginMode"):
-            with suppress(Exception):
-                mode = str(self.client.fetch_margin_mode(self.symbol).get("marginMode") or "")
-                mode = mode.lower()
-        if value is None:
-            return None, mode
-        try:
-            read = Decimal(str(value))
-        except ArithmeticError:
-            return None, mode
-        # Venues answer 10.0 for 10; the record and the refusal should say 10.
-        return (read.to_integral_value() if read == read.to_integral_value() else read), mode
-
-    def _position_row(self) -> Mapping[str, Any]:
-        """This symbol's row of the position list, flat rows included, or nothing."""
-        fetch = getattr(self.client, "fetch_positions", None)
-        if fetch is None:
-            return {}
-        with suppress(Exception):
-            for row in fetch([self.symbol]) or []:
-                if row.get("symbol") == self.symbol:
-                    return dict(row)
-        return {}
-
-    def _capital(
-        self, notional: Decimal, side: str, mid: Decimal, intent: Mapping[str, Any]
-    ) -> dict[str, str] | str:
-        """Is there margin for this order, and does liquidation sit safely beyond the stop?"""
-        if self.leverage is None:
-            return {}
-        market = self.market()
-        currency = market.settlement
-        if not currency:
-            return f"the settlement currency of {self.symbol} is unknown; nothing was sent"
-        try:
-            account = read_account(self.client, currency)
-        except CapitalError as exc:
-            return self.redact(str(exc))
-        fee_bps = (market.taker or Decimal(0)) * BPS
-        needed = margin_needed(notional, self.leverage, fee_bps)
-        allowed = account.free * self.max_margin_share
-        if needed > allowed:
-            return (
-                f"this order needs {needed:.2f} {currency} of margin at {self.leverage}x and "
-                f"{self.max_margin_share} of the free {account.free:.2f} is {allowed:.2f}; "
-                "nothing was sent"
-            )
-        record = {
-            "margin_needed": str(needed.quantize(Decimal("0.01"))),
-            "free_margin": str(account.free),
-            "equity": str(account.equity),
-            "leverage": str(self.leverage),
-            "margin_mode": self.margin_mode,
-        }
-        stop = intent.get("stop_price")
-        if not stop:
-            return record
-        maintenance = maintenance_rate(self.client, self.symbol)
-        liquidation = liquidation_estimate(mid, side, self.leverage, maintenance)
-        stop_price = Decimal(str(stop))
-        buffer = stop_price * self.liquidation_buffer_bps / BPS
-        unsafe = (
-            liquidation >= stop_price - buffer
-            if side == "buy"
-            else liquidation <= stop_price + buffer
-        )
-        record["liquidation_estimate"] = str(liquidation.quantize(Decimal("0.01")))
-        if unsafe:
-            return (
-                f"at {self.leverage}x liquidation is estimated at {liquidation:.2f}, inside "
-                f"the stop at {stop_price} plus {self.liquidation_buffer_bps} bps; a stop past "
-                "liquidation is not a stop, so lower [execution].leverage"
-            )
-        return record
-
-    def _cash(
-        self, notional: Decimal, market: Market, size: Decimal, price: Decimal
-    ) -> dict[str, str] | str:
-        """Is there quote currency for this order? A spot order is paid in full, fee included."""
-        currency = market.quote
-        if not currency:
-            return f"the quote currency of {self.symbol} is unknown; nothing was sent"
-        try:
-            account = read_account(self.client, currency)
-        except CapitalError as exc:
-            return self.redact(str(exc))
-        fee = self._fee(notional, market, size, price)
-        needed = notional + fee
-        allowed = account.free * self.max_margin_share
-        if needed > allowed:
-            return (
-                f"this order costs {needed:.2f} {currency} with its fee and "
-                f"{self.max_margin_share} of the free {account.free:.2f} is {allowed:.2f}; "
-                "nothing was sent"
-            )
-        return {
-            "cash_needed": str(needed.quantize(Decimal("0.01"))),
-            "free_cash": str(account.free),
-            "equity": str(account.equity),
-        }
-
-    def _fee(self, notional: Decimal, market: Market, size: Decimal, price: Decimal) -> Decimal:
-        """The fee of buying `size` at `price`: the venue's own calculation for an outcome, since a
-        prediction venue's fee is not a flat rate (one charges 0.07 x shares x p x (1 - p))."""
-        calculate = getattr(self.client, "calculate_fee", None)
-        if market.outcome and calculate is not None:
-            with suppress(Exception):
-                found = calculate(self.symbol, "limit", "buy", float(size), float(price))
-                return Decimal(str(found["cost"]))
-        return notional * (market.taker or Decimal(0))
-
-    def account(self) -> Any:
-        """The account in this symbol's settlement currency, read through this hand's client."""
-        currency = self.market().settlement
-        if not currency:
-            raise CapitalError(f"the settlement currency of {self.symbol} is unknown")
-        return read_account(self.client, currency)
-
-    def market(self) -> Market:
-        """This hand's market as the venue describes it through ccxt, in the package's one shape."""
-        return Market.from_ccxt(self.venue, self.symbol, self._market())
-
-    def _market(self) -> Mapping[str, Any]:
-        with suppress(Exception):
-            load = getattr(self.client, "load_markets", None)
-            if load is not None:
-                load()
-        return market_of(self.client, self.symbol)
-
-    def _protected_price(self, touch: Mapping[str, Any], side: str) -> Decimal | None:
-        """The far edge of the band a taker order may fill within, on the venue's tick."""
-        raw = touch.get("ask") if side == "buy" else touch.get("bid")
-        if raw is None:
-            return None
-        edge = Decimal(str(raw))
-        step = edge * self.max_slippage_bps / BPS
-        price = edge + step if side == "buy" else edge - step
-        # Held inside the venue's own band where it publishes one: an order priced past it is
-        # refused whole, and the band's edge is never a worse price than the slippage bound.
-        high, low = price_band(self.venue, self.client, self.symbol)
-        market = self.market()
-        # An outcome share trades between the venue's own floor and ceiling, never at 0 or 1.
-        high = market.price_max if high is None and market.outcome else high
-        low = market.price_min if low is None and market.outcome else low
-        if side == "buy" and high is not None and price > high:
-            price = high
-        elif side == "sell" and low is not None and price < low:
-            price = low
-        to_tick = getattr(self.client, "price_to_precision", None)
-        if market.outcome:
-            to_tick = getattr(self.client, "price_to_prediction_precision", None)
-        if to_tick is not None:
-            with suppress(Exception):
-                price = Decimal(str(to_tick(self.symbol, float(price))))
-        return price
-
-    def close_position(self, reason: str) -> dict[str, Any]:
-        """Close whatever this account holds on the symbol with a reduce-only market order.
-
-        Exits are never price-limited: a close that fails is worse than one that slips. Reduce-only
-        means the order can shrink the position and never open or flip one.
-        """
-        held = self.position()
-        if not held:
-            return {"closed": False, "note": "nothing is held"}
-        side = "sell" if held > 0 else "buy"
-        market = self.market()
-        spot = market.held_as_balance or market.outcome
-        if market.outcome:
-            self.cancel_open_orders()
-            return self._sell_outcome(held, reason)
-        if spot:
-            # The stop and take profit rest as orders that can hold the coins; a sale needs them.
-            self.cancel_open_orders()
-            held = self._holding(self.market())
-            if not held:
-                return {"closed": False, "note": "nothing is held once the exits were cancelled"}
-        amount = abs(held) / self.contract_size()
-        to_step = getattr(self.client, "amount_to_precision", None)
-        if to_step is not None:
-            # Down to the venue's step, never above what is held: a spot sale cannot be
-            # reduce-only, so the step is the guard.
-            with suppress(Exception):
-                amount = Decimal(str(to_step(self.symbol, float(amount))))
-        try:
-            order = self.client.create_order(
-                self.symbol,
-                "market",
-                side,
-                float(amount),
-                None,
-                # A close carries an id of its own like every other order. Without one, ccxt fills
-                # in its own broker id on some venues (seen on 2026-10-20 on a demo close).
-                {"clientOrderId": self.close_id()}
-                if spot
-                else {
-                    **self.order_params(),
-                    "reduceOnly": True,
-                    "clientOrderId": self.close_id(),
-                },
-            )
-        except Exception as exc:
-            return {
-                "closed": False,
-                "error": self.redact(f"{exc.__class__.__name__}: {exc}")[:300],
-                "reason": reason,
-            }
-        order_id = str(order.get("id", ""))
-        state = str(order.get("status") or "")
-        average = order.get("average")
-        if order_id and state not in ("closed", "filled", *ENDED):
-            taken = self._taken(order_id)
-            state, average = str(taken.get("status") or state), taken.get("average", average)
-        if average is None and order_id:
-            average = self._filled_average(order_id)
-        # Accepted is not filled. Seen on a demo on 2026-10-17: a reduce-only market close on a
-        # stock perpetual whose book sat outside the venue's price band rested unfilled, and the
-        # account still held the position. The record says closed only when the account agrees.
-        after = self.position()
-        if after and (after > 0) == (held > 0):
-            if order_id and state not in ("closed", "filled", *ENDED):
-                self._cancel(order_id)
-            return {
-                "closed": False,
-                "reason": reason,
-                "order_id": order_id,
-                "error": (
-                    f"the close did not fill: the venue reports {state or 'no status'} and the "
-                    f"account still holds {after}; the unfilled close was cancelled, the exits at "
-                    "the venue still stand, and the next pass tries again"
-                ),
-            }
-        closed: dict[str, Any] = {
-            "closed": True,
-            "reason": reason,
-            "side": side,
-            "size": f"{amount * self.contract_size():f}",
-            "order_id": order_id,
-            "average": None if average is None else str(average),
-        }
-        if self.exits == "separate":
-            swept = self._sweep_exits()
-            closed["exits_cancelled" if isinstance(swept, int) else "exits_left"] = swept
-        return closed
-
-    def settlement(self, since_ms: int) -> dict[str, Any] | None:
-        """How this outcome settled since `since_ms`: shares, the price paid out (1 or 0), when.
-
-        None when the venue reports no settlement for it, or none through ccxt.
-        """
-        has = getattr(self.client, "has", {}) or {}
-        if not has.get("fetchSettlements"):
-            return None
-        rows = self.client.fetch_settlements(self.symbol, since_ms) or []
-        for row in rows:
-            if str(row.get("outcome") or "") != self.symbol or row.get("amount") is None:
-                continue
-            return {
-                "amount": Decimal(str(row["amount"])),
-                "price": Decimal(str(row.get("price") or 0)),
-                "won": bool(row.get("won")),
-                "timestamp": row.get("timestamp") or 0,
-            }
-        return None
-
-    def _sell_outcome(self, held: Decimal, reason: str) -> dict[str, Any]:
-        """Sell an outcome's shares now: these venues take no market order, so a limit at the
-        venue's floor, immediate or cancel, which is a market order that cannot rest."""
-        floor = self.market().price_min or Decimal("0.01")
-        try:
-            order = self.client.create_order(
-                self.symbol,
-                "limit",
-                "sell",
-                float(held),
-                float(floor),
-                {**self.params, "timeInForce": "IOC"},
-            )
-        except Exception as exc:
-            return {
-                "closed": False,
-                "error": self.redact(f"{exc.__class__.__name__}: {exc}")[:300],
-                "reason": reason,
-            }
-        order_id = str(order.get("id", ""))
-        after = self._shares()
-        if after > 0:
-            return {
-                "closed": False,
-                "reason": reason,
-                "order_id": order_id,
-                "error": (
-                    f"the sale did not fill: the account still holds {after} shares; the next pass "
-                    "tries again"
-                ),
-            }
-        return {
-            "closed": True,
-            "reason": reason,
-            "side": "sell",
-            "size": f"{held:f}",
-            "order_id": order_id,
-            "average": None if order.get("average") is None else str(order["average"]),
-        }
-
-    def cancel_open_orders(self) -> int:
-        """Cancel every working order on the symbol, attached exits included. How many went."""
-        fetch = getattr(self.client, "fetch_open_orders", None)
-        if fetch is None:
-            return 0
-        gone = 0
-        with suppress(Exception):
-            for order in fetch(self.symbol) or []:
-                if not self._cancel(str(order.get("id", ""))):
-                    gone += 1
-        extra = exit_cancel_params(self.venue)
-        for read in exit_reads(self.venue):
-            # One kind the venue will not list is not a reason to skip the others.
-            with suppress(Exception):
-                for order in fetch(self.symbol, None, None, dict(read)) or []:
-                    if not self._cancel(str(order.get("id", "")), extra):
-                        gone += 1
-        return gone
-
-    def _touch_now(self) -> tuple[Decimal | None, Decimal | None]:
-        """The best bid and ask at this moment, or nothing when the venue will not say."""
-        fetch = getattr(self.client, "fetch_order_book", None)
-        if fetch is None:
-            return None, None
-        self.book_age_s = None
-        try:
-            book = fetch(self.symbol)
-            bid = Decimal(str(book["bids"][0][0])) if book.get("bids") else None
-            ask = Decimal(str(book["asks"][0][0])) if book.get("asks") else None
-            stamp = book.get("timestamp")
-            if stamp:
-                self.book_age_s = self.clock() - float(stamp) / 1000
-        except Exception:
-            # Without a fresh book the order rests at the snapshot's touch, as it always did.
-            return None, None
-        return bid, ask
-
-    def _resting_price(self, intent: Mapping[str, Any], side: str) -> Decimal | None:
-        """Where a maker order sits: this snapshot's own touch, moved by the declared offset."""
-        touch = intent.get("bid") if side == "buy" else intent.get("ask")
-        if touch is None:
-            return None
-        price = Decimal(str(touch))
-        if self.price_offset_bps:
-            # Away from the touch is further from a fill and further from crossing. Both legs of
-            # that trade-off are the operator's to make, so the sign follows the side.
-            step = price * self.price_offset_bps / BPS
-            price = price - step if side == "buy" else price + step
-        return price
-
-    def _settle(self, order_id: str) -> dict[str, Any]:
-        """Wait for a resting order to fill, then cancel what is left. One pass, no retries."""
-        if not order_id:
-            return {"filled": None, "cancelled": False, "waited_s": 0.0}
-        started = self.clock()
-        try:
-            while self.clock() - started < self.limit_timeout_s:
-                status = self.order_status(order_id)
-                state = "" if status is None else str(status.get("status", ""))
-                if status is not None and state in ("closed", "filled"):
-                    return {
-                        "filled": str(status.get("filled", "")),
-                        "average": (
-                            None if status.get("average") is None else str(status["average"])
-                        ),
-                        "cancelled": False,
-                        "waited_s": round(self.clock() - started, 3),
-                    }
-                if status is not None and state in ENDED:
-                    return self._ended(status, round(self.clock() - started, 3))
-                self.sleep(min(1.0, self.limit_timeout_s))
-        except KeyboardInterrupt:
-            return self._interrupted(order_id, round(self.clock() - started, 3))
-        waited = round(self.clock() - started, 3)
-        why = self._cancel(order_id)
-        if not why:
-            return {
-                "cancelled": True,
-                "waited_s": waited,
-                "note": "it did not fill inside [execution].limit_timeout_s and was cancelled",
-            }
-        # The cancel did not go through. Either the venue had already ended the order - which is
-        # ordinary for a post-only limit - or it is still resting there, and those are very
-        # different facts. Asking costs one call and turns a guess into a record.
-        standing = self.order_status(order_id)
-        state = "" if standing is None else str(standing.get("status", ""))
-        if standing is not None and state in (*ENDED, "closed", "filled"):
-            return {**self._ended(standing, waited), "cancel_refused": why}
-        still_open = state in ("open", "new") or (standing is None)
-        return {
-            "cancelled": False,
-            "waited_s": waited,
-            "cancel_refused": why,
-            "status": state or None,
-            "note": (
-                f"the cancel was refused ({why}) and the venue reports {state or 'nothing'}; "
-                "an order may still be resting there, and the next cycle on this instrument will "
-                "refuse a new entry while it is"
-                if still_open
-                else f"it did not fill in time; the venue had already ended it ({state})"
-            ),
-        }
-
-    def _interrupted(self, order_id: str, waited: float) -> dict[str, Any]:
-        """The operator stopped the process while an order rested. Take it off the book first.
-
-        Leaving here without a cancel would leave a post-only order working with nobody waiting on
-        it, so the cancel is sent before anything else and the record says how it went. The
-        caller sees `interrupted` and ends the run once the record is on disk.
-        """
-        why = self._cancel(order_id)
-        return {
-            "interrupted": True,
-            "cancelled": not why,
-            "cancel_refused": why or None,
-            "waited_s": waited,
-            "note": (
-                "interrupted while the order rested; it was cancelled before the process left"
-                if not why
-                else f"interrupted while the order rested and the cancel was refused ({why}); "
-                "check the venue, and the next cycle will refuse while an order works"
-            ),
-        }
-
-    def _ended(self, status: Mapping[str, Any], waited: float) -> dict[str, Any]:
-        """The venue finished the order itself: say how, and how much of it filled."""
-        state = str(status.get("status", ""))
-        filled = Decimal(str(status.get("filled") or 0))
-        return {
-            "cancelled": False,
-            "status": state,
-            "filled": str(filled),
-            "average": None if status.get("average") is None else str(status["average"]),
-            "waited_s": waited,
-            "note": (
-                f"the venue ended the order itself ({state}) with {filled} filled; "
-                + (
-                    "nothing is held from it"
-                    if filled == 0
-                    else "that part is a position, with its exits attached at the venue"
-                )
-            ),
-        }
-
-    def order_status(self, order_id: str) -> Mapping[str, Any] | None:
-        """What the venue says became of an order, or None when it will not say.
-
-        Seen on 2026-10-04: one venue's fetch_order through ccxt refuses unless told the order is
-        among the last 500, and that refusal was read as "no answer" for the whole wait. A venue
-        that answers per state is asked per state: open first, then closed (which includes
-        cancelled and rejected).
-        """
-        has = getattr(self.client, "has", {}) or {}
-        ways: list[str] = []
-        if has.get("fetchOpenOrder") and has.get("fetchClosedOrder"):
-            ways += ["fetch_open_order", "fetch_closed_order"]
-        ways.append("fetch_order")
-        for way in ways:
-            fetch = getattr(self.client, way, None)
-            if fetch is None:
-                continue
-            found = None
-            # Not found in this state, or a read this venue will not do: try the next way.
-            with suppress(Exception):
-                found = fetch(order_id, self.symbol)
-            if found:
-                return self.in_base(found, self.contract_size())
-        # No single-order read answered: look for it in the open list, then the closed one.
-        for listed, way in (
-            ("fetchOpenOrders", "fetch_open_orders"),
-            ("fetchClosedOrders", "fetch_closed_orders"),
-        ):
-            fetch = getattr(self.client, way, None)
-            if fetch is None or not has.get(listed):
-                continue
-            with suppress(Exception):
-                for order in fetch(self.symbol) or []:
-                    if str(order.get("id", "")) == order_id:
-                        return self.in_base(order, self.contract_size())
-        return None
-
-    def _cancel(self, order_id: str, params: Mapping[str, Any] | None = None) -> str:
-        """Empty when the venue took the cancel; otherwise what it said, in its own words."""
-        cancel = getattr(self.client, "cancel_order", None)
-        if cancel is None:
-            return "this venue has no cancel through ccxt"
-        try:
-            if params:
-                cancel(order_id, self.symbol, dict(params))
-            else:
-                cancel(order_id, self.symbol)
-        except Exception as exc:
-            return self.redact(f"{exc.__class__.__name__}: {exc}")[:200]
-        return ""
-
-
-def key_hint(missing: Sequence[str], expected: Sequence[str], env: Mapping[str, str]) -> str:
-    """Names set beside the missing ones under the same venue prefix, by name and never by value.
-
-    Seen on 2026-10-20: an exchange's own page calls the secret a "secret key", and a `.env` held
-    GATE_SECRET_KEY where GATE_API_SECRET is read.
-    """
-    prefixes = tuple({name.split("_", 1)[0] + "_" for name in missing})
-    near = sorted(n for n in env if n.startswith(prefixes) and n not in expected and env.get(n))
-    if not near:
-        return ""
-    return f"{', '.join(near)} is set; the names read are {', '.join(expected)}"
-
-
-def leverage_number(leverage: Decimal) -> int | float:
-    """A whole leverage as an integer: one venue refused 3.0 as malformed (2026-10-20)."""
-    whole = leverage.to_integral_value()
-    return int(whole) if leverage == whole else float(leverage)
-
-
-def _drift_bps(
-    priced: Decimal, bid: Decimal | None, ask: Decimal | None, side: str
-) -> Decimal | None:
-    """How far the mid moved against the trade since it was priced; negative is in its favour."""
-    if not priced or bid is None or ask is None:
-        return None
-    now = (bid + ask) / 2
-    moved = (now - priced) / priced * BPS
-    return moved if side == "buy" else -moved
-
-
-def _decision_age_s(intent: Mapping[str, Any], now: float) -> float | None:
-    """Seconds since the cycle that made this decision began, read from its id."""
-    from datetime import UTC, datetime
-
-    stamp = str(intent.get("at", ""))[:20]
-    try:
-        began = datetime.strptime(stamp, "%Y-%m-%dT%H-%M-%SZ").replace(tzinfo=UTC)
-    except ValueError:
-        return None
-    return now - began.timestamp()
-
-
-def _slippage_bps(average: Any, mid: Decimal, side: str) -> str | None:
-    """What the fill paid against the mid the trade was priced at; positive is worse."""
-    if average in (None, "") or mid <= 0:
-        return None
-    try:
-        paid = Decimal(str(average))
-    except ArithmeticError:
-        return None
-    moved = (paid - mid) / mid * BPS
-    return str((moved if side == "buy" else -moved).quantize(Decimal("0.01")))
-
-
-def _client_id(intent: Mapping[str, Any], longest: int = 32, prefix: str = "") -> str:
-    """One id per cycle and instrument, so a cycle run twice cannot open two positions.
-
-    Letters and digits only, 32 at most, behind a prefix the venue requires. A venue that takes
-    fewer gets a digest of the same id, which is just as fixed for the cycle and cannot lose the
-    instrument the way a cut would.
-    """
-    cycle = re.sub(r"[^0-9A-Za-z]", "", str(intent.get("at", "")) or "unknown")
-    instrument = re.sub(r"[^0-9A-Za-z]", "", str(intent.get("instrument", "")))
-    body = cycle if instrument and cycle.endswith(instrument) else cycle + instrument
-    full = f"{prefix}tra{body}"
-    if len(full) <= longest:
-        return full
-    if longest >= 32 and not prefix:
-        return full[:32]
-    digest = hashlib.sha256(full.encode("ascii")).hexdigest()
-    return f"{prefix}tra{digest[: longest - len(prefix) - 3]}"
 
 
 def account_fees(
