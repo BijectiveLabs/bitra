@@ -21,7 +21,7 @@ def record(**fields: Any) -> dict[str, Any]:
         "cycle_id": "2026-09-29T10-00-00Z",
         "refusals": [],
         "agents": {"failed": {}},
-        "validators": None,
+        "reviewers": None,
         "stopped_by": None,
         "intent": None,
         "placed": None,

@@ -32,8 +32,8 @@ def _cycle_steps(cfg: Any) -> list[str]:
         steps.append("judge")
     # Every reading has a row, read or not; the row says which.
     steps.extend(["macro", "onchain", "sentiment"])
-    steps.extend(["cost", "exit"])
-    steps.extend(f"validator_{stance}" for stance in cfg.validators)
+    steps.extend(["cost", "exit", "paths"])
+    steps.extend(f"reviewer_{stance}" for stance in cfg.reviewers)
     if not cfg.matrix.idle:
         steps.append("confluence")
     if not cfg.conviction.idle:
@@ -97,13 +97,14 @@ def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], l
     payload["out"] = str(result.path)
     spent = f"{result.fan.seconds}s of agents"
     if result.debate is not None:
-        spent += f", {result.debate.seconds}s of validators"
+        spent += f", {result.debate.seconds}s of reviewers"
     lines = [f"cycle {result.cycle} {result.instrument}: {spent}"]
     lines.extend(_data_lines(result))
     lines.extend(_voice_lines(result))
-    lines.extend(_validator_lines(result))
+    lines.extend(_reviewer_lines(result))
     lines.extend(_sizing_lines(result))
     lines.extend(_exit_lines(result))
+    lines.extend(_path_lines(result.briefs.get("paths")))
     lines.extend(_target_lines(result))
     lines.extend(_cost_lines(result))
     lines.extend(_intent_lines(result, mode))
@@ -113,6 +114,19 @@ def _cycle_report(result: Any, usage: Any, mode: str) -> tuple[dict[str, Any], l
         lines.append(f"stopped by: {result.stopped_by}")
     lines.append(f"snapshot.json, briefs, answers and cycle.json in {result.path}")
     return payload, lines
+
+
+def _path_lines(paths: Mapping[str, Any] | None) -> list[str]:
+    """How the instrument's own paths read the lead's levels."""
+    if not paths:
+        return []
+    if "absent" in paths:
+        return [f"paths:     not read, {paths['absent']}"]
+    return [
+        f"paths:     take first {paths['take_first']:.2f}, stop first {paths['stop_first']:.2f}, "
+        f"neither {paths['neither']:.2f} over {paths['horizon_bars']} bars "
+        f"({paths['paths']} paths); {paths['expected_bps']:+.2f} bps net of the round trip"
+    ]
 
 
 def _data_lines(result: Any) -> list[str]:
@@ -162,10 +176,10 @@ def _voice_lines(result: Any) -> list[str]:
     return lines
 
 
-def _validator_lines(result: Any) -> list[str]:
+def _reviewer_lines(result: Any) -> list[str]:
     lines: list[str] = []
     for role, said in sorted(result.context.items()):
-        if not role.startswith("validator"):
+        if not role.startswith("reviewer"):
             continue
         verdict = said.get("verdict") or f"failed: {said.get('error', '')}"
         cited = len(said.get("claims") or ())

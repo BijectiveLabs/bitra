@@ -32,7 +32,7 @@ RULE = Conviction(
         "sentiment": Decimal("0.5"),
         "structure_lead": Decimal(2),
     },
-    validator_weight=Decimal(1),
+    reviewer_weight=Decimal(1),
     min_score=Decimal("0.4"),
     ladder=(
         Tier(Decimal("0.75"), Decimal(1)),
@@ -88,7 +88,7 @@ def test_one_leg_pointing_the_other_way_costs_size() -> None:
 
     assert score.agreed == ("macro", "sentiment", "structure_lead")
     assert score.against == ("onchain",)
-    # A full band of opposition from the heaviest reading voice, and a validator against: 0.2.
+    # A full band of opposition from the heaviest reading voice, and a reviewer against: 0.2.
     assert score.score == Decimal("0.200")
 
     put = stake(score)

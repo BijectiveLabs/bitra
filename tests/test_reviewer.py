@@ -1,4 +1,4 @@
-"""A validator's words count only when they rest on a figure it was given.
+"""A reviewer's words count only when they rest on a figure it was given.
 
 The check is the whole point of the role: three stances can argue as well as they like, and code
 keeps only the claims that cite a figure from the brief with that figure's value. A verdict with no
@@ -11,14 +11,14 @@ import json
 
 import pytest
 
-from trading_research_agents.agents.validator import (
+from trading_research_agents.agents.reviewer import (
     ROLE,
     SCHEMA,
     STANCES,
     checked,
     figures_of,
     parse,
-    validator_brief,
+    reviewer_brief,
 )
 from trading_research_agents.llm.form import FormError
 
@@ -122,7 +122,7 @@ def test_a_made_up_number_is_not_a_citation() -> None:
 
 def test_the_schema_is_closed_and_the_stance_and_verdict_are_named() -> None:
     assert SCHEMA["additionalProperties"] is False
-    assert ROLE == "validator" and STANCES == ("pro", "contra", "neutral")
+    assert ROLE == "reviewer" and STANCES == ("pro", "contra", "neutral")
 
     with pytest.raises(FormError, match="stance must be one of"):
         parse(answer(stance="bullish"))
@@ -135,7 +135,7 @@ def test_the_schema_is_closed_and_the_stance_and_verdict_are_named() -> None:
 
 
 def test_the_brief_carries_the_proposal_and_its_figures_and_nothing_else() -> None:
-    brief = validator_brief(
+    brief = reviewer_brief(
         instrument="BTCUSDT",
         stance="neutral",
         proposal={"target": "long", "confidence": 0.71},
@@ -148,7 +148,7 @@ def test_the_brief_carries_the_proposal_and_its_figures_and_nothing_else() -> No
         "proposal",
         "figures",
     }
-    # The cost and the desk's rules are code's question, so they are not in a validator's brief.
+    # The cost and the desk's rules are code's question, so they are not in a reviewer's brief.
     assert brief["stance"] == "neutral" and "cost_bps" not in brief
 
 
@@ -215,3 +215,42 @@ def test_a_name_written_as_one_word_resolves_and_a_different_name_still_does_not
     )
     # A name the brief does not carry is still refused, however it is spelled.
     assert "not a figure" in cites("us10y_correlation", "-0.0", figures)
+
+
+def test_a_desk_that_still_says_validator_runs_unchanged() -> None:
+    from decimal import Decimal
+
+    from test_config import AGENTS, agent_raw
+    from trading_research_agents.trading.config import parse_strategy_config
+    from trading_research_agents.trading.config_agents import renamed_in
+    from trading_research_agents.trading.config_values import ConfigError
+
+    raw = agent_raw(
+        agents={
+            **AGENTS,
+            "validators": ["pro", "contra"],
+            "on_missing_validator": "continue",
+            "roles": {"validator": {"model": "m-review"}},
+        },
+        conviction={"validator_weight": Decimal("0.2")},
+    )
+    cfg = parse_strategy_config(raw)
+    assert cfg.agents is not None and cfg.agents.reviewers == ("pro", "contra")
+    assert cfg.agents.on_missing_reviewer == "continue"
+    assert cfg.agents.for_role("reviewer").model == "m-review"
+    assert cfg.conviction.reviewer_weight == Decimal("0.2")
+    notes = renamed_in(raw)
+    assert "[agents].validators is [agents].reviewers since 0.12" in notes
+    assert "[conviction].validator_weight is [conviction].reviewer_weight since 0.12" in notes
+    twice = agent_raw(agents={**AGENTS, "validators": ["pro"], "reviewers": ["pro"]})
+    with pytest.raises(ConfigError, match="names reviewers twice"):
+        parse_strategy_config(twice)
+
+
+def test_a_cycle_recorded_with_validators_still_shows_them() -> None:
+    from trading_research_agents.cli.tui_panels import _reviewer_table
+    from trading_research_agents.execution.hindsight import gate_of
+
+    record = {"context": {"validator_pro": {"stance": "pro", "verdict": "support"}}}
+    assert _reviewer_table(record)
+    assert gate_of({"refusals": ["validator_contra: opposes"]}) == "reviewers"

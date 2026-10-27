@@ -18,7 +18,7 @@ AGENTS = (
     "risk_manager",
     "executor",
     "auditor",
-    "validator",
+    "reviewer",
 )
 FORBIDDEN = ("win rate", "profit", "guaranteed", "alpha")
 

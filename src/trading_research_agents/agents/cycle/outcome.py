@@ -29,7 +29,7 @@ from trading_research_agents.agents.cycle.record import _finish, _send, _stop_be
 from trading_research_agents.agents.cycle.result import CycleResult
 from trading_research_agents.agents.cycle.state import Pass
 from trading_research_agents.agents.progress import DONE, REFUSED, RUNNING, announce
-from trading_research_agents.agents.validator.tools import figures_of
+from trading_research_agents.agents.reviewer.tools import figures_of
 from trading_research_agents.execution.desk import within_desk
 from trading_research_agents.execution.outcome import BPS, OutcomeError, outcome_edge
 from trading_research_agents.records import append_line, write_json

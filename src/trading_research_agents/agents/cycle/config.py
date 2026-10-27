@@ -135,12 +135,12 @@ class CycleConfig:
     take_frac: Decimal | None = None
     # [exit].mode = "volatility": each trade's stop measured from the decision timeframe's range.
     volatility_exit: VolatilityExit | None = None
-    # [agents].validators: the stances to ask once there is a proposal worth arguing about. Each
+    # [agents].reviewers: the stances to ask once there is a proposal worth arguing about. Each
     # stance is one more call, so an operator turns them on deliberately.
-    validators: tuple[str, ...] = ()
+    reviewers: tuple[str, ...] = ()
     # refuse: a declared stance that no model answered stops the trade. continue: trade on the votes
     # that came back. A lost check never adds size either way.
-    on_missing_validator: str = "refuse"
+    on_missing_reviewer: str = "refuse"
     # Higher timeframes read as context, in seconds; the decision stays on interval_s.
     context_intervals: tuple[int, ...] = ()
     # How long a position is kept: the analyst's horizon, or [exit].timeout_bars. The cost gate
@@ -193,10 +193,10 @@ class CycleConfig:
         strangers = sorted(set(self.team) - set(TEAM))
         if strangers or len(set(self.team)) != len(self.team):
             raise CycleError(f"the team is each of {list(TEAM)} at most once, not {self.team}")
-        bad_stance = sorted(set(self.validators) - set(STANCES))
+        bad_stance = sorted(set(self.reviewers) - set(STANCES))
         if bad_stance:
             raise CycleError(f"{bad_stance} is not a stance; have {list(STANCES)}")
-        if len(set(self.validators)) != len(self.validators):
+        if len(set(self.reviewers)) != len(self.reviewers):
             raise CycleError("each stance is asked once")
         if self.mode not in MODES:
             raise CycleError(f"mode is one of {list(MODES)}")

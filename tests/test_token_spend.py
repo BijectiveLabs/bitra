@@ -15,7 +15,7 @@ from trading_research_agents.execution.targets import Targets
 START = datetime(2026, 9, 27, 10, 0, tzinfo=UTC)
 
 
-def test_validators_are_not_asked_when_code_will_refuse_anyway(
+def test_reviewers_are_not_asked_when_code_will_refuse_anyway(
     tmp_path: Path, envelope: Envelope
 ) -> None:
     # The fixture's round trip is about 13.8 bps without impact; 40 bps claimed is under 4x.
@@ -23,13 +23,13 @@ def test_validators_are_not_asked_when_code_will_refuse_anyway(
         tmp_path,
         envelope,
         {"structure_lead": analyst_answer()},
-        validators=("pro", "contra", "neutral"),
+        reviewers=("pro", "contra", "neutral"),
         targets=Targets(min_edge_multiple=Decimal("4")),
     )
     result = run_cycle(cfg)
-    assert "validator" not in fake.per_role
+    assert "reviewer" not in fake.per_role
     assert any(
-        r.startswith("targets: the claimed edge is at most") and "validators were not asked" in r
+        r.startswith("targets: the claimed edge is at most") and "reviewers were not asked" in r
         for r in result.refusals
     )
 
@@ -39,16 +39,16 @@ def test_table_readers_think_low_only_where_an_effort_is_declared() -> None:
     from trading_research_agents.trading.config import parse_strategy_config
 
     plain = parse_strategy_config(agent_raw()).agents
-    assert plain is not None and plain.for_role("validator").effort is None
+    assert plain is not None and plain.for_role("reviewer").effort is None
     raw = agent_raw()
     raw["agents"] = {
         **raw["agents"],
         "effort": "medium",
-        "roles": {"validator": {"effort": "high"}},
+        "roles": {"reviewer": {"effort": "high"}},
     }
     agents = parse_strategy_config(raw).agents
     assert agents is not None
-    assert agents.for_role("validator").effort == "high"
+    assert agents.for_role("reviewer").effort == "high"
     assert agents.for_role("market_screener").effort == "low"
     assert agents.for_role("structure_lead").effort == "medium"
 
@@ -64,7 +64,7 @@ def test_briefs_go_to_the_model_without_spaces() -> None:
         def completer_for(role: str) -> FakeCompleter:
             return fake
 
-    _ask(Config(), "validator", {"a": 1, "b": [1, 2]}, {})  # type: ignore[arg-type]
+    _ask(Config(), "reviewer", {"a": 1, "b": [1, 2]}, {})  # type: ignore[arg-type]
     assert fake.calls[0].user == json.dumps({"a": 1, "b": [1, 2]}, separators=(",", ":"))
 
 

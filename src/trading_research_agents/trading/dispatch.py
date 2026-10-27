@@ -249,7 +249,7 @@ class VenueHand(HandUpkeep):
         return _refused(off_step) if off_step else None
 
     def _priced_now(self, send: _Send) -> dict[str, Any] | None:
-        # The snapshot this was priced on is as old as the analysts and validators were slow -
+        # The snapshot this was priced on is as old as the analysts and reviewers were slow -
         # half a minute is ordinary. Seen on 2026-10-04: a post-only order rested at that stale
         # touch was on the wrong side of a market that had moved, and the venue rejected it at once.
         now_bid, now_ask = self._touch_now()

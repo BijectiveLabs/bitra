@@ -83,7 +83,7 @@ def alarms_of(record: Mapping[str, Any]) -> tuple[Alarm, ...]:
     elif stopped:
         add(STOPPED, str(stopped))
 
-    for key in ("agents", "validators"):
+    for key in ("agents", "reviewers"):
         failed = (record.get(key) or {}).get("failed") if isinstance(record.get(key), dict) else {}
         if isinstance(failed, dict) and failed:
             first = sorted(failed.items())[0]

@@ -21,10 +21,10 @@ def _load_notes(a: Any, roster: tuple[str, ...], screener: bool = False) -> list
     reading = [name for name in (a.readings or roster) if name != "structure_lead"]
     roles = [
         *asked,
-        *(["validator"] if a.validators else []),
+        *(["reviewer"] if a.reviewers else []),
         *(["market_screener"] if screener else []),
     ]
-    calls = len(asked) + len(a.validators) + (1 if screener else 0)
+    calls = len(asked) + len(a.reviewers) + (1 if screener else 0)
     on = sorted({a.for_role(role).provider for role in roles})
     said = [
         f"models: a full pass makes at most {calls} call(s) within a minute"
@@ -58,15 +58,15 @@ def _load_notes(a: Any, roster: tuple[str, ...], screener: bool = False) -> list
             f"models: the roles share {on[0]} across {', '.join(pairs)}, each model on "
             "its own limits"
         )
-    if a.validators:
+    if a.reviewers:
         said.append(
-            "models: a declared validator that no model answers "
+            "models: a declared reviewer that no model answers "
             + (
                 "refuses the trade"
-                if a.on_missing_validator == "refuse"
+                if a.on_missing_reviewer == "refuse"
                 else "is left out and the trade goes on"
             )
-            + " ([agents].on_missing_validator)"
+            + " ([agents].on_missing_reviewer)"
         )
     return said
 
@@ -279,7 +279,7 @@ def _spend_notes(cfg: Any) -> list[str]:
     else:
         roles = (
             "structure_lead",
-            "validator",
+            "reviewer",
             "market_screener",
         )
         levels: dict[str, list[str]] = {}
@@ -293,7 +293,7 @@ def _spend_notes(cfg: Any) -> list[str]:
     free = sorted(m for m, (i, o) in a.pricing.items() if i == 0 and o == 0)
     used = {
         a.for_role(role).model or "default"
-        for role in ("structure_lead", "validator", "market_screener")
+        for role in ("structure_lead", "reviewer", "market_screener")
     }
     used |= {name.partition(":")[2] for name in a.fallback}
     unpriced = sorted(m for m in used if m not in a.pricing and m != "default")

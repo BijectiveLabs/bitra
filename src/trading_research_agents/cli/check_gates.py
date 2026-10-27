@@ -42,7 +42,7 @@ def _gate_lines(
     out: a required role nobody asks, or a vote count nobody can cast.
     """
     bad: list[str] = []
-    good = _validator_notes(cfg)
+    good = _reviewer_notes(cfg)
     good.extend(_confluence_notes(cfg, roster, bad))
     good.extend(_execution_notes(cfg, project, tier, env, entry_role, bad))
     good.extend(_fallback_notes(cfg, bad))
@@ -67,13 +67,13 @@ def _gate_lines(
     return good, bad
 
 
-def _validator_notes(cfg: Any) -> list[str]:
-    stances = () if cfg.agents is None else cfg.agents.validators
+def _reviewer_notes(cfg: Any) -> list[str]:
+    stances = () if cfg.agents is None else cfg.agents.reviewers
     if not stances:
         return []
     from trading_research_agents.agents.cycle import judge_mode
 
-    weight = cfg.conviction.validator_weight
+    weight = cfg.conviction.reviewer_weight
     how = (
         "; the advocates build their cases apart and neutral judges them, its verdict the one "
         "that counts; with a case on one side only, code decides without asking it"
@@ -81,7 +81,7 @@ def _validator_notes(cfg: Any) -> list[str]:
         else ""
     )
     return [
-        f"validators: {', '.join(stances)}; asked once there is a proposal and the system "
+        f"reviewers: {', '.join(stances)}; asked once there is a proposal and the system "
         "has not already refused it"
         + how
         + (f"; each counted vote moves conviction by {weight}" if weight > 0 else "")
@@ -92,7 +92,7 @@ def _confluence_notes(cfg: Any, roster: tuple[str, ...], bad: list[str]) -> list
     matrix = cfg.confluence
     if matrix.idle:
         return ["confluence: not declared; the context is recorded but gates nothing"]
-    stances = () if cfg.agents is None else cfg.agents.validators
+    stances = () if cfg.agents is None else cfg.agents.reviewers
     absent = sorted(set(matrix.required) - set(roster))
     if absent:
         bad.append(
@@ -102,7 +102,7 @@ def _confluence_notes(cfg: Any, roster: tuple[str, ...], bad: list[str]) -> list
     if matrix.min_support > len(stances):
         bad.append(
             f"[confluence].min_support is {matrix.min_support} but "
-            f"{len(stances)} validator(s) are asked; no cycle can clear it"
+            f"{len(stances)} reviewer(s) are asked; no cycle can clear it"
         )
     return [
         f"confluence: needs {', '.join(matrix.required) or 'no role'}; "
@@ -213,12 +213,12 @@ def _conviction_notes(cfg: Any, roster: tuple[str, ...], bad: list[str]) -> list
         good = ["conviction: not declared; every admitted cycle trades the base size"]
     else:
         good = _conviction_rule(rule, roster, bad)
-    asked = cfg.agents.validators if cfg.agents is not None else ()
+    asked = cfg.agents.reviewers if cfg.agents is not None else ()
     gated = cfg.confluence.min_support > 0 or cfg.confluence.max_opposition is not None
-    if asked and not gated and rule.validator_weight <= 0:
+    if asked and not gated and rule.reviewer_weight <= 0:
         bad.append(
-            f"validators: {', '.join(asked)} are asked every cycle and their votes move nothing; "
-            "give them [conviction].validator_weight, or [confluence].min_support / "
+            f"reviewers: {', '.join(asked)} are asked every cycle and their votes move nothing; "
+            "give them [conviction].reviewer_weight, or [confluence].min_support / "
             "max_opposition, or stop asking them"
         )
     return good
@@ -266,6 +266,11 @@ def _target_notes(cfg: Any, bad: list[str]) -> list[str]:
         good = ["targets: not declared; only the cost gate stands between a claim and an intent"]
     else:
         good = ["targets: " + "; ".join(_targets_said(targets))]
+    if targets.min_path_ev_bps is not None:
+        good.append(
+            f"paths: a trade worth less than {targets.min_path_ev_bps} bps over the instrument's "
+            "own paths, net of the round trip, is refused, and so is one too few candles can read"
+        )
     if targets.min_edge_multiple is None:
         good.append(
             "targets: no edge multiple declared, so a trade worth two basis points more than it "

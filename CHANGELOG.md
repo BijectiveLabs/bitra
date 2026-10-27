@@ -8,6 +8,12 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- The paths (`forecast/paths.py`): the instrument's own candles drawn forward from the last closed
+  one, with Kronos as the reference for the candle as the unit, the window normalised on itself and
+  the next candle drawn on a coarse and a fine token, read at the levels the trade names: how often
+  the take comes before the stop inside the hold. Every cycle records the reading under `paths`;
+  `[targets].min_path_ev_bps` refuses a trade below a floor; the arena gains a `paths` row.
+
 - The risk gate (`risk/`): every new order passes one entry point that checks the intent against
   the hard caps, recomputes the loss at the stop from the intent's own numbers, and reads the
   switches, unanswered sends, today's trades and the day's loss and drawdown, failing closed when
@@ -67,9 +73,11 @@ All notable changes to this project are recorded here. The format follows
 
 - The seats that decide are named for what they answer for: `structure_lead` (was
   `technical_analyst`), `blind_confirmer` (was `technical_peer`), `flow_specialist` (was
-  `flow_analyst`) and `outcome_assessor` (was `event_analyst`). A desk written with the old names
-  runs unchanged and `tra check` names the new ones; a cycle folder written before keeps its
-  `technical.json`, and every reader takes either name.
+  `flow_analyst`), `outcome_assessor` (was `event_analyst`) and `reviewer` (was `validator`, with
+  `[agents].reviewers`, `[agents].on_missing_reviewer` and `[conviction].reviewer_weight`). A desk
+  written with the old names runs unchanged and `tra check` names the new ones; a cycle folder
+  written before keeps its `technical.json` and `validator_*` entries, and every reader takes
+  either name.
 - A venue error at the create call is classified: a refusal by the venue raises as before, and
   anything else (a timeout, a dropped connection, a duplicate client id) is read back by the
   order's client id instead of being recorded as `sent: false`.

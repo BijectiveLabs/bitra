@@ -25,10 +25,10 @@ from trading_research_agents.cli.tui_panels import (
     _cost_table,
     _cycle_panel,
     _data_table,
+    _reviewer_table,
     _risk_panel,
     _series_table,
     _targets_panel,
-    _validator_table,
 )
 
 
@@ -143,7 +143,7 @@ class CycleView:
 
 
 def _step_label(name: str) -> str:
-    return name.replace("_analyst", "").replace("validator_", "validator ").replace("_", " ")
+    return name.replace("_analyst", "").replace("reviewer_", "reviewer ").replace("_", " ")
 
 
 def screen_view(record: Mapping[str, Any]) -> Group:
@@ -236,7 +236,7 @@ def cycle_view(record: Mapping[str, Any]) -> Group:
     parts.extend(_data_table(record))
     parts.extend(_series_table(record))
     parts.extend(_cost_table(record))
-    parts.extend(_validator_table(record))
+    parts.extend(_reviewer_table(record))
     parts.extend(_confluence_panel(record))
     parts.extend(_conviction_panel(record))
     parts.extend(_risk_panel(record))

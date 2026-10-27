@@ -39,8 +39,11 @@ trading_research_agents/
                (listed on the MCP page); shared by mcp and agents                -> everything above
   readings/    macro, on-chain and sentiment: the operator's series against the
                operator's thresholds, a declared state and a graded score; no model -> data
+  forecast/    the instrument's own candles drawn forward and read at a trade's
+               levels; a logistic fit, Platt and isotonic calibration, the
+               expected value of a side; numerics only                          depends on nothing
   agents/      the research roles at layers 0, 2 and 3; the session roles; the
-               cycle and its analyst, validators and screener                   -> everything above, llm, store, surface, readings
+               cycle and its seats, reviewers and screener                      -> everything above, llm, store, surface, readings, forecast
   mcp/         the gates as MCP tools                                            -> everything except agent
   market_data/ one-minute flow and book bars, derivatives and liquidations, dated
                text, gap marks; the verified archive in day files and hour parts,
@@ -48,10 +51,8 @@ trading_research_agents/
   features/    figures computed at a bar's close from what was known then:
                price, path, order flow, derivatives, cross-asset                -> market_data, execution
   perception/  archived headlines read by the typed judge into text events     -> llm, market_data, features
-  forecast/    a logistic fit, Platt and isotonic calibration, the expected value
-               of a side; numerics only                                         depends on nothing
   evaluation/  views, triple-barrier settlement with the desk's costs,
-               baselines, the forecast row, the arena and its records           -> features, market_data, data, envelope, execution, forecast
+               baselines, the forecast and paths rows, the arena and its records -> features, market_data, data, envelope, execution, forecast
   cli/         the `tra` command                                                 -> everything
 ```
 

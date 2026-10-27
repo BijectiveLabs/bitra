@@ -20,7 +20,7 @@ from typing import Any
 STATES = ("bullish", "bearish", "mixed", "undeclared")
 POLICIES = ("refuse", "ignore")
 VOTES = ("support", "oppose", "abstain")
-# The three stances a validator can be asked to take. Declared here, beside the gate that counts
+# The three stances a reviewer can be asked to take. Declared here, beside the gate that counts
 # their votes, so the role package and the config reader share one definition.
 STANCES = ("pro", "contra", "neutral")
 
@@ -121,10 +121,10 @@ def confluent(
     states: Mapping[str, Mapping[str, Any]],
     votes: Sequence[str] = (),
 ) -> Confluence:
-    """Apply the matrix to the declared states and the validators' votes.
+    """Apply the matrix to the declared states and the reviewers' votes.
 
     `states` is what code derived from the operator's thresholds, one entry per reading read.
-    `votes` are the validators' verdicts after their claims were checked against the brief.
+    `votes` are the reviewers' verdicts after their claims were checked against the brief.
     """
     allowed = matrix.allowed_for(target)
     read: dict[str, str] = {}
@@ -151,10 +151,10 @@ def confluent(
     opposition = sum(1 for vote in votes if vote == "oppose")
     abstained = sum(1 for vote in votes if vote == "abstain")
     if support < matrix.min_support:
-        reasons.append(f"{support} validator(s) support it; {matrix.min_support} required")
+        reasons.append(f"{support} reviewer(s) support it; {matrix.min_support} required")
     if matrix.max_opposition is not None and opposition > matrix.max_opposition:
         reasons.append(
-            f"{opposition} validator(s) oppose it; at most {matrix.max_opposition} allowed"
+            f"{opposition} reviewer(s) oppose it; at most {matrix.max_opposition} allowed"
         )
 
     refusing = [r for r in reasons if "allowed by on_missing" not in r]

@@ -27,8 +27,8 @@ from trading_research_agents.agents.cycle.pricing import (
     _touch,
 )
 from trading_research_agents.agents.cycle.record import _finish
+from trading_research_agents.agents.cycle.reviewers import _informative_votes, _votes
 from trading_research_agents.agents.cycle.state import Pass, Step
-from trading_research_agents.agents.cycle.validators import _informative_votes, _votes
 from trading_research_agents.agents.progress import DONE, REFUSED, announce
 from trading_research_agents.execution.confluence import confluent
 from trading_research_agents.execution.conviction import score_of, stake_for

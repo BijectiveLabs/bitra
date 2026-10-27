@@ -44,7 +44,7 @@ like it would have had to win just to break even:
 
 Then the data the cycle used and how old it was, the series the readings read, the stop and
 take profit it would have placed, and which agents answered. A cycle that goes further adds what
-each validator argued, how conviction weighed the voices, the risk at the stop and the targets:
+each reviewer argued, how conviction weighed the voices, the risk at the stop and the targets:
 
 ![data, series, exits and agents](/images/one-cycle.png)
 
@@ -61,7 +61,7 @@ shortened; the two reading lines are printed as 0.11 prints them, where the run 
 carried a model's label:
 
 ```
-cycle 2026-09-29T02-59-16Z BTCUSDT: 5.344s of agents, 15.042s of validators
+cycle 2026-09-29T02-59-16Z BTCUSDT: 5.344s of agents, 15.042s of reviewers
   funding        ccxt:bybit         age 4.267s
   ohlcv          ccxt:bybit         age 32.746s
   orderbook      ccxt:bybit         age 7.544s
@@ -69,8 +69,8 @@ macro      read by code: bullish (risk-on)
 sentiment  read by code: bullish (positive)
 lead:      long on range_reversion at 0.65 over 5 bars: the close is stretched low in the window
 read: zscore=-0.587, vwap_gap_bps=-3.99, ret_1_bps=1.59
-validator contra   oppose on 2 cited figure(s)
-validator pro      support on 3 cited figure(s)
+reviewer contra   oppose on 2 cited figure(s)
+reviewer pro      support on 3 cited figure(s)
 conviction: 0.800 of 1.0 (macro 1.0, sentiment 0.5, structure_lead 1.300)
 risk: 8.29 bps of equity at the stop against the declared 50 bps, size 0.010
 cost: 12.87 bps round trip, 2.00 of it estimated

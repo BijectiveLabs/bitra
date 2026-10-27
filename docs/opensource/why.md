@@ -167,7 +167,7 @@ mentions:
 
 | Found | What changed |
 |---|---|
-| Validators asked side by side voted their assignment: pro supported 63 times in 64, contra opposed 61 times in 63, and a neutral asked alone abstained in 33 of 37 cycles | pro and contra build their cases apart and neutral judges the checked cases ([the validators](/opensource/cycle#the-validators)) |
+| Reviewers asked side by side voted their assignment: pro supported 63 times in 64, contra opposed 61 times in 63, and a neutral asked alone abstained in 33 of 37 cycles | pro and contra build their cases apart and neutral judges the checked cases ([the reviewers](/opensource/cycle#the-reviewers)) |
 | The reading analysts of the time cited figures by names the brief did not use, 27 times in four days | a naming rule in the prompts and a check that resolves names; none discarded in the week of runs that followed |
 | A demo API served an order book 3.2 hours old, 35 bps from where its own trades printed | orders are refused against a book older than 30 seconds |
 | A library reported a fee the venue charged as a rebate | fees are read as the venue charged them |

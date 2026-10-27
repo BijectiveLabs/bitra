@@ -130,7 +130,7 @@ def agent_raw(**tables: Any) -> dict[str, Any]:
 def test_the_two_gates_are_absent_until_they_are_declared() -> None:
     cfg = parse_strategy_config(agent_raw())
     assert cfg.confluence.idle and cfg.targets.idle
-    assert cfg.agents is not None and cfg.agents.validators == ()
+    assert cfg.agents is not None and cfg.agents.reviewers == ()
 
 
 def test_a_declared_matrix_carries_the_readings_and_the_policy() -> None:
@@ -233,31 +233,31 @@ def test_effort_is_declared_once_and_overridden_per_role() -> None:
             agents={
                 **AGENTS,
                 "effort": "high",
-                "roles": {"validator": {"effort": "low"}},
+                "roles": {"reviewer": {"effort": "low"}},
             }
         )
     )
     assert cfg.agents is not None
     assert cfg.agents.for_role("structure_lead").effort == "high"
-    assert cfg.agents.for_role("validator").effort == "low"
+    assert cfg.agents.for_role("reviewer").effort == "low"
     plain = parse_strategy_config(agent_raw()).agents
     assert plain is not None and plain.for_role("structure_lead").effort is None
     with pytest.raises(ConfigError, match="effort is one of"):
         parse_strategy_config(agent_raw(agents={**AGENTS, "effort": "ludicrous"}))
     with pytest.raises(ConfigError, match="effort is one of"):
         parse_strategy_config(
-            agent_raw(agents={**AGENTS, "roles": {"validator": {"effort": "ludicrous"}}})
+            agent_raw(agents={**AGENTS, "roles": {"reviewer": {"effort": "ludicrous"}}})
         )
 
 
 def test_the_stances_are_named_and_asked_once() -> None:
-    cfg = parse_strategy_config(agent_raw(agents={**AGENTS, "validators": ["pro", "contra"]}))
-    assert cfg.agents is not None and cfg.agents.validators == ("pro", "contra")
+    cfg = parse_strategy_config(agent_raw(agents={**AGENTS, "reviewers": ["pro", "contra"]}))
+    assert cfg.agents is not None and cfg.agents.reviewers == ("pro", "contra")
 
     with pytest.raises(ConfigError, match="is not a stance"):
-        parse_strategy_config(agent_raw(agents={**AGENTS, "validators": ["bullish"]}))
+        parse_strategy_config(agent_raw(agents={**AGENTS, "reviewers": ["bullish"]}))
     with pytest.raises(ConfigError, match="asks each stance once"):
-        parse_strategy_config(agent_raw(agents={**AGENTS, "validators": ["pro", "pro"]}))
+        parse_strategy_config(agent_raw(agents={**AGENTS, "reviewers": ["pro", "pro"]}))
 
 
 def test_conviction_is_absent_until_declared_and_reads_its_ladder_from_the_top() -> None:
@@ -267,7 +267,7 @@ def test_conviction_is_absent_until_declared_and_reads_its_ladder_from_the_top()
         agent_raw(
             conviction={
                 "weights": {"structure_lead": Decimal(2), "macro": Decimal(1)},
-                "validator_weight": Decimal(1),
+                "reviewer_weight": Decimal(1),
                 "min_score": Decimal("0.4"),
                 "max_leverage": Decimal(3),
                 "ladder": [
@@ -403,13 +403,13 @@ def test_a_setting_that_no_longer_does_anything_is_read_and_named_by_check() -> 
             **AGENTS,
             "analysts": ["structure_lead", "sentiment_analyst"],
             "reuse_reading_for": "1h",
-            "roles": {"macro_analyst": {"model": "m"}, "validator": {"model": "v"}},
+            "roles": {"macro_analyst": {"model": "m"}, "reviewer": {"model": "v"}},
         },
         confluence={"required": ["onchain_analyst"]},
     )
     cfg = parse_strategy_config(desk)
     assert cfg.agents is not None and cfg.agents.readings == ("sentiment",)
-    assert set(cfg.agents.roles) == {"validator"}
+    assert set(cfg.agents.roles) == {"reviewer"}
     notes = renamed_in(desk)
     assert any("[agents].analysts is [agents].readings" in n for n in notes)
     assert any("[agents.roles.macro_analyst]" in n and "asks no model" in n for n in notes)

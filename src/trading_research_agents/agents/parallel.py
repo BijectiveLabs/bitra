@@ -1,6 +1,6 @@
 """Agents that do not wait for each other, and a cycle that survives one of them failing.
 
-A model call is seconds of waiting on a socket. Two advocating validators in sequence is twice that
+A model call is seconds of waiting on a socket. Two advocating reviewers in sequence is twice that
 wait for no reason, so calls that do not depend on each other go out together on a small pool of
 threads. What makes this safe is not the concurrency but what happens around it: each answer is
 written the moment it arrives, a failure is recorded and does not touch the others, and the results

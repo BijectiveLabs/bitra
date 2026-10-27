@@ -3,7 +3,7 @@
 The readings come first, read by code. The structure lead answers inside its schema, and code
 checks every figure it cited, the setup against the measured regime, and its confidence. The round
 trip is priced on the snapshot's own book, and the stop and the take profit are placed inside the
-operator's bounds before any validator is paid to argue about the trade.
+operator's bounds before any reviewer is paid to argue about the trade.
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ from trading_research_agents.agents.cycle.briefing import (
     _regime_line,
 )
 from trading_research_agents.agents.cycle.config import TARGETS
+from trading_research_agents.agents.cycle.paths import read_the_paths
 from trading_research_agents.agents.cycle.pricing import (
     _break_even,
     _channel,
@@ -35,14 +36,14 @@ from trading_research_agents.agents.cycle.pricing import (
     _held_bars,
 )
 from trading_research_agents.agents.cycle.record import _finish
+from trading_research_agents.agents.cycle.reviewers import _before_votes, _run_reviewers
 from trading_research_agents.agents.cycle.state import Pass, Step
 from trading_research_agents.agents.cycle.team import check_reasons, combine, split, tasks
-from trading_research_agents.agents.cycle.validators import _before_votes, _run_validators
 from trading_research_agents.agents.parallel import Task, run_tasks
 from trading_research_agents.agents.progress import DONE, REFUSED, announce, timed
+from trading_research_agents.agents.reviewer.tools import figures_of
 from trading_research_agents.agents.roles import RoleError
 from trading_research_agents.agents.scope import crossings
-from trading_research_agents.agents.validator.tools import figures_of
 from trading_research_agents.execution import session
 from trading_research_agents.execution.regime import misfit
 from trading_research_agents.execution.stops import StopError
@@ -96,7 +97,7 @@ def _brief(p: Pass) -> bool:
     return True
 
 
-def _ask_technical(p: Pass) -> bool:
+def _ask_lead(p: Pass) -> bool:
     """The structure lead and its team, in parallel; the readings are written down meanwhile."""
     cfg, result = p.cfg, p.result
     states = {n: _reading_state(n, brief) for n, brief in p.reading_briefs.items()}
@@ -321,28 +322,28 @@ def _exits_pay(p: Pass, view: dict[str, Any]) -> bool:
 def _validate(p: Pass) -> bool:
     """The declared stances, unless code is already certain to refuse whatever they say."""
     cfg, result = p.cfg, p.result
-    if not cfg.validators:
+    if not cfg.reviewers:
         return True
     early = _before_votes(cfg, result, p.costs, p.edge)
     if early:
         # Refused by code that does not read a single vote, so asking three models first
         # would only pay for an answer nothing can use.
-        result.refusals.append(f"{early}; the validators were not asked")
+        result.refusals.append(f"{early}; the reviewers were not asked")
         announce(cfg.watch, early.partition(":")[0], REFUSED, early.partition(": ")[2])
         _finish(cfg, p.where, result)
         return False
-    _run_validators(cfg, p.where, result, asked=p.asked, analyst=p.analyst)
+    _run_reviewers(cfg, p.where, result, asked=p.asked, analyst=p.analyst)
     silent = [
         name
-        for name in (f"validator_{stance}" for stance in cfg.validators)
+        for name in (f"reviewer_{stance}" for stance in cfg.reviewers)
         if "error" in (result.context.get(name) or {"error": "not asked"})
     ]
-    if silent and cfg.on_missing_validator == "refuse" and result.stopped_by is None:
+    if silent and cfg.on_missing_reviewer == "refuse" and result.stopped_by is None:
         why = (
-            f"validators: {', '.join(silent)} did not answer, and "
-            "[agents].on_missing_validator is refuse; a check you declared did not happen"
+            f"reviewers: {', '.join(silent)} did not answer, and "
+            "[agents].on_missing_reviewer is refuse; a check you declared did not happen"
         )
-        return _stop(p, why, "validators", f"{', '.join(silent)} did not answer", stopped=True)
+        return _stop(p, why, "reviewers", f"{', '.join(silent)} did not answer", stopped=True)
     if result.stopped_by is not None:
         _finish(cfg, p.where, result)
         return False
@@ -351,13 +352,14 @@ def _validate(p: Pass) -> bool:
 
 DECIDING: tuple[Step, ...] = (
     _brief,
-    _ask_technical,
+    _ask_lead,
     _check_answer,
     combine,
     _fits_regime,
     check_reasons,
     _price,
     _place_exits,
+    read_the_paths,
     _validate,
 )
 

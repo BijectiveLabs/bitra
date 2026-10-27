@@ -72,15 +72,15 @@ class AgentSettings:
     # [agents].team: who answers beside the structure lead: a blind peer on its brief, and a
     # flow specialist on the book, funding and open interest. Empty is the analyst alone.
     team: tuple[str, ...] = ()
-    # [agents].validators: the stances asked about a proposal once there is one. Each stance is one
+    # [agents].reviewers: the stances asked about a proposal once there is one. Each stance is one
     # more call, so this is empty until an operator asks for it.
-    validators: tuple[str, ...] = ()
+    reviewers: tuple[str, ...] = ()
     # [agents].fallback: `provider:model` entries every role inherits, tried in order when the
     # provider above cannot be reached. A rate limit is a dependency failing, not a reason to stop.
     fallback: tuple[str, ...] = ()
-    # A declared validator that no model answered: refuse the trade (a check you asked for did not
+    # A declared reviewer that no model answered: refuse the trade (a check you asked for did not
     # happen) or continue on the votes that did come back.
-    on_missing_validator: str = "refuse"
+    on_missing_reviewer: str = "refuse"
     # How long a role waits for a provider that said "try again in N seconds" before the next link.
     max_retry_wait_s: float = 15.0
 
@@ -113,7 +113,7 @@ class AgentSettings:
 # Roles whose brief is a table of figures code already computed.
 TABLE_READERS = (
     "market_screener",
-    "validator",
+    "reviewer",
 )
 
 
@@ -140,6 +140,13 @@ RENAMED_SEATS = {
     "technical_peer": "blind_confirmer",
     "flow_analyst": "flow_specialist",
     "event_analyst": "outcome_assessor",
+    "validator": "reviewer",
+}
+# Keys renamed with the seat they configure. Read under either name, never both.
+RENAMED_KEYS = {
+    "validators": "reviewers",
+    "on_missing_validator": "on_missing_reviewer",
+    "validator_weight": "reviewer_weight",
 }
 ALIASES = {**RETIRED_READERS, **RENAMED_SEATS}
 
@@ -164,8 +171,8 @@ KNOWN_ROLES = (
     "risk_manager",
     "executor",
     "auditor",
-    # One stance is one call, so a validator may run on its own model like any other role.
-    "validator",
+    # One stance is one call, so a reviewer may run on its own model like any other role.
+    "reviewer",
     # The deciding role on a prediction market outcome.
     "outcome_assessor",
 )
@@ -200,6 +207,17 @@ def _known(names: Any, allowed: tuple[str, ...], where: str) -> tuple[str, ...]:
         if named.count(name) > 1:
             raise ConfigError(f"{where} names {name} twice")
     return named
+
+
+def current_keys(table: Mapping[str, Any], where: str) -> dict[str, Any]:
+    """The table with every key under its current name; one setting written twice is refused."""
+    out: dict[str, Any] = {}
+    for key, value in table.items():
+        named = RENAMED_KEYS.get(key, key)
+        if named in out:
+            raise ConfigError(f"{where} names {named} twice, once as {key}")
+        out[named] = value
+    return out
 
 
 def _readings(table: Mapping[str, Any]) -> tuple[str, ...]:
@@ -257,6 +275,13 @@ def renamed_in(raw: Mapping[str, Any]) -> tuple[str, ...]:
     ]
     for where, names in named:
         notes.extend(_renamed_names(where, names or ()))
+    tables = (("[agents]", agents), ("[conviction]", raw.get("conviction") or {}))
+    notes.extend(
+        f"{where}.{key} is {where}.{RENAMED_KEYS[key]} since 0.12"
+        for where, table in tables
+        for key in table
+        if key in RENAMED_KEYS
+    )
     return tuple(notes)
 
 
@@ -334,8 +359,8 @@ AGENTS_KEYS = (
     # What a desk wrote before 0.11; read, and named by `tra check`.
     "analysts",
     "reuse_reading_for",
-    "validators",
-    "on_missing_validator",
+    "reviewers",
+    "on_missing_reviewer",
     "fallback",
 )
 
@@ -351,6 +376,7 @@ def _agents(raw: dict[str, Any], strategy_raw: dict[str, Any]) -> AgentSettings 
     table = raw.get("agents")
     if not isinstance(table, dict):
         raise ConfigError("[agents] is required when [strategy].agent is set")
+    table = current_keys(table, "[agents]")
     # A misspelt budget is a budget that is not there; it is refused rather than ignored.
     unknown = sorted(set(table) - set(AGENTS_KEYS))
     _no_secrets(unknown, "[agents]")
@@ -402,9 +428,9 @@ def _agents(raw: dict[str, Any], strategy_raw: dict[str, Any]) -> AgentSettings 
         roles=_roles(table.get("roles")),
         readings=_readings(table),
         team=_team(table.get("team")),
-        validators=_validators(table.get("validators")),
-        on_missing_validator=_choice(
-            table, "on_missing_validator", ("refuse", "continue"), "refuse", "[agents]"
+        reviewers=_reviewers(table.get("reviewers")),
+        on_missing_reviewer=_choice(
+            table, "on_missing_reviewer", ("refuse", "continue"), "refuse", "[agents]"
         ),
         max_retry_wait_s=float(table.get("max_retry_wait_s", 15.0)),
         fallback=_fallback(table.get("fallback")),
@@ -429,18 +455,18 @@ def _fallback(raw: Any) -> tuple[str, ...]:
     return tuple(names)
 
 
-def _validators(raw: Any) -> tuple[str, ...]:
-    """`[agents].validators`: the stances that argue about a proposal before the votes are read."""
+def _reviewers(raw: Any) -> tuple[str, ...]:
+    """`[agents].reviewers`: the stances that argue about a proposal before the votes are read."""
     if raw is None:
         return ()
     if not isinstance(raw, list) or not all(isinstance(name, str) for name in raw):
-        raise ConfigError("[agents].validators is a list of stances")
+        raise ConfigError("[agents].reviewers is a list of stances")
     names = [str(name) for name in raw]
     unknown = sorted(set(names) - set(STANCES))
     if unknown:
-        raise ConfigError(f"[agents].validators: {unknown} is not a stance; have {list(STANCES)}")
+        raise ConfigError(f"[agents].reviewers: {unknown} is not a stance; have {list(STANCES)}")
     if len(set(names)) != len(names):
-        raise ConfigError("[agents].validators asks each stance once")
+        raise ConfigError("[agents].reviewers asks each stance once")
     return tuple(names)
 
 

@@ -1,6 +1,6 @@
-"""The brief a validator gets, and the check code runs over the claims it comes back with.
+"""The brief a reviewer gets, and the check code runs over the claims it comes back with.
 
-A validator's words only count when they rest on a figure it was actually given. So every claim
+A reviewer's words only count when they rest on a figure it was actually given. So every claim
 names a figure by the brief's own name and repeats that figure's value, and code compares the two:
 a figure that is not in the brief is discarded, a value that does not match is discarded, and both
 discards are recorded. A verdict with no surviving claim becomes `abstain`, because a verdict
@@ -17,9 +17,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from trading_research_agents.agents.cited import cites, figures_of
-from trading_research_agents.agents.validator.role import Claim, Validator
+from trading_research_agents.agents.reviewer.role import Claim, Reviewer
 
-__all__ = ["Checked", "checked", "figures_of", "validator_brief"]
+__all__ = ["Checked", "checked", "figures_of", "reviewer_brief"]
 
 
 @dataclass(frozen=True)
@@ -42,7 +42,7 @@ class Checked:
         }
 
 
-def checked(said: Validator, figures: Mapping[str, str]) -> Checked:
+def checked(said: Reviewer, figures: Mapping[str, str]) -> Checked:
     """Keep the claims that cite a figure in the brief with that figure's value, drop the rest."""
     kept: list[Claim] = []
     discarded: list[str] = []
@@ -65,14 +65,14 @@ def checked(said: Validator, figures: Mapping[str, str]) -> Checked:
     )
 
 
-def validator_brief(
+def reviewer_brief(
     *,
     instrument: str,
     stance: str,
     proposal: Mapping[str, Any],
     figures: Mapping[str, str],
 ) -> dict[str, Any]:
-    """One validator's brief: the proposal, the figures it was built from, and the declarations."""
+    """One reviewer's brief: the proposal, the figures it was built from, and the declarations."""
     return {
         "instrument": instrument,
         "stance": stance,

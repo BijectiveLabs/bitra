@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from trading_research_agents.agents import structure_lead
-from trading_research_agents.agents.scope import VALIDATOR, scope_of
+from trading_research_agents.agents.scope import REVIEWER, scope_of
 
 PROMPTS = Path(__file__).resolve().parent.parent / "src" / "trading_research_agents" / "agents"
 PROMPTS = PROMPTS / "prompts"
@@ -50,7 +50,7 @@ RULE_WORDING = (
 )
 
 
-@pytest.mark.parametrize("role", [structure_lead.ROLE, VALIDATOR])
+@pytest.mark.parametrize("role", [structure_lead.ROLE, REVIEWER])
 def test_a_proposing_role_is_never_handed_the_desks_rules(role: str) -> None:
     scope = scope_of(role)
     assert [key for key in POLICY if scope.keeps(key)] == []
@@ -61,8 +61,8 @@ def test_a_proposing_role_is_never_handed_the_desks_rules(role: str) -> None:
     [
         "structure_lead_live",
         "structure_lead",
-        "validator",
-        "validator_judge",
+        "reviewer",
+        "reviewer_judge",
         "outcome_assessor",
     ],
 )

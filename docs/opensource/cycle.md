@@ -119,7 +119,9 @@ the universe (system: one data pull each, the trigger per instrument, ordered by
                           flow specialist reads the book, funding and open interest)
   -> the round trip priced (system)
   -> the stop and the target (the lead's levels, held in your [exit] bounds; break-even checked)
-  -> validators          (when configured: pro and contra apart, then neutral judges both)
+  -> paths               (system: how often the instrument's own paths reach the take before the
+                          stop at these levels; refuses only below [targets].min_path_ev_bps)
+  -> reviewers          (when configured: pro and contra apart, then neutral judges both)
   -> confluence matrix   (system: declared states and votes)   -> whether to trade at all
   -> conviction          (system: the same voices, weighted)    -> how much the desk wants on
   -> sizing              (system, when [sizing] is declared: Kelly from the desk's own round trips,
@@ -248,7 +250,7 @@ runs/cycles/2026-09-27T14-51-23Z-BTCUSDT/
   briefs/structure_lead.json    the figures the lead was given, computed here, not by the model
   briefs/cost.json              what a round trip would cost, per component
   briefs/risk_gate.json         every check the risk gate ran, and why it refused if it did
-  briefs/validator_pro.json     the proposal and the figures a validator was given
+  briefs/reviewer_pro.json     the proposal and the figures a reviewer was given
   answers/structure_lead.json   what the model answered, as it answered it
   intents.jsonl                 the intent, if the gates and the risk gate admitted one
   placed.json                   what the venue did with it, in venue mode
@@ -504,8 +506,8 @@ places anything. Four things keep a role inside its job, and only the last is wo
 
 | Enforced by | What it prevents |
 |---|---|
-| the brief | A role cannot reason about what it was never given. No validator's or screener's brief carries equity, size, the controls or the exit distances. `agents/scope.py` filters every brief to that role's declared reads, and what it removed is written in the record. |
-| the schema | A closed schema with only that role's own fields. A validator has nowhere to put a size, and a field outside the schema is a parse error rather than a surprise. |
+| the brief | A role cannot reason about what it was never given. No reviewer's or screener's brief carries equity, size, the controls or the exit distances. `agents/scope.py` filters every brief to that role's declared reads, and what it removed is written in the record. |
+| the schema | A closed schema with only that role's own fields. A reviewer has nowhere to put a size, and a field outside the schema is a parse error rather than a surprise. |
 | the wiring | Nothing downstream reads a sentence. The confluence matrix and the conviction score read the declared state the system derived from the operator's thresholds; the cost gate reads the snapshot's own book; the size comes from the operator's ladder and caps. |
 | the prompt | One line naming what is not this role's job, plus a small vocabulary the system looks for in case it appears anyway. |
 
@@ -531,24 +533,24 @@ required = ["macro", "onchain"]
 long_states = ["bullish"]
 short_states = ["bearish"]
 on_missing = "refuse"          # refuse | ignore
-min_support = 1                # validators that must support it
-max_opposition = 0             # validators that may oppose it; 0 is the strictest there is
+min_support = 1                # reviewers that must support it
+max_opposition = 0             # reviewers that may oppose it; 0 is the strictest there is
 ```
 
 It fails closed. A required role whose declaration is `undeclared` or `mixed` has produced no state,
 and a state nobody produced is not a neutral state: the cycle refuses and names the role. An
 operator who means to run on one leg writes `on_missing = "ignore"`, and the record says they did.
 `tra check` refuses a matrix that can never pass - a required role the roster does not ask, or more
-support required than there are validators to give it.
+support required than there are reviewers to give it.
 
-## The validators
+## The reviewers
 
 Three stances of one role, asked after the deciding analyst answers and after the round trip is
 priced:
 
 ```toml
 [agents]
-validators = ["pro", "contra", "neutral"]
+reviewers = ["pro", "contra", "neutral"]
 ```
 
 With all three, they work as a judged case rather than a vote:
@@ -606,7 +608,7 @@ What counts, and where, is yours to declare:
 | Where | Setting | Effect |
 |---|---|---|
 | the confluence matrix | `[confluence].min_support`, `max_opposition` | a hard gate: too few supports or too many opposes refuses the trade |
-| conviction | `[conviction].validator_weight` | each counted vote that says something adds or takes away that weight; the size follows the score |
+| conviction | `[conviction].reviewer_weight` | each counted vote that says something adds or takes away that weight; the size follows the score |
 
 With neither declared, the verdicts are recorded and move nothing, and `tra check` says so.
 
@@ -625,7 +627,7 @@ strong each side is, so every voice counts as strong as it actually is.
 ```toml
 [conviction]
 weights = { structure_lead = 2.0, onchain = 1.5, macro = 1.0, sentiment = 0.5 }
-validator_weight = 1.0
+reviewer_weight = 1.0
 min_score = 0.4                  # below this the desk does not trade
 max_leverage = 3.0               # notional against [run].equity; a ceiling, never a target
 
@@ -665,8 +667,8 @@ every time from the same figures, and the record keeps every series it came from
 | the deciding analyst | `weight * confidence` | `weight` |
 | a reading | `weight * score`, plus when it agrees with the direction, minus when against | `weight * abs(score)` |
 | a reading with nothing past its lines | `0` | nothing; it is listed as silent |
-| a validator that supports, after its claims were checked | `+validator_weight` | `validator_weight` |
-| a validator that opposes | `-validator_weight` | `validator_weight` |
+| a reviewer that supports, after its claims were checked | `+reviewer_weight` | `reviewer_weight` |
+| a reviewer that opposes | `-reviewer_weight` | `reviewer_weight` |
 
 `score = max(0, what they bring) / what they count toward`, so it sits between 0 and 1. With nobody
 else speaking it is the deciding analyst's own confidence. Agreement lifts it, opposition lowers it
@@ -1007,6 +1009,35 @@ average, across the ones that hit the stop, the take profit or the time limit. T
 `[targets]` judge the trade on the edge less the round trip, because that is the number a desk
 lives on. Model spend names the calls that had no declared price in `[agents.pricing]`, rather
 than counting them as free.
+
+## The paths
+
+The structure lead names where a trade is wrong and where it is done. Code then asks the
+instrument's own history how often a take at that distance comes before a stop at that distance
+inside the hold. It does not predict the next price; it reads the odds at the two levels the trade
+carries.
+
+| Step | What it does |
+|---|---|
+| the unit | every closed candle as its open, high, low and close against the previous close, so a take a wick reaches counts |
+| the window | the last 512 closed candles, normalised on their own volatility and clipped at five deviations; a mean move its own noise does not support is taken out |
+| the tokens | each candle gets a coarse token (its move) and a fine one (its range); the next candle is drawn from those that followed the same token, leaning on the coarse token and then the whole window when a token was rarely seen |
+| the paths | 1000, each drawn forward bar by bar at the volatility of the last 64 candles, seeded by the cycle so a replay gives the same figures |
+| the reading | the share that reaches the take first, the stop first or neither within the hold; a candle that reaches both counts as the stop, as the arena settles it |
+
+Every cycle records the reading under `paths` in `cycle.json` and prints it beside the exits,
+with its value net of the round trip: `take first x take distance - stop first x stop distance +
+neither x the mean move of those paths - round trip`. The lead never sees it. Undeclared, it refuses nothing;
+`[targets].min_path_ev_bps` refuses a trade whose value is below the floor, and refuses one whose
+reading could not be made (too few candles, a market that did not move) rather than passing it
+unread. The `paths` row of the arena reads the same way, so whether the reading separates good
+trades from bad is measured before a desk leans on it.
+
+The reference is Kronos (arXiv 2508.02739), a model of candles that tested well: the candle as the
+unit, each window normalised on itself, the next candle drawn on a coarse and a fine token, many
+paths. What its audit found wanting is not carried over: no transformer to train or ship, since its
+skill on the direction of crypto was small and on volatility real; every path kept rather than
+averaged; every draw seeded; and the question asked of the paths is the trade's own barrier.
 
 ## The cost gate, and what each number is worth
 

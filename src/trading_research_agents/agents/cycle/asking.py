@@ -27,8 +27,8 @@ LIVE_PROMPTS = {
 }
 
 
-# Neutral fills the validator's schema, but as the judge of the two cases it has its own job.
-JUDGE_PROMPT = "validator_judge"
+# Neutral fills the reviewer's schema, but as the judge of the two cases it has its own job.
+JUDGE_PROMPT = "reviewer_judge"
 
 
 def _ask(
@@ -63,8 +63,8 @@ def _ask_readable(
 ) -> str:
     """Ask, and ask once more, with the reason, when the answer does not fit its schema.
 
-    A malformed answer is a failed call, not a verdict, and with on_missing_validator at refuse one
-    of them stops a trade (seen 2026-10-06: a validator's JSON came back with its fields out of
+    A malformed answer is a failed call, not a verdict, and with on_missing_reviewer at refuse one
+    of them stops a trade (seen 2026-10-06: a reviewer's JSON came back with its fields out of
     place). One more call is cheaper than a lost cycle, and a model told what was wrong with its
     answer does not have to guess; a second malformed answer is left to fail.
     """

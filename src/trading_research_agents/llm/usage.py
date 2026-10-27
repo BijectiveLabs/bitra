@@ -130,7 +130,7 @@ class UsageLedger:
         self.path = path
         path.parent.mkdir(parents=True, exist_ok=True)
         self.records: list[UsageRecord] = []
-        # Analysts and validators answer on several threads at once, and an append-mode file on
+        # Analysts and reviewers answer on several threads at once, and an append-mode file on
         # Windows is not safe against two writers: lines could land inside each other.
         self._lock = threading.Lock()
 

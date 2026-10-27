@@ -35,7 +35,7 @@ class CycleResult:
     snapshot: Snapshot
     briefs: dict[str, Any] = field(default_factory=dict)
     fan: FanOut = field(default_factory=FanOut)
-    # The validators are a second round: they argue about a proposal that has to exist first. Kept
+    # The reviewers are a second round: they argue about a proposal that has to exist first. Kept
     # apart from the first round so each round's wall clock still means what it says.
     debate: FanOut | None = None
     context: dict[str, Any] = field(default_factory=dict)
@@ -76,7 +76,7 @@ class CycleResult:
             # Venue mode only: the account as read before the cycle, and the equity sizing used.
             "equity": self.briefs.get("equity"),
             "agents": self.fan.record(),
-            "validators": None if self.debate is None else self.debate.record(),
+            "reviewers": None if self.debate is None else self.debate.record(),
             "analyst": None if self.analyst is None else _said(self.analyst),
             "cited": self.cited,
             "context": self.context,
@@ -103,6 +103,8 @@ class CycleResult:
             "targets_rule": self.briefs.get("targets_rule"),
             # Every check the risk gate ran on the intent, and why it refused if it did.
             "risk_gate": self.briefs.get("risk_gate"),
+            # How often the instrument's own paths reach the take before the stop at these levels.
+            "paths": self.briefs.get("paths"),
             "trigger": None if self.wake is None else self.wake.record(),
             "held": self.held,
             "mode": self.briefs.get("mode"),

@@ -1,4 +1,4 @@
-"""The validators: the stances asked about a proposal, their checked claims, and the votes."""
+"""The reviewers: the stances asked about a proposal, their checked claims, and the votes."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import Any
 
 from trading_research_agents.agents import (
-    validator,
+    reviewer,
 )
 from trading_research_agents.agents.cycle.asking import JUDGE_PROMPT, _ask_readable, _within_scope
 from trading_research_agents.agents.cycle.config import CycleConfig
@@ -20,9 +20,9 @@ from trading_research_agents.agents.progress import (
     announce,
     timed,
 )
+from trading_research_agents.agents.reviewer.tools import checked, figures_of, reviewer_brief
 from trading_research_agents.agents.roles import RoleError
 from trading_research_agents.agents.scope import crossings
-from trading_research_agents.agents.validator.tools import checked, figures_of, validator_brief
 from trading_research_agents.execution.desk import within_desk
 from trading_research_agents.execution.targets import (
     edge_multiple,
@@ -35,7 +35,7 @@ from trading_research_agents.store.cycles import CycleDir
 
 
 def _before_votes(cfg: CycleConfig, result: CycleResult, costs: Any, edge: Decimal) -> str:
-    """A refusal later steps are certain to make whatever the validators say, or nothing.
+    """A refusal later steps are certain to make whatever the reviewers say, or nothing.
 
     Only what cannot change after the votes is read here: the desk with nothing added to it, the
     day's round trips, the declared reward to risk, and the edge against the part of the round trip
@@ -82,7 +82,7 @@ def _before_votes(cfg: CycleConfig, result: CycleResult, costs: Any, edge: Decim
     return ""
 
 
-def _run_validators(
+def _run_reviewers(
     cfg: CycleConfig,
     where: CycleDir,
     result: CycleResult,
@@ -111,16 +111,16 @@ def _run_validators(
         "reason": analyst.reason,
         "mechanism": cfg.mechanism,
     }
-    judged = judge_mode(cfg.validators)
+    judged = judge_mode(cfg.reviewers)
     tasks = []
     seen: dict[str, dict[str, str]] = {}
-    for stance in cfg.validators:
+    for stance in cfg.reviewers:
         if judged and stance == "neutral":
             continue
-        name = f"validator_{stance}"
+        name = f"reviewer_{stance}"
         brief = _within_scope(
-            validator.ROLE,
-            validator_brief(
+            reviewer.ROLE,
+            reviewer_brief(
                 instrument=cfg.instrument,
                 stance=stance,
                 proposal=proposal,
@@ -129,13 +129,13 @@ def _run_validators(
             result,
         )
         write_json(where.brief(name), brief)
-        # What this validator may cite is what this validator was given, the proposal's own
+        # What this reviewer may cite is what this reviewer was given, the proposal's own
         # figures, rather than a narrower set it never saw.
         seen[name] = figures_of(brief)
         tasks.append(
             Task(
                 name=name,
-                work=timed(cfg.watch, name, _validator_task(cfg, brief)),
+                work=timed(cfg.watch, name, _reviewer_task(cfg, brief)),
                 path=where.answer(name),
             )
         )
@@ -163,14 +163,14 @@ def _record_verdict(
 ) -> dict[str, Any] | None:
     stance = name.partition("_")[2]
     try:
-        said = validator.parse(str(answer))
+        said = reviewer.parse(str(answer))
     except (RoleError, ValueError) as exc:
         result.context[name] = {"stance": stance, "error": str(exc)}
         result.refusals.append(f"{name}: {exc}")
         return None
     verdict = checked(said, figures)
     record = verdict.record()
-    reached = crossings(validator.ROLE, {"reason": verdict.reason})
+    reached = crossings(reviewer.ROLE, {"reason": verdict.reason})
     if reached:
         record["out_of_scope"] = list(reached)
         for finding in reached:
@@ -195,9 +195,9 @@ def _judge(
     weighed. When there is nothing to weigh, code says so without paying for a call: no case on
     either side is an abstention, and a case nobody answered is uncontested.
     """
-    name = "validator_neutral"
-    cases = {s: result.context.get(f"validator_{s}") or {} for s in ("pro", "contra")}
-    asked = [s for s in ("pro", "contra") if s in cfg.validators]
+    name = "reviewer_neutral"
+    cases = {s: result.context.get(f"reviewer_{s}") or {} for s in ("pro", "contra")}
+    asked = [s for s in ("pro", "contra") if s in cfg.reviewers]
     silent = [s for s in asked if not cases[s] or "error" in cases[s]]
     case_for = list(cases["pro"].get("claims") or [])
     case_against = list(cases["contra"].get("claims") or [])
@@ -223,9 +223,9 @@ def _judge(
         announce(cfg.watch, name, DONE, f"{verdict}: {decided}")
         return
     brief = _within_scope(
-        validator.ROLE,
+        reviewer.ROLE,
         {
-            **validator_brief(
+            **reviewer_brief(
                 instrument=cfg.instrument, stance="neutral", proposal=proposal, figures=figures
             ),
             "case_for": case_for,
@@ -238,7 +238,7 @@ def _judge(
         cfg.watch,
         name,
         lambda: _ask_readable(
-            cfg, validator.ROLE, brief, validator.SCHEMA, validator.parse, system=JUDGE_PROMPT
+            cfg, reviewer.ROLE, brief, reviewer.SCHEMA, reviewer.parse, system=JUDGE_PROMPT
         ),
     )
     try:
@@ -256,9 +256,9 @@ def _judge(
         record["judged"] = "neutral"
 
 
-def _validator_task(cfg: CycleConfig, brief: Mapping[str, Any]) -> Callable[[], str]:
+def _reviewer_task(cfg: CycleConfig, brief: Mapping[str, Any]) -> Callable[[], str]:
     def ask() -> str:
-        return _ask_readable(cfg, validator.ROLE, brief, validator.SCHEMA, validator.parse)
+        return _ask_readable(cfg, reviewer.ROLE, brief, reviewer.SCHEMA, reviewer.parse)
 
     return ask
 
@@ -268,13 +268,13 @@ def _counted(result: CycleResult) -> list[tuple[str, Mapping[str, Any]]]:
     rows = [
         (role, said)
         for role, said in sorted(result.context.items())
-        if role.startswith("validator") and isinstance(said.get("verdict"), str)
+        if role.startswith("reviewer") and isinstance(said.get("verdict"), str)
     ]
     return [row for row in rows if row[1].get("judged")] or rows
 
 
 def _votes(result: CycleResult) -> tuple[str, ...]:
-    """The validators' verdicts, after code checked the claims they rest on."""
+    """The reviewers' verdicts, after code checked the claims they rest on."""
     return tuple(str(said["verdict"]) for _, said in _counted(result))
 
 
@@ -289,7 +289,7 @@ STANCE_SIGNAL: dict[str, dict[str, str]] = {
 
 
 def _informative_votes(result: CycleResult) -> tuple[str, ...]:
-    """The validators' verdicts as conviction weighs them: what each one says beyond its stance."""
+    """The reviewers' verdicts as conviction weighs them: what each one says beyond its stance."""
     out = []
     for role, said in _counted(result):
         verdict = str(said["verdict"])

@@ -26,9 +26,9 @@ from trading_research_agents.agents.cycle.result import _said
 from trading_research_agents.agents.cycle.state import Pass
 from trading_research_agents.agents.parallel import Task
 from trading_research_agents.agents.progress import DONE, REFUSED, announce, timed
+from trading_research_agents.agents.reviewer.tools import figures_of
 from trading_research_agents.agents.roles import RoleError
 from trading_research_agents.agents.scope import FLOW, FLOW_READS
-from trading_research_agents.agents.validator.tools import figures_of
 from trading_research_agents.llm.judge import Check, JudgeError
 from trading_research_agents.records import write_json
 

@@ -52,6 +52,9 @@ class Targets:
     # The share of trades like this one that must reach the take profit to cover the stops and the
     # round trip. Arithmetic on the trade's own levels and costs; 1 turns the bound off.
     max_break_even_win_rate: Decimal = Decimal("0.5")
+    # The value of the trade over the instrument's own paths at its levels, net of the round trip,
+    # in bps; undeclared, the paths are read and recorded but refuse nothing.
+    min_path_ev_bps: Decimal | None = None
 
     def __post_init__(self) -> None:
         if not Decimal(0) < self.max_break_even_win_rate <= Decimal(1):
@@ -92,6 +95,7 @@ class Targets:
             ),
             "max_round_trips_per_day": self.max_round_trips_per_day,
             "max_break_even_win_rate": str(self.max_break_even_win_rate),
+            "min_path_ev_bps": None if self.min_path_ev_bps is None else str(self.min_path_ev_bps),
         }
 
 
