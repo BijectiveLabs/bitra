@@ -15,7 +15,7 @@ import pytest
 
 from trading_research_agents.cli import console as shell
 from trading_research_agents.cli.common import CLEARED, REFUSED
-from trading_research_agents.cli.main import build_parser
+from trading_research_agents.cli.parser import build_parser
 
 
 def build(
