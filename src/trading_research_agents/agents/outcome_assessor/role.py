@@ -9,7 +9,7 @@ from typing import Any
 from trading_research_agents.agents.cited import FIGURES_SCHEMA, Figure, figures_used
 from trading_research_agents.llm.form import FormError, _decimal, _text, _unit, parse_object
 
-ROLE = "event_analyst"
+ROLE = "outcome_assessor"
 SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -25,19 +25,19 @@ SCHEMA: dict[str, Any] = {
 
 
 @dataclass(frozen=True)
-class EventAnalyst:
+class OutcomeAssessor:
     probability: Decimal
     confidence: float
     reason: str
     figures_used: tuple[Figure, ...]
 
 
-def parse(text: str) -> EventAnalyst:
+def parse(text: str) -> OutcomeAssessor:
     data = parse_object(text, SCHEMA)
     probability = _decimal(data.get("probability"), "probability")
     if not Decimal(0) <= probability <= Decimal(1):
         raise FormError("probability is a number in [0, 1]")
-    return EventAnalyst(
+    return OutcomeAssessor(
         probability=probability,
         confidence=_unit(data.get("confidence"), "confidence"),
         reason=_text(data.get("reason"), "reason"),

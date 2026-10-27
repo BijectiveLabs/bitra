@@ -35,7 +35,7 @@ from trading_research_agents.execution.sizing import (
 
 AGREES = {"long": "bullish", "short": "bearish"}
 OPPOSES = {"long": "bearish", "short": "bullish"}
-DECIDING = "technical_analyst"
+DECIDING = "structure_lead"
 
 
 class ConvictionError(ValueError):

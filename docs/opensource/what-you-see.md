@@ -67,11 +67,11 @@ cycle 2026-09-29T02-59-16Z BTCUSDT: 5.344s of agents, 15.042s of validators
   orderbook      ccxt:bybit         age 7.544s
 macro      read by code: bullish (risk-on)
 sentiment  read by code: bullish (positive)
-technical: long on range_reversion at 0.65 over 5 bars: the close is stretched low in the window
+lead:      long on range_reversion at 0.65 over 5 bars: the close is stretched low in the window
 read: zscore=-0.587, vwap_gap_bps=-3.99, ret_1_bps=1.59
 validator contra   oppose on 2 cited figure(s)
 validator pro      support on 3 cited figure(s)
-conviction: 0.800 of 1.0 (macro 1.0, sentiment 0.5, technical 1.300)
+conviction: 0.800 of 1.0 (macro 1.0, sentiment 0.5, structure_lead 1.300)
 risk: 8.29 bps of equity at the stop against the declared 50 bps, size 0.010
 cost: 12.87 bps round trip, 2.00 of it estimated
 gate: 25.0000 bps claimed clears 12.8723 bps cost plus 0.0000 bps margin

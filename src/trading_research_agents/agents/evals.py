@@ -33,7 +33,7 @@ from trading_research_agents.llm.usage import (
 )
 from trading_research_agents.trading import RunReport, StrategyConfig
 
-ROLE = "technical_analyst"
+ROLE = "structure_lead"
 
 
 @dataclass(frozen=True)

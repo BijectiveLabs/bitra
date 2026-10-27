@@ -141,8 +141,8 @@ def test_the_cache_returns_only_what_is_still_fresh(tmp_path: Path) -> None:
 def test_a_cycle_directory_names_every_artefact(tmp_path: Path) -> None:
     root = tmp_path / "cycles"
     first = CycleDir(root=root, cycle="2026-09-27T08-00-00Z").make()
-    assert first.brief("technical").parent.name == "briefs"
-    assert first.answer("technical").parent.name == "answers"
+    assert first.brief("structure_lead").parent.name == "briefs"
+    assert first.answer("structure_lead").parent.name == "answers"
     assert first.snapshot.name == "snapshot.json" and first.decision.name == "decision.json"
     assert cycles_in(root) == [] and latest_cycle(root) is None  # no snapshot written yet
 

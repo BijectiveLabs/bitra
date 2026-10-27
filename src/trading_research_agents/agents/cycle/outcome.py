@@ -1,4 +1,4 @@
-"""A prediction outcome: the event analyst's probability against the ask, held to resolution.
+"""A prediction outcome: the outcome assessor's probability against the ask, held to resolution.
 
 The share pays 1 or nothing, so what it can lose is its cost: that is the stop, and the size is cut
 until that cost fits the risk per trade. The take profit is the analyst's own probability, offered
@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
-from trading_research_agents.agents import event_analyst
+from trading_research_agents.agents import outcome_assessor
 from trading_research_agents.agents.cited import survived
 from trading_research_agents.agents.cycle.asking import _ask_readable
 from trading_research_agents.agents.cycle.briefing import _calendar
@@ -120,42 +120,42 @@ def _event_brief(p: Pass, market: Market, book: _Book) -> dict[str, Any]:
 
 
 def _ask_event(p: Pass, market: Market, book: _Book) -> Any:
-    """The event analyst's probability, its citations checked; None when the cycle has ended."""
+    """The outcome assessor's probability, its citations checked; None when the cycle has ended."""
     cfg, result = p.cfg, p.result
     brief = _event_brief(p, market, book)
-    write_json(p.where.brief(event_analyst.ROLE), brief)
-    announce(cfg.watch, event_analyst.ROLE, RUNNING)
+    write_json(p.where.brief(outcome_assessor.ROLE), brief)
+    announce(cfg.watch, outcome_assessor.ROLE, RUNNING)
     try:
         answer = _ask_readable(
-            cfg, event_analyst.ROLE, brief, event_analyst.SCHEMA, event_analyst.parse
+            cfg, outcome_assessor.ROLE, brief, outcome_assessor.SCHEMA, outcome_assessor.parse
         )
-        analyst = event_analyst.parse(answer)
+        analyst = outcome_assessor.parse(answer)
     except Exception as exc:
-        why = f"{event_analyst.ROLE}: {exc.__class__.__name__}: {exc}"
+        why = f"{outcome_assessor.ROLE}: {exc.__class__.__name__}: {exc}"
         result.refusals.append(why)
         result.stopped_by = why
         _finish(cfg, p.where, result)
         return None
-    write_json(p.where.answer(event_analyst.ROLE), json.loads(answer))
+    write_json(p.where.answer(outcome_assessor.ROLE), json.loads(answer))
     kept, lost = survived(analyst.figures_used, figures_of(brief))
     result.cited = [figure.record() for figure in kept]
     for gone in lost:
-        result.refusals.append(f"{event_analyst.ROLE}: discarded a citation, {gone}")
+        result.refusals.append(f"{outcome_assessor.ROLE}: discarded a citation, {gone}")
     result.briefs["event"] = {
         "probability": str(analyst.probability),
         "confidence": analyst.confidence,
         "reason": analyst.reason,
     }
-    announce(cfg.watch, event_analyst.ROLE, DONE, f"probability {analyst.probability}")
+    announce(cfg.watch, outcome_assessor.ROLE, DONE, f"probability {analyst.probability}")
     why = ""
     if not kept:
         why = (
-            f"{event_analyst.ROLE}: not one figure from its brief survived the check, so the "
+            f"{outcome_assessor.ROLE}: not one figure from its brief survived the check, so the "
             "probability rests on nothing this cycle measured"
         )
     elif analyst.confidence < cfg.min_confidence:
         why = (
-            f"{event_analyst.ROLE}: confidence {analyst.confidence} below the declared "
+            f"{outcome_assessor.ROLE}: confidence {analyst.confidence} below the declared "
             f"{cfg.min_confidence}"
         )
     if why:
@@ -210,7 +210,7 @@ def _stake(p: Pass, market: Market, book: _Book, analyst: Any, edge: Any) -> Cyc
         "reason": analyst.reason,
         "cited": result.cited,
         "edge_bps": str(edge.edge_bps.quantize(Decimal("0.01"))),
-        "edge_source": "event_analyst",
+        "edge_source": "outcome_assessor",
         "stake": str(stake.quantize(Decimal("0.0001"))),
         "mode": cfg.mode,
         "mid": str(ask if book.bid is None else (book.bid + ask) / 2),

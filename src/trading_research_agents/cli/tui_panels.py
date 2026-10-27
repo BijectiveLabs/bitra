@@ -27,7 +27,7 @@ def _cycle_panel(record: Mapping[str, Any]) -> list[Any]:
     if analyst:
         head.append(
             (
-                "technical",
+                "lead",
                 f"{analyst.get('target')} on {analyst.get('setup')} at "
                 f"{analyst.get('confidence')} over {analyst.get('horizon_bars')} bars: "
                 f"{analyst.get('reason')}",

@@ -226,7 +226,7 @@ def _venue_next(able: Any, keys: list[str]) -> str:
 
 AGENT_HEAD = (
     "[strategy]\n"
-    'agent = "technical_analyst"          # the model decides on each closed bar\n'
+    'agent = "structure_lead"          # the model decides on each closed bar\n'
     "# file = ... / class = ...             # or a scripted strategy instead\n"
     "#                                       # (docs.bijectivelabs.dev/opensource/trading)\n\n"
 )
@@ -272,7 +272,7 @@ VOLATILITY_EXIT = (
 
 AGENT_TIMEFRAME_FROM = (
     "bar_interval_s = 60\n"
-    '# context_intervals = ["15m", "1h"] # higher timeframes the technical analyst '
+    '# context_intervals = ["15m", "1h"] # higher timeframes the structure lead '
     "reads as context\n"
 )
 
@@ -295,7 +295,7 @@ AGENT_MECHANISM = (
 
 
 def _agent_config(text: str, provider_name: str, model: str) -> str:
-    """The template with the technical analyst as the core and the [agents] table live."""
+    """The template with the structure lead as the core and the [agents] table live."""
     text = text[: text.index("[strategy]")] + AGENT_HEAD + text[text.index("[exit]") :]
     # An agent desk trades many instruments at many speeds; one fraction of price fits none of them.
     text = text.replace(FIXED_EXIT, VOLATILITY_EXIT, 1)
@@ -341,7 +341,7 @@ min_support = 0                    # validators that must support it; needs [age
 # What each voice is worth, and how much of the base size their agreement buys. With nothing on the
 # shelf yet, the only voice is the deciding analyst, so the score is its own confidence. Add a
 # weight beside each reading as you declare its sources.
-weights = { technical_analyst = 2.0 }
+weights = { structure_lead = 2.0 }
 min_score = 0.4                    # below this the desk does not trade, whatever the gates said
 # max_leverage = 3.0               # notional against [run].equity; a ceiling, never a target
 

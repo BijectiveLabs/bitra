@@ -8,7 +8,7 @@ With c the closes and r_i = ln(c_i / c_(i-1)) the one-bar log returns:
 - `range_vol_bps`: Parkinson, sqrt(sum of ln(H/L)^2 / (4 n ln 2)) over 96 bars, * 10^4.
 - `atr_bps`: Wilder's average true range of 14 bars, smoothed over the last 96, over c_t, * 10^4.
 
-The path figures keep the definitions the v1 technical analyst reads, on its 60-bar window, so a v1
+The path figures keep the definitions the v1 structure lead reads, on its 60-bar window, so a v1
 record and a replay say the same thing about the same bars: `zscore`, `vwap_gap_bps` (closes
 weighted by base volume, as v1 has it), `position_in_range`, `window_move_bps`, `trend_strength`,
 `variance_ratio_4`, and `regime` from the default regime rule.

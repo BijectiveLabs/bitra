@@ -51,7 +51,7 @@ def dataset(tmp_path: Path, name: str, prices: list[str]) -> Path:
 def config(tmp_path: Path) -> Path:
     text = (EXAMPLES / "strategy.toml").read_text(encoding="utf-8")
     start, end = text.index("[strategy]"), text.index("[exit]")
-    text = text[:start] + '[strategy]\nagent = "technical_analyst"\n\n' + text[end:] + AGENT_TABLES
+    text = text[:start] + '[strategy]\nagent = "structure_lead"\n\n' + text[end:] + AGENT_TABLES
     text = text.replace('kill_switch = "KILL"', f'kill_switch = "{(tmp_path / "KILL").as_posix()}"')
     path = tmp_path / "strategy.toml"
     path.write_text(text, encoding="utf-8")
@@ -164,10 +164,10 @@ def test_a_session_runs_the_roles_in_order_and_records_everything(
     assert (out / "figures.json").exists() and (out / "audit.json").exists()
     assert (out / "AAAUSDT" / "trades.jsonl").exists()
     by_role = usage.by_role()
-    assert by_role["technical_analyst"]["calls"] == 6 and by_role["auditor"]["calls"] == 1
+    assert by_role["structure_lead"]["calls"] == 6 and by_role["auditor"]["calls"] == 1
     assert set(by_role) == {
         "market_screener",
-        "technical_analyst",
+        "structure_lead",
         "risk_manager",
         "executor",
         "auditor",

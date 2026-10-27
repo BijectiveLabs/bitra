@@ -79,7 +79,7 @@ def test_the_shelf_starts_empty_and_check_says_what_filling_it_in_does(
     out = capsys.readouterr().out
     assert "nothing declared yet" in out
     assert (
-        "ok    roster: technical_analyst asks a model; no reading declared; `tra run` uses these"
+        "ok    roster: structure_lead asks a model; no reading declared; `tra run` uses these"
         in out
     )
 
@@ -89,8 +89,8 @@ def test_the_shelf_starts_empty_and_check_says_what_filling_it_in_does(
     strategy.write_text(before + '\n[confluence]\nrequired = ["macro_analyst"]\n', "utf-8")
     main(["check"])
     assert (
-        "ok    written before 0.11, still read: [confluence].required: macro_analyst is macro"
-        in capsys.readouterr().out
+        "ok    written for an earlier release, still read: [confluence].required: macro_analyst is "
+        "macro" in capsys.readouterr().out
     )
     strategy.write_text(before, "utf-8")
 
@@ -113,8 +113,7 @@ def test_the_shelf_starts_empty_and_check_says_what_filling_it_in_does(
     out = capsys.readouterr().out
     assert "ok    sources/macro.toml: 1 declared (us10y)" in out
     assert (
-        "ok    roster: technical_analyst asks a model; macro read by code; `tra run` uses these"
-        in out
+        "ok    roster: structure_lead asks a model; macro read by code; `tra run` uses these" in out
     )
 
 
@@ -338,7 +337,7 @@ def test_the_autonomous_profile_lays_the_cycle_down_wired(
     assert "the cycle is wired" in said and "name the provider" in said
 
     cfg = load_strategy_config(target / "strategy.toml")
-    assert cfg.agents is not None and cfg.agents.role == "technical_analyst"
+    assert cfg.agents is not None and cfg.agents.role == "structure_lead"
     # The gates are live rather than commented, and they are the operator's to change.
     assert not cfg.conviction.idle and cfg.conviction.min_score == Decimal("0.4")
     assert [str(t.size_multiple) for t in cfg.conviction.ladder] == ["1.0", "0.5", "0.25"]
@@ -347,7 +346,7 @@ def test_the_autonomous_profile_lays_the_cycle_down_wired(
     # Nothing is required of the matrix yet: no source is declared, and a role nobody asked has
     # agreed to nothing.
     assert cfg.confluence.required == ()
-    assert cfg.conviction.weights == {"technical_analyst": Decimal("2.0")}
+    assert cfg.conviction.weights == {"structure_lead": Decimal("2.0")}
 
     # The data section survived the rewrite that put [agents] in, and so did the shelf.
     assert "[data]" in (target / "strategy.toml").read_text("utf-8")

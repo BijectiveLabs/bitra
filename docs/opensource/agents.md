@@ -6,7 +6,7 @@ description: "The agent roster in TRA: what each role reads, the closed schema i
 
 Agents here read a lot and decide very little. In a cycle each role gets the part of the brief
 its job needs and nothing else, answers once inside a closed schema, and holds no tools. The
-technical analyst proposes a direction; the system prices it, sizes it, checks it against the book and
+structure lead proposes a direction; the system prices it, sizes it, checks it against the book and
 decides whether it goes out. In a session the auditor also gets a small set of read tools, and the
 files those tools can open are fenced to the project.
 
@@ -19,8 +19,8 @@ the system's own rules, tested and failing closed, and a role acts through them,
 | Role | Holds | May write | Cadence |
 |---|---|---|---|
 | `market_screener` | in a cycle, one live snapshot per instrument in the universe; in a session, the data gate, the envelope and the cost floor | nothing; it may only take an instrument out of a list the system already admitted | once per pass, or once per session |
-| `technical_analyst` | the recorded trades and bars; in a research run the registered mechanism, in `tra run` the regime and higher timeframes, with your mechanism as a preference | a `Signal`, as the decision core of a run: a direction, a setup named from a closed list, the figures it read, and in `tra run` the stop and target prices that bound the idea, held by the system inside your `[exit]` bounds | once per closed bar, within its budget |
-| `validator` | `figures_of`, `checked` over the brief the deciding analyst was given | one stance (pro, contra, neutral): the proposal as the analyst gave it (side, setup, levels, confidence) and the figures it was built from, never another analyst's reading, the cost, the claimed edge or the desk's rules; every claim it makes has to cite one of those figures with its value, and the system discards the ones that do not. With all three stances, pro and contra build their cases apart and neutral judges both ([the validators](/opensource/cycle#the-validators)) | once per cycle, when `[agents].validators` is set |
+| `structure_lead` | the recorded trades and bars; in a research run the registered mechanism, in `tra run` the regime and higher timeframes, with your mechanism as a preference | a `Signal`, as the decision core of a run: a direction, a setup named from a closed list, the figures it read, and in `tra run` the stop and target prices that bound the idea, held by the system inside your `[exit]` bounds | once per closed bar, within its budget |
+| `validator` | `figures_of`, `checked` over the brief the structure lead was given | one stance (pro, contra, neutral): the proposal as the lead gave it (side, setup, levels, confidence) and the figures it was built from, never another analyst's reading, the cost, the claimed edge or the desk's rules; every claim it makes has to cite one of those figures with its value, and the system discards the ones that do not. With all three stances, pro and contra build their cases apart and neutral judges both ([the validators](/opensource/cycle#the-validators)) | once per cycle, when `[agents].validators` is set |
 | `risk_manager` | in `tra run`: the client's limits, what is in force, the alarms, the round trips by instrument; in a session: the limits, the canary caps, the ladder, latency, net against the registration | in `tra run`: `reduce` (size multiple below 1), `pause` (instruments), `halt` (the kill switch), each for `hold_hours`; in a session: `tighten_limits`, `demote`, `arm_kill_switch` | in `tra run`, between cycles whenever the quant auditor is asked; in a session, after the runs |
 | `executor` | the venue, the rate limits, the allocation across instruments | an allocation, fractions summing to at most one | after the risk decision |
 | `auditor` | the ledger, every run, `usage.jsonl`, the ladder | `audit.json` | last |
@@ -30,23 +30,45 @@ fill, a parser that refuses anything outside it, and a prompt that names venues 
 role talks to another. The session hands each one what the system computed plus what earlier roles
 wrote, and records every answer as a numbered file in the session directory.
 
-## The technical team
+## Seats, not personas
 
-The technical analyst can work alone, as it does on a desk that declares nothing, or with a team
+A model is not trained here to become a trader. A seat is what makes whichever model holds it a
+specialist, and every part of a seat is code or a file you can read:
+
+| Part of a seat | What it does | Where |
+|---|---|---|
+| A name for what it answers for | `structure_lead`, not "technical analyst": the name says what the desk holds it to | `agents/<seat>/` |
+| A brief fenced to its job | only the figures the seat answers from; a figure another seat reads is not in it | `agents/scope.py` |
+| A closed answer | a schema with closed lists, parsed and refused outside it | `agents/<seat>/role.py` |
+| Citations checked | every figure it cites is compared with the brief; one that does not match is discarded | `agents/cited.py` |
+| A typed judge on its reasons | where declared, its reason is checked against the labels code measured | `agents/cycle/team.py` |
+| A record that can be read back | every brief, answer, check and refusal on disk, and the arena replays it | `store/`, `evaluation/` |
+
+The seats that decide were renamed in 0.12, each for what it answers for: `technical_analyst` is
+`structure_lead`, `technical_peer` is `blind_confirmer`, `flow_analyst` is `flow_specialist`, and
+`event_analyst` is `outcome_assessor`. A desk written before then runs unchanged: the old names are
+read as the seats they became, wherever they appear (`[agents].team`, `[agents.roles.<seat>]`,
+`[conviction].weights`, `[confluence].required`), and `tra check` names the new name to write.
+Answers recorded in the response cache under an old name, or an older prompt, are not replayed;
+record them again.
+
+## The deciding team
+
+The structure lead can work alone, as it does on a desk that declares nothing, or with a team
 (`[agents].team`). The members answer in parallel, none seeing another's answer, and code combines
 them.
 
 | Member | Reads | Answers | How it counts |
 |---|---|---|---|
-| `technical_analyst` (lead) | price, path, structure, the regime on every timeframe, levels, its own last reading | target, setup, confidence, horizon, stop and target prices | its levels are the trade's |
-| `technical_peer` | the lead's brief, blind to the lead's answer | the same schema | the two must name the same side, or there is no trade; the lower confidence counts |
-| `flow_analyst` | the book, the spread, funding and open interest, which leave the lead's brief | a side, a confidence, cited figures | a declared state that `[conviction].weights.flow_analyst` weighs and `[confluence].required` may require |
+| `structure_lead` (lead) | price, path, structure, the regime on every timeframe, levels, its own last reading | target, setup, confidence, horizon, stop and target prices | its levels are the trade's |
+| `blind_confirmer` | the lead's brief, blind to the lead's answer | the same schema | the two must name the same side, or there is no trade; the lower confidence counts |
+| `flow_specialist` | the book, the spread, funding and open interest, which leave the lead's brief | a side, a confidence, cited figures | a declared state that `[conviction].weights.flow_specialist` weighs and `[confluence].required` may require |
 
 Why this shape and not a debate: several models talking a question over do not reliably beat
 independent answers combined, while models that see different evidence, or are different models,
 do; and the errors of one model are correlated with its own errors. So each member reads its own
-evidence or is another model, answers once, and code compares. `tra check` says when the peer runs
-on the same model as the lead.
+evidence or is another model, answers once, and code compares. `tra check` says when the blind
+confirmer runs on the same model as the lead.
 
 When a typed judge is declared (`[judge]` in `data.toml`), it reads each structure answer's reason
 beside the labels code measured (the regime, the structure, the regime on each timeframe) and says
@@ -105,7 +127,7 @@ verdict on the whole session, including what every call cost.
 
 ```toml
 [strategy]
-agent = "technical_analyst"
+agent = "structure_lead"
 
 [agents]
 provider = "deepseek"                 # any registered provider; see Model providers
@@ -164,7 +186,7 @@ size, or declared by the operator and labelled as such.
 | Role | Tools (`agents/<role>/tools.py`) | What the brief carries |
 |---|---|---|
 | `market_screener` | `screen_figures` | per instrument: rows, print rate, realised volatility, first-lag autocorrelation, the 1:10 variance ratio, largest gap, last-hour volume against the average, turnover, the cost floor for the claimed edge, and a regime the system proposes from a written rule (`[agents.screen]` sets the two thresholds: `min_prints_per_minute`, `volatile_above_bps`) |
-| `technical_analyst` | `features` | on each closed bar: returns over 1, 5 and 20 bars, the close as a z-score of the window, the gap to VWAP, the last bar's volume and range against the window's, the position between the window's high and low, the net move and trend strength with the regime they give, the variance ratio, and the market structure (swings labelled HH, HL, LH, LL, the trend they make, the last break of structure or change of character, invalidation, support and resistance); the same regime and structure on each higher timeframe in `[run].context_intervals`; the book imbalance and the open interest change since the last snapshot (see [the cycle](/opensource/cycle#the-market-around-the-decision)), and in `tra run` its own last reading of the instrument with the move since (`previous`). Nothing another analyst reads or says |
+| `structure_lead` | `features` | on each closed bar: returns over 1, 5 and 20 bars, the close as a z-score of the window, the gap to VWAP, the last bar's volume and range against the window's, the position between the window's high and low, the net move and trend strength with the regime they give, the variance ratio, and the market structure (swings labelled HH, HL, LH, LL, the trend they make, the last break of structure or change of character, invalidation, support and resistance); the same regime and structure on each higher timeframe in `[run].context_intervals`; the book imbalance and the open interest change since the last snapshot (see [the cycle](/opensource/cycle#the-market-around-the-decision)), and in `tra run` its own last reading of the instrument with the move since (`previous`). Nothing another analyst reads or says |
 | `risk_manager` | `risk_brief` | per run: latency from intent to fill (median, max, n, ratio to the declared), net per round trip overall and over the last window against the claimed magnitude, maximum drawdown, the favourable and adverse excursions of the closed round trips with what the winners gave back, which control refused and how often |
 | `executor` | `size_for`, `rate_budget`, `export_signals` | a size that never exceeds a cap, rounded down to the venue's step; what the minute still allows; the run's admitted intents as `signals.jsonl` or CSV for execution elsewhere (`tra signals export RUN`) |
 | `auditor` | `audit_brief`, then a tool loop over `read_run_report`, `show_ledger`, `search_ledger`, `list_runs`, `show_ladder` | usage per role with tokens per closed round trip, each promotion with whether its evidence names a gate, and a run against its replay trade by trade; then whatever it chooses to read, up to six calls |
@@ -177,15 +199,15 @@ the schema its answer fills.
 
 | Role | Reads | Answers | Code then checks |
 |---|---|---|---|
-| `technical_analyst` | the features, structure, regime and higher timeframes of its instrument, the book, open interest, its own last reading | `target`, `setup`, `confidence`, `horizon_bars`, `stop_price`, `target_price`, `reason`, `figures_used` | the schema, the setup against the measured regime, the levels on the right side of the price, every citation |
+| `structure_lead` | the features, structure, regime and higher timeframes of its instrument, the book, open interest, its own last reading | `target`, `setup`, `confidence`, `horizon_bars`, `stop_price`, `target_price`, `reason`, `figures_used` | the schema, the setup against the measured regime, the levels on the right side of the price, every citation |
 | validators: pro, contra | the proposal and the figures it was built from; neither sees the other's case | `stance`, `claims`, `verdict`, `reason` | the schema; a claim that does not cite a figure it was given is dropped |
 | validator: neutral, as judge | the same, and both cases as code checked them, without the advocates' verdicts | `stance`, `claims`, `verdict`, `reason` | the same; its verdict is the one that counts, and it is not asked when only one side has a case |
-| `event_analyst` | the question, the outcome's book and recent prices, the calendar and your notes | `probability`, `confidence`, `reason`, `figures_used` | the schema, every citation |
+| `outcome_assessor` | the question, the outcome's book and recent prices, the calendar and your notes | `probability`, `confidence`, `reason`, `figures_used` | the schema, every citation |
 | `market_screener` | one live snapshot per admitted instrument | `kept`, `excluded`, `picks` | it can only drop an instrument, never add one |
 
 An answer that does not fit its schema is asked for once more with the reason, and then refused.
 
-No role sees another's data or another's answer. The technical analyst reads its own market and
+No role sees another's data or another's answer. The structure lead reads its own market and
 not the macro, on-chain or sentiment readings; each reading reads its own shelf and nothing the
 others were given; the validators argue from the proposal's own figures. A view that knows the other
 views can lean toward them, and then two voices agreeing says less than it seems to. The readings
@@ -212,9 +234,9 @@ What a role's answer does differs:
 
 | Role | What its answer decides |
 |---|---|
-| `technical_analyst` | the side, the setup and the levels; every gate after it works on these |
-| `technical_peer` | nothing on its own: without its agreement on the side there is no trade |
-| `flow_analyst` | a voice in conviction, and in confluence when required; never a level |
+| `structure_lead` | the side, the setup and the levels; every gate after it works on these |
+| `blind_confirmer` | nothing on its own: without its agreement on the side there is no trade |
+| `flow_specialist` | a voice in conviction, and in confluence when required; never a level |
 | validators | one vote each in conviction, after their claims are checked |
 | `market_screener` | which instruments, from code's own order, get a cycle; it may drop, never add |
 | `risk_manager` | between cycles: size cuts, pauses, a halt; never a loosening |
@@ -231,9 +253,9 @@ the market alone, and code applies your settings afterwards.
 
 | Who | Knows | Does not know |
 |---|---|---|
-| `technical_analyst` | the market figures, the structure, the regime, the higher timeframes, your mechanism as a preference, its own last reading | the cost of the round trip, every `[targets]`, `[exit]`, `[run]` sizing and `[controls]` setting, what became of its last reading, and the macro, on-chain and sentiment readings |
+| `structure_lead` | the market figures, the structure, the regime, the higher timeframes, your mechanism as a preference, its own last reading | the cost of the round trip, every `[targets]`, `[exit]`, `[run]` sizing and `[controls]` setting, what became of its last reading, and the macro, on-chain and sentiment readings |
 | validators | the analyst's proposal as given and the figures it was built from | the same, and the claimed edge |
-| `event_analyst` (prediction markets) | the question, the outcome's bid, ask and mid, its recent prices, your dated notes and calendar | the fee, the margin an estimate has to clear and the size |
+| `outcome_assessor` (prediction markets) | the question, the outcome's bid, ask and mid, its recent prices, your dated notes and calendar | the fee, the margin an estimate has to clear and the size |
 | code | everything you declared | nothing it has to guess |
 
 What code changes is written beside what was proposed: each cycle's `exits.measured` record keeps
@@ -249,7 +271,7 @@ So a result can be traced to one of three things: the data the desk was given, h
 is at reading it, and the settings you chose. A test keeps the rules out of these roles' briefs and
 their prompts.
 
-The spread and the funding rate stay in the technical analyst's brief. They are the market's own
+The spread and the funding rate stay in the structure lead's brief. They are the market's own
 figures, on every trading screen, not settings of yours.
 
 ### Risk: one role after the runs, one step inside each decision
@@ -383,9 +405,9 @@ A question worth answering plainly, because it decides where the token bill goes
 | Step | Who does it | What it may do |
 |---|---|---|
 | read one class of data against your lines | a reading, in code | a declared state and a graded score, from the figures against the operator's lines |
-| propose a direction and a horizon | the technical analyst | one target, one confidence, one reason |
-| read the same brief again, blind | the technical peer, when declared | agree on the side, or there is no trade |
-| read the book, funding and open interest | the flow analyst, when declared | one side and one confidence, weighed in conviction |
+| propose a direction and a horizon | the structure lead | one target, one confidence, one reason |
+| read the same brief again, blind | the blind confirmer, when declared | agree on the side, or there is no trade |
+| read the book, funding and open interest | the flow specialist, when declared | one side and one confidence, weighed in conviction |
 | check a reason against the measured regime | the typed judge, when declared | below one half, no trade |
 | argue for or against that proposal | pro and contra, apart | claims that cite figures from the brief; the system discards the rest |
 | judge the two cases | neutral | one verdict from the claims that survived, weighed on the premise of the setup |
@@ -470,7 +492,7 @@ The short version for anyone reviewing this before putting money behind it:
 | What a role may say | A closed JSON schema per role. Extra fields, a wrong enum, or a number out of range are refused before anyone reads the answer. | `agents/<role>/role.py`, `llm/form.py` |
 | Whether its figures are real | Every cited figure is checked against the brief, value included. Citations that do not hold are discarded, and a deciding answer with nothing left is refused. | `agents/cited.py` |
 | Tools | None in a cycle. In a session the auditor gets five read tools in a loop capped at six steps; every path a model writes has to resolve inside the project, the session or the ladder's directory, and hidden files (`.env`, `.git`, `.tra-history`) are never readable. The MCP server applies the same fence to whatever host calls it (`tra mcp serve --root`). | `agents/react.py`, `surface/confine.py` |
-| Orchestration | A fixed pipeline: the technical analyst, then, when validators are declared, the advocates together and the judge after them. Code passes the checked claims from one to the other. No graph to configure, no role calling another, no loop that a model controls. | `agents/cycle/`, `agents/parallel.py` |
+| Orchestration | A fixed pipeline: the structure lead, then, when validators are declared, the advocates together and the judge after them. Code passes the checked claims from one to the other. No graph to configure, no role calling another, no loop that a model controls. | `agents/cycle/`, `agents/parallel.py` |
 | Spend | Every call is a line in `usage.jsonl`. Declared ceilings (`token_budget`, `max_calls_per_hour`, `min_interval_s`) apply to the whole desk in one run, not to each role. | `llm/usage.py` |
 | Credentials | Keys come from the environment: the shell, an `--env-file` you name, or the `.env` beside `strategy.toml`; never from a config file. A vendor or venue error is scrubbed of any credential this process holds before it goes into a record or a brief. | `llm/completer.py`, `trading/dispatch.py` |
 | Text from outside | Headlines, notes, vendor messages and another role's reason reach some briefs as material to read. The prompts say so, and more to the point, none of those roles decides: the gates read the operator's declared states and measured figures. The role that proposes a direction reads numbers only. | `agents/prompts/` |

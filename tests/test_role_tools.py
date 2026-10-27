@@ -26,7 +26,7 @@ from trading_research_agents.agents.risk_manager.tools import (
 )
 from trading_research_agents.agents.session import ScreenSettings, SessionConfig
 from trading_research_agents.agents.session_run import run_session
-from trading_research_agents.agents.technical_analyst.tools import features
+from trading_research_agents.agents.structure_lead.tools import features
 from trading_research_agents.cli.main import main
 from trading_research_agents.data import Side, Trade
 from trading_research_agents.data.series import Point, Series, SeriesSpec, Threshold
@@ -80,7 +80,7 @@ def test_screen_figures_propose_a_regime_from_a_written_rule() -> None:
     assert record["largest_gap_s"] == 30.0 and record["turnover"] == "6.00"
 
 
-# technical analyst
+# structure lead
 
 
 def test_features_come_from_closed_bars_only_and_carry_the_window() -> None:
@@ -301,7 +301,7 @@ def test_auditor_tools_total_usage_compare_runs_and_check_evidence(tmp_path: Pat
     ledger = UsageLedger(tmp_path / "usage.jsonl")
     metered = MeteredCompleter(
         FakeCompleter(['{"a":1}', '{"a":2}']),
-        role="technical_analyst",
+        role="structure_lead",
         provider="fake",
         limits=BudgetLimits(token_budget=10_000, max_calls_per_hour=100, min_interval_s=0),
         ledger=ledger,
@@ -311,7 +311,7 @@ def test_auditor_tools_total_usage_compare_runs_and_check_evidence(tmp_path: Pat
     metered.complete(system="s", user="u" * 20, schema={})
     summary = usage_summary(tmp_path / "usage.jsonl", round_trips=2)
     assert summary["calls"] == 2 and summary["tokens_per_round_trip"] == summary["tokens"] // 2
-    assert summary["by_role"]["technical_analyst"]["mean_latency_ms"] is not None
+    assert summary["by_role"]["structure_lead"]["mean_latency_ms"] is not None
 
     live = run_dir(tmp_path / "live", ["10", "-5"], latency_ms=[1, 1], refusals=[])
     replay = run_dir(tmp_path / "replay", ["12", "-5"], latency_ms=[1, 1], refusals=[])
@@ -372,7 +372,7 @@ def test_a_session_hands_the_roles_measured_briefs(tmp_path: Path, envelope: Env
     config = tmp_path / "strategy.toml"
     config.write_text(
         text[:start]
-        + '[strategy]\nagent = "technical_analyst"\n\n'
+        + '[strategy]\nagent = "structure_lead"\n\n'
         + text[end:]
         + '\n[agents]\nprovider = "local"\nbase_url = "http://localhost:1/v1"\nmodel = "m"\n'
         'mechanism = "m"\n'

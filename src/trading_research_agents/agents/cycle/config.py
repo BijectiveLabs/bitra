@@ -43,9 +43,9 @@ MODES = MANDATE_MODES
 
 
 TARGETS = {"long": Direction.LONG, "short": Direction.SHORT}
-# Who may join the technical analyst: a blind second read of its own brief, and a reader of the
-# flow figures that then leave the technical brief.
-TEAM = ("technical_peer", "flow_analyst")
+# Who may join the structure lead: a blind second read of its own brief, and a reader of the
+# flow figures that then leave the structure brief.
+TEAM = ("blind_confirmer", "flow_specialist")
 
 
 # What a contract market has and a spot pair does not.
@@ -169,7 +169,7 @@ class CycleConfig:
     series: Mapping[str, tuple[Path, ...]] = field(default_factory=dict)
     news: tuple[Path, ...] = ()
     readings: tuple[str, ...] = ()
-    # [agents].team: who answers beside the technical analyst. Empty is the analyst alone, on the
+    # [agents].team: who answers beside the structure lead. Empty is the analyst alone, on the
     # whole brief, as before.
     team: tuple[str, ...] = ()
     # The typed judge, when declared: each structure read's reason checked against the measured

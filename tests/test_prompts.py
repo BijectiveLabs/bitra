@@ -14,7 +14,7 @@ AGENTS = (
     # The screener answers the same schema over two different briefs - recorded trades in a
     # session, one live snapshot per instrument in a cycle - so it carries a prompt for each.
     "market_screener_live",
-    "technical_analyst",
+    "structure_lead",
     "risk_manager",
     "executor",
     "auditor",

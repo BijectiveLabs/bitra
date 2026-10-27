@@ -231,7 +231,7 @@ symbols = { FEDCUT = "FED_CUTS_IN_DECEMBER:YES" }
 List `prediction` in `[execution].markets`, and the cycle on that instrument is decided by a
 different role:
 
-- **The event analyst decides**, not the technical analyst: it reads the question, the outcome,
+- **The outcome assessor decides**, not the structure lead: it reads the question, the outcome,
   when it resolves, the book, the recent prices and your dated notes, and answers with the
   probability that the outcome wins. With nothing beyond the price to go on, the answer is the
   mid with a low confidence, and the desk does nothing.
@@ -261,7 +261,7 @@ fee_coefficient = 0.07     # 0.07 x shares x price x (1 - price), the way Kalshi
 A channel that says neither is refused rather than priced at zero.
 
 Run on 2026-10-17: a sandbox cycle on Polymarket's public data (an outcome on the 2028 US
-presidential election), where the event analyst answered with the mid and a confidence of 0.2,
+presidential election), where the outcome assessor answered with the mid and a confidence of 0.2,
 citing the book, and the cycle stopped at the confidence floor. The order path is covered by tests
 against ccxt's prediction shapes. Sending orders needs a demo or testnet API: Kalshi has a demo
 environment that ccxt reaches (an API key and an RSA private key); Polymarket signs with a wallet

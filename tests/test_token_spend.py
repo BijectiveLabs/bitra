@@ -22,7 +22,7 @@ def test_validators_are_not_asked_when_code_will_refuse_anyway(
     cfg, fake, _ = cycle_config(
         tmp_path,
         envelope,
-        {"technical_analyst": analyst_answer()},
+        {"structure_lead": analyst_answer()},
         validators=("pro", "contra", "neutral"),
         targets=Targets(min_edge_multiple=Decimal("4")),
     )
@@ -50,7 +50,7 @@ def test_table_readers_think_low_only_where_an_effort_is_declared() -> None:
     assert agents is not None
     assert agents.for_role("validator").effort == "high"
     assert agents.for_role("market_screener").effort == "low"
-    assert agents.for_role("technical_analyst").effort == "medium"
+    assert agents.for_role("structure_lead").effort == "medium"
 
 
 def test_briefs_go_to_the_model_without_spaces() -> None:

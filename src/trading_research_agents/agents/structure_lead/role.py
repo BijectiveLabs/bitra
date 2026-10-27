@@ -17,7 +17,7 @@ from trading_research_agents.llm.form import (
     parse_object,
 )
 
-ROLE = "technical_analyst"
+ROLE = "structure_lead"
 TARGETS = ("long", "short", "flat")
 # The named shapes this role is allowed to say it recognised. A closed list, because "where did this
 # position come from" has to be answerable by reading the record rather than by reading a paragraph,
@@ -59,7 +59,7 @@ SCHEMA: dict[str, Any] = {
 
 
 @dataclass(frozen=True)
-class TechnicalAnalyst:
+class StructureLead:
     target: str
     setup: str
     reason: str
@@ -76,7 +76,7 @@ LEVELS = ("stop_price", "target_price")
 READ: dict[str, Any] = {**SCHEMA, "required": [k for k in SCHEMA["required"] if k not in LEVELS]}
 
 
-def parse(text: str) -> TechnicalAnalyst:
+def parse(text: str) -> StructureLead:
     data = parse_object(text, READ)
     target = _enum(data.get("target"), "target", TARGETS)
     setup = _enum(data.get("setup"), "setup", SETUPS)
@@ -84,7 +84,7 @@ def parse(text: str) -> TechnicalAnalyst:
     cited = figures_used(data.get("figures_used"))
     confidence = _unit(data.get("confidence"), "confidence")
     horizon_bars = _posint(data.get("horizon_bars"), "horizon_bars")
-    return TechnicalAnalyst(
+    return StructureLead(
         stop_price=_price(data.get("stop_price"), "stop_price"),
         target_price=_price(data.get("target_price"), "target_price"),
         target=target,

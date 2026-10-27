@@ -4,7 +4,7 @@ description: Where the macro, on-chain and sentiment readings' figures come from
 
 # Where the readings' figures come from
 
-The technical analyst reads the venue: candles, the book, funding and open interest, pulled through
+The structure lead reads the venue: candles, the book, funding and open interest, pulled through
 `data.toml` on every cycle with their age attached. The macro, on-chain and sentiment readings are
 code over something else: dated series you declare under `sources/`. This page is about those, and about how
 you can tell, on any cycle, that they read a real figure and how old it was.
@@ -199,7 +199,7 @@ decision can weigh is the job of the judge planned for 0.12, not of a model's fr
 
 Series in `sources/derivatives.toml` (long/short ratios, taker volume, open interest history,
 liquidations) are read by the on-chain reading beside the chain figures, and your thresholds on
-them reach confluence and conviction like any other series. The technical analyst does not see
+them reach confluence and conviction like any other series. The structure lead does not see
 them: it reads its own market's candles, book, funding and open interest, so its proposal does not
 lean on another reading's data.
 

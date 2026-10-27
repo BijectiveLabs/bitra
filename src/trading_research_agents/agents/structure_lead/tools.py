@@ -1,4 +1,4 @@
-"""What the technical analyst is handed on each closed bar: features, computed by code.
+"""What the structure lead is handed on each closed bar: features, computed by code.
 
 Raw bars are what the model would otherwise have to add up itself, badly and at a price per
 token. These are the figures a desk analyst would have on the screen: returns over a few

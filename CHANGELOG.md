@@ -54,8 +54,8 @@ All notable changes to this project are recorded here. The format follows
 - The `forecast` arena row: a logistic model per side fitted walk-forward on settled outcomes only,
   calibrated (Platt or isotonic, chosen on held-out halves), and one expected-value decision net of
   the round trip. In the arena only, beside the baselines, until it is shown to be better.
-- The technical team (`[agents].team`): a `technical_peer` that reads the technical analyst's
-  brief blind and must agree on the side, at the lower of the two confidences, and a `flow_analyst`
+- The deciding team (`[agents].team`): a `blind_confirmer` that reads the structure lead's
+  brief blind and must agree on the side, at the lower of the two confidences, and a `flow_specialist`
   that reads the book, the spread, funding and open interest (which then leave the analyst's brief)
   as a voice in `[conviction]` and `[confluence]`. Members answer in parallel; each has its own
   `[agents.roles.<role>]`; `tra check` says when the peer is the same model as the lead. With a
@@ -65,6 +65,11 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- The seats that decide are named for what they answer for: `structure_lead` (was
+  `technical_analyst`), `blind_confirmer` (was `technical_peer`), `flow_specialist` (was
+  `flow_analyst`) and `outcome_assessor` (was `event_analyst`). A desk written with the old names
+  runs unchanged and `tra check` names the new ones; a cycle folder written before keeps its
+  `technical.json`, and every reader takes either name.
 - A venue error at the create call is classified: a refusal by the venue raises as before, and
   anything else (a timeout, a dropped connection, a duplicate client id) is read back by the
   order's client id instead of being recorded as `sent: false`.
@@ -74,7 +79,7 @@ All notable changes to this project are recorded here. The format follows
   model wrote beside it. The cycle makes one model call fewer per reading, about a quarter of a
   cycle's tokens on the demo desks. The research session reads them the same way.
 - The readings are named by their new names everywhere a desk names them: `[agents].readings`
-  (in place of `[agents].analysts`, since the technical analyst is always asked),
+  (in place of `[agents].analysts`, since the structure lead is always asked),
   `[confluence].required`, `[conviction].weights`, the rows of the live table, `briefs/macro.json`,
   and `not_read` in `cycle.json`. A desk written before 0.11 runs unchanged: `[agents].analysts`
   and the old analyst names are read as the readings they became, a role table or

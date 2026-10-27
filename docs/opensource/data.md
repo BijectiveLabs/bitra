@@ -205,7 +205,7 @@ rule to all of them. `[[news]]` entries name dated-text files (`when,what[,sourc
 reading takes them as events while the sentiment reading takes them as notes.
 
 `tra init` writes all five files as forms with the entries commented out. A form declares nothing,
-so an untouched project reads nothing beside the market and asks only the technical analyst. `tra check` prints what each file
+so an untouched project reads nothing beside the market and asks only the structure lead. `tra check` prints what each file
 declares, flags an export that is declared but missing, and prints the roster.
 
 ## The audit

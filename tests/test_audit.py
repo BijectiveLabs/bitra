@@ -36,7 +36,7 @@ CYCLE = {
     "instrument": "BTCUSDT",
     "agents": {
         "agents": [
-            {"agent": "technical", "ok": True, "error": "", "seconds": 6.0, "reused": False},
+            {"agent": "structure_lead", "ok": True, "error": "", "seconds": 6.0, "reused": False},
             {
                 "agent": "event",
                 "ok": False,
@@ -89,8 +89,7 @@ def project(tmp_path: Path, *, cycles: int = 2) -> Path:
         record = {**CYCLE, "cycle_id": where.name}
         (where / "cycle.json").write_text(json.dumps(record), encoding="utf-8")
     (runs / "usage.jsonl").write_text(
-        json.dumps({"role": "technical_analyst", "output_tokens": 500, "latency_ms": 3000.0})
-        + "\n",
+        json.dumps({"role": "structure_lead", "output_tokens": 500, "latency_ms": 3000.0}) + "\n",
         encoding="utf-8",
     )
     (tmp_path / "strategy.toml").write_text(
@@ -135,7 +134,7 @@ def test_the_counts_are_arithmetic_an_operator_can_repeat(tmp_path: Path) -> Non
     spend = token_spend(cycles, read_usage(tmp_path / "runs" / "cycles" / "usage.jsonl"))
     assert spend["tokens_total"] == 16000 and spend["intents"] == 2
     assert spend["tokens_per_intent"] == 8000.0
-    assert spend["output_tokens_by_role"] == {"technical_analyst": 500}
+    assert spend["output_tokens_by_role"] == {"structure_lead": 500}
 
     made = decisions(cycles)
     assert made["targets"] == {"long": 2} and made["intents"] == 2 and made["placed"] == 0

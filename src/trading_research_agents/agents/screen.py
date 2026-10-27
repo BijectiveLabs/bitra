@@ -37,7 +37,7 @@ from trading_research_agents.agents.progress import (
 )
 from trading_research_agents.agents.roles import RoleError, prompt
 from trading_research_agents.agents.scope import brief_for, dropped
-from trading_research_agents.agents.technical_analyst.tools import features
+from trading_research_agents.agents.structure_lead.tools import features
 from trading_research_agents.data.sources.chain import SourceChain
 from trading_research_agents.execution.desk import Desk
 from trading_research_agents.execution.regime import RegimeRule, label

@@ -140,7 +140,7 @@ def test_figures_are_read_for_each_reading(tmp_path: Path) -> None:
         assert measured is None or "n" in measured
 
     with pytest.raises(BriefError, match="not a reading"):
-        reading_brief("technical_analyst", snap)
+        reading_brief("structure_lead", snap)
     with pytest.raises(BriefError, match="snapshot is empty"):
         reading_brief(MACRO, Snapshot(cycle="c", instrument="BTCUSDT"))
 
@@ -154,7 +154,7 @@ def test_a_role_may_run_on_its_own_model(tmp_path: Path) -> None:
     start, end = text.index("[strategy]"), text.index("[exit]")
     base = (
         text[:start]
-        + '[strategy]\nagent = "technical_analyst"\n\n'
+        + '[strategy]\nagent = "structure_lead"\n\n'
         + text[end:]
         + "\n[agents]\n"
         + 'provider = "groq"\nmodel = "strong-model"\nmechanism = "reversion after a burst"\n'
@@ -168,7 +168,7 @@ def test_a_role_may_run_on_its_own_model(tmp_path: Path) -> None:
     )
     cfg = load_strategy_config(path)
     assert cfg.agents is not None
-    strong = cfg.agents.for_role("technical_analyst")
+    strong = cfg.agents.for_role("structure_lead")
     cheap = cfg.agents.for_role("validator")
     assert strong.model == "strong-model" and strong.max_output_tokens == 1024
     assert cheap.model == "cheap-model" and cheap.max_output_tokens == 256
@@ -192,7 +192,7 @@ def test_the_readings_can_be_named_in_the_config(tmp_path: Path) -> None:
     start, end = text.index("[strategy]"), text.index("[exit]")
     base = (
         text[:start]
-        + '[strategy]\nagent = "technical_analyst"\n\n'
+        + '[strategy]\nagent = "structure_lead"\n\n'
         + text[end:]
         + "\n[agents]\n"
         + 'provider = "groq"\nmodel = "m"\nmechanism = "reversion after a burst of prints"\n'
@@ -217,7 +217,7 @@ def test_the_readings_can_be_named_in_the_config(tmp_path: Path) -> None:
         ('readings = ["poet"]\n', "is not one of"),
         ('readings = "macro"\n', "a list of reading names"),
         ('readings = ["macro", "macro_analyst"]\n', "names macro twice"),
-        ('analysts = ["technical_analyst", "poet"]\n', "is not one of"),
+        ('analysts = ["structure_lead", "poet"]\n', "is not one of"),
     ):
         path.write_text(base + body, "utf-8")
         with pytest.raises(ConfigError, match=message):

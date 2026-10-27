@@ -35,9 +35,9 @@ class Pass:
     equity: Decimal | None = None
     mid_now: Decimal | None = None
     spread_now: Decimal | None = None
-    technical: Any = None
+    structure: Any = None
     asked: dict[str, Any] = field(default_factory=dict)
-    # The flow analyst's brief, and every member's raw answer by task name.
+    # The flow specialist's brief, and every member's raw answer by task name.
     flow_brief: dict[str, Any] = field(default_factory=dict)
     answers: dict[str, Any] = field(default_factory=dict)
     # The side each member read, for the intent; empty when the analyst decides alone.

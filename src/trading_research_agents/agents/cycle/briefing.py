@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from trading_research_agents.agents import (
-    technical_analyst,
+    structure_lead,
 )
 from trading_research_agents.agents.briefs import (
     BriefError,
@@ -37,6 +37,7 @@ from trading_research_agents.records import (
     has_index,
     recent,
 )
+from trading_research_agents.store.cycles import ANSWERS, BRIEFS, lead_file
 from trading_research_agents.store.snapshot import (
     Snapshot,
 )
@@ -112,7 +113,7 @@ def _previous_open_interest(root: Path, instrument: str, cycle: str) -> dict[str
 def _previous_reading(
     root: Path, instrument: str, cycle: str, close: Any, *, now: datetime, within_s: float
 ) -> dict[str, Any] | None:
-    """The technical analyst's own last reading of this instrument, inside the window it reads.
+    """The structure lead's own last reading of this instrument, inside the window it reads.
 
     The reading and the market since, nothing more. Whether it was traded, refused or how it ended
     would tell a proposing role the desk's rules, which it is not given.
@@ -135,15 +136,13 @@ def _previous_reading(
         if age_s > within_s:
             return None
         folder = root / name
-        answer = folder / "answers" / "technical.json"
+        answer = lead_file(folder, ANSWERS)
         if not answer.is_file():
             continue
         try:
             raw = json.loads(answer.read_text(encoding="utf-8"))
-            said = technical_analyst.parse(raw if isinstance(raw, str) else json.dumps(raw))
-            then = Decimal(
-                str(json.loads((folder / "briefs" / "technical.json").read_text("utf-8"))["close"])
-            )
+            said = structure_lead.parse(raw if isinstance(raw, str) else json.dumps(raw))
+            then = Decimal(str(json.loads(lead_file(folder, BRIEFS).read_text("utf-8"))["close"]))
             moved = (Decimal(str(close)) / then - 1) * BPS if close is not None and then else None
         except (OSError, ValueError, KeyError, ArithmeticError):
             continue

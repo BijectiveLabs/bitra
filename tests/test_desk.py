@@ -147,7 +147,7 @@ def test_a_cycle_refuses_a_trade_the_book_cannot_carry(tmp_path: Path, envelope:
     cfg, _, _ = cycle_config(
         tmp_path,
         envelope,
-        {"technical_analyst": analyst_answer()},
+        {"structure_lead": analyst_answer()},
         equity=Decimal("10000"),
         stop_frac=Decimal("0.01"),
         take_frac=Decimal("0.02"),
@@ -172,7 +172,7 @@ def test_a_book_nobody_can_read_refuses_the_trade_rather_than_the_cycle(
     cfg, _, _ = cycle_config(
         tmp_path,
         envelope,
-        {"technical_analyst": analyst_answer()},
+        {"structure_lead": analyst_answer()},
         equity=Decimal("10000"),
         stop_frac=Decimal("0.01"),
         take_frac=Decimal("0.02"),

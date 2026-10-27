@@ -97,9 +97,9 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
         shelf = declared_in(beside)
         good.extend(_shelf_notes(args, shelf, bad))
         readings = (cfg.agents.readings if cfg.agents is not None else ()) or shelf.readings
-        roster = ("technical_analyst", *readings)
+        roster = ("structure_lead", *readings)
         read = f"{', '.join(readings)} read by code" if readings else "no reading declared"
-        good.append(f"roster: technical_analyst asks a model; {read}; `tra run` uses these")
+        good.append(f"roster: structure_lead asks a model; {read}; `tra run` uses these")
         ready, missing = _gate_lines(
             cfg,
             roster,
@@ -126,7 +126,9 @@ def _config_read(args: argparse.Namespace, good: list[str], bad: list[str]) -> A
         good.append(
             f"{args.config}: valid; core {cfg.strategy.name!r}; instrument {cfg.run.instrument}"
         )
-        good.extend(f"written before 0.11, still read: {note}" for note in _renamed(args.config))
+        good.extend(
+            f"written for an earlier release, still read: {note}" for note in _renamed(args.config)
+        )
     except FileNotFoundError:
         bad.append(f"{args.config}: not here, so this folder is not a desk; {NOT_A_DESK}")
     except (ConfigError, OSError, ValueError) as exc:

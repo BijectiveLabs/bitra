@@ -15,7 +15,7 @@ export or paid dump alike, and nothing in here fetches anything.
 Everything a run needs is in `strategy.toml`, commented line by line. `strategies/
 trailing_zscore.py` is an example core, not a recommendation; replace it with your own (a
 class with `name` and `on_bar(bar) -> Signal | None`), or make a model the core with
-`agent = "technical_analyst"` and an `[agents]` table (`tra init --agent PROVIDER --model M`
+`agent = "structure_lead"` and an `[agents]` table (`tra init --agent PROVIDER --model M`
 writes one). Keys go in `.env` (copy `.env.example`); the `.env` beside `strategy.toml` is read on its own, and
 `--env-file` names another one.
 

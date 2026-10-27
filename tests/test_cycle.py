@@ -14,7 +14,7 @@ from trading_research_agents.agents.briefs import (
     BriefError,
     cost_brief,
     data_brief,
-    technical_brief,
+    structure_brief,
 )
 from trading_research_agents.agents.cycle import CycleConfig, CycleError, CycleResult, run_cycle
 from trading_research_agents.agents.parallel import FanOut, Task, run_tasks
@@ -304,7 +304,7 @@ def test_the_briefs_are_computed_by_code_and_name_their_sources(envelope: Envelo
     assert set(data.values) == {"ohlcv", "orderbook", "funding"}
     assert data.values["ohlcv"]["source"] == "file:data" and data.refused == {}
 
-    brief = technical_brief(snap, mechanism="reversion", interval_s=60, lookback_bars=5, now=NOW)
+    brief = structure_brief(snap, mechanism="reversion", interval_s=60, lookback_bars=5, now=NOW)
     record = brief.record()
     assert record["bars"] == 5 and record["mechanism"] == "reversion"
     assert record["spread_bps"] == "9.80" and record["funding_rate"] == "0.0001"
@@ -330,9 +330,9 @@ def test_the_briefs_are_computed_by_code_and_name_their_sources(envelope: Envelo
 
     thin = snapshot_with(closes=["100"])
     with pytest.raises(BriefError, match="fewer than two candles"):
-        technical_brief(thin, mechanism="m", lookback_bars=5)
+        structure_brief(thin, mechanism="m", lookback_bars=5)
     with pytest.raises(BriefError, match="at least 2"):
-        technical_brief(snap, mechanism="m", lookback_bars=1)
+        structure_brief(snap, mechanism="m", lookback_bars=1)
     with pytest.raises(BriefError, match="no book in the snapshot"):
         cost_brief(
             snapshot_with(book=False),
@@ -425,18 +425,18 @@ def test_a_cycle_writes_everything_it_touched_and_admits_a_claim_that_clears(
 
     where = Path(str(result.path))
     assert json.loads((where / "snapshot.json").read_text("utf-8"))["instrument"] == "BTCUSDT"
-    brief = json.loads((where / "briefs" / "technical.json").read_text("utf-8"))
+    brief = json.loads((where / "briefs" / "structure_lead.json").read_text("utf-8"))
     assert brief["bars"] == 5 and brief["mechanism"].startswith("short-horizon")
     # The figures the analyst names its stop and target from reach it, rather than being filtered.
     assert {"range_high", "range_low", "atr", "atr_bps"} <= set(brief)
     assert not any("not this role's to read" in line for line in result.refusals)
     assert (where / "briefs" / "cost.json").is_file()
-    assert (where / "answers" / "technical.json").is_file()
+    assert (where / "answers" / "structure_lead.json").is_file()
     intents = (where / "intents.jsonl").read_text("utf-8").strip().splitlines()
     assert len(intents) == 1 and json.loads(intents[0])["target"] == "long"
     summary = json.loads((where / "cycle.json").read_text("utf-8"))
     assert summary["cost"]["admitted"] is True and summary["mode"] == "sandbox"
-    assert summary["agents"]["agents"][0]["agent"] == "technical"
+    assert summary["agents"]["agents"][0]["agent"] == "structure_lead"
     assert summary["tokens"] == usage.tokens
 
 
@@ -519,7 +519,7 @@ def test_a_cycle_with_no_data_stops_before_it_asks_a_model(
     cfg, fake, _ = cycle_config(tmp_path, envelope, [analyst_answer()], chains=empty)
     result = run_cycle(cfg)
     assert fake.calls == [] and result.stopped_by is not None
-    assert "no technical brief" in result.stopped_by
+    assert "no structure brief" in result.stopped_by
     assert any("data ohlcv" in r for r in result.refusals)
 
 
@@ -569,7 +569,7 @@ def test_the_cli_runs_one_cycle(
     start, end = text.index("[strategy]"), text.index("[exit]")
     text = (
         text[:start]
-        + '[strategy]\nagent = "technical_analyst"\n\n'
+        + '[strategy]\nagent = "structure_lead"\n\n'
         + text[end:]
         + '\n[agents]\nprovider = "scripted-cycle"\nmodel = "scripted"\n'
         + 'mechanism = "reversion after a burst"\ntoken_budget = 100000\n'
@@ -649,7 +649,7 @@ def test_the_readings_are_read_by_code_and_ask_no_model(tmp_path: Path, envelope
     cfg, fake, usage = cycle_config(
         tmp_path,
         envelope,
-        {"technical_analyst": analyst_answer()},
+        {"structure_lead": analyst_answer()},
         watch=lambda step: steps.append((step.name, step.state, step.detail)),
         series={"macro": (macro,), "onchain": (onchain,)},
         readings=("macro", "onchain", "sentiment"),
@@ -657,7 +657,7 @@ def test_the_readings_are_read_by_code_and_ask_no_model(tmp_path: Path, envelope
     result = run_cycle(cfg)
     assert result.stopped_by is None and result.acted
     # One model is asked, the one that proposes; the readings cost nothing.
-    assert [o.name for o in result.fan.outcomes] == ["technical"]
+    assert [o.name for o in result.fan.outcomes] == ["structure_lead"]
     assert len(fake.calls) == 1 and usage.tokens > 0
     assert result.context["macro"]["declared_state"]["declared"] == "bearish"
     assert result.context["onchain"]["declared_state"]["declared"] == "undeclared"
@@ -715,7 +715,7 @@ def test_the_matrix_refuses_a_direction_the_declarations_do_not_support(
     cfg, _, _ = cycle_config(
         tmp_path,
         envelope,
-        {"technical_analyst": analyst_answer()},
+        {"structure_lead": analyst_answer()},
         readings=("macro",),
         matrix=Matrix(required=("macro",)),
     )
@@ -782,7 +782,7 @@ def test_the_validators_argue_and_only_cited_claims_reach_the_matrix(
             "contra": validator_answer("contra", "oppose", figure="made_up", value="1"),
         }
     )
-    fake = Scripted({"technical_analyst": analyst_answer()})
+    fake = Scripted({"structure_lead": analyst_answer()})
     usage = UsageLedger(tmp_path / "usage.jsonl")
     limits = BudgetLimits(token_budget=500_000, max_calls_per_hour=1000, min_interval_s=0)
     metered: dict[str, MeteredCompleter] = {}
@@ -839,7 +839,7 @@ def test_a_validator_that_opposes_can_stop_a_cycle_the_cost_gate_would_have_pass
     from trading_research_agents.execution.confluence import Matrix
 
     stances = ByStance({"contra": validator_answer("contra", "oppose")})
-    fake = Scripted({"technical_analyst": analyst_answer()})
+    fake = Scripted({"structure_lead": analyst_answer()})
     usage = UsageLedger(tmp_path / "usage.jsonl")
     limits = BudgetLimits(token_budget=500_000, max_calls_per_hour=1000, min_interval_s=0)
     metered: dict[str, MeteredCompleter] = {}
@@ -887,7 +887,7 @@ def conviction_rule(**overrides: Any) -> Any:
     from trading_research_agents.execution.conviction import Conviction, Tier
 
     settings: dict[str, Any] = {
-        "weights": {"technical_analyst": Decimal(1), "macro": Decimal(1)},
+        "weights": {"structure_lead": Decimal(1), "macro": Decimal(1)},
         "min_score": Decimal("0.4"),
         "ladder": (
             Tier(Decimal("0.8"), Decimal(1)),
@@ -945,7 +945,7 @@ def test_a_context_that_disagrees_costs_size_rather_than_being_averaged_away(
     agreeing, _, _ = cycle_config(
         tmp_path / "agrees",
         envelope,
-        {"technical_analyst": analyst_answer(confidence=1.0)},
+        {"structure_lead": analyst_answer(confidence=1.0)},
         readings=("macro",),
         conviction=conviction_rule(),
     )
@@ -1099,9 +1099,9 @@ def test_a_loop_ends_on_the_budget_the_kill_switch_or_the_count(tmp_path: Path) 
     plan = Schedule(every_s=60.0, cycles=3, kill_switch=kill, rest=lambda s: None)
 
     assert plan.stop_reason(Stopped(), 1) == ""
-    assert "budget" in plan.stop_reason(Stopped("technical: BudgetSpentError: spent"), 1)
+    assert "budget" in plan.stop_reason(Stopped("structure_lead: BudgetSpentError: spent"), 1)
     # A stop that is not the budget does not end the loop: the next cycle decides again.
-    assert plan.stop_reason(Stopped("no technical brief: ohlcv is not in the snapshot"), 1) == ""
+    assert plan.stop_reason(Stopped("no structure brief: ohlcv is not in the snapshot"), 1) == ""
 
     assert plan.stop_reason(Stopped(), 3) == "the 3 pass(es) asked for"
 
@@ -1208,7 +1208,7 @@ def test_a_reading_leaves_its_declared_state_without_a_model(
     cfg, _, _ = cycle_config(
         tmp_path,
         envelope,
-        {"technical_analyst": analyst_answer()},
+        {"structure_lead": analyst_answer()},
         readings=("macro",),
     )
     result = run_cycle(cfg)
@@ -1275,7 +1275,7 @@ def test_a_declared_validator_that_never_answers_refuses_the_trade_by_default(
 ) -> None:
     # The validator role is scripted once, so one of the two stances gets no answer at all.
     answers = {
-        "technical_analyst": analyst_answer(),
+        "structure_lead": analyst_answer(),
         "validator": validator_answer("pro", "support"),
     }
     cfg, _, _ = cycle_config(tmp_path, envelope, answers, validators=("pro", "contra"))
@@ -1303,7 +1303,7 @@ def test_the_desk_analyst_is_told_the_regime_picks_the_setup(
     run_cycle(cfg)
     told = fake.calls[0].system
     # The desk's prompt, not the research core's sealed pre-registration.
-    assert told == prompt("technical_analyst_live")
+    assert told == prompt("structure_lead_live")
     assert "it is not the only setup you may name" in told and "pre-registration" not in told
 
 
@@ -1390,7 +1390,7 @@ def test_each_reading_sees_its_own_series_and_the_analyst_sees_none_of_them(
     macro = series_for(tmp_path, "us10y", "4.4", "{ bearish_above = 4.25 }")
     onchain = series_for(tmp_path, "venue_net_flow", "120", "{ bearish_above = 100 }")
     answers = {
-        "technical_analyst": analyst_answer(),
+        "structure_lead": analyst_answer(),
     }
     cfg, _fake, _ = cycle_config(
         tmp_path,
@@ -1401,10 +1401,12 @@ def test_each_reading_sees_its_own_series_and_the_analyst_sees_none_of_them(
     )
     result = run_cycle(cfg)
     where = Path(str(result.path)) / "briefs"
-    seen = {name: (where / f"{name}.json").read_text("utf-8") for name in ("technical", "macro")}
+    seen = {
+        name: (where / f"{name}.json").read_text("utf-8") for name in ("structure_lead", "macro")
+    }
     seen["onchain"] = (where / "onchain.json").read_text("utf-8")
     others = {
-        "technical": ("us10y", "venue_net_flow", "declared_series"),
+        "structure_lead": ("us10y", "venue_net_flow", "declared_series"),
         "macro": ("venue_net_flow", "market_structure"),
         "onchain": ("us10y", "market_structure"),
     }
@@ -1420,7 +1422,7 @@ def judged_cycle(
     from trading_research_agents.execution.confluence import Matrix
 
     stances = ByStance(answers)
-    fake = Scripted({"technical_analyst": analyst_answer()})
+    fake = Scripted({"structure_lead": analyst_answer()})
     usage = UsageLedger(tmp_path / "usage.jsonl")
     limits = BudgetLimits(token_budget=500_000, max_calls_per_hour=1000, min_interval_s=0)
     metered: dict[str, MeteredCompleter] = {}

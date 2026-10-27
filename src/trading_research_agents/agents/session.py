@@ -359,7 +359,7 @@ class _Session:
                 f"{instrument}: recorded run stopped by {recorded.stopped_by}; run again"
             )
         core = AgentStrategy(
-            self.cfg.completer_for("technical_analyst"),
+            self.cfg.completer_for("structure_lead"),
             mechanism=a.mechanism,
             lookback_bars=a.lookback_bars,
             min_confidence=a.min_confidence,

@@ -317,7 +317,7 @@ def test_a_cycle_cuts_the_size_to_the_declared_risk_and_the_intent_says_so(
     cfg, _, _ = cycle_config(
         tmp_path,
         envelope,
-        {"technical_analyst": analyst_answer()},
+        {"structure_lead": analyst_answer()},
         equity=Decimal("10000"),
         stop_frac=Decimal("0.01"),
         take_frac=Decimal("0.02"),
@@ -341,7 +341,7 @@ def test_a_declared_risk_limit_with_no_stop_refuses_rather_than_sending_an_unche
     cfg, _, _ = cycle_config(
         tmp_path,
         envelope,
-        {"technical_analyst": analyst_answer()},
+        {"structure_lead": analyst_answer()},
         equity=Decimal("10000"),
         max_risk_per_trade_bps=Decimal("3"),
     )
@@ -357,7 +357,7 @@ def test_a_held_cycle_pays_for_one_data_pull_and_nothing_else(
     cfg, fake, usage = cycle_config(
         tmp_path,
         envelope,
-        {"technical_analyst": analyst_answer()},
+        {"structure_lead": analyst_answer()},
         trigger=Trigger(min_move_bps=Decimal("50")),
     )
     first = run_cycle(cfg)
@@ -403,7 +403,7 @@ def test_the_operator_can_ask_anyway_and_the_cycle_says_so(
     cfg, _, _ = cycle_config(
         tmp_path,
         envelope,
-        {"technical_analyst": analyst_answer()},
+        {"structure_lead": analyst_answer()},
         trigger=Trigger(min_move_bps=Decimal("50")),
         forced=True,
     )
@@ -413,7 +413,7 @@ def test_the_operator_can_ask_anyway_and_the_cycle_says_so(
     forced, _, _ = cycle_config(
         tmp_path / "again",
         envelope,
-        {"technical_analyst": analyst_answer()},
+        {"structure_lead": analyst_answer()},
         trigger=Trigger(min_move_bps=Decimal("50")),
         forced=True,
     )
@@ -428,7 +428,7 @@ def test_the_deciding_analyst_has_to_name_a_setup_and_point_at_a_figure(
     uncited, _, _ = cycle_config(
         tmp_path / "uncited",
         envelope,
-        {"technical_analyst": analyst_answer(cited=[{"figure": "zscore", "value": "-9999"}])},
+        {"structure_lead": analyst_answer(cited=[{"figure": "zscore", "value": "-9999"}])},
     )
     result = run_cycle(uncited)
     assert not result.acted
@@ -438,7 +438,7 @@ def test_the_deciding_analyst_has_to_name_a_setup_and_point_at_a_figure(
     shapeless, _, _ = cycle_config(
         tmp_path / "shapeless",
         envelope,
-        {"technical_analyst": analyst_answer(setup="no_setup")},
+        {"structure_lead": analyst_answer(setup="no_setup")},
     )
     result = run_cycle(shapeless)
     assert not result.acted
@@ -449,7 +449,7 @@ def test_an_intent_carries_the_setup_and_the_figures_the_direction_came_from(
     tmp_path: Path, envelope: Envelope
 ) -> None:
     cfg, _, _ = cycle_config(
-        tmp_path, envelope, {"technical_analyst": analyst_answer(setup="range_breakout")}
+        tmp_path, envelope, {"structure_lead": analyst_answer(setup="range_breakout")}
     )
     result = run_cycle(cfg)
 
@@ -471,7 +471,7 @@ def test_a_watcher_sees_every_step_as_it_happens_and_can_change_none_of_them(
     cfg, _, _ = cycle_config(
         tmp_path,
         envelope,
-        {"technical_analyst": analyst_answer()},
+        {"structure_lead": analyst_answer()},
         watch=watch,
         trigger=Trigger(min_move_bps=Decimal("5")),
     )
@@ -480,5 +480,5 @@ def test_a_watcher_sees_every_step_as_it_happens_and_can_change_none_of_them(
     assert result.acted
     seen = dict(steps)
     assert seen["data"] == "done" and seen["trigger"] == "done"
-    assert ("technical", "running") in steps and seen["technical"] == "done"
+    assert ("structure_lead", "running") in steps and seen["structure_lead"] == "done"
     assert seen["cost"] == "done" and seen["cost gate"] == "done" and seen["intent"] == "done"

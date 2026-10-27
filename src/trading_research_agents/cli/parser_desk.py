@@ -18,7 +18,7 @@ def _add_init(top: Any) -> None:
     init_cmd.set_defaults(command="init")
     init_cmd.add_argument("directory", type=Path)
     init_cmd.add_argument(
-        "--agent", metavar="PROVIDER", help="make the technical analyst the core, on this provider"
+        "--agent", metavar="PROVIDER", help="make the structure lead the core, on this provider"
     )
     init_cmd.add_argument("--model", help="the model for --agent")
     init_cmd.add_argument(

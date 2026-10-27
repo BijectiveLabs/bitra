@@ -1,4 +1,4 @@
-"""The technical analyst as a decision core: a model decides, the runtime and controls execute.
+"""The structure lead as a decision core: a model decides, the runtime and controls execute.
 
 It satisfies the `Strategy` protocol like any code core, so replay, paper, shadow and canary
 run it unchanged. What differs is the cadence and the budget: the model is asked once per
@@ -16,8 +16,8 @@ from decimal import Decimal
 
 from trading_research_agents.agents.cited import figures_of, survived
 from trading_research_agents.agents.roles import RoleError, prompt
-from trading_research_agents.agents.technical_analyst import ROLE, SCHEMA, parse
-from trading_research_agents.agents.technical_analyst.tools import features
+from trading_research_agents.agents.structure_lead import ROLE, SCHEMA, parse
+from trading_research_agents.agents.structure_lead.tools import features
 from trading_research_agents.llm.completer import Completer
 from trading_research_agents.llm.usage import BudgetSpentError
 from trading_research_agents.strategy.core import Bar, Signal, Target
@@ -37,7 +37,7 @@ class Held:
 class AgentStrategy:
     """`name` and `on_bar`, and a `halt` the runtime reads when the budget is spent."""
 
-    name = "agent-technical-analyst"
+    name = "agent-structure-lead"
     min_bar_interval_s = MIN_BAR_INTERVAL_S
 
     def __init__(
@@ -134,7 +134,7 @@ class AgentStrategy:
         self._failures_in_a_row += 1
         if self._failures_in_a_row >= self.max_failures_in_a_row:
             self.halt = (
-                f"technical_analyst: {self._failures_in_a_row} failed calls in a row; "
+                f"structure_lead: {self._failures_in_a_row} failed calls in a row; "
                 f"last: {exc.__class__.__name__}"
             )
 

@@ -28,6 +28,15 @@ SUMMARY = "cycle.json"
 DECISION = "decision.json"
 BRIEFS = "briefs"
 ANSWERS = "answers"
+# The deciding seat's brief and answer, by its name since 0.12 and by the name it had before.
+LEAD = "structure_lead"
+LEAD_BEFORE = "technical"
+
+
+def lead_file(folder: Path, kind: str) -> Path:
+    """The lead's brief or answer in a cycle folder, whichever name the cycle wrote it under."""
+    path = folder / kind / f"{LEAD}.json"
+    return path if path.is_file() else folder / kind / f"{LEAD_BEFORE}.json"
 
 
 @dataclass(frozen=True)

@@ -194,7 +194,7 @@ def _confluence(raw: dict[str, Any]) -> Matrix:
         raise ConfigError(f"[confluence]: unknown {unknown}; have {list(CONFLUENCE_KEYS)}")
     required = _known(
         _names(table.get("required"), "required"),
-        (*READINGS, "flow_analyst"),
+        (*READINGS, "flow_specialist"),
         "[confluence].required",
     )
     try:

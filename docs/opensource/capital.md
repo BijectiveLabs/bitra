@@ -15,7 +15,7 @@ them. A venue that cannot answer one gets a named refusal or a note in the recor
 
 | Decision | Who | How |
 |---|---|---|
-| direction, confidence, horizon | the technical analyst | inside its schema, from figures the system computed |
+| direction, confidence, horizon | the structure lead | inside its schema, from figures the system computed |
 | how much behind the idea | the conviction rule | your weights and ladder over every voice ([The cycle](/opensource/cycle)) |
 | the most it may lose at the stop | your risk rule | `[controls].max_risk_per_trade_bps` against equity |
 | leverage and margin mode | you | `[execution].leverage`, `[execution].margin_mode` |

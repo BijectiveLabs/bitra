@@ -201,7 +201,7 @@ def test_a_cycle_refuses_when_the_desks_own_record_shows_no_edge(
     cfg, _, _ = cycle_config(
         tmp_path,
         envelope,
-        {"technical_analyst": analyst_answer()},
+        {"structure_lead": analyst_answer()},
         equity=D("10000"),
         stop_frac=D("0.01"),
         take_frac=D("0.02"),
@@ -220,7 +220,7 @@ def test_a_cycle_risks_no_more_than_the_record_supports(tmp_path: Path, envelope
     cfg, _, _ = cycle_config(
         tmp_path,
         envelope,
-        {"technical_analyst": analyst_answer()},
+        {"structure_lead": analyst_answer()},
         equity=D("10000"),
         stop_frac=D("0.01"),
         take_frac=D("0.02"),
@@ -279,7 +279,7 @@ def test_a_rung_above_one_is_priced_at_its_own_size_before_the_risk_check(
     cfg, _, _ = cycle_config(
         tmp_path,
         envelope,
-        {"technical_analyst": analyst_answer()},
+        {"structure_lead": analyst_answer()},
         equity=D("10000"),
         stop_frac=D("0.01"),
         take_frac=D("0.02"),
