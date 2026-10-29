@@ -18,6 +18,12 @@ All notable changes to this project are recorded here. The format follows
 - The providers page and the README name the typed judge beside the model providers: where it is
   declared, its key, its endpoint and its pinned versions.
 
+### Changed
+
+- What the software does on its own is called the system, in the README, the docs and the lines it
+  prints: a reading is `read by the system`, the hindsight line says `levels: the system's`.
+  `code` is kept where it means source code.
+
 ### Fixed
 
 - Documented output checked against the code that prints it: the plain cycle sample, the live
