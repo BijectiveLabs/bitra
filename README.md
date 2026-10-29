@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://www.bijectivelabs.dev"><img src="assets/bijective_banner.png" alt="Bijective Labs"></a>
+  <a href="https://www.bijectivelabs.dev"><img src="assets/tra.png" alt="TRA by Bijective Labs"></a>
 </p>
 
 <h1 align="center">TRA</h1>
