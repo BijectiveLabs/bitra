@@ -6,6 +6,24 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-10-29
+
+### Added
+
+- TypeSafe is found where people look for a provider. `tra models typesafe` lists the versions the
+  key may use, through the vendor's `GET /v1/models`, and marks the aliases the judge refuses;
+  `tra keys` lists `TYPESAFE_API_KEY` when `data.toml` declares `[judge]`, and `--probe` proves it
+  with that same model list, which sends no question. A typesafe name given as an `[agents]`
+  provider says where the judge is declared instead.
+- The providers page and the README name the typed judge beside the model providers: where it is
+  declared, its key, its endpoint and its pinned versions.
+
+### Fixed
+
+- Documented output checked against the code that prints it: the plain cycle sample, the live
+  step table, `tra venues okx`, the hindsight lines and two refusal messages now read exactly as
+  printed.
+
 ## [0.12.0] - 2026-10-29
 
 The 0.11 and 0.12 steps of the roadmap, released together.
