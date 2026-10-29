@@ -9,6 +9,7 @@ from decimal import Decimal
 from functools import partial
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -723,3 +724,54 @@ def test_venue_params_reach_only_their_own_venue() -> None:
     assert _params(scoped, "okx") == {}
     assert _params({"params": {"category": "linear"}}, "okx") == {"category": "linear"}
     assert _params({}, "okx") == {}
+
+
+def test_typesafe_asked_for_as_a_provider_says_where_the_judge_is_declared(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from trading_research_agents.llm.providers import typesafe
+    from trading_research_agents.llm.providers.registry import UnknownProviderError, provider
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+    with pytest.raises(UnknownProviderError, match=r"declared in data.toml under \[judge\]"):
+        provider("TypeSafe")
+    # No key: where to make one, and where the judge is declared.
+    assert main(["models", "typesafe"]) != 0
+    assert "console.typesafe.ai/keys" in capsys.readouterr().err
+
+    seen: list[str] = []
+
+    def listed(key: str, **_: Any) -> list[str]:
+        seen.append(key)
+        return ["jev-latest", "jev-1.14.0", "jev-1.13.0"]
+
+    monkeypatch.setattr(typesafe, "model_names", listed)
+    monkeypatch.setenv("TYPESAFE_API_KEY", "t" * 32)
+    assert main(["models", "typesafe", "--json"]) == 0
+    said = json.loads(capsys.readouterr().out)
+    assert said["judge"] is True and said["models"] == ["jev-latest", "jev-1.14.0", "jev-1.13.0"]
+    assert main(["models", "typesafe"]) == 0
+    assert "jev-latest  (an alias that moves; the judge refuses it)" in capsys.readouterr().out
+
+    # Declared in data.toml, the judge's key is one of the keys the project needs, and the probe is
+    # the model list, which sends no question.
+    (tmp_path / "data.toml").write_text(
+        '[judge]\nprovider = "typesafe"\nmodel = "jev-1.14.0"\n', encoding="utf-8"
+    )
+
+    def judged() -> dict[str, Any]:
+        rows = json.loads(capsys.readouterr().out)["credentials"]
+        (row,) = [r for r in rows if r["what"].startswith("judge ")]
+        return dict(row)
+
+    main(["keys", "--json"])
+    row = judged()
+    assert row["what"] == "judge typesafe ([judge] in data.toml, jev-1.14.0)"
+    assert row["verdict"] == "set, not verified"
+    seen.clear()
+    main(["keys", "--probe", "--json"])
+    assert judged()["verdict"] == "verified" and seen == ["t" * 32]
+    monkeypatch.delenv("TYPESAFE_API_KEY")
+    main(["keys", "--json"])
+    assert judged()["missing"] == ["TYPESAFE_API_KEY"]

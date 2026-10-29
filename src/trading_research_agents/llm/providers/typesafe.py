@@ -1,9 +1,11 @@
 """TypeSafe's Jev as a `Judge`, over its documented HTTP API with the standard library.
 
-`POST <base>/v1/systemone` with `{model, state, questions}` and a bearer key. A `Pick` is sent as
+`POST <base>/v1/systemone` with `{model, state, questions}` and a bearer key; `GET <base>/v1/models`
+lists the names the key may use, and costs no tokens. A `Pick` is sent as
 `choice` (criteria: option name to description), a `Grade` as `score` (criteria: the ordered
 levels), a `Check` as `noul` (criteria: what true and false mean, when given). Reference read
-2026-10-26: docs.typesafe.ai/api.
+2026-10-26: docs.typesafe.ai/api; the model list and its `ModelMetadataList` shape read from
+api.typesafe.ai/openapi.json on 2026-10-29.
 
 The SDK is not used: one endpoint and a small schema do not justify its dependencies, and the
 timeout and retry policy here must be ours. A moving alias (`jev-latest`, `jev-preview`) is refused,
@@ -39,7 +41,16 @@ from trading_research_agents.llm.judge import (
     Verdicts,
 )
 
+NAME = "typesafe"
 BASE_URL = "https://api.typesafe.ai"
+# Where a reader is sent for the versions and their prices, and where a key is made.
+DOCS_URL = "https://docs.typesafe.ai/models"
+KEYS_URL = "https://console.typesafe.ai/keys"
+# Said wherever a person looks for TypeSafe among the model providers and does not find it there.
+WHERE = (
+    f"{NAME} is the typed judge (Jev), declared in data.toml under [judge], not a model provider "
+    "for [agents]"
+)
 KEY_ENV = "TYPESAFE_API_KEY"
 ALIASES = ("-latest", "-preview")
 RETRYABLE = (429, 529)
@@ -61,6 +72,50 @@ def _post(
         return int(exc.code), dict(exc.headers or {}), exc.read()
 
 
+def _get(url: str, headers: Mapping[str, str], timeout_s: float) -> tuple[int, bytes]:
+    request = urllib.request.Request(url, headers=dict(headers), method="GET")  # noqa: S310
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_s) as response:  # noqa: S310
+            return int(response.status), response.read()
+    except urllib.error.HTTPError as exc:
+        return int(exc.code), exc.read()
+
+
+Get = Callable[[str, Mapping[str, str], float], tuple[int, bytes]]
+
+
+def model_names(
+    key: str, *, base_url: str = BASE_URL, timeout_s: float = 10.0, get: Get = _get
+) -> list[str]:
+    """The model names and aliases this key may use, as `GET /v1/models` returns them.
+
+    One authenticated read that sends no question and spends no token, so it doubles as the proof
+    that a key works. Raises JudgeUnauthorizedError on 401 or 403, JudgeUnavailableError when no
+    answer arrived, and JudgeRefusedError on any other status or a body of another shape.
+    """
+    if urlsplit(base_url).scheme != "https":
+        raise ValueError(f"{base_url!r}: the judge is reached over https only")
+    url = base_url.rstrip("/") + "/v1/models"
+    try:
+        status, raw = get(url, {"Authorization": f"Bearer {key}"}, timeout_s)
+    except (TimeoutError, OSError) as exc:
+        raise JudgeUnavailableError(f"{type(exc).__name__}: {exc}") from exc
+    payload = _json(raw)
+    if status in (401, 403):
+        raise JudgeUnauthorizedError(f"HTTP {status}: {_detail(payload)}")
+    if status != 200:
+        raise JudgeRefusedError(f"HTTP {status}: {_detail(payload)}")
+    try:
+        return [str(row["name"]) for row in payload["models"]]
+    except (KeyError, TypeError) as exc:
+        raise JudgeRefusedError(f"the model list has another shape: {str(payload)[:200]}") from exc
+
+
+def pinned(name: str) -> bool:
+    """Whether a judge may run on this name: a version, never an alias that moves."""
+    return bool(name.strip()) and not name.endswith(ALIASES)
+
+
 class TypeSafeJudge:
     def __init__(
         self,
@@ -76,7 +131,7 @@ class TypeSafeJudge:
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
-        if not model.strip() or model.endswith(ALIASES):
+        if not pinned(model):
             raise ValueError(f"{model!r}: a judge model is pinned to a version, e.g. jev-1.14.0")
         if urlsplit(base_url).scheme != "https":
             raise ValueError(f"{base_url!r}: the judge is reached over https only")
@@ -211,4 +266,14 @@ def _detail(payload: Any) -> str:
     return str(payload)[:200]
 
 
-__all__ = ["BASE_URL", "KEY_ENV", "TypeSafeJudge"]
+__all__ = [
+    "BASE_URL",
+    "DOCS_URL",
+    "KEYS_URL",
+    "KEY_ENV",
+    "NAME",
+    "WHERE",
+    "TypeSafeJudge",
+    "model_names",
+    "pinned",
+]
