@@ -296,6 +296,11 @@ def test_what_the_cycles_on_disk_say_survives_a_restart(tmp_path: Path) -> None:
         ),
         ("2026-09-27T09-30-00Z", {"instrument": "BTCUSDT", "seen": {"mid": "101"}, "intent": None}),
         ("2026-09-27T09-45-00Z", {"instrument": "ETHUSDT", "seen": {"mid": "3"}, "intent": None}),
+        # Stopped before the lead was asked (a loss limit, data that would not come): not a look.
+        (
+            "2026-09-27T09-50-00Z",
+            {"instrument": "BTCUSDT", "seen": {"mid": "101"}, "intent": None, "analyst": None},
+        ),
         ("2026-09-27T09-55-00Z", {"instrument": "BTCUSDT", "seen": {"mid": "102"}, "intent": None}),
     ):
         where = root / name
@@ -482,3 +487,19 @@ def test_a_watcher_sees_every_step_as_it_happens_and_can_change_none_of_them(
     assert seen["data"] == "done" and seen["trigger"] == "done"
     assert ("structure_lead", "running") in steps and seen["structure_lead"] == "done"
     assert seen["cost"] == "done" and seen["cost gate"] == "done" and seen["intent"] == "done"
+
+
+def test_the_index_says_whether_the_lead_was_asked() -> None:
+    from trading_research_agents.records.index import index_row
+
+    asked = index_row(
+        {"cycle_id": "2026-09-27T09-00-00Z", "analyst": {"target": "flat"}},
+        open_interest=None,
+        summary_sha256=None,
+    )
+    stopped = index_row(
+        {"cycle_id": "2026-09-27T09-15-00Z", "analyst": None},
+        open_interest=None,
+        summary_sha256=None,
+    )
+    assert asked["asked"] is True and stopped["asked"] is False

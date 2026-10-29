@@ -94,6 +94,9 @@ class GoogleCompleter:
         return Completion(
             text=str(text),
             model=self.model,
-            input_tokens=prompt + cached,
+            # The vendor's prompt count already includes the cached part ("the total effective
+            # prompt size", per its UsageMetadata reference); adding it again counted it twice.
+            input_tokens=prompt,
             output_tokens=answer + thoughts,
+            cached_tokens=cached,
         )

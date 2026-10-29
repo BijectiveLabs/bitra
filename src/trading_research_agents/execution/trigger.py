@@ -233,7 +233,8 @@ def last_seen(root: Path, *, instrument: str, look_back: int = 40) -> Seen:
 
     A cycle this rule already held is not counted. It is the desk deciding not to look, not the desk
     looking and finding nothing, and counting it would let the trigger widen its own bar every few
-    minutes of quiet until nothing could wake it.
+    minutes of quiet until nothing could wake it. Nor is a cycle that stopped before the lead was
+    asked (data that would not come, a loss limit, a brief that could not be built): nobody looked.
     """
     mid: Decimal | None = None
     at: datetime | None = None
@@ -246,9 +247,9 @@ def last_seen(root: Path, *, instrument: str, look_back: int = 40) -> Seen:
             found = _mid_of(row)
             if found is not None:
                 mid, at = found, when
-        if row.get("held"):
-            continue
         acted = row.get("intent") is not None
+        if row.get("held") or (not acted and not _asked(row)):
+            continue
         if acted:
             counting = False
             if last_intent is None:
@@ -307,6 +308,16 @@ def _summaries(
             continue
         out.append((row, at_of(path.parent.name)))
     return out
+
+
+def _asked(row: dict[str, Any]) -> bool:
+    """Whether the lead was asked in this cycle. A record that cannot say counts as asked, so the
+    streak stays a floor for desks whose records predate the field."""
+    if "asked" in row:
+        return bool(row["asked"])
+    if "analyst" in row:
+        return row["analyst"] is not None
+    return True
 
 
 def _mid_of(row: dict[str, Any]) -> Decimal | None:

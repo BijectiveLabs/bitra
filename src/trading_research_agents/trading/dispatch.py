@@ -116,6 +116,7 @@ class VenueHand(HandUpkeep):
             self._priced_now,
             self._carried,
             self._order_terms,
+            self._still_current,
         )
         for check in checks:
             refused = check(send)
@@ -194,6 +195,22 @@ class VenueHand(HandUpkeep):
             if skew:
                 return _refused(skew)
             self.skew_checked = True
+        return None
+
+    def _still_current(self, send: _Send) -> dict[str, Any] | None:
+        # The checks between the first age check and here read the venue, sweep exits and set
+        # leverage, which can take seconds each on a slow day. The order goes out on what is true
+        # now, so the decision's age and the gate's approval are read again just before it.
+        problem = approval_problem(send.intent, now=self.clock())
+        if problem:
+            return _refused(problem)
+        age = _decision_age_s(send.intent, self.clock())
+        if age is not None and age > self.max_decision_age_s:
+            return _refused(
+                f"the decision became {age:.0f}s old before it could be sent, past "
+                f"[execution].max_decision_age_s {self.max_decision_age_s:.0f}",
+                decision_age_s=round(age, 1),
+            )
         return None
 
     def _account_admits(self, send: _Send) -> dict[str, Any] | None:

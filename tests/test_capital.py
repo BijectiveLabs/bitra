@@ -642,3 +642,27 @@ def test_a_margin_mode_the_venue_would_not_change_refuses_and_says_why() -> None
     assert placed["sent"] is False
     assert "in cross margin at the venue" in placed["refused"]
     assert "need future pos write permissions" in placed["refused"]
+
+
+def test_a_unified_balance_net_of_position_margin_is_not_read_as_a_loss() -> None:
+    from trading_research_agents.trading.capital import read_account
+
+    class Unified:
+        id = "unified"
+
+        def __init__(self, used: str, free: str) -> None:
+            self.used, self.free = used, free
+
+        def fetch_balance(self) -> dict[str, Any]:
+            return {"USDT": {"total": "969.02", "free": self.free, "used": self.used}}
+
+        def fetch_positions(self) -> list[dict[str, Any]]:
+            return [{"settle": "USDT", "unrealizedPnl": "1.27", "initialMargin": "30.88"}]
+
+    # Measured on a unified demo account: the venue's own equity was 1001.18.
+    netted = read_account(Unified(used="0", free="969.02"), "USDT")
+    assert netted.wallet + netted.unrealized == Decimal("1001.17")
+    assert netted.free == Decimal("969.02")
+    # A row that counts the margin as used is read as it is.
+    counted = read_account(Unified(used="30.88", free="938.14"), "USDT")
+    assert counted.wallet == Decimal("969.02")

@@ -13,6 +13,7 @@ import json
 import os
 from collections.abc import Mapping
 from typing import Any
+from urllib.parse import urlparse
 
 from trading_research_agents.extras import install_hint
 from trading_research_agents.llm.completer import Completion, ProviderError
@@ -49,9 +50,7 @@ class OpenAICompleter:
         if structured not in ("json_schema", "json_object"):
             raise ValueError("structured is json_schema or json_object")
         base_url = base_url or os.environ.get(BASE_URL_ENV) or None
-        if base_url is not None and not base_url.startswith(
-            ("https://", "http://localhost", "http://127.0.0.1")
-        ):
+        if base_url is not None and not _allowed(base_url):
             raise ProviderError("base_url is https, or http on localhost only")
         if client is None:
             try:
@@ -154,3 +153,15 @@ def _refuses_schema(exc: Exception) -> bool:
     return (status in (None, 400, 422)) and any(
         word in said for word in ("response_format", "json_schema", "structured output")
     )
+
+
+# Plain http is for a server on this machine only; the host is compared whole, so a name that only
+# begins with "localhost" is not mistaken for it.
+LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
+
+
+def _allowed(base_url: str) -> bool:
+    parsed = urlparse(base_url)
+    if parsed.scheme == "https":
+        return bool(parsed.hostname)
+    return parsed.scheme == "http" and parsed.hostname in LOCAL_HOSTS

@@ -63,23 +63,39 @@ def read_account(client: Any, currency: str) -> Account:
         row = balance.get(currency) or {}
         if row.get("total") is None:
             row = unparsed(str(getattr(client, "id", "") or ""), balance, currency) or row
-        unrealized = Decimal(0)
+        unrealized = margin = Decimal(0)
         positions = getattr(client, "fetch_positions", None)
         if positions is not None:
             for held in positions() or []:
                 if str(held.get("settle") or currency) != currency:
                     continue
                 unrealized += _dec(held.get("unrealizedPnl"))
+                margin += _dec(held.get("initialMargin"))
     except Exception as exc:
         raise CapitalError(f"cannot read the account: {exc.__class__.__name__}: {exc}") from exc
     if not row:
         raise CapitalError(f"the account reports no {currency} balance")
     return Account(
         currency=currency,
-        wallet=_dec(row.get("total")),
+        wallet=_dec(row.get("total")) + _margin_left_out(row, margin),
         free=_dec(row.get("free")),
         unrealized=unrealized,
     )
+
+
+def _margin_left_out(row: Any, margin: Decimal) -> Decimal:
+    """Margin held by open positions that the balance row does not count, or zero.
+
+    Some unified accounts report the balance net of the margin their positions hold: total equal
+    to free, nothing used, while a position ties margin up (seen on a Bitget unified demo account,
+    2026-10-26: total 969.02 beside 30.88 of initial margin, the venue's own equity 1001.18). Read
+    as it is, opening a position would look like a loss of its margin and trip the day's loss
+    limit. Only that exact shape is corrected; a row that counts its margin anywhere is left alone.
+    """
+    total, free, used = _dec(row.get("total")), _dec(row.get("free")), _dec(row.get("used"))
+    if margin > 0 and used == 0 and total == free:
+        return margin
+    return Decimal(0)
 
 
 def sizing_equity(declared: Decimal | None, venue: Decimal | None) -> Decimal | None:

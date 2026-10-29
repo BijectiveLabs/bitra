@@ -120,6 +120,22 @@ All notable changes to this project are recorded here. The format follows
 - `tra data get` on Bybit: the venue republished its trade archives with an eleventh column,
   `RPI`, and every day was refused as a changed header. Both layouts are now read and give the
   same trades.
+- A candle with no volume no longer stops the cycle: it is an empty bar, as in a replay (#15).
+- The kill switch reads a position up to three times, keeps going when one instrument cannot be
+  closed, and ends with "NOT flat yet" and the instruments left, exiting refused, instead of
+  "after flattening" (#15). A close past the hold limit that raises is recorded as `close_failed`.
+- Every fallback link that did not answer is a line in `ladder.jsonl` (#15).
+- Anthropic: an undeclared effort is left out of the request rather than sent as `high` (#15).
+- A cycle that stopped before the lead was asked no longer lengthens the trigger's refusal streak,
+  and a missing funding rate is refused before any model is asked rather than after (#15).
+- The decision's age and the risk gate's approval are read again right before the order is sent
+  (#15).
+- `ready()` redacts the venue's message; plain http is accepted for a local host only by its whole
+  name, so `localhost.example` is refused; Google's cached tokens are no longer counted twice (#15).
+- A unified account whose balance is net of the margin its positions hold is read with that margin
+  added back, so opening a position no longer reads as a loss of its margin (#14).
+- A position read on a connection left idle past the venue's keep-alive is repeated once on a fresh
+  one, and a read that still fails is journalled with its cause (#13).
 
 ## [0.10.2] - 2026-10-24
 

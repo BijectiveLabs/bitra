@@ -1616,3 +1616,18 @@ def test_check_names_a_declared_path_floor() -> None:
     assert any(
         line.startswith("paths: a trade worth less than 2 bps") for line in _target_notes(cfg, [])
     )
+
+
+def test_a_candle_nobody_traded_in_is_an_empty_bar_and_the_brief_goes_on() -> None:
+    from dataclasses import replace as replaced
+
+    from trading_research_agents.agents.briefs import bars_of
+
+    rows = candles(["100", "101", "99", "100", "102", "101", "103"])
+    rows[3] = replaced(rows[3], volume=Decimal(0), trades=0)
+    bars = bars_of(rows, 60)
+    assert [b.empty for b in bars] == [False, False, False, True, False, False, False]
+    snap = snapshot_with(closes=["100"])
+    snap.values["ohlcv"] = replaced(snap.values["ohlcv"], value=rows)
+    brief = structure_brief(snap, mechanism="reversion", interval_s=60, lookback_bars=5, now=NOW)
+    assert brief.record()["close"] == "103"

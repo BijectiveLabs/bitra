@@ -14,7 +14,6 @@ from trading_research_agents.extras import install_hint
 from trading_research_agents.llm.completer import Completion, ProviderError
 
 DEFAULT_MODEL = "claude-opus-5-5"
-DEFAULT_EFFORT = "high"
 # This vendor requires max_tokens on every request, so an undeclared cap becomes this number rather
 # than nothing. It is a field the API insists on, not a budget this software is imposing.
 DEFAULT_MAX_TOKENS = 8192
@@ -54,19 +53,20 @@ class AnthropicCompleter:
             client = anthropic.Anthropic(timeout=timeout_s, max_retries=max_retries)
         self.model = model
         self.max_tokens = DEFAULT_MAX_TOKENS if max_tokens is None else max_tokens
-        self.effort = DEFAULT_EFFORT if effort is None else EFFORTS.get(effort, DEFAULT_EFFORT)
+        # Undeclared stays undeclared: the field is left out and the vendor's own default applies.
+        self.effort = None if effort is None else EFFORTS.get(effort, "high")
         self._client = client
 
     def request(self, *, system: str, user: str, schema: Mapping[str, Any]) -> dict[str, Any]:
+        output: dict[str, Any] = {"format": {"type": "json_schema", "schema": dict(schema)}}
+        if self.effort is not None:
+            output["effort"] = self.effort
         return {
             "model": self.model,
             "max_tokens": self.max_tokens,
             "system": [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
             "messages": [{"role": "user", "content": user}],
-            "output_config": {
-                "effort": self.effort,
-                "format": {"type": "json_schema", "schema": dict(schema)},
-            },
+            "output_config": output,
         }
 
     def complete(self, *, system: str, user: str, schema: Mapping[str, Any]) -> Completion:

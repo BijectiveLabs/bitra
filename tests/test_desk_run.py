@@ -195,3 +195,36 @@ def test_another_instrument_is_held_to_the_quote_cap_alone(
     run.run()
     (asked,) = seams["asked"]
     assert asked.instrument == "ETHUSDT" and asked.max_position is None
+
+
+class Stuck(Keeper):
+    """A keeper that could not read one position while the kill switch was armed."""
+
+    def run(self, *, kill: bool) -> list[str]:
+        self.unresolved = ["ETHUSDT could not be read"] if kill else []
+        return super().run(kill=kill)
+
+
+def test_a_kill_switch_that_left_a_position_unread_says_so_and_exits_refused(
+    tmp_path: Path, seams: dict[str, Any]
+) -> None:
+    switch = tmp_path / "KILL"
+    switch.write_text("stop", encoding="utf-8")
+    run = desk_run(tmp_path, keeper=Stuck(), kill_switch=switch)
+    assert run.run() == REFUSED
+    (stopped,) = stops(tmp_path)
+    assert "NOT flat yet: ETHUSDT could not be read" in stopped["stopped_by"]
+    assert "after flattening" not in stopped["stopped_by"]
+
+
+def test_a_ladder_link_that_did_not_answer_leaves_a_line(tmp_path: Path) -> None:
+    from trading_research_agents.cli.desk_models import LADDER, _ladder_journal
+    from trading_research_agents.llm.chain import Attempt
+
+    note = _ladder_journal(tmp_path)
+    assert note is not None
+    note("structure_lead", Attempt("groq:fast", "failed", "ProviderError: 429 rate limit"))
+    note("structure_lead", Attempt("google:steady", "answered", "steady-1"))
+    (line,) = read_lines(tmp_path / LADDER)
+    assert line["role"] == "structure_lead" and line["link"] == "groq:fast"
+    assert line["outcome"] == "failed" and "429" in line["detail"]

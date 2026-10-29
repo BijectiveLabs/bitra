@@ -135,7 +135,9 @@ def test_google_adapter_requests_json_and_counts_every_token() -> None:
 
     completer = GoogleCompleter("gemini-x", client=SimpleNamespace(models=Models()))
     out = completer.complete(system="S", user="U", schema={"type": "object"})
-    assert out.text == '{"a": "b"}' and out.input_tokens == 15 and out.output_tokens == 5
+    # The prompt count already holds the five cached tokens; they are reported, not added again.
+    assert out.text == '{"a": "b"}' and out.input_tokens == 10 and out.output_tokens == 5
+    assert out.cached_tokens == 5
     config = captured["config"]
     assert config["response_mime_type"] == "application/json"
     assert config["response_json_schema"] == {"type": "object"}

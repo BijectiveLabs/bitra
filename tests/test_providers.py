@@ -46,7 +46,7 @@ def test_anthropic_request_caches_the_doctrine_and_asks_for_the_schema() -> None
     assert sent["system"][0]["text"] == "DOCTRINE"
     assert sent["messages"] == [{"role": "user", "content": "Idea: x"}]
     assert sent["output_config"]["format"] == {"type": "json_schema", "schema": BOUND_SCHEMA}
-    assert sent["output_config"]["effort"] == "high"
+    assert "effort" not in sent["output_config"]
     assert "thinking" not in sent
     assert completion.text == '{"magnitude_bps": "3.0"}'
     assert completion.model == "claude-opus-5-5"
@@ -117,6 +117,11 @@ def test_openai_base_url_reaches_a_compatible_server(monkeypatch: pytest.MonkeyP
     monkeypatch.delenv(BASE_URL_ENV)
     with pytest.raises(ProviderError, match="https"):
         OpenAICompleter("m", client=Client(), base_url="http://example.com/v1")
+    # A name that only begins with localhost is somebody else's server.
+    for elsewhere in ("http://localhost.evil.example/v1", "http://127.0.0.1.evil.example/v1"):
+        with pytest.raises(ProviderError, match="https"):
+            OpenAICompleter("m", client=Client(), base_url=elsewhere)
+    assert OpenAICompleter("m", client=Client(), base_url="http://127.0.0.1:8080/v1").base_url
     assert OpenAICompleter("m", client=Client()).base_url is None
 
 
@@ -133,6 +138,9 @@ def test_effort_is_one_vocabulary_mapped_onto_what_each_vendor_takes() -> None:
         system="s", user="u", schema=BOUND_SCHEMA
     )
     assert kept["output_config"]["effort"] == "xhigh"
+    # Undeclared is left out of the request entirely, so the vendor's own default applies.
+    unset = AnthropicCompleter(client=object()).request(system="s", user="u", schema=BOUND_SCHEMA)
+    assert "effort" not in unset["output_config"]
 
     # Gemini takes a thinking level, and only when the operator asked for one.
     thinking = GoogleCompleter("gemini-x", client=object(), effort="max").request(
