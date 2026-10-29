@@ -6,6 +6,10 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-29
+
+The 0.11 and 0.12 steps of the roadmap, released together.
+
 ### Added
 
 - Jev weighs the reviewers' two checked cases when `[judge]` is declared: the neutral verdict is a

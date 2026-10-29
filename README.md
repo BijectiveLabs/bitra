@@ -152,8 +152,8 @@ path as the work below lands. Where it is going, in the order it is being built:
 
 | Release | Adds |
 |---|---|
-| 0.11 | the market data plane (`tra data bars`, `tra record`), the feature library, the arena; the macro, on-chain and sentiment analysts become readings that ask no model |
-| 0.12 | the lead's levels read against the instrument's own paths, a forecast and a calibrator fitted on recorded outcomes, risk as its own signed gate; Jev for dated text and the team's reasons |
+| 0.11, in 0.12.0 | the market data plane (`tra data bars`, `tra record`), the feature library, the arena; the macro, on-chain and sentiment analysts become readings that ask no model |
+| 0.12, in 0.12.0 | the lead's levels read against the instrument's own paths, a forecast and a calibrator fitted on recorded outcomes, risk as its own signed gate; Jev for dated text and the team's reasons |
 | 0.13 | the reasoning model woken only when the market gives it something to weigh, its claims checked by the judge; the v1 cycle retired once the arena shows the new one is better |
 
 Each step is measured in the arena before it is trusted, and the four guarantees at the end of this
