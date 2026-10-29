@@ -216,7 +216,7 @@ class HandReads(HandTerms):
         if fetch is None:
             return None
         try:
-            held = fetch(self.symbol)
+            held = self._read_once_more_if_stale(fetch)
         except Exception as exc:
             if type(exc).__name__ == "NotSupported":
                 # Seen on 2026-10-20: a venue that reads one position only for options through
@@ -240,6 +240,24 @@ class HandReads(HandTerms):
             return Decimal(0)
         signed = Decimal(str(contracts)) * self.contract_size()
         return -signed if str(held.get("side", "")).lower() == "short" else signed
+
+    def _read_once_more_if_stale(self, fetch: Any) -> Any:
+        """The position read, repeated once on a fresh connection when the first never answered.
+
+        A pooled connection left idle past the venue's keep-alive can hang until the client's
+        timeout (seen on 2026-10-26: four reads in ten after fifteen idle minutes). A read changes
+        nothing at the venue, so it is safe to repeat; an answer the venue gave is never repeated.
+        """
+        try:
+            return fetch(self.symbol)
+        except Exception as exc:
+            if not _unanswered(exc):
+                raise
+            session = getattr(self.client, "session", None)
+            close = getattr(session, "close", None)
+            if callable(close):
+                close()
+            return fetch(self.symbol)
 
     def _position_in_list(self) -> Mapping[str, Any] | None:
         """This symbol's row of the venue's position list: empty when flat, None when unreadable."""
@@ -573,3 +591,9 @@ class HandReads(HandTerms):
         except Exception as exc:
             return self.redact(f"{exc.__class__.__name__}: {exc}")[:200]
         return ""
+
+
+def _unanswered(exc: BaseException) -> bool:
+    """A failure in which no answer arrived, as opposed to one the venue gave."""
+    names = {kind.__name__ for kind in type(exc).__mro__}
+    return bool(names & {"NetworkError", "TimeoutError", "ConnectionError"})

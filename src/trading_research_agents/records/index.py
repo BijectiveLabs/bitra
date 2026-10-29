@@ -36,6 +36,9 @@ def index_row(
         "instrument": summary.get("instrument"),
         "seen": summary.get("seen"),
         "held": bool(summary.get("held")),
+        # Whether the lead was asked: a cycle that stopped before it did is not a look that found
+        # nothing, and the trigger's streak leaves it out.
+        "asked": summary.get("analyst") is not None,
         "intent": summary.get("intent"),
         "placed": summary.get("placed"),
         "open_interest": dict(open_interest) if open_interest else None,

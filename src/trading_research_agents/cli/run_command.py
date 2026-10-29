@@ -21,7 +21,6 @@ from trading_research_agents.cli.auditing import Auditing
 from trading_research_agents.cli.common import (
     CLEARED,
     REFUSED,
-    _completer_for_role,
     _cycle_ui,
     _desk_data,
     _load_env,
@@ -31,6 +30,7 @@ from trading_research_agents.cli.common import (
     emit,
 )
 from trading_research_agents.cli.cycle_report import _cycle_report, _cycle_steps, _cycle_view
+from trading_research_agents.cli.desk_models import _metered_completers
 from trading_research_agents.cli.fees import _fill_account_fees
 from trading_research_agents.cli.schedule import Schedule, held_back_by
 from trading_research_agents.cli.text import (
@@ -140,7 +140,7 @@ def _open_desk(args: argparse.Namespace, cfg: Any) -> _Desk:
         rate=rate,
         keeper=keeper,
         usage=usage,
-        completer_for=_metered_completers(cfg.agents, usage),
+        completer_for=_metered_completers(cfg.agents, usage, out),
     )
 
 
@@ -154,43 +154,6 @@ def _overrides(args: argparse.Namespace) -> dict[str, Path]:
         ("news", args.news),
     )
     return {name: path for name, path in named if path is not None}
-
-
-def _metered_completers(a: Any, usage: Any) -> Callable[[str], Any]:
-    """One budget and one rate window for the whole desk, one client per role: a role may run on a
-    cheaper model without the others paying for it."""
-    from trading_research_agents.llm.usage import (
-        BudgetLimits,
-        MeteredCompleter,
-        Pricing,
-        RateWindow,
-    )
-
-    limits = BudgetLimits(
-        token_budget=a.token_budget,
-        max_calls_per_hour=a.max_calls_per_hour,
-        min_interval_s=a.min_interval_s,
-        call_timeout_s=a.call_timeout_s,
-    )
-    pricing = {model: Pricing(i, o) for model, (i, o) in a.pricing.items()}
-    metered: dict[str, MeteredCompleter] = {}
-    window = RateWindow()
-
-    def completer_for(role: str) -> MeteredCompleter:
-        if role not in metered:
-            settings = a.for_role(role)
-            metered[role] = MeteredCompleter(
-                _completer_for_role(a, role),
-                role=role,
-                provider=settings.provider,
-                limits=limits,
-                ledger=usage,
-                pricing=pricing,
-                window=window,
-            )
-        return metered[role]
-
-    return completer_for
 
 
 def _cycle_config(desk: _Desk) -> Any:
@@ -348,7 +311,7 @@ class _DeskRun:
         self._say(desk.keeper.run(kill=armed))
         if not armed:
             return False
-        stop = f"the kill switch at {desk.cfg.kill_switch}, after flattening"
+        stop = self._flat_or_not(f"the kill switch at {desk.cfg.kill_switch}")
         emit(
             {"cycles": self.ran, "passes": self.passes, "stopped_by": stop},
             desk.args.json,
@@ -356,6 +319,15 @@ class _DeskRun:
         )
         shutdown.journal(desk.out, "stopped", stopped_by=stop, cycles=self.ran)
         return True
+
+    def _flat_or_not(self, switch: str) -> str:
+        """How the run ended after the keeper's flatten pass. A position that could not be read
+        or closed is named, and the run exits refused so a supervisor starts the desk again."""
+        left = list(getattr(self.desk.keeper, "unresolved", None) or [])
+        if not left:
+            return f"{switch}, after flattening"
+        self.cleared = REFUSED
+        return f"{switch}, NOT flat yet: {'; '.join(left)}"
 
     def _choose(self) -> tuple[tuple[str, ...], Any]:
         desk = self.desk
@@ -441,6 +413,7 @@ class _DeskRun:
             kept = desk.keeper.run(kill=True)
             if kept and not desk.args.json:
                 sys.stdout.write("\n".join(kept) + "\n")
+            stop = self._flat_or_not(stop)
         if self.schedule.looping:
             emit(
                 {"cycles": self.ran, "passes": self.passes, "stopped_by": stop},

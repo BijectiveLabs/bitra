@@ -44,6 +44,8 @@ JOURNAL = "positions.jsonl"
 ROUND_TRIPS = "round_trips.jsonl"
 HOLD_LIMITS = ("timeout", "horizon", "none")
 FINISHED = ("closed_by_venue", "closed_by_time", "flattened")
+# Reads of one position before the kill switch gives up on it for this pass.
+KILL_READS = 3
 
 
 def _opened(cycle: str) -> datetime | None:
@@ -170,6 +172,8 @@ class Keeper:
     clock: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
     # Also look after every instrument with an entry on record, listed or not.
     follow_records: bool = False
+    # Set by each run with the kill switch armed: what could not be read or closed.
+    unresolved: list[str] = field(default_factory=list)
 
     def limit_for(self, entry: Entry) -> timedelta | None:
         """How long this entry may be held, or None when time never closes it."""
@@ -181,7 +185,11 @@ class Keeper:
         return timedelta(seconds=bars * self.bar_interval_s)
 
     def run(self, *, kill: bool = False) -> list[str]:
-        """One look at every instrument. Returns the lines a person reads; the journal keeps all."""
+        """One look at every instrument. Returns the lines a person reads; the journal keeps all.
+
+        With the kill switch armed, an instrument whose position could not be read or closed is
+        named in `unresolved`: the desk is not flat until that list is empty.
+        """
         now = self.clock()
         said = self._reconcile_unknown(now)
         entries = filled_entries(self.root)
@@ -189,49 +197,90 @@ class Keeper:
         names = list(self.instruments)
         if self.follow_records:
             names = list(dict.fromkeys([*names, *entries]))
+        self.unresolved = []
         for name in names:
-            try:
-                hand = self.hand_for(name)
-                held = hand.position()
-            except Exception as exc:
-                said.append(f"positions: {name} could not be read ({exc.__class__.__name__})")
-                continue
-            entry = entries.get(name)
-            if kill:
-                cancelled = hand.cancel_open_orders()
-                if held:
-                    closed = hand.close_position("the kill switch is armed")
-                    self._record(now, name, "flattened", entry, closed, cancelled=cancelled)
-                    said.append(f"positions: {name} flattened for the kill switch: {_how(closed)}")
-                    if closed.get("closed") and entry is not None and entry.order_id not in done:
-                        self._round_trip(now, hand, entry, "kill switch")
-                continue
-            if entry is None or entry.order_id in done:
-                continue
-            if held:
-                limit = self.limit_for(entry)
-                age = now - entry.opened_at
-                if limit is not None and age > limit:
-                    reason = (
-                        f"held {_span(age)}, past its {self.hold_limit} limit of {_span(limit)}"
-                    )
-                    closed = hand.close_position(reason)
-                    event = "closed_by_time" if closed.get("closed") else "close_failed"
-                    self._record(now, name, event, entry, closed)
-                    said.append(f"positions: {name} {reason}: {_how(closed)}")
-                    if closed.get("closed"):
-                        self._round_trip(now, hand, entry, "time")
-                continue
-            if not entry.confirmed:
-                # Never confirmed as filled, and nothing is held: there is no trade to write up.
-                continue
-            # Open by our record, flat at the venue: its stop or take profit closed it.
-            self._record(now, name, "closed_by_venue", entry, {})
-            trip = self._round_trip(now, hand, entry, "venue exit")
-            said.append(f"positions: {name} was closed at the venue; {_trip_line(trip)}")
+            said.extend(self._look(now, name, entries.get(name), done, kill=kill))
         if not kill:
             said.extend(self._complete(now, entries))
         return said
+
+    def _read(self, name: str, tries: int) -> tuple[Any, Decimal | None] | str:
+        """The hand and what it holds, or why it could not be read after `tries` reads."""
+        why = ""
+        for _ in range(tries):
+            try:
+                hand = self.hand_for(name)
+                return hand, hand.position()
+            except Exception as exc:
+                why = f"{exc.__class__.__name__}: {exc}"
+        return why
+
+    def _look(
+        self, now: datetime, name: str, entry: Entry | None, done: set[str], *, kill: bool
+    ) -> list[str]:
+        read = self._read(name, KILL_READS if kill else 1)
+        if isinstance(read, str):
+            if kill:
+                self.unresolved.append(f"{name} could not be read")
+            return [f"positions: {name} could not be read ({read[:300]})"]
+        hand, held = read
+        if kill:
+            return self._flatten(now, name, hand, held, entry, done)
+        if entry is None or entry.order_id in done:
+            return []
+        if held:
+            return self._time_exit(now, name, hand, entry)
+        if not entry.confirmed:
+            # Never confirmed as filled, and nothing is held: there is no trade to write up.
+            return []
+        # Open by our record, flat at the venue: its stop or take profit closed it.
+        self._record(now, name, "closed_by_venue", entry, {})
+        trip = self._round_trip(now, hand, entry, "venue exit")
+        return [f"positions: {name} was closed at the venue; {_trip_line(trip)}"]
+
+    def _flatten(
+        self,
+        now: datetime,
+        name: str,
+        hand: Any,
+        held: Decimal | None,
+        entry: Entry | None,
+        done: set[str],
+    ) -> list[str]:
+        try:
+            cancelled = hand.cancel_open_orders()
+            closed = hand.close_position("the kill switch is armed") if held else None
+        except Exception as exc:
+            # One instrument that cannot be flattened must not stop the others from being tried.
+            why = f"{exc.__class__.__name__}: {exc}"
+            self.unresolved.append(f"{name}: {why}")
+            self._record(now, name, "close_failed", entry, {"closed": False, "error": why})
+            return [f"positions: {name} could not be flattened ({why[:300]})"]
+        if closed is None:
+            return []
+        event = "flattened" if closed.get("closed") else "close_failed"
+        self._record(now, name, event, entry, closed, cancelled=cancelled)
+        if not closed.get("closed"):
+            self.unresolved.append(f"{name}: {_how(closed)}")
+        if closed.get("closed") and entry is not None and entry.order_id not in done:
+            self._round_trip(now, hand, entry, "kill switch")
+        return [f"positions: {name} flattened for the kill switch: {_how(closed)}"]
+
+    def _time_exit(self, now: datetime, name: str, hand: Any, entry: Entry) -> list[str]:
+        limit = self.limit_for(entry)
+        age = now - entry.opened_at
+        if limit is None or age <= limit:
+            return []
+        reason = f"held {_span(age)}, past its {self.hold_limit} limit of {_span(limit)}"
+        try:
+            closed = hand.close_position(reason)
+        except Exception as exc:
+            closed = {"closed": False, "error": f"{exc.__class__.__name__}: {exc}"}
+        event = "closed_by_time" if closed.get("closed") else "close_failed"
+        self._record(now, name, event, entry, closed)
+        if closed.get("closed"):
+            self._round_trip(now, hand, entry, "time")
+        return [f"positions: {name} {reason}: {_how(closed)}"]
 
     def _reconcile_unknown(self, now: datetime) -> list[str]:
         """Look for every UNKNOWN order by its client id, and resolve the ones the venue settles."""

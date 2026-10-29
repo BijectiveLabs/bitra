@@ -50,9 +50,10 @@ class HandUpkeep(HandReads):
                     "every order would be refused until it is current"
                 )
         except DispatchError as exc:
-            return str(exc)
+            return self.redact(str(exc))
         except Exception as exc:
-            return f"{exc.__class__.__name__}: {exc}"
+            # A vendor's message can carry a signed URL or a key; what is printed is redacted.
+            return self.redact(f"{exc.__class__.__name__}: {exc}")
         return ""
 
     def _taken(self, order_id: str, tries: int = 4) -> dict[str, Any]:

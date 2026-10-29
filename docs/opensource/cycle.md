@@ -231,9 +231,11 @@ trigger admits it instead of measuring hours of drift against it.
 
 `widen_after` is the part that answers a whole quiet day. After a run of refusals with nothing
 changing, the movement required grows with the streak, to a hard ceiling of eight times the
-declared minimum so a desk can never be talked into going blind. One real move brings it straight
-back to the baseline. A cycle the trigger itself held does not count towards the streak: that is
-the desk deciding not to look, not the desk looking and finding nothing.
+declared minimum so a desk can never be talked into going blind. The streak is the cycles since
+the last intent, so the first intent brings the bar straight back to the baseline. A cycle the
+trigger itself held does not count towards the streak, and neither does one that stopped before the
+lead was asked (data that would not come, a loss limit): that is the desk not looking, not the desk
+looking and finding nothing.
 
 `tra run --now` asks the roster whatever the trigger would have said. The override is written into
 the cycle, so a reader can tell a forced cycle from a natural one.

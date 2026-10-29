@@ -51,10 +51,27 @@ def bars_of(candles: list[Candle], interval_s: int) -> list[Bar]:
     interval_ns = interval_s * NS_PER_S
     out = []
     for candle in candles:
+        end_ns = candle.start_ns + interval_ns
+        if candle.volume <= 0:
+            # A venue may publish an interval nobody traded in. It is an empty bar, as in a replay,
+            # never one filled from its own flat prices.
+            out.append(
+                Bar(
+                    start_ns=candle.start_ns,
+                    end_ns=end_ns,
+                    open=None,
+                    high=None,
+                    low=None,
+                    close=None,
+                    volume=Decimal(0),
+                    trades=0,
+                )
+            )
+            continue
         out.append(
             Bar(
                 start_ns=candle.start_ns,
-                end_ns=candle.start_ns + interval_ns,
+                end_ns=end_ns,
                 open=candle.open,
                 high=candle.high,
                 low=candle.low,

@@ -262,8 +262,9 @@ def test_a_maker_channel_rests_on_the_book_and_never_crosses_it() -> None:
 
 def test_a_resting_order_that_does_not_fill_is_cancelled_rather_than_chased() -> None:
     venue = FakeExchange()
-    # The decision age and the send are read first, then the wait for the fill.
-    ticks = iter([0.0, 0.0, 0.0, 0.0, 0.0, 10.0, 40.0, 40.0])
+    # The approval and decision age (twice: before the venue reads and just before the send) and
+    # the send are read first, then the wait for the fill.
+    ticks = iter([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 10.0, 40.0, 40.0])
     hand = VenueHand(
         venue="bybit",
         symbol="BTC/USDT:USDT",
@@ -1147,3 +1148,91 @@ def test_the_hand_sends_nothing_the_risk_gate_did_not_sign() -> None:
     assert "expired" in hand(late.approved_intent(LONG))["refused"]
     assert venue.orders == []
     assert hand(signed)["sent"] is True and len(venue.orders) == 1
+
+
+def test_a_read_on_a_connection_left_idle_is_repeated_once_on_a_fresh_one() -> None:
+    class Session:
+        closed = 0
+
+        def close(self) -> None:
+            self.closed += 1
+
+    class Idle(FakeExchange):
+        def __init__(self, fails: int, error: Exception) -> None:
+            super().__init__(position={"contracts": 0.01, "side": "long"})
+            self.session = Session()
+            self.fails = fails
+            self.error = error
+            self.reads = 0
+
+        def fetch_position(self, symbol: str) -> object:
+            self.reads += 1
+            if self.reads <= self.fails:
+                raise self.error
+            return self.position
+
+    def hand(client: Idle) -> VenueHand:
+        return VenueHand(
+            venue="bybit",
+            symbol="BTC/USDT:USDT",
+            max_notional=Decimal(2000),
+            keys=("K", "S"),
+            client=client,
+        )
+
+    stale = Idle(1, RequestTimeout("read timed out after 10 s"))
+    assert hand(stale).position() == Decimal("0.01")
+    assert stale.reads == 2 and stale.session.closed == 1
+    # Twice unanswered is a venue that is down, not a stale connection: no third read.
+    down = Idle(2, RequestTimeout("read timed out after 10 s"))
+    with pytest.raises(DispatchError, match="RequestTimeout"):
+        hand(down).position()
+    assert down.reads == 2
+    # A venue that answered no is never asked again.
+    refused = Idle(1, InsufficientFunds("not this"))
+    with pytest.raises(DispatchError, match="InsufficientFunds"):
+        hand(refused).position()
+    assert refused.reads == 1
+
+
+def test_a_decision_that_aged_during_the_venue_reads_is_not_sent() -> None:
+    now = [datetime.now(UTC).timestamp()]
+
+    class Slow(FakeExchange):
+        def fetch_open_orders(self, symbol: str) -> list[dict[str, Any]]:
+            # A slow read: the checks before it passed, and the decision ages while it answers.
+            now[0] += 90
+            return super().fetch_open_orders(symbol)
+
+    venue = Slow()
+    hand = VenueHand(
+        venue="bybit",
+        symbol="BTC/USDT:USDT",
+        max_notional=Decimal(2000),
+        keys=("K", "S"),
+        client=venue,
+        max_decision_age_s=60.0,
+        clock=lambda: now[0],
+    )
+    fresh = datetime.fromtimestamp(now[0], UTC).strftime("%Y-%m-%dT%H-%M-%SZ")
+    late = hand(approved({**LONG, "at": fresh}))
+    assert late["sent"] is False
+    assert "old before it could be sent, past [execution].max_decision_age_s 60" in late["refused"]
+    assert venue.orders == []
+
+
+def test_the_readiness_check_never_prints_a_key() -> None:
+    class Leaky(FakeExchange):
+        def fetch_open_orders(self, symbol: str) -> list[dict[str, Any]]:
+            raise RuntimeError("GET /v5/order/realtime?api_key=AKIDSECRET1234 failed")
+
+    hand = VenueHand(
+        venue="bybit",
+        symbol="BTC/USDT:USDT",
+        max_notional=Decimal(2000),
+        keys=("K", "S"),
+        env={"K": "AKIDSECRET1234", "S": "S" * 16},
+        client=Leaky(),
+    )
+    said = hand.ready()
+    assert "RuntimeError" in said and "AKIDSECRET1234" not in said and "[redacted]" in said

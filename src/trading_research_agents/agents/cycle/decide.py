@@ -209,22 +209,26 @@ def _fits_regime(p: Pass) -> bool:
     return True
 
 
+def _funding_read(p: Pass) -> bool:
+    """A contract's round trip cannot be priced without its funding rate, so a cycle that has the
+    book and not the rate is refused before any model is asked, not after it was paid for."""
+    cfg, result, snapshot = p.cfg, p.result, p.snapshot
+    if p.no_contract or "orderbook" not in snapshot.values or "funding" in snapshot.values:
+        return True
+    why = snapshot.refused.get("funding", "no funding chain is declared in data.toml")
+    result.refusals.append(
+        f"cost: the funding rate for {cfg.instrument} could not be read ({why}); a contract's "
+        "round trip is not priced without it"
+    )
+    result.stopped_by = "cost: no funding rate"
+    announce(cfg.watch, "cost", REFUSED, "no funding rate to price the hold")
+    _finish(cfg, p.where, result)
+    return False
+
+
 def _price(p: Pass) -> bool:
     """The round trip on the snapshot's own book, at the base size."""
-    cfg, result, snapshot = p.cfg, p.result, p.snapshot
-    # After the book, which is the first thing a price needs and the first refusal to name.
-    if not p.no_contract and "orderbook" in snapshot.values and "funding" not in snapshot.values:
-        # A perpetual pays funding while it is held. Priced without the rate, the round trip would
-        # look cheaper than it is, so the trade is refused rather than priced on a missing term.
-        why = snapshot.refused.get("funding", "no funding chain is declared in data.toml")
-        result.refusals.append(
-            f"cost: the funding rate for {cfg.instrument} could not be read ({why}); a contract's "
-            "round trip is not priced without it"
-        )
-        result.stopped_by = "cost: no funding rate"
-        announce(cfg.watch, "cost", REFUSED, "no funding rate to price the hold")
-        _finish(cfg, p.where, result)
-        return False
+    cfg, result = p.cfg, p.result
     try:
         p.costs = price_at(p, p.base)
     except BriefError as exc:
@@ -352,6 +356,7 @@ def _validate(p: Pass) -> bool:
 
 DECIDING: tuple[Step, ...] = (
     _brief,
+    _funding_read,
     _ask_lead,
     _check_answer,
     combine,
