@@ -82,11 +82,11 @@ class RunView:
 
 STEPS = (
     "figures",
-    "market_screener",
+    "screen",
     "macro",
     "onchain",
-    "risk_manager",
-    "executor",
+    "risk",
+    "allocation",
     "auditor",
 )
 
@@ -116,8 +116,8 @@ class SessionView:
 
     def on_step(self, step: str, status: str, summary: str) -> None:
         if step not in self.state:
-            # Runs appear after the screener, one per kept instrument, in the order they start.
-            at = self.order.index("risk_manager")
+            # Runs appear after the screen, one per kept instrument, in the order they start.
+            at = self.order.index("risk")
             self.order.insert(at, step)
         self.state[step] = (status, summary)
         if self.live is not None:
@@ -139,7 +139,7 @@ class SessionView:
 def session_report(result: Any, usage: Any, out: str) -> Group:
     kept = Table(box=box.SIMPLE_HEAD, show_edge=False, pad_edge=False, title="instruments")
     kept.add_column("instrument")
-    kept.add_column("screener")
+    kept.add_column("screen")
     kept.add_column("regime")
     kept.add_column("round trips", justify="right")
     kept.add_column("net", justify="right")
@@ -166,10 +166,11 @@ def session_report(result: Any, usage: Any, out: str) -> Group:
         )
     rows: list[tuple[str, Any]] = [("session", result.session_id)]
     if result.risk is not None:
-        rows.append(("risk manager", f"{result.risk['decision']}: {result.risk['reason']}"))
+        reasons = "; ".join(result.risk.get("reasons") or []) or "no rule fired"
+        rows.append(("risk", f"{result.risk['decision']}: {reasons}"))
     if result.allocation:
         parts = ", ".join(f"{a.get('instrument')} {a.get('fraction')}" for a in result.allocation)
-        rows.append(("executor", parts))
+        rows.append(("allocation", parts))
     if result.audit is not None:
         verdict = str(result.audit.get("verdict"))
         rows.append(

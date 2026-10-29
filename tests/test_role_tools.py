@@ -15,17 +15,17 @@ from trading_research_agents.agents.auditor.tools import (
     run_vs_replay,
     usage_summary,
 )
-from trading_research_agents.agents.executor.tools import export_signals, rate_budget, size_for
-from trading_research_agents.agents.market_screener.tools import screen_figures
-from trading_research_agents.agents.risk_manager.tools import (
+from trading_research_agents.agents.run_measures import (
     alpha_decay,
     drawdown,
     measured_latency,
     refusal_pattern,
     risk_brief,
 )
+from trading_research_agents.agents.screen_figures import screen_figures
 from trading_research_agents.agents.session import ScreenSettings, SessionConfig
 from trading_research_agents.agents.session_run import run_session
+from trading_research_agents.agents.signals_export import export_signals, rate_budget, size_for
 from trading_research_agents.agents.structure_lead.tools import features
 from trading_research_agents.cli.main import main
 from trading_research_agents.data import Side, Trade
@@ -385,10 +385,6 @@ def test_a_session_hands_the_roles_measured_briefs(tmp_path: Path, envelope: Env
         "min_prints_per_minute": 0.1,
         "volatile_above_bps": 500.0,
     }
-    screener = {
-        "kept": [{"instrument": "AAAUSDT", "regime": "ranging", "reason": "as proposed"}],
-        "excluded": [],
-    }
     analyst = {
         "target": "flat",
         "setup": "no_setup",
@@ -397,8 +393,6 @@ def test_a_session_hands_the_roles_measured_briefs(tmp_path: Path, envelope: Env
         "confidence": 0.9,
         "horizon_bars": 2,
     }
-    risk = {"decision": "continue", "limits": {}, "reason": "fine", "triggers": []}
-    alloc = {"size": "0.01", "reason": "r", "allocations": []}
     audit = {
         "action": "answer",
         "tool": "",
@@ -406,7 +400,7 @@ def test_a_session_hands_the_roles_measured_briefs(tmp_path: Path, envelope: Env
         "answer": {"findings": [], "verdict": "sound", "summary": "ok"},
         "thought": "done",
     }
-    fake = FakeCompleter([screener, *([analyst] * 6), risk, alloc, audit])
+    fake = FakeCompleter([*([analyst] * 6), audit])
     usage = UsageLedger(tmp_path / "out" / "usage.jsonl")
     limits = BudgetLimits(token_budget=500000, max_calls_per_hour=1000, min_interval_s=0)
     metered: dict[str, MeteredCompleter] = {}
@@ -448,7 +442,8 @@ def test_a_session_hands_the_roles_measured_briefs(tmp_path: Path, envelope: Env
         and brief["series"][0]["state"] == "bullish"
     )
     assert brief["events"] == [] or brief["events"][0]["what"] == "release"
-    risk_user = json.loads(fake.calls[-3].user)
-    assert "measured" in risk_user and "latency" in risk_user["measured"]["AAAUSDT"]
+    # The risk rule reads the same measured brief a model used to be handed.
+    assert result.risk is not None and result.risk["decided_by"] == "rule"
+    assert "latency" in result.risk["triggers"]["measured"]["AAAUSDT"]
     audit_user = json.loads(fake.calls[-1].user)["question"]
     assert "usage" in audit_user["measured"] and "promotions" in audit_user["measured"]

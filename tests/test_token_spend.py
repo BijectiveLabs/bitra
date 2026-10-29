@@ -41,16 +41,14 @@ def test_table_readers_think_low_only_where_an_effort_is_declared() -> None:
     plain = parse_strategy_config(agent_raw()).agents
     assert plain is not None and plain.for_role("reviewer").effort is None
     raw = agent_raw()
-    raw["agents"] = {
-        **raw["agents"],
-        "effort": "medium",
-        "roles": {"reviewer": {"effort": "high"}},
-    }
+    raw["agents"] = {**raw["agents"], "effort": "medium"}
     agents = parse_strategy_config(raw).agents
     assert agents is not None
-    assert agents.for_role("reviewer").effort == "high"
-    assert agents.for_role("market_screener").effort == "low"
+    assert agents.for_role("reviewer").effort == "low"
     assert agents.for_role("structure_lead").effort == "medium"
+    raw["agents"]["roles"] = {"reviewer": {"effort": "high"}}
+    held = parse_strategy_config(raw).agents
+    assert held is not None and held.for_role("reviewer").effort == "high"
 
 
 def test_briefs_go_to_the_model_without_spaces() -> None:

@@ -1,14 +1,13 @@
-"""One session of the seven roles, in the sandbox, in a fixed order, everything written down.
+"""One research session in the sandbox, in a fixed order, everything written down.
 
-    figures (code) -> screener -> [macro] -> [onchain] -> analyst runs (one per kept instrument)
-                   -> risk manager -> executor (allocation) -> auditor
+    figures (code) -> screen (rule) -> [macro] -> [onchain] -> one replay per kept instrument,
+                      the structure lead as its core -> risk (rule) -> allocation (rule) -> auditor
 
-No role talks to another; each gets what code computed plus what the previous roles wrote,
-and each answer is a typed object recorded in the session directory. The analyst is the only
-role that decides inside a run, as the decision core of a replay over recorded trades. The
-risk manager's decision is applied through the action surface, which can only make the next
-session safer. The executor allocates; it does not send. The auditor reads it all, including
-what every call cost.
+The structure lead is the only model that decides inside a run, as the decision core of a replay
+over recorded trades. What to screen, whether the evidence holds and how to split the allocation
+are written rules in `session_rules`: the same answer every time, at no cost, each naming the
+figure that decided it. A risk ruling is applied through the action surface, which can only make
+the next session safer. The auditor reads it all, including what every call cost.
 """
 
 from __future__ import annotations
@@ -21,18 +20,19 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from trading_research_agents.agents import (
-    auditor,
-    executor,
-    market_screener,
-    risk_manager,
-)
+from trading_research_agents.agents import auditor
 from trading_research_agents.agents.auditor.tools import audit_brief
-from trading_research_agents.agents.market_screener.tools import ScreenFigures, screen_figures
 from trading_research_agents.agents.react import ToolLoopError, run_tool_loop
-from trading_research_agents.agents.risk_manager.tools import risk_brief
 from trading_research_agents.agents.roles import RoleError, prompt
+from trading_research_agents.agents.run_measures import risk_brief
+from trading_research_agents.agents.screen_figures import ScreenFigures, screen_figures
 from trading_research_agents.agents.session_replay import _report_from_disk, replay_instrument
+from trading_research_agents.agents.session_rules import (
+    RiskRuling,
+    allocate_evenly,
+    risk_by_rule,
+    screen_by_rule,
+)
 from trading_research_agents.agents.strategy import MAX_FAILURES_IN_A_ROW, AgentStrategy
 from trading_research_agents.chain import cost_floor, load_observation, observe
 from trading_research_agents.data.dated_text import read_events
@@ -56,7 +56,6 @@ from trading_research_agents.surface.actions import (
     ActionRefusedError,
     arm_kill_switch,
     demote,
-    tighten_limits,
 )
 from trading_research_agents.surface.confine import confine_all, roots_of
 from trading_research_agents.trading import (
@@ -66,6 +65,7 @@ from trading_research_agents.trading import (
     StrategyConfig,
 )
 from trading_research_agents.trading.controls import Limits
+from trading_research_agents.trading.ladder import Tier
 
 NS_PER_MINUTE = 60 * 1_000_000_000
 
@@ -109,7 +109,7 @@ class Figures:
 
 @dataclass(frozen=True)
 class ScreenSettings:
-    """The screener's two thresholds, the operator's; `[agents.screen]` or these defaults."""
+    """The screen's two thresholds, the operator's; `[agents.screen]` or these defaults."""
 
     min_prints_per_minute: float = 1.0
     volatile_above_bps: float = 50.0
@@ -184,7 +184,7 @@ def figures_for(
     check = cost_floor(envelope, magnitude_bps, venue=venue)
     observed = None
     if observation is not None:
-        # Layer 1 on the same prints: the screener sees whether the declared event recurs
+        # Layer 1 on the same prints: the screen reads whether the declared event recurs
         # here, with its counts and response, before it labels a regime.
         report = observe(load_observation(observation), read_trades(path), dataset=str(path))
         observed = {
@@ -284,36 +284,7 @@ class _Session:
         return str(saved["response"])
 
     def screen(self, figures: list[Figures]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-        text = self.ask(
-            market_screener.ROLE,
-            {"candidates": [f.record() for f in figures]},
-            market_screener.SCHEMA,
-        )
-        if text is None:
-            return [], [
-                {"instrument": f.instrument, "reason": "screener unavailable"} for f in figures
-            ]
-        try:
-            out = market_screener.parse(text)
-        except RoleError as exc:
-            self.refusals.append(f"market_screener: {exc}")
-            return [], [{"instrument": f.instrument, "reason": str(exc)} for f in figures]
-        known = {f.instrument for f in figures}
-        kept = [k for k in out.kept if isinstance(k, dict) and k.get("instrument") in known]
-        invented = [k for k in out.kept if isinstance(k, dict) and k.get("instrument") not in known]
-        for k in invented:
-            self.refusals.append(f"market_screener: kept an instrument it was not given: {k}")
-        # A candidate the screener did not mention is excluded, not silently kept.
-        named = {k["instrument"] for k in kept} | {
-            e.get("instrument") for e in out.excluded if isinstance(e, dict)
-        }
-        excluded = [e for e in out.excluded if isinstance(e, dict)]
-        for f in figures:
-            if f.instrument not in named:
-                excluded.append(
-                    {"instrument": f.instrument, "reason": "not mentioned by the screener"}
-                )
-        return kept, excluded
+        return screen_by_rule(figures)
 
     def context(
         self, reading: str, series_path: Path | None, reference: Path | None
@@ -382,86 +353,33 @@ class _Session:
 
     def risk(
         self, reports: dict[str, RunReport], limits: Limits, ladder: Ladder
-    ) -> tuple[Any, Limits]:
-        s = self.cfg.strategy
-        user = {
-            "tier": ladder.tier.name,
-            "limits": {
-                "max_risk_per_trade_bps": str(limits.max_risk_per_trade_bps),
-                "max_position": str(limits.max_position),
-                "max_orders_per_minute": limits.max_orders_per_minute,
-                "daily_loss_limit_bps": str(limits.daily_loss_limit_bps),
-            },
-            "declared_latency_ms": str(s.run.latency_ms),
-            "registration_magnitude_bps": str(self.cfg.magnitude_bps),
-            "measured": risk_brief(
-                [(name, self.out / name) for name in reports],
-                declared_ms=s.run.latency_ms,
-                claimed_bps=self.cfg.magnitude_bps,
-            ),
-            "runs": {
-                name: {
-                    "prints": r.prints,
-                    "bars": r.bars,
-                    "intents": r.intents,
-                    "refused": r.refused,
-                    "fills": r.fills,
-                    "round_trips": r.round_trips,
-                    "net_bps_total": str(r.net_bps_total),
-                    "stopped_by": r.stopped_by,
-                    "refusals": r.refusals[:5],
-                }
-                for name, r in reports.items()
-            },
-        }
-        text = self.ask(risk_manager.ROLE, user, risk_manager.SCHEMA)
-        if text is None:
-            return None, limits
+    ) -> tuple[RiskRuling, Limits]:
+        """The written risk rule over what code measured from each run; applied through the
+        action surface, which can only demote the ladder or arm the kill switch."""
+        measured = risk_brief(
+            [(name, self.out / name) for name in reports],
+            declared_ms=self.cfg.strategy.run.latency_ms,
+            claimed_bps=self.cfg.magnitude_bps,
+        )
+        ruling = risk_by_rule(measured, {name: r.stopped_by for name, r in reports.items()})
+        why = "; ".join(ruling.reasons)
         try:
-            decision = risk_manager.parse(text)
-        except RoleError as exc:
-            self.refusals.append(f"risk_manager: {exc}")
-            return None, limits
-        after = limits
-        try:
-            if decision.decision == "tighten":
-                tightened = tighten_limits(limits, decision.limits)
-                after = tightened.after
-                if not tightened.changed:
-                    self.refusals.append("risk_manager: tighten changed nothing")
-            elif decision.decision == "demote":
-                demote(ladder, reason=decision.reason)
-            elif decision.decision == "halt":
-                arm_kill_switch(KillSwitch(), reason=decision.reason, touch=self.cfg.kill_file)
-                self.stopped_by = self.stopped_by or f"risk manager halt: {decision.reason}"
+            if ruling.decision == "demote" and ladder.tier is Tier.RESEARCH:
+                # Nothing below research: the ruling stands on the record and the ladder stays.
+                self.refusals.append(
+                    f"risk: demote ruled, the ladder is already at research; {why}"
+                )
+            elif ruling.decision == "demote":
+                demote(ladder, reason=why)
+            elif ruling.decision == "halt":
+                arm_kill_switch(KillSwitch(), reason=why, touch=self.cfg.kill_file)
+                self.stopped_by = self.stopped_by or f"risk rule halt: {why}"
         except ActionRefusedError as exc:
-            self.refusals.append(f"risk_manager: {exc}")
-        return decision, after
+            self.refusals.append(f"risk: {exc}")
+        return ruling, limits
 
     def allocate(self, kept: list[dict[str, Any]], limits: Limits) -> list[dict[str, Any]]:
-        if not kept:
-            return []
-        user = {
-            "instruments": [k["instrument"] for k in kept],
-            "max_position": str(limits.max_position),
-            "declared_size": str(self.cfg.strategy.run.fixed_size()),
-            "gross_exposure_cap": "1.0",
-        }
-        text = self.ask(executor.ROLE, user, executor.SCHEMA)
-        if text is None:
-            return []
-        try:
-            out = executor.parse(text)
-        except RoleError as exc:
-            self.refusals.append(f"executor: {exc}")
-            return []
-        names = {k["instrument"] for k in kept}
-        rows = [r for r in out.allocations if isinstance(r, dict) and r.get("instrument") in names]
-        total = sum(float(r.get("fraction", 0)) for r in rows)
-        if total > 1.0 + 1e-9:
-            self.refusals.append(f"executor: allocations sum to {total:.3f}; capped at 1")
-            return []
-        return rows
+        return allocate_evenly(kept)
 
     def audit(
         self,
@@ -496,6 +414,7 @@ class _Session:
             "cost_total": str(usage.cost),
             "tokens_per_round_trip": None if round_trips == 0 else usage.tokens / round_trips,
             "risk_decision": None if risk is None else risk.decision,
+            "risk_reasons": [] if risk is None else list(risk.reasons),
             "allocation": allocation,
             "ladder_history": list(ladder.history),
             "refusals": self.refusals,

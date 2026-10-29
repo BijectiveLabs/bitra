@@ -13,9 +13,6 @@ import pytest
 from trading_research_agents.agents import (
     RoleError,
     auditor,
-    executor,
-    market_screener,
-    risk_manager,
     structure_lead,
 )
 from trading_research_agents.agents.roles import prompt
@@ -39,10 +36,7 @@ from trading_research_agents.llm.usage import (
 )
 
 ROLES = (
-    market_screener,
     structure_lead,
-    risk_manager,
-    executor,
     auditor,
 )
 
@@ -205,33 +199,10 @@ def test_every_role_has_a_prompt_a_schema_and_a_parser() -> None:
             "in \\[0, 1\\]",
         ),
         (
-            risk_manager,
-            {
-                "decision": "tighten",
-                "limits": {"max_position": "0.01"},
-                "reason": "r",
-                "triggers": ["x"],
-            },
-            {"decision": "loosen", "limits": {}, "reason": "r", "triggers": []},
-            "decision must be one of",
-        ),
-        (
-            executor,
-            {"size": "0.01", "reason": "declared", "allocations": []},
-            {"size": "lots", "reason": "declared", "allocations": []},
-            "size is not a number",
-        ),
-        (
             auditor,
             {"findings": [], "verdict": "sound", "summary": "s"},
             {"findings": [], "verdict": "great", "summary": "s"},
             "verdict must be one of",
-        ),
-        (
-            market_screener,
-            {"kept": [{"instrument": "X", "regime": "ranging", "reason": "r"}], "excluded": []},
-            {"kept": "X", "excluded": []},
-            "kept must be a list",
         ),
     ],
 )
@@ -244,15 +215,6 @@ def test_role_parsers_accept_the_schema_and_refuse_the_rest(
         role.parse(json.dumps(bad))
     with pytest.raises(RoleError, match="not valid JSON"):
         role.parse("{")
-
-
-def test_executor_size_is_a_decimal_and_risk_limits_stay_an_object() -> None:
-    out = executor.parse('{"size": "0.010", "reason": "declared size", "allocations": []}')
-    assert out.size == Decimal("0.010")
-    risk = risk_manager.parse(
-        '{"decision": "continue", "limits": {}, "reason": "within band", "triggers": []}'
-    )
-    assert risk.decision == "continue" and risk.limits == {}
 
 
 # Usage and budget

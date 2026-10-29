@@ -132,10 +132,14 @@ class _Loop:
         self.report.prints += 1
         self.last_price = trade.price
         fill = self.c.venue.poll(trade)
+        held_before = self.position
         if fill is not None:
             self.on_fill(fill)
+        # The print that fills an entry can also close the bar before it. That bar was traded
+        # before the position existed, so it neither stops it nor counts as a bar held.
+        opened = held_before is None and self.position is not None
         for bar in self.builder.push(trade):
-            self.on_bar(bar)
+            self.on_bar(bar, opened_after=opened)
 
     def on_fill(self, fill: Fill) -> None:
         self.report.fills += 1
@@ -171,7 +175,7 @@ class _Loop:
 
     # Bars
 
-    def on_bar(self, bar: Bar) -> None:
+    def on_bar(self, bar: Bar, *, opened_after: bool = False) -> None:
         self.report.bars += 1
         if self.c.canary is not None and self.report.stopped_by is None:
             over = self.c.canary.session_over(bar.end_ns) or self.c.canary.caps_reached(
@@ -181,7 +185,7 @@ class _Loop:
                 self.report.stopped_by = over
                 if self.position is not None and not self.pending_close:
                     self.request(bar.end_ns, Target.FLAT, over)
-        if self.position is not None and not self.pending_close:
+        if self.position is not None and not self.pending_close and not opened_after:
             self.evaluate_exits(self.position, bar)
         if (
             self.c.controls.kill_switch.armed

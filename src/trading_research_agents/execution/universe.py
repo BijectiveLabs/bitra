@@ -10,9 +10,10 @@ the last look, the width of the book, the cooldown after an intent - is applied 
 what survives is ordered by a written rule: the move already seen against what it costs to cross the
 spread. That is the same reasoning the trigger does, asked across a row instead of down one.
 
-The ordering is code because it decides where capital gets to be considered at all. A screener may
-narrow what code admitted and say why; it may never add an instrument, reorder one into the run, or
-say anything about direction or size.
+The ordering is code because it decides where capital gets to be considered at all. First comes the
+room ahead: the range the instrument's own paths draw over the hold, against the spread it costs to
+cross. A market that is expected to move far for what it costs is worth a cycle before one that has
+merely moved. The move already seen orders what the paths cannot read.
 """
 
 from __future__ import annotations
@@ -34,10 +35,11 @@ class Universe:
     instruments: tuple[str, ...] = ()
     max_per_cycle: int = 1
     max_intents_per_day: int | None = None
+    # Retired in 0.12 with the screener seat: read so a desk that set it still runs, and ignored;
+    # `tra check` says so. Code orders the universe.
     screener: bool = False
     # Discovery: every linear perpetual the venue lists, filtered to what can be traded, the most
-    # traded `top` of them added to `instruments` each pass. Code finds and measures; the screener
-    # chooses among what code found.
+    # traded `top` of them added to `instruments` each pass.
     discover: bool = False
     top: int = 20
     min_quote_volume: Decimal = Decimal(10_000_000)
@@ -59,11 +61,6 @@ class Universe:
             raise UniverseError("[universe].max_per_cycle is at least 1")
         if self.max_intents_per_day is not None and self.max_intents_per_day < 0:
             raise UniverseError("[universe].max_intents_per_day is not negative")
-        if self.screener and not self.instruments and not self.discover:
-            raise UniverseError(
-                "[universe].screener has nothing to screen; declare instruments, set discover, "
-                "or drop it"
-            )
         if self.top < 1 or self.min_listed_days < 0:
             raise UniverseError("[universe].top is at least 1 and min_listed_days not negative")
         if self.min_quote_volume < 0 or self.max_spread_bps <= 0:
@@ -108,23 +105,20 @@ class Candidate:
     range_bps: Decimal | None = None
     age_s: float | None = None
     reasons: tuple[str, ...] = ()
-    kept_by_screener: bool = True
-    screener_said: str = ""
     # How closely this instrument has been moving with something the desk already holds, and which
     # one. Two names moving together are one trade in two places.
     correlation: Decimal | None = None
     correlated_with: str = ""
-    # What code measured on this instrument for the screener to choose from, beyond the trigger's
+    # What code measured on this instrument, beyond the trigger's
     # figures: regime, stretch, volume, the venue's 24 hours, correlation with BTC.
     features: Mapping[str, Any] = field(default_factory=dict)
-    # Where the screener placed it (1 is first) and the setup it expects; None when it was not
-    # picked or no screener was asked.
-    pick_rank: int | None = None
-    setup: str = ""
+    # The range the instrument's own paths draw over the hold, in bps of the mid; None when too
+    # few candles were there to draw from.
+    paths_range_bps: Decimal | None = None
 
     @property
     def taken(self) -> bool:
-        return self.admitted and self.kept_by_screener
+        return self.admitted
 
     @property
     def pressure(self) -> Decimal | None:
@@ -132,6 +126,13 @@ class Candidate:
         if self.moved_bps is None or self.spread_bps is None or self.spread_bps <= 0:
             return None
         return (self.moved_bps / self.spread_bps).quantize(Decimal("0.01"))
+
+    @property
+    def room(self) -> Decimal | None:
+        """The range the paths expect over the hold against the cost of crossing the book."""
+        if self.paths_range_bps is None or self.spread_bps is None or self.spread_bps <= 0:
+            return None
+        return (self.paths_range_bps / self.spread_bps).quantize(Decimal("0.01"))
 
     def record(self) -> dict[str, Any]:
         return {
@@ -143,14 +144,12 @@ class Candidate:
             "range_bps": None if self.range_bps is None else str(self.range_bps),
             "age_s": self.age_s,
             "pressure": None if self.pressure is None else str(self.pressure),
+            "paths_range_bps": None if self.paths_range_bps is None else str(self.paths_range_bps),
+            "room": None if self.room is None else str(self.room),
             "correlation": None if self.correlation is None else str(self.correlation),
             "correlated_with": self.correlated_with,
             "reasons": list(self.reasons),
-            "kept_by_screener": self.kept_by_screener,
-            "screener_said": self.screener_said,
             "features": dict(self.features),
-            "pick_rank": self.pick_rank,
-            "setup": self.setup,
         }
 
 
@@ -162,9 +161,6 @@ class Screened:
     candidates: list[Candidate] = field(default_factory=list)
     chosen: tuple[str, ...] = ()
     refusals: list[str] = field(default_factory=list)
-    asked_screener: bool = False
-    # Code's own order of what it admitted, kept beside the screener's so the two can be compared
-    # once trades have closed.
     code_order: tuple[str, ...] = ()
     discovered: Mapping[str, Any] | None = None
 
@@ -174,26 +170,26 @@ class Screened:
             "candidates": [c.record() for c in self.candidates],
             "chosen": list(self.chosen),
             "refusals": self.refusals,
-            "asked_screener": self.asked_screener,
             "code_order": list(self.code_order),
             "discovered": None if self.discovered is None else dict(self.discovered),
         }
 
 
 def order(candidates: list[Candidate], declared: tuple[str, ...]) -> list[Candidate]:
-    """The order a pass takes them in: most pressure first, then the operator's own order.
+    """The order a pass takes them in: most room ahead first, then most pressure, then the
+    operator's own order.
 
-    An instrument with no previous cycle has no move to measure, so it cannot be compared on
-    pressure and keeps the place the operator gave it. Nothing here is a forecast: it is the same
-    question the trigger asks, which is where something has happened relative to what it costs.
+    Room is the range the instrument's own paths draw over the hold against its spread; pressure
+    is the move already seen against the same spread. An instrument with neither keeps the place
+    the operator gave it.
     """
     where = {name: i for i, name in enumerate(declared)}
 
-    def key(c: Candidate) -> tuple[int, int, Decimal, int]:
-        pressure = c.pressure
+    def key(c: Candidate) -> tuple[int, Decimal, int, Decimal, int]:
+        room, pressure = c.room, c.pressure
         return (
-            # The screener's order, when it gave one, comes before code's.
-            c.pick_rank if c.pick_rank is not None else 1_000_000,
+            0 if room is not None else 1,
+            -(room or Decimal(0)),
             0 if pressure is not None else 1,
             -(pressure or Decimal(0)),
             where.get(c.instrument, len(where)),
@@ -215,6 +211,7 @@ def why_no_cycle(rows: Sequence[Mapping[str, Any]]) -> str:
     """
 
     def held_for(row: Mapping[str, Any], words: str) -> bool:
+        # A screen recorded before 0.12 may say a screener passed an admitted instrument over.
         taken = row.get("admitted") and row.get("kept_by_screener", True)
         return not taken and any(words in str(r) for r in row.get("reasons") or [])
 

@@ -47,7 +47,7 @@ def _gate_lines(
     good.extend(_execution_notes(cfg, project, tier, env, entry_role, bad))
     good.extend(_fallback_notes(cfg, bad))
     if cfg.agents is not None:
-        good.extend(_load_notes(cfg.agents, roster, screener=cfg.universe.screener))
+        good.extend(_load_notes(cfg.agents, roster))
     good.append(_regime_note(cfg))
     good.extend(_conviction_notes(cfg, roster, bad))
     good.extend(_target_notes(cfg, bad))

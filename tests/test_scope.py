@@ -22,10 +22,10 @@ from trading_research_agents.agents.scope import (
 from trading_research_agents.readings import READINGS
 
 LATER = ("equity", "size", "max_position", "stop_frac", "take_profit")
-ASKED = ("structure_lead", "reviewer", "market_screener")
+ASKED = ("structure_lead", "reviewer")
 
 
-@pytest.mark.parametrize("role", ("reviewer", "market_screener"))
+@pytest.mark.parametrize("role", ("reviewer",))
 def test_a_reviewing_role_is_never_handed_a_figure_from_a_later_step(role: str) -> None:
     allowed = scope_of(role)
     for key in LATER:

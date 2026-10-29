@@ -3,7 +3,7 @@
 Code does this part, every pass, from two public calls: the market list and one ticker for every
 market. Nothing here ranks for opportunity; it only removes what cannot be traded at all (too thin,
 too wide, too new, not crypto, not reachable at the desk's leverage) and orders the rest by how much
-trades in it. Which of them is worth a cycle is the screener's question, asked later.
+trades in it. Which of them is worth a cycle is the pass's question, asked later, by code.
 """
 
 from __future__ import annotations

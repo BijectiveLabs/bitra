@@ -142,19 +142,26 @@ class CycleView:
         return Group(self.table(), Text(self.status(), style="dim"))
 
 
+def _screen_state(row: Mapping[str, Any], chosen: list[str]) -> str:
+    if row["instrument"] in chosen:
+        return "taken"
+    # A screen recorded before 0.12 may say a screener passed an admitted instrument over.
+    return "waiting" if row["admitted"] and row.get("kept_by_screener", True) else "held"
+
+
 def _step_label(name: str) -> str:
     return name.replace("_analyst", "").replace("reviewer_", "reviewer ").replace("_", " ")
 
 
 def screen_view(record: Mapping[str, Any]) -> Group:
-    """One pass over the universe: what code found and measured, and what the screener chose."""
+    """One pass over the universe: what code found and measured, and the order it took them in."""
     from trading_research_agents.execution.universe import why_no_cycle
 
     table = Table(box=box.SIMPLE_HEAD, show_edge=False, pad_edge=False, title="the universe")
     for name, justify in (
         ("instrument", "left"),
         ("state", "left"),
-        ("pick", "left"),
+        ("room", "right"),
         ("regime", "left"),
         ("zscore", "right"),
         ("moved bps", "right"),
@@ -164,31 +171,21 @@ def screen_view(record: Mapping[str, Any]) -> Group:
     ):
         table.add_column(name, justify=justify)  # type: ignore[arg-type]
     chosen = list(record.get("chosen") or ())
-    picked = any(row.get("pick_rank") for row in record.get("candidates") or [])
     styles = {"taken": "green", "waiting": "cyan", "held": "yellow"}
-    rows = sorted(
-        record.get("candidates") or [],
-        key=lambda r: (r.get("pick_rank") or 10_000, 0 if r.get("admitted") else 1),
-    )
+    rows = sorted(record.get("candidates") or [], key=lambda r: 0 if r.get("admitted") else 1)
     for row in rows:
-        state = (
-            "taken"
-            if row["instrument"] in chosen
-            else ("waiting" if row["admitted"] and row["kept_by_screener"] else "held")
-        )
-        why = row.get("screener_said") or (row.get("reasons") or [""])[0]
+        state = _screen_state(row, chosen)
+        why = (row.get("reasons") or [""])[0]
         if state == "waiting":
-            ranked = "the screener's order" if picked else "pressure"
             why = (
                 f"admitted, but [universe].max_per_cycle was taken by {', '.join(chosen)}, "
-                f"ahead on {ranked}; {why}"
+                f"ahead on room and pressure; {why}"
             )
         seen = row.get("features") or {}
-        rank = row.get("pick_rank")
         table.add_row(
             str(row["instrument"]),
             Text(state, style=styles.get(state, "")),
-            f"#{rank} {row.get('setup')}" if rank else "",
+            _fmt(row.get("room")),
             str(seen.get("regime") or ""),
             _fmt(seen.get("zscore")),
             _fmt(row.get("moved_bps")),
@@ -203,18 +200,11 @@ def screen_view(record: Mapping[str, Any]) -> Group:
             f"the universe: {len(found.get('kept') or [])} of {found.get('markets')} perpetuals "
             f"kept by the system ({dropped})"
         )
-    code = list(record.get("code_order") or [])
     if chosen:
-        caption = f"{len(chosen)} taken"
-        if picked:
-            ranked = ", ".join(code[:5]) or "-"
-            caption += f"; the screener chose, the system's own order was {ranked}"
-        else:
-            caption += "; the system's order (pressure), no screener asked"
+        caption = f"{len(chosen)} taken, in the system's order: room, then pressure"
     else:
-        caption = f"no cycle this pass: {why_no_cycle(record.get('candidates') or [])}" + (
-            "" if record.get("asked_screener") else "; no model was asked"
-        )
+        caption = f"no cycle this pass: {why_no_cycle(record.get('candidates') or [])}"
+    caption += "; no model was asked"
     table.caption = caption
     return Group(table)
 

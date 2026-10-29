@@ -173,25 +173,6 @@ def test_a_refused_last_cycle_leaves_the_run_refused(tmp_path: Path, seams: dict
     assert run.run() == REFUSED
 
 
-def test_a_paused_instrument_is_not_asked(
-    tmp_path: Path, seams: dict[str, Any], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from datetime import UTC, datetime
-
-    class Paused:
-        @staticmethod
-        def load(out: Path, moment: datetime) -> Paused:
-            return Paused()
-
-        def pause_of(self, instrument: str, moment: datetime) -> datetime:
-            return datetime(2026, 1, 1, 12, tzinfo=UTC)
-
-    monkeypatch.setattr(run_command, "RiskOverrides", Paused)
-    run = desk_run(tmp_path, cycles=1)
-    assert run.run() == CLEARED
-    assert seams["asked"] == [] and run.ran == 0 and run.passes == 1
-
-
 def test_a_stop_in_the_middle_of_a_cycle_is_refused_and_written_down(
     tmp_path: Path, seams: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:

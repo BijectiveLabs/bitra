@@ -1,8 +1,7 @@
-"""The auditors and the risk manager woken between cycles, on their own ledger."""
+"""The auditors woken between cycles, on their own ledger. They report; code holds the risk."""
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -10,7 +9,6 @@ from pathlib import Path
 from time import time as wall_clock
 from typing import Any
 
-from trading_research_agents.agents.roles import prompt
 from trading_research_agents.cli.common import (
     REPORT_HEADROOM,
     _audit_lines,
@@ -19,7 +17,6 @@ from trading_research_agents.cli.common import (
     _watching,
     plain_text,
 )
-from trading_research_agents.records import append_line
 
 
 @dataclass
@@ -91,13 +88,7 @@ class Auditing:
         if "quant_auditor" in who and clock is not None:
             # Any look restarts the clock: a review that just happened is the one the clock wanted.
             reported.write(quant_at=now)
-        if "quant_auditor" in who and getattr(self.policy, "risk_manager", False):
-            # The auditor reports; the risk manager is the one who can act on the same figures.
-            who.insert(0, "risk_manager")
         return tuple(who), fired
-
-    def _risk(self, out: Path, fired: tuple[Any, ...]) -> list[str]:
-        return _risk_decision(self, out, fired)
 
     @staticmethod
     def _first_time(alarm: Any, state: Mapping[str, Any], now: float) -> bool:
@@ -138,13 +129,6 @@ class Auditing:
         ]
         for alarm in fired:
             said.append(f"  alarm {alarm.kind}: {alarm.detail}")
-        if "risk_manager" in who:
-            said.extend(self._risk(out, fired))
-            who = tuple(w for w in who if w != "risk_manager")
-        if not who:
-            if not as_json:
-                print(plain_text("\n".join(said)), flush=True)
-            return said
         try:
             usage = UsageLedger(out / "usage.jsonl")
             audit = AuditConfig(
@@ -170,68 +154,6 @@ class Auditing:
         if not as_json:
             print(plain_text("\n".join(said)), flush=True)
         return said
-
-
-def _risk_decision(auditing: Any, out: Path, fired: tuple[Any, ...]) -> list[str]:
-    """Ask the risk manager, put what it decided in force one way only, and say so."""
-    from trading_research_agents.agents.risk_manager import run as risk
-    from trading_research_agents.llm.usage import UsageLedger
-
-    now = datetime.fromtimestamp(auditing.clock(), tz=UTC)
-    held = risk.Overrides.load(auditing.runs, now)
-    try:
-        usage = UsageLedger(out / "usage.jsonl")
-        ask = _metered_roles(auditing.settings, usage, floor=REPORT_HEADROOM)(risk.ROLE)
-        done = ask.complete(
-            system=prompt(risk.PROMPT),
-            user=json.dumps(
-                risk.brief(
-                    auditing.runs,
-                    limits=auditing.limits,
-                    overrides=held,
-                    alarms=[a.record() for a in fired],
-                    now=now,
-                ),
-                default=str,
-            ),
-            schema=risk.SCHEMA,
-        )
-        decision = risk.parse(done.text)
-    except Exception as exc:
-        # A risk manager that cannot answer leaves the client's limits exactly where they were.
-        return [f"  risk manager: no decision ({exc.__class__.__name__}: {exc}); limits unchanged"]
-    append_line(
-        auditing.runs / "risk_decisions.jsonl",
-        {
-            "at": now.isoformat(),
-            "decision": decision.decision,
-            "size_multiple": None
-            if decision.size_multiple is None
-            else str(decision.size_multiple),
-            "pause_instruments": list(decision.pause_instruments),
-            "hold_hours": decision.hold_hours,
-            "reason": decision.reason,
-            "triggers": list(decision.triggers),
-        },
-        durable=True,
-    )
-    said = [f"  risk manager: {decision.decision}, {decision.reason}"]
-    if decision.decision == "halt":
-        if auditing.kill_switch is not None:
-            auditing.kill_switch.write_text(
-                f"armed by the risk manager at {now.isoformat()}: {decision.reason}\n",
-                encoding="utf-8",
-            )
-            said.append(f"  the kill switch at {auditing.kill_switch} is armed: flatten and stop")
-        else:
-            # No kill switch declared: the nearest one-way step is to take no new entry anywhere.
-            pause_all = risk.RunDecision(
-                "pause", None, ("*",), decision.hold_hours, decision.reason, decision.triggers
-            )
-            said.extend(f"  {line}" for line in held.apply(pause_all, now))
-        return said
-    said.extend(f"  {line}" for line in held.apply(decision, now))
-    return said
 
 
 def _utc_day(now: float) -> str:

@@ -154,19 +154,7 @@ def test_a_trace_reads_a_session_and_a_run_back_in_order(
 ) -> None:
     from trading_research_agents.cli.main import main
 
-    screener = {
-        "kept": [{"instrument": "AAAUSDT", "regime": "ranging", "reason": "flat prints"}],
-        "excluded": [{"instrument": "BBBUSDT", "reason": "too few prints"}],
-    }
-    calls = [analyst("flat"), analyst("long"), analyst("long"), analyst("flat")] + [
-        analyst("flat")
-    ] * 2
-    risk = {"decision": "continue", "limits": {}, "reason": "one round trip", "triggers": []}
-    allocation = {
-        "size": "0.01",
-        "reason": "declared",
-        "allocations": [{"instrument": "AAAUSDT", "fraction": 1.0, "reason": "kept"}],
-    }
+    calls = [analyst("flat"), analyst("long"), analyst("long"), analyst("flat")]
     audit_steps = [
         {
             "action": "call",
@@ -177,32 +165,23 @@ def test_a_trace_reads_a_session_and_a_run_back_in_order(
         },
         final({"findings": [], "verdict": "sound", "summary": "One round trip."}),
     ]
-    result, _, _ = scripted_session(
-        tmp_path, envelope, [screener, *calls, risk, allocation, *audit_steps]
-    )
+    result, _, _ = scripted_session(tmp_path, envelope, [*calls, *audit_steps])
     assert result.audit is not None
     session = trace(tmp_path / "out")
     assert session.kind == "session" and session.header["audit_verdict"] == "sound"
-    assert [e.who for e in session.roles] == [
-        "market_screener",
-        "risk_manager",
-        "executor",
-        "auditor",
-        "auditor",
-        "auditor",
-    ]
-    assert session.roles[0].detail == "kept ['AAAUSDT'], excluded 1"
-    assert session.roles[4].kind == "step" and session.roles[4].detail.startswith("search_ledger(")
-    assert "->" in session.roles[4].detail and session.roles[5].detail == "answered"
-    # ten answers plus the auditor's one tool step
-    assert len(session.calls) == 11 and session.calls[0].who == "market_screener"
+    # Only the auditor answers inside a session's own record; the lead's calls are its runs'.
+    assert [e.who for e in session.roles] == ["auditor", "auditor", "auditor"]
+    assert session.roles[0].detail == "sound: One round trip."
+    assert session.roles[1].kind == "step" and session.roles[1].detail.startswith("search_ledger(")
+    assert "->" in session.roles[1].detail and session.roles[2].detail == "answered"
+    assert len(session.calls) == 6 and session.calls[0].who == "structure_lead"
     assert "total" in session.calls[-1].detail
     kinds = [e.kind for e in session.market]
-    assert kinds.count("intent") == 2 and kinds.count("fill") == 2 and kinds[-1] == "round_trip"
-    assert all(e.who == "AAAUSDT" for e in session.market)
+    assert kinds[:2] == ["intent", "fill"]
+    assert all(e.who == "BBBUSDT" for e in session.market)
     assert session.market[0].at.startswith("1970-01-01 00:0")
 
-    run = trace(tmp_path / "out" / "AAAUSDT")
+    run = trace(tmp_path / "out" / "BBBUSDT")
     assert run.kind == "run" and run.roles == [] and run.calls == []
     assert [e.kind for e in run.market] == kinds
     text = lines(session)
@@ -212,5 +191,5 @@ def test_a_trace_reads_a_session_and_a_run_back_in_order(
 
     code = main(["agent", "trace", str(tmp_path / "out"), "--json"])
     payload = json.loads(capsys.readouterr().out)
-    assert code == 0 and payload["kind"] == "session" and len(payload["roles"]) == 6
+    assert code == 0 and payload["kind"] == "session" and len(payload["roles"]) == 3
     assert main(["agent", "trace", str(tmp_path / "nowhere")]) == 1
