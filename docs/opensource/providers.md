@@ -1,5 +1,5 @@
 ---
-description: Supported model providers (Anthropic, OpenAI, Google Gemini, Groq, DeepSeek, xAI, Mistral, OpenRouter, Qwen, Ollama, local servers), their keys, endpoints and default models.
+description: Supported model providers (Anthropic, OpenAI, Google Gemini, Groq, DeepSeek, xAI, Mistral, OpenRouter, Qwen, Ollama, local servers) and the TypeSafe typed judge, their keys, endpoints and default models.
 ---
 
 # Model providers
@@ -24,6 +24,25 @@ vendor that speaks the OpenAI chat API.
 | `local` | `[openai]` | none | `--base-url` (https, or http on localhost) | JSON mode |
 
 Every endpoint and key variable was read from the vendor's own documentation on 2026-09-13.
+
+### The typed judge: TypeSafe
+
+TypeSafe is not in the table above because it is not a model for `[agents]`: its Jev is the typed
+judge, declared in `data.toml` under `[judge]` ([The typed judge](/opensource/llm#the-typed-judge)).
+
+| Name | Declared in | Key variable | Endpoint | Install with |
+|---|---|---|---|---|
+| `typesafe` | `data.toml` `[judge]` | `TYPESAFE_API_KEY`, made at `https://console.typesafe.ai/keys` | `https://api.typesafe.ai` | nothing extra; the standard library |
+
+- **Model:** a pinned version, such as `jev-1.14.0`. `jev-latest` and `jev-preview` move, and are
+  refused. `tra models typesafe` lists what your key may use and marks the aliases.
+- **Key check:** `tra keys --probe` proves the key with the vendor's model list, which sends no
+  question and spends no token.
+- **Tested here:** against the vendor's documented API and its OpenAPI document, in unit tests;
+  not yet with a live key.
+
+Every endpoint and field above was read from the vendor's documentation and
+`https://api.typesafe.ai/openapi.json` on 2026-10-29.
 
 Model names belong to your account, not to this package, and that is deliberate: a catalogue of
 model names goes stale every month and a warning about an unknown name is noise. If a vendor

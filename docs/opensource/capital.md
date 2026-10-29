@@ -118,8 +118,7 @@ Two examples of a refusal, as the record writes them:
 
 ```
 this order needs 333.88 USDT of margin at 3x and 0.5 of the free 500.00 is 250.00; nothing was sent
-at 80x liquidation is estimated at 99250.00, inside the stop at 99000 plus 50 bps; a stop past
-liquidation is not a stop, so lower [execution].leverage
+at 80x liquidation is estimated at 99250.00, inside the stop at 99000 plus 50 bps; a stop past liquidation is not a stop, so lower [execution].leverage
 ```
 
 ## While it is open: the position

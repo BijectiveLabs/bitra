@@ -55,9 +55,8 @@ spinner of its own.
 
 ## The same cycle as plain text
 
-`--plain`, a pipe or a log gives text instead of panels. This is from a real run on live data,
-shortened; the two reading lines are printed as 0.11 prints them, where the run itself still
-carried a model's label:
+`--plain`, a pipe or a log gives text instead of panels. These are the figures of a real run on
+live data (2026-09-29), printed by this release with the template's conviction weights, shortened:
 
 ```
 cycle 2026-09-29T02-59-16Z BTCUSDT: 5.344s of agents, 15.042s of reviewers
@@ -68,14 +67,13 @@ macro      read by code: bullish (risk-on)
 sentiment  read by code: bullish (positive)
 lead:      long on range_reversion at 0.65 over 5 bars: the close is stretched low in the window
 read: zscore=-0.587, vwap_gap_bps=-3.99, ret_1_bps=1.59
-reviewer contra   oppose on 2 cited figure(s)
-reviewer pro      support on 3 cited figure(s)
-conviction: 0.800 of 1.0 (macro 1.0, sentiment 0.5, structure_lead 1.300)
+reviewer contra    oppose on 2 cited figure(s)
+reviewer pro       support on 3 cited figure(s)
+conviction: 0.800 of 1.0 (macro 1.0 of 1.0, sentiment 0.5 of 0.5, structure_lead 1.300 of 2.0)
 risk: 8.29 bps of equity at the stop against the declared 50 bps, size 0.010
 cost: 12.87 bps round trip, 2.00 of it estimated
 gate: 25.0000 bps claimed clears 12.8723 bps cost plus 0.0000 bps margin
-  refused targets: the claimed edge is 1.94x the round trip and the desk declared 2.0x;
-                   the cost is certain and the edge is not
+  refused targets: the claimed edge is 1.94x the round trip and the desk declared 2.0x; the cost is certain and the edge is not
 ```
 
 That trade was refused. It cleared the cost gate and still died, because this desk asks for an edge

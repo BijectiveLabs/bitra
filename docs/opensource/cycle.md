@@ -814,8 +814,7 @@ ten bars is a number with no claim behind it. A candidate moving with an open po
 the threshold is refused with the figure and the name:
 
 ```
-ETHUSDT: has been moving with BTCUSDT at 0.931 over the window, at or above the declared 0.7;
-one trade in two names is not two trades
+ETHUSDT: has been moving with BTCUSDT at 0.931 over the window, at or above the declared 0.7; one trade in two names is not two trades
 ```
 
 ## The targets
@@ -1073,15 +1072,15 @@ named and survived the [exit] bounds, and `[agents].magnitude_bps`, a declaratio
 when layer 1 or layer 5 has measured the phenomenon, the same field carries the measurement and
 the label changes with it.
 
-A real cycle, live data and a real model, printed as the console shows it:
+A real cycle (2026-09-27, live data and a real model), in the form this release prints it. The
+lead's line is left out: that cycle predates the setup a lead now names, so its line cannot be
+printed as it would be today.
 
 ```
 cycle 2026-09-27T14-51-23Z BTCUSDT: 8.46s of agents
   funding        ccxt:bybit         age 0.764s
   ohlcv          ccxt:bybit         age 35.705s
   orderbook      ccxt:bybit         age 5.303s
-lead:      long at 0.68 over 3 bars: short-horizon reversion of the close against its window
-           triggered by a zscore of -2.197, vwap_gap_bps of -24.21 and volume_ratio 2.392
 cost: 13.48 bps round trip, 2.00 of it estimated
 gate: 25.0000 bps claimed clears 13.4800 bps cost plus 0.0000 bps margin
 the edge is declared: [agents].magnitude_bps, declared by the operator and not measured here
@@ -1140,19 +1139,30 @@ belongs under a supervisor, and `tra watch` is how it is looked at from anywhere
 
 A cycle spends most of its wall clock waiting on sockets, so a terminal that prints only the outcome
 looks like a hung process. Every step says when it starts and how it ended, and the console draws
-the pipeline the project configured with each step pending, running, done, refused or held:
+the pipeline the project configured with each step pending, running, done, refused, held or
+skipped. The rows and their wording are what the console draws for the desk `tra init --profile
+autonomous` writes, while its lead is being asked; the figures are an example, and a terminal adds
+colour and a spinner:
 
 ```
-step      | state    | detail
-----------+----------+---------------------
-data      | done     | 4 kind(s) (1.2s)
-trigger   | done     | moved 41.20 bps
-structure_lead | done     | 5.3s
-macro     | running  |
-cost      | pending  |
-risk      | pending  |
-targets   | pending  |
-intent    | pending  |
+step           | state      | detail
+---------------+------------+----------------------------------------------------------------------------------
+data           | done       | 4 of 4 kind(s) answered
+trigger        | done       | moved 41.20 bps
+regime         | done       | ranging on 15m, 1h ranging, 4h trending
+structure lead | - running  | 5s
+macro          | skipped    | nothing declared in sources/macro.toml, so not read
+onchain        | skipped    | nothing declared in sources/onchain.toml or sources/derivatives.toml, so not read
+sentiment      | skipped    | nothing declared in sources/sentiment.toml, so not read
+cost           | pending    |
+exit           | pending    |
+paths          | pending    |
+conviction     | pending    |
+risk           | pending    |
+cost gate      | pending    |
+targets        | pending    |
+risk gate      | pending    |
+intent         | pending    |
 ```
 
 Progress travels on its own wire and can change nothing: a watcher that throws is swallowed, because
@@ -1326,11 +1336,13 @@ trade would have done. `tra hindsight` replays every directional decision in `ru
 candles that followed it, then puts each gate's refusals next to what the desk let through:
 
 ```text
-hindsight: <n> decisions replayed over <d> day(s), <k> of them independent, each held 4h on 5m candles, net of its round trip
-  admitted             <n>  mean <bps>  median <bps>  won <%>  sum <bps>
-  refused by targets   <n>  mean <bps>  median <bps>  won <%>  sum <bps>  <what the refusals would have done>
-  refused by regime    <n>  mean <bps>  median <bps>  won <%>  sum <bps>  <what the refusals would have done>
-  side: the model's <bps> against <bps> on the reverse; <which side did better>
+hindsight: <n> decisions replayed over <d> day(s), <k> of them independent, each held <hold> on <bar> candles, net of its round trip
+  admitted               <n>  mean <net> bps  median <net>  won <%>  sum <net>
+  refused by targets     <n>  mean <net> bps  median <net>  won <%>  sum <net>  <what the refusals would have done>
+  refused by regime      <n>  mean <net> bps  median <net>  won <%>  sum <net>  <what the refusals would have done>
+  all refused            <n>  mean <net> bps  median <net>  won <%>  sum <net>  <what the refusals would have done>
+  side: the model's <net> bps against <net> on the reverse; <which side did better>
+  written to hindsight.json; <what the replay was based on>
 ```
 
 Each row is one gate: how many decisions it refused, and what those decisions would have done net
