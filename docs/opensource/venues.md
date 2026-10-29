@@ -526,7 +526,7 @@ tra venues okx
 ```
 okx
   data        funding, ohlcv, open_interest, orderbook
-  execution   create_order: yes, attached_exits: yes, position: yes, open_orders: yes, cancel: yes
+  execution   create_order: yes, attached_exits: yes, position: yes, open_orders: yes, cancel: yes, order_status: yes, leverage: yes, fills: yes
   practice    testnet
   keys        OKX_API_KEY, OKX_API_SECRET, OKX_API_PASSPHRASE
   verdict     venue mode ready: orders with the stop and take profit attached, account readable

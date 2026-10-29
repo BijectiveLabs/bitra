@@ -16,6 +16,7 @@ from importlib.util import find_spec
 from typing import Any
 
 from trading_research_agents.llm.completer import Completer
+from trading_research_agents.llm.providers import typesafe
 from trading_research_agents.llm.providers.presets import PRESETS
 
 ENTRY_POINT_GROUP = "trading_research_agents.providers"
@@ -280,6 +281,7 @@ def provider(name: str) -> Provider:
     except KeyError:
         raise UnknownProviderError(
             f"no provider named {name!r}; registered: {', '.join(sorted(_registry))}"
+            + (f"; {typesafe.WHERE}" if name.strip().lower() == typesafe.NAME else "")
         ) from None
 
 

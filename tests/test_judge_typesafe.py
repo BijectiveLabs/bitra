@@ -197,3 +197,41 @@ def test_another_route_to_the_same_api_is_a_base_url() -> None:
     assert wire.sent[0][0] == "https://relay.example/api/v1/systemone"
     with pytest.raises(ValueError, match="https"):
         TypeSafeJudge("jev-1.14.0", base_url="http://relay.example", post=wire, env={})
+
+
+def test_the_model_list_is_one_authenticated_read_and_its_failures_are_named() -> None:
+    from trading_research_agents.llm.judge import (
+        JudgeRefusedError,
+        JudgeUnauthorizedError,
+        JudgeUnavailableError,
+    )
+    from trading_research_agents.llm.providers.typesafe import model_names, pinned
+
+    asked: list[tuple[str, dict[str, str]]] = []
+
+    def listing(status: int, body: bytes) -> Any:
+        def get(url: str, headers: Any, timeout_s: float) -> tuple[int, bytes]:
+            asked.append((url, dict(headers)))
+            return status, body
+
+        return get
+
+    # The shape is the vendor's ModelMetadataList, read from its OpenAPI document.
+    body = (
+        b'{"models": [{"name": "jev-latest", "description": "d", "release_date": "2026-09-15"},'
+        b' {"name": "jev-1.14.0", "description": "d", "release_date": "2026-10-14"}]}'
+    )
+    assert model_names("k" * 32, get=listing(200, body)) == ["jev-latest", "jev-1.14.0"]
+    assert asked == [("https://api.typesafe.ai/v1/models", {"Authorization": "Bearer " + "k" * 32})]
+    assert not pinned("jev-latest") and not pinned("jev-preview") and pinned("jev-1.14.0")
+
+    with pytest.raises(JudgeUnauthorizedError, match="403"):
+        model_names("bad", get=listing(403, b'{"detail": {"message": "Must supply an API key!"}}'))
+    with pytest.raises(JudgeRefusedError, match="another shape"):
+        model_names("k", get=listing(200, b'{"data": []}'))
+
+    def silent(url: str, headers: Any, timeout_s: float) -> tuple[int, bytes]:
+        raise TimeoutError("timed out")
+
+    with pytest.raises(JudgeUnavailableError, match="TimeoutError"):
+        model_names("k", get=silent)

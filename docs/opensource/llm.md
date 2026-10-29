@@ -268,7 +268,7 @@ It never decides a direction from numbers, sizes a trade or reaches an order.
 [judge]
 provider = "typesafe"           # TypeSafe's Jev, over its HTTP API
 model = "jev-1.14.0"            # a version; an alias that moves is refused
-key_env = "TYPESAFE_API_KEY"    # the key comes from the environment
+key_env = "TYPESAFE_API_KEY"    # the key comes from the environment (console.typesafe.ai/keys)
 min_confidence = 0.5            # below this the kind of event is absent, not a guess
 cache = "record"                # record | replay | off
 ```

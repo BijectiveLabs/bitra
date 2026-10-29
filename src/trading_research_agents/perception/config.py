@@ -23,9 +23,9 @@ from typing import Any
 
 from trading_research_agents.llm.cache import CacheMode
 from trading_research_agents.llm.judge import CachedJudge, Judge
-from trading_research_agents.llm.providers.typesafe import BASE_URL, KEY_ENV, TypeSafeJudge
+from trading_research_agents.llm.providers.typesafe import BASE_URL, KEY_ENV, NAME, TypeSafeJudge
 
-PROVIDERS = ("typesafe",)
+PROVIDERS = (NAME,)
 KEYS = ("provider", "model", "key_env", "base_url", "min_confidence", "cache", "timeout_s")
 SECRET_WORDS = ("key", "secret", "token", "password")
 
