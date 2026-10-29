@@ -44,7 +44,7 @@ trading_research_agents/
   readings/    macro, on-chain and sentiment: the operator's series against the
                operator's thresholds, a declared state and a graded score; no model -> data
   agents/      the research roles at layers 0, 2 and 3; the session roles; the
-               cycle and its seats, reviewers and screener                      -> everything above, llm, store, surface, readings
+               cycle and its seats and reviewers; the session's written rules     -> everything above, llm, store, surface, readings
   mcp/         the gates as MCP tools                                            -> everything except agent
   market_data/ one-minute flow and book bars, derivatives and liquidations, dated
                text, gap marks; the verified archive in day files and hour parts,
@@ -242,29 +242,24 @@ the same archive before the new one replaces the old.
 ```mermaid
 sequenceDiagram
     participant C as system
-    participant S as screener
-    participant A as analyst (core)
-    participant R as risk manager
-    participant E as executor
+    participant A as structure lead (core)
     participant U as auditor
     C->>C: figures per dataset, cost floor, layer 1 when declared
-    C->>S: figures only
-    S-->>C: kept / excluded, a reason each
+    C->>C: screen by rule: kept / excluded, a reason each
     loop every closed bar, per kept instrument
         C->>A: compact bars, features
         A-->>C: target, confidence, horizon
         C->>C: controls admit or refuse, the venue fills, exits run
     end
-    C->>R: run reports, measured latency and costs
-    R-->>C: continue / tighten / demote / halt
-    C->>E: kept instruments, limits after
-    E-->>C: allocation fractions (nothing is sent)
+    C->>C: risk by rule: continue / demote / halt, on the measured figures
+    C->>C: allocation by rule: an equal share each (nothing is sent)
     C->>U: run reports, ledger, ladder, usage (a bounded tool loop)
     U-->>C: verdict, findings
 ```
 
-The macro and on-chain roles, when series are declared, are read between the screener and the
-runs: their briefs are measured by the system, read against the operator's thresholds by code, and
+The screen, the risk ruling and the allocation are written rules (`agents/session_rules.py`):
+the same answer every time, at no cost, each naming the figure that decided it. The macro and
+on-chain readings, when series are declared, are read between the screen and the runs: their briefs are measured by the system, read against the operator's thresholds by code, and
 ask no model.
 
 ## The chain

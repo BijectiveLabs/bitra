@@ -112,7 +112,7 @@ the key on each exchange is in [Exchange accounts and keys](/opensource/exchange
 | Bad days | no new entry after a 3% loss on the day or a 10% fall from the peak | `[controls]` |
 | Time limit | a position closes after 4 hours | `[exit].timeout_bars` |
 | Trades worth taking | the edge at least 2x the round trip, break even at half the trades or better, at most 6 a day | `[targets]` |
-| Oversight | a risk manager that can only cut, pause or halt; two auditors that report | `[audit]` |
+| Oversight | the risk gate on every new order; two auditors that report | `[controls]`, `[audit]` |
 
 Working on the code itself? [Contributing](/opensource/contributing) has the setup from a clone.
 

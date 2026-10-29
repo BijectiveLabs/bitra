@@ -123,10 +123,9 @@ code that runs after the model has answered, and no model is in that path.
   costs, what it has to clear, the size or the limits, so there is nothing to argue with or around.
 - An answer is a closed schema. Code reads its fields, a value outside its list is refused, and no
   sentence a model writes is read to decide anything.
-- The roles that can touch a limit can only make the desk more careful. The risk manager's limits
-  apply only where smaller, and a limit it names that does not exist is refused; between cycles it
-  can cut size below 1x, pause instruments or halt, each for a capped number of hours, and never
-  add size.
+- No model touches a limit. Until 0.12 a risk manager seat could tighten one between cycles; it
+  was retired for the signed risk gate and the controls, which are code, and for a session's
+  written risk rule, which can only demote the ladder or arm the kill switch.
 - No model can change the configuration, send an order or reach a key. An auditor's proposed change
   has to name a setting the configuration accepts, and the loader refuses a setting it does not know
   in every table it reads, so a rule a model made up cannot take effect even if someone copied it

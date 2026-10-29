@@ -144,8 +144,7 @@ directory and no order leaves the machine.
 ## Which instrument, before any of this
 
 A desk that watches one instrument runs it. A desk that declares a universe takes the cheap look
-first, and only then spends a cycle. The work is split on purpose: **the system finds and measures, the
-screener chooses.**
+first, and only then spends a cycle. **The system finds, measures and orders; no model chooses.**
 
 ```toml
 [universe]
@@ -162,7 +161,6 @@ quote = "USDT"                   # the settlement currency to look in
 # exclude_types = ["stock", "etf", "commodity", "forex"]   # and the values to leave out
 max_per_cycle = 1                # how many one pass runs a full cycle on
 max_intents_per_day = 6          # across every instrument, not per one
-screener = true                  # the screener chooses and orders; without it, the system's order
 ```
 
 **Discovery (system, every pass).** One market list and one ticker call cover every linear perpetual
@@ -187,16 +185,17 @@ last look and its pressure against the spread, the window's move, z-score, trend
 regime, volume against the window, where the close sits in its range, 24-hour volume and change,
 and the correlation with BTC.
 
-**Choice (the screener).** With `screener = true` the market screener reads those rows and picks the
-instruments where the mechanism has the best chance now, best first, naming the setup it expects
-and citing the figures behind each pick. The system checks every pick: it must be an instrument the system
-admitted, and at least one citation from that instrument's own row must hold, or the pick is
-thrown away. The screener cannot add an instrument, and it says nothing about direction or size;
-the structure lead decides those later from a fuller brief. A screener that cannot answer leaves
-the system's order, the move against the spread, in place.
+**Order (system).** What the trigger admitted is ordered by its room: the range the instrument's
+own paths draw over the next 24 bars (see [the paths](#the-paths)) against the spread it costs to
+cross. A market expected to move far for what it costs is worth a cycle before one that has merely
+moved; the move already seen against the spread orders what the paths cannot read (too few candles),
+and the order you wrote breaks the last tie. `runs/screens/<time>.json` keeps every candidate with
+its room and pressure and the `code_order`.
 
-Both orders are kept in `runs/screens/<time>.json` (`code_order` and each candidate's `pick_rank`),
-so once trades have closed the audit can say whether the screener's choices did better than the system's.
+Until 0.12 a market screener, a model, could narrow and reorder this list. It was retired: ordering
+by a measured, forward-looking range is what it was asked to judge, and code answers it the same way
+every time at no cost. `[universe].screener` is still read, so an older desk runs, and does nothing;
+`tra check` says so.
 
 Each instrument keeps its own history: its own trigger streak, its own carried research spend, its
 own daily round trips. A position on an instrument discovery stops listing is still counted by the
@@ -387,8 +386,8 @@ setup still allowed.
 the regime and the higher timeframes first and names the setup the market supports. A mixed market
 takes `range_breakout`, `momentum_exhaustion`, `volatility_expansion` or flat.
 `[agents].mechanism` is your thesis: the setups you favour when the market offers them. It never
-turns a trending market into a fade, and the screener picks where *a* setup has the best chance,
-not one mechanism. `tra init --agent` writes a mechanism that names no setup ("trade the setup the
+turns a trending market into a fade, and the universe is ordered by where the market has room to
+move, not by one mechanism. `tra init --agent` writes a mechanism that names no setup ("trade the setup the
 measured regime supports: with a trend, inside a range, or flat"). Write a narrower one only if you
 trade a single idea. The research core in `tra backtest` and `tra agent session` is different: it
 trades one registered mechanism, by design.
@@ -506,7 +505,7 @@ places anything. Four things keep a role inside its job, and only the last is wo
 
 | Enforced by | What it prevents |
 |---|---|
-| the brief | A role cannot reason about what it was never given. No reviewer's or screener's brief carries equity, size, the controls or the exit distances. `agents/scope.py` filters every brief to that role's declared reads, and what it removed is written in the record. |
+| the brief | A role cannot reason about what it was never given. No reviewer's brief carries equity, size, the controls or the exit distances. `agents/scope.py` filters every brief to that role's declared reads, and what it removed is written in the record. |
 | the schema | A closed schema with only that role's own fields. A reviewer has nowhere to put a size, and a field outside the schema is a parse error rather than a surprise. |
 | the wiring | Nothing downstream reads a sentence. The confluence matrix and the conviction score read the declared state the system derived from the operator's thresholds; the cost gate reads the snapshot's own book; the size comes from the operator's ladder and caps. |
 | the prompt | One line naming what is not this role's job, plus a small vocabulary the system looks for in case it appears anyway. |

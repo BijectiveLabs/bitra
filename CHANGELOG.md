@@ -8,6 +8,11 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- Jev weighs the reviewers' two checked cases when `[judge]` is declared: the neutral verdict is a
+  closed choice with a probability for each of support, oppose and abstain, and below one half the
+  seat abstains.
+- `[exit].measure = "paths"`: the stop placed where the instrument's own paths reach against the
+  side inside the hold, at `[exit].paths_quantile`, instead of a multiple of the ATR.
 - The paths (`forecast/paths.py`): the instrument's own candles drawn forward from the last closed
   one, with Kronos as the reference for the candle as the unit, the window normalised on itself and
   the next candle drawn on a coarse and a fine token, read at the levels the trade names: how often
@@ -71,6 +76,13 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- The universe is ordered by code: the room the instrument's own paths expect over the hold against
+  its spread, then the move already seen. The market screener seat is retired; `[universe].screener`
+  is read and does nothing.
+- The risk manager and executor seats are retired. In `tra run` the signed risk gate and the
+  controls hold the risk; a research session screens, rules on risk and allocates by written rules
+  (`agents/session_rules.py`). Their role tables and `[audit].risk_manager` are read and do nothing;
+  `tra check` says so.
 - The seats that decide are named for what they answer for: `structure_lead` (was
   `technical_analyst`), `blind_confirmer` (was `technical_peer`), `flow_specialist` (was
   `flow_analyst`), `outcome_assessor` (was `event_analyst`) and `reviewer` (was `validator`, with
@@ -102,6 +114,9 @@ All notable changes to this project are recorded here. The format follows
 
 ### Fixed
 
+- A replay no longer judges a new position's stop and take on the bar that closed before its
+  entry filled: the print that fills an entry can close that bar, which was traded before the
+  position existed.
 - `tra data get` on Bybit: the venue republished its trade archives with an eleventh column,
   `RPI`, and every day was refused as a changed header. Both layouts are now read and give the
   same trades.
