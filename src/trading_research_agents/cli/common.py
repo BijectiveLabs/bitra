@@ -118,7 +118,7 @@ def _completer_for_role(
 ) -> Completer:
     """The models this role is asked with, in the order the operator declared them.
 
-    A screener that labels a regime and an analyst that reasons over sixty bars do not need the
+    A reviewer that reads a table and a lead that reasons over sixty bars do not need the
     same model, and the difference is most of a token bill. `[agents.roles.<role>]` is where an
     operator says so, and `fallback` is where they say what to do when that provider is rate
     limited or down: the next one is tried with the same brief, because the brief is built by code

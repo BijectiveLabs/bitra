@@ -393,7 +393,6 @@ losing_streak = 3                  # losing round trips in a row that wake the q
 # instruments = ["BTCUSDT", "ETHUSDT"]
 # max_per_cycle = 1
 # max_intents_per_day = 6          # across every instrument, not per one
-# screener = false                 # ask the screener to narrow what the trigger admitted
 
 [execution]
 # sandbox keeps the intent here. signals writes it for your own executor. venue sends it, and does

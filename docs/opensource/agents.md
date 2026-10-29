@@ -18,11 +18,8 @@ the system's own rules, tested and failing closed, and a role acts through them,
 
 | Role | Holds | May write | Cadence |
 |---|---|---|---|
-| `market_screener` | in a cycle, one live snapshot per instrument in the universe; in a session, the data gate, the envelope and the cost floor | nothing; it may only take an instrument out of a list the system already admitted | once per pass, or once per session |
 | `structure_lead` | the recorded trades and bars; in a research run the registered mechanism, in `tra run` the regime and higher timeframes, with your mechanism as a preference | a `Signal`, as the decision core of a run: a direction, a setup named from a closed list, the figures it read, and in `tra run` the stop and target prices that bound the idea, held by the system inside your `[exit]` bounds | once per closed bar, within its budget |
 | `reviewer` | `figures_of`, `checked` over the brief the structure lead was given | one stance (pro, contra, neutral): the proposal as the lead gave it (side, setup, levels, confidence) and the figures it was built from, never another analyst's reading, the cost, the claimed edge or the desk's rules; every claim it makes has to cite one of those figures with its value, and the system discards the ones that do not. With all three stances, pro and contra build their cases apart and neutral judges both ([the reviewers](/opensource/cycle#the-reviewers)) | once per cycle, when `[agents].reviewers` is set |
-| `risk_manager` | in `tra run`: the client's limits, what is in force, the alarms, the round trips by instrument; in a session: the limits, the canary caps, the ladder, latency, net against the registration | in `tra run`: `reduce` (size multiple below 1), `pause` (instruments), `halt` (the kill switch), each for `hold_hours`; in a session: `tighten_limits`, `demote`, `arm_kill_switch` | in `tra run`, between cycles whenever the quant auditor is asked; in a session, after the runs |
-| `executor` | the venue, the rate limits, the allocation across instruments | an allocation, fractions summing to at most one | after the risk decision |
 | `auditor` | the ledger, every run, `usage.jsonl`, the ladder | `audit.json` | last |
 
 Each role is a package under `trading_research_agents.agents`: a JSON schema the model must
@@ -109,23 +106,24 @@ tra agent session --config strategy.toml --envelope envelope.toml \
 ```
 
 ```
-figures (system) -> screener -> [macro] -> [onchain] -> one replay per kept instrument,
-                  the analyst as its core -> risk manager -> executor -> auditor
+figures (system) -> screen (rule) -> [macro] -> [onchain] -> one replay per kept instrument,
+                  the structure lead as its core -> risk (rule) -> allocation (rule) -> auditor
 ```
 
 The system measures each dataset first (rows, print rate, realised volatility, turnover, the cost
 floor for the claimed magnitude, and, when `observation.toml` sits beside the config or
 `--observation` names one, layer 1 on the same prints: whether the declared event recurs on
-that instrument, its counts per subperiod and its response) and the screener sees only those
-figures. It keeps or
-excludes; it cannot add an instrument it was not given, and a candidate it does not mention is
-excluded, not silently kept. Each kept instrument then runs through the same replay loop as
-`tra backtest`, with the analyst deciding on each closed bar and the controls admitting or
-refusing as they always do. The risk manager reads the run reports and decides: continue,
-tighten (applied only where the figure is smaller), demote (the ladder steps down, on the
-reason), or halt (the kill switch file is written and nothing more is asked). The executor
-allocates fractions across the kept instruments; it sends nothing. The auditor closes with a
-verdict on the whole session, including what every call cost.
+that instrument, its counts per subperiod and its response), and a written rule screens them:
+an instrument is kept when it printed, moved, cleared its cost floor and, when an observation is
+declared, its event recurs; every other one is excluded with the check that failed. Each kept
+instrument then runs through the same replay loop as `tra backtest`, with the structure lead
+deciding on each closed bar and the controls admitting or refusing as they always do. A second rule
+reads what the runs measured: it halts (the kill switch file is written) when a control stopped a
+run, demotes the ladder when the measured latency is three times the declared one, the rolling net
+falls below the claimed magnitude or one control refused three times, and otherwise continues. The
+allocation is an equal share per kept instrument; nothing is sent. The auditor closes with a verdict
+on the whole session, including what every call cost. All three rules are in
+`agents/session_rules.py`, and each ruling names the figure that decided it.
 
 `strategy.toml` declares the analyst as the core and the budget:
 
@@ -189,10 +187,7 @@ size, or declared by the operator and labelled as such.
 
 | Role | Tools (`agents/<role>/tools.py`) | What the brief carries |
 |---|---|---|
-| `market_screener` | `screen_figures` | per instrument: rows, print rate, realised volatility, first-lag autocorrelation, the 1:10 variance ratio, largest gap, last-hour volume against the average, turnover, the cost floor for the claimed edge, and a regime the system proposes from a written rule (`[agents.screen]` sets the two thresholds: `min_prints_per_minute`, `volatile_above_bps`) |
 | `structure_lead` | `features` | on each closed bar: returns over 1, 5 and 20 bars, the close as a z-score of the window, the gap to VWAP, the last bar's volume and range against the window's, the position between the window's high and low, the net move and trend strength with the regime they give, the variance ratio, and the market structure (swings labelled HH, HL, LH, LL, the trend they make, the last break of structure or change of character, invalidation, support and resistance); the same regime and structure on each higher timeframe in `[run].context_intervals`; the book imbalance and the open interest change since the last snapshot (see [the cycle](/opensource/cycle#the-market-around-the-decision)), and in `tra run` its own last reading of the instrument with the move since (`previous`). Nothing another analyst reads or says |
-| `risk_manager` | `risk_brief` | per run: latency from intent to fill (median, max, n, ratio to the declared), net per round trip overall and over the last window against the claimed magnitude, maximum drawdown, the favourable and adverse excursions of the closed round trips with what the winners gave back, which control refused and how often |
-| `executor` | `size_for`, `rate_budget`, `export_signals` | a size that never exceeds a cap, rounded down to the venue's step; what the minute still allows; the run's admitted intents as `signals.jsonl` or CSV for execution elsewhere (`tra signals export RUN`) |
 | `auditor` | `audit_brief`, then a tool loop over `read_run_report`, `show_ledger`, `search_ledger`, `list_runs`, `show_ladder` | usage per role with tokens per closed round trip, each promotion with whether its evidence names a gate, and a run against its replay trade by trade; then whatever it chooses to read, up to six calls |
 
 ### In a cycle: what goes in, what comes out
@@ -207,7 +202,6 @@ the schema its answer fills.
 | reviewers: pro, contra | the proposal and the figures it was built from; neither sees the other's case | `stance`, `claims`, `verdict`, `reason` | the schema; a claim that does not cite a figure it was given is dropped |
 | reviewer: neutral, as judge | the same, and both cases as code checked them, without the advocates' verdicts | `stance`, `claims`, `verdict`, `reason` | the same; its verdict is the one that counts, and it is not asked when only one side has a case |
 | `outcome_assessor` | the question, the outcome's book and recent prices, the calendar and your notes | `probability`, `confidence`, `reason`, `figures_used` | the schema, every citation |
-| `market_screener` | one live snapshot per admitted instrument | `kept`, `excluded`, `picks` | it can only drop an instrument, never add one |
 
 An answer that does not fit its schema is asked for once more with the reason, and then refused.
 
@@ -242,8 +236,6 @@ What a role's answer does differs:
 | `blind_confirmer` | nothing on its own: without its agreement on the side there is no trade |
 | `flow_specialist` | a voice in conviction, and in confluence when required; never a level |
 | reviewers | one vote each in conviction, after their claims are checked |
-| `market_screener` | which instruments, from code's own order, get a cycle; it may drop, never add |
-| `risk_manager` | between cycles: size cuts, pauses, a halt; never a loosening |
 
 ### Proposals made without the desk's rules
 
@@ -290,16 +282,14 @@ the cost gate, and it cuts the size to fit or refuses. No model is asked, becaus
 much to risk answers differently on Tuesday than on Monday from the same figures, and a size that
 depends on which sentence was written last cannot be backtested or audited. See [The cycle](/opensource/cycle).
 
-**The role.** Whether the limits themselves are still the right limits is a judgement over what
-the desk has been doing: losses in a row, net per round trip against what was claimed, drawdown,
-which control keeps refusing. In `tra run` the risk manager is asked whenever the quant auditor is,
-and it may cut the size of new entries, pause instruments or halt the desk, each for a stated
-number of hours (below). In a research session it reads the finished runs and may tighten a
-limit, step the ladder down or arm the kill switch. Either way it cannot widen anything, and it
-never decides a single trade.
+**The rules.** Whether the desk should keep trading at all is held by code as well: the daily loss
+and drawdown limits, the losing streak, the trade count and the kill switch in `[controls]`, read
+fresh by the signed risk gate before every new order ([the risk gate](/opensource/cycle)). A model
+seat that could cut size, pause or halt between cycles was retired in 0.12: every one of its
+triggers is already a declared limit that acts, and a risk decision that depends on the sentence a
+model wrote last cannot be backtested or audited.
 
-So "where is the risk manager" has two answers: the per-trade limit is arithmetic the system does
-in every cycle, and the judgement over a run of trades is the role's, made between cycles.
+So "where is the risk manager" has one answer: in code, before every order.
 
 ### The two auditors
 
@@ -361,7 +351,6 @@ the daily loss limit was reached, or several round trips in a row lost money.
 | Every `quant_every_cycles` cycles | quant auditor | a count of cycles run: at `--every 15m`, 4 cycles is about an hour |
 | Every `quant_every` (for example `"24h"`) | quant auditor | a clock: the first cycle starts it, any quant look restarts it |
 | Both on the same cycle | both, in one audit | one report, one ledger entry per call |
-| The quant auditor is asked, for any reason | the risk manager as well, first | it may cut size, pause instruments or halt, never loosen; `[audit].risk_manager = false` leaves the account to your limits alone |
 | A gate refused (cost, risk, regime, trigger) | nobody | the system working as declared |
 | Any time you want | whoever you name | `tra audit` |
 
@@ -369,27 +358,35 @@ The defaults: `on_alarm` is on even with no `[audit]` table, and with it the dai
 losing streak alarms; the scheduled quant look is off until you give it a count or a clock. Auditors
 are asked between the cycles of `tra run`, single or `--every`.
 
-### The risk manager in `tra run`
+### Seats retired in 0.12
 
-The auditors report; the risk manager is the one role that can act on the same figures, and only
-toward caution. It is handed what the system measured from the run's own files (round trips over the last
-twenty, wins, the losing streak, the result per instrument), the alarms that woke it, your limits
-and anything it already put in force, and it answers one of:
+Three seats were retired because a written rule does their job the same way every time, at no
+cost. A desk that still configures one runs unchanged, and `tra check` names the rule.
 
-| Decision | What the system does |
+| Seat | What does its job now |
 |---|---|
-| `continue` | nothing |
-| `reduce` | every new entry trades `size_multiple` (above 0, below 1) of its size for `hold_hours` |
-| `pause` | the named instruments take no new entry for `hold_hours` |
-| `halt` | writes the kill switch file, so the next pass flattens and stops; with no kill switch declared, every instrument is paused instead |
+| `market_screener` | code orders the universe by the room its own paths expect over the spread |
+| `risk_manager` | the signed risk gate and the controls in `tra run`; a written risk rule in a session |
+| `executor` | a session's allocation is an equal share per kept instrument |
 
-Each decision lapses after `hold_hours` (at most 72) back to your own settings, and two reductions
-compound downward: a milder one never undoes a deeper cut. What is in force is in
-`runs/cycles/risk.json`, every decision with its reason and triggers in
-`runs/cycles/risk_decisions.jsonl`; delete `risk.json` to lift it early. An answer that does not
-fit the schema, a size multiple of 1 or more, or a model that does not answer at all leaves your
-limits exactly where they were. Your limits in `[controls]` are applied after the risk manager's,
-whatever it decides.
+`[agents.roles.market_screener]`, `[agents.roles.risk_manager]`, `[agents.roles.executor]`,
+`[universe].screener` and `[audit].risk_manager` are still read and do nothing.
+
+What stays with a model, and what moved to the typed judge, is decided by the same question: is the
+answer a judgement in words over figures code computed, or a closed choice whose probability can be
+thresholded?
+
+| Job | Held by | Why |
+|---|---|---|
+| side, setup and levels from price structure | `structure_lead` (a model) | a reading of a whole structure, argued in words and checked by code |
+| the same side, independently | `blind_confirmer` (a model) | a second draw, ideally another model family |
+| side from flow and positioning | `flow_specialist` (a model) | other evidence, so its errors are not the lead's |
+| the case for and against | `reviewer` pro and contra (models) | building a case is writing; every claim is checked by code |
+| weighing the two checked cases | Jev, when `[judge]` is declared; else `reviewer` neutral | a closed choice of three verdicts with a probability each |
+| whether a reason describes the measured regime | Jev, when declared | a yes or no with a probability, thresholded at one half |
+| what a dated headline reports | Jev, when declared | a closed set of event kinds with probabilities |
+| how likely a prediction-market outcome is | `outcome_assessor` (a model) | a question about the world with dates and numbers in it, which a typed judge reads unreliably |
+| findings over the records | the auditors (models) | written for a person, and they act on nothing |
 
 What survives a restart is kept in `audits/reported.json`: the clock's last look, the day whose loss
 limit was reported, and the round trip that last extended a losing streak, so restarting the desk
@@ -419,10 +416,10 @@ A question worth answering plainly, because it decides where the token bill goes
 | decide how much goes behind it | the conviction rule, in the system | weigh every voice by its strength (confidence, graded scores, votes) and pick a size multiple off the operator's ladder; it may only shrink the base size |
 | price the round trip | the cost gate, in the system | refuse a claim that does not clear its own cost |
 | hold the desk's shape | the targets, in the system | refuse a trade that is not worth what the operator said it must be worth |
-| watch what actually happened | the risk manager | in `tra run`: continue, cut size, pause instruments or halt, from measured behaviour; it never enlarges anything |
+| hold the desk's limits before every order | the risk gate, in the system | refuse an intent that breaks a cap, a loss limit or a switch, and sign the rest |
 | read the machinery afterwards | the technology auditor | write findings tied to figures, and propose changes a person applies |
 | read the desk's own results afterwards | the quant auditor | the same, over decisions and round trips |
-| turn a decision into an order | the executor | caps, the venue's step, the rate budget, the signal file; no discretion |
+| turn a decision into an order | the order hand, in the system | the signed approval, caps, the venue's step, the rate budget; no discretion |
 
 No model sizes a trade and no model is asked whether the voices agree. Both are rules over the
 operator's own declarations, which is what makes a result reproducible tomorrow.

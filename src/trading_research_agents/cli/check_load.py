@@ -14,7 +14,7 @@ def _span_s(seconds: float) -> str:
     return f"{whole}s"
 
 
-def _load_notes(a: Any, roster: tuple[str, ...], screener: bool = False) -> list[str]:
+def _load_notes(a: Any, roster: tuple[str, ...]) -> list[str]:
     """How a cycle's calls land on providers, and what happens when one of them says no."""
     # The readings are read by code; the analyst and its team are the models a cycle asks.
     asked = ["structure_lead", *a.team]
@@ -22,13 +22,11 @@ def _load_notes(a: Any, roster: tuple[str, ...], screener: bool = False) -> list
     roles = [
         *asked,
         *(["reviewer"] if a.reviewers else []),
-        *(["market_screener"] if screener else []),
     ]
-    calls = len(asked) + len(a.reviewers) + (1 if screener else 0)
+    calls = len(asked) + len(a.reviewers)
     on = sorted({a.for_role(role).provider for role in roles})
     said = [
         f"models: a full pass makes at most {calls} call(s) within a minute"
-        + (" (the screener, then the cycle)" if screener else "")
         + f", on {', '.join(on)}; a provider that says wait up to {a.max_retry_wait_s:.0f}s is "
         "waited for once, a provider whose quota is spent rests 15 minutes, then the next link "
         "is tried"
@@ -202,12 +200,10 @@ def _universe_notes(cfg: Any, bad: list[str]) -> list[str]:
             f"universe: at most {universe.max_intents_per_day} intent(s) a day across every "
             "instrument, counted from what is on disk"
         )
-    if universe.screener:
-        said.append(
-            "universe: the screener picks and orders what the system admitted, citing each "
-            "instrument's own figures; it cannot add an instrument, and the system's order "
-            "is kept beside its own"
-        )
+    said.append(
+        "universe: code orders what the trigger admitted, the room the paths expect over the hold "
+        "against the spread first; no model is asked to choose"
+    )
     if cfg.trigger.idle:
         bad.append(
             "[universe] is declared and [trigger] is not, so every pass would ask the whole roster "
@@ -241,11 +237,6 @@ def _audit_notes(cfg: Any) -> list[str]:
         said.append(f"the quant auditor runs every {policy.quant_every_cycles} cycles")
     if policy.quant_every_s is not None:
         said.append(f"the quant auditor runs every {_span_s(policy.quant_every_s)}")
-    if policy.risk_manager:
-        said.append(
-            "the risk manager is asked with the quant auditor and may only cut size, pause an "
-            "instrument or halt, each for a stated number of hours"
-        )
     return ["auditors: " + "; ".join(said) + "; the auditors report and never act"]
 
 
@@ -277,11 +268,7 @@ def _spend_notes(cfg: Any) -> list[str]:
             "for every role and [agents.roles.<role>].effort overrides one"
         )
     else:
-        roles = (
-            "structure_lead",
-            "reviewer",
-            "market_screener",
-        )
+        roles = ("structure_lead", "reviewer")
         levels: dict[str, list[str]] = {}
         for role in roles:
             levels.setdefault(str(a.for_role(role).effort), []).append(role)
@@ -291,10 +278,7 @@ def _spend_notes(cfg: Any) -> list[str]:
         )
     quoted = sorted(m for m, (i, o) in a.pricing.items() if i > 0 or o > 0)
     free = sorted(m for m, (i, o) in a.pricing.items() if i == 0 and o == 0)
-    used = {
-        a.for_role(role).model or "default"
-        for role in ("structure_lead", "reviewer", "market_screener")
-    }
+    used = {a.for_role(role).model or "default" for role in ("structure_lead", "reviewer")}
     used |= {name.partition(":")[2] for name in a.fallback}
     unpriced = sorted(m for m in used if m not in a.pricing and m != "default")
     parts = []

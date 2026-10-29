@@ -295,7 +295,7 @@ def trade_live(args: argparse.Namespace) -> int:
 
 
 def signals_export(args: argparse.Namespace) -> int:
-    from trading_research_agents.agents.executor.tools import export_signals
+    from trading_research_agents.agents.signals_export import export_signals
 
     summary = args.run / "run.json"
     if not summary.is_file():

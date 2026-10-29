@@ -178,7 +178,7 @@ def test_a_role_may_run_on_its_own_model(tmp_path: Path) -> None:
     path.write_text(base + '\n[agents.roles.nobody]\nmodel = "x"\n', "utf-8")
     with pytest.raises(ConfigError, match="is not a role"):
         load_strategy_config(path)
-    path.write_text(base + "\n[agents.roles.executor]\ntemperature = 0.3\n", "utf-8")
+    path.write_text(base + "\n[agents.roles.reviewer]\ntemperature = 0.3\n", "utf-8")
     with pytest.raises(ConfigError, match="is not settable"):
         load_strategy_config(path)
 

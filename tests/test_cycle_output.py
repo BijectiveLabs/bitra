@@ -62,25 +62,20 @@ def test_funding_is_priced_over_the_hold_the_desk_keeps(tmp_path: Path, envelope
 def test_an_admitted_instrument_that_did_not_run_says_why() -> None:
     record = {
         "chosen": ["ETHUSDT"],
-        "code_order": ["BTCUSDT", "ETHUSDT"],
-        "asked_screener": True,
+        "code_order": ["ETHUSDT", "BTCUSDT"],
         "candidates": [
             {
                 "instrument": "BTCUSDT",
                 "admitted": True,
-                "kept_by_screener": True,
-                "pick_rank": 2,
-                "setup": "range_reversion",
-                "screener_said": "#2 range_reversion: a burst large enough for reversion",
+                "room": "4.10",
+                "reasons": [],
                 "features": {"regime": "ranging", "zscore": 1.2, "quote_volume_24h": "4167294740"},
             },
             {
                 "instrument": "ETHUSDT",
                 "admitted": True,
-                "kept_by_screener": True,
-                "pick_rank": 1,
-                "setup": "range_breakout",
-                "screener_said": "#1 range_breakout: the range is giving way",
+                "room": "9.80",
+                "reasons": [],
                 "features": {"regime": "mixed", "zscore": 2.85},
             },
         ],
@@ -88,9 +83,9 @@ def test_an_admitted_instrument_that_did_not_run_says_why() -> None:
     }
     text = shown(screen_view(record))
     assert "waiting" in text and "max_per_cycle was taken by ETHUSDT" in text
-    assert "ahead on the screener's order" in text
-    assert "#1 range_breakout" in text and "4,167M" in text
-    assert "the screener chose, the system's own order was BTCUSDT, ETHUSDT" in text
+    assert "ahead on room and pressure" in text
+    assert "9.80" in text and "4,167M" in text
+    assert "taken, in the system's order: room, then pressure; no model was asked" in text
     assert "2 of 782 perpetuals kept by the system (260 not crypto)" in text
 
 

@@ -16,7 +16,6 @@ from typing import Any
 import pytest
 
 from test_cycle import chains, snapshot_with
-from trading_research_agents.agents import market_screener
 from trading_research_agents.agents.screen import figures_of, look, sweep
 from trading_research_agents.execution.targets import intents_today
 from trading_research_agents.execution.trigger import Trigger
@@ -75,18 +74,28 @@ def test_the_order_is_movement_against_the_toll_then_the_operators_own_order() -
     assert take(Universe(instruments=declared, max_per_cycle=2), rows) == ("SOLUSDT", "ETHUSDT")
 
 
-def test_only_what_the_trigger_admitted_and_the_screener_kept_is_taken() -> None:
-    declared = ("BTCUSDT", "ETHUSDT")
+def test_the_room_the_paths_expect_orders_before_the_move_already_seen() -> None:
+    declared = ("BTCUSDT", "ETHUSDT", "SOLUSDT")
     rows = [
-        candidate("BTCUSDT", admitted=False, moved_bps=Decimal("1"), spread_bps=Decimal("10")),
+        # Moved most, but its paths expect little ahead for what it costs.
+        candidate(
+            "BTCUSDT",
+            moved_bps=Decimal("50"),
+            spread_bps=Decimal("10"),
+            paths_range_bps=Decimal("30"),
+        ),
         candidate(
             "ETHUSDT",
-            moved_bps=Decimal("30"),
+            moved_bps=Decimal("10"),
             spread_bps=Decimal("10"),
-            kept_by_screener=False,
+            paths_range_bps=Decimal("200"),
         ),
+        # Too few candles to draw from: ordered after every instrument the paths could read.
+        candidate("SOLUSDT", moved_bps=Decimal("90"), spread_bps=Decimal("9")),
     ]
-    assert take(Universe(instruments=declared), rows) == ()
+    assert [c.instrument for c in order(rows, declared)] == ["ETHUSDT", "BTCUSDT", "SOLUSDT"]
+    assert rows[1].room == Decimal("20.00") and rows[2].room is None
+    assert take(Universe(instruments=declared), [*rows[:1], rows[2]]) == ("BTCUSDT",)
 
 
 def test_a_universe_is_declared_once_and_checked() -> None:
@@ -94,8 +103,8 @@ def test_a_universe_is_declared_once_and_checked() -> None:
         Universe(instruments=("BTCUSDT", "BTCUSDT"))
     with pytest.raises(UniverseError, match="at least 1"):
         Universe(instruments=("BTCUSDT",), max_per_cycle=0)
-    with pytest.raises(UniverseError, match="nothing to screen"):
-        Universe(screener=True)
+    # Retired with the screener seat: still read, so an older desk runs, and changes nothing.
+    assert Universe(screener=True).idle
     assert Universe().idle and not Universe(instruments=("BTCUSDT",)).idle
 
 
@@ -150,7 +159,6 @@ def test_a_pass_looks_at_everything_and_spends_a_cycle_on_the_top_of_the_order(
     assert screened.at == "2026-09-27T10-00-00Z"
     taken = {c.instrument: c for c in screened.candidates}
     assert taken["ETHUSDT"].admitted and not taken["BTCUSDT"].admitted
-    assert not screened.asked_screener
 
 
 def test_a_desk_that_has_traded_enough_today_stops_before_the_screen_chooses(
@@ -177,76 +185,6 @@ def test_a_desk_that_has_traded_enough_today_stops_before_the_screen_chooses(
     )
     assert screened.chosen == ()
     assert any("across every instrument" in r for r in screened.refusals)
-
-
-def test_the_screener_orders_what_code_admitted_and_cannot_add_or_pick_blind() -> None:
-    from trading_research_agents.agents.screen import choose, screener_brief
-
-    rows = [
-        candidate("BTCUSDT", spread_bps=Decimal("0.01"), features={"zscore": 0.4}),
-        candidate("ETHUSDT", spread_bps=Decimal("0.04"), features={"zscore": 2.85}),
-        candidate("SOLUSDT", spread_bps=Decimal("0.84"), features={"regime": "ranging"}),
-    ]
-    brief = screener_brief(rows, mechanism="reversion after a burst", at="2026-09-27T10-00-00Z")
-    said = market_screener.parse_live(
-        json.dumps(
-            {
-                "picks": [
-                    {
-                        "instrument": "ETHUSDT",
-                        "setup": "range_reversion",
-                        "reason": "stretched",
-                        "figures_used": [{"figure": "zscore", "value": "2.85"}],
-                    },
-                    {
-                        "instrument": "DOGEUSDT",
-                        "setup": "range_breakout",
-                        "reason": "invented",
-                        "figures_used": [{"figure": "zscore", "value": "1"}],
-                    },
-                    {
-                        "instrument": "BTCUSDT",
-                        "setup": "trend_continuation",
-                        "reason": "made up",
-                        "figures_used": [{"figure": "zscore", "value": "3.1"}],
-                    },
-                    {
-                        "instrument": "SOLUSDT",
-                        "setup": "range_reversion",
-                        "reason": "a range",
-                        "figures_used": [{"figure": "regime", "value": "ranging"}],
-                    },
-                ],
-                "excluded": [],
-            }
-        )
-    )
-    chosen, refusals = choose(rows, said, brief)
-    by = {c.instrument: c for c in chosen}
-    assert by["ETHUSDT"].pick_rank == 1 and by["ETHUSDT"].setup == "range_reversion"
-    # The second valid pick is ranked second, whatever position it had in the answer.
-    assert by["SOLUSDT"].pick_rank == 2
-    # A pick whose only citation does not hold is not taken.
-    assert not by["BTCUSDT"].kept_by_screener and by["BTCUSDT"].pick_rank is None
-    assert any("picked an instrument it was not given: 'DOGEUSDT'" in r for r in refusals)
-    assert any("BTCUSDT picked on no figure from its own row" in r for r in refusals)
-    ordered = [c.instrument for c in order(chosen, ("BTCUSDT", "ETHUSDT", "SOLUSDT")) if c.taken]
-    assert ordered == ["ETHUSDT", "SOLUSDT"]
-
-
-def test_a_screener_that_cannot_answer_does_not_stop_the_pass(tmp_path: Path) -> None:
-    from trading_research_agents.agents.screen import asking
-
-    class Broken:
-        def complete(self, **_: Any) -> Any:
-            raise TimeoutError("the provider did not answer")
-
-    ask = asking(Broken(), mechanism="reversion after a burst of prints", at="2026-09-27T10-00-00Z")
-    rows = [candidate("BTCUSDT")]
-    narrowed, refusals = ask(rows)
-    # Code already admitted these, so a silent screener leaves them where they were.
-    assert [c.instrument for c in narrowed] == ["BTCUSDT"] and narrowed[0].taken
-    assert any("TimeoutError" in r for r in refusals)
 
 
 def test_the_universe_is_read_from_the_project() -> None:
@@ -398,46 +336,20 @@ def test_an_open_position_is_named_first_even_when_the_trigger_held_it_too() -> 
     )
 
 
-def test_a_pass_measures_every_candidate_and_runs_what_the_screener_put_first(
-    tmp_path: Path,
-) -> None:
-    from trading_research_agents.agents.screen import asking
-    from trading_research_agents.llm.completer import FakeCompleter
-
-    answer = {
-        "picks": [
-            {
-                "instrument": "SOLUSDT",
-                "setup": "range_reversion",
-                "reason": "a range",
-                "figures_used": [{"figure": "spread_bps", "value": "9.80"}],
-            },
-            {
-                "instrument": "ETHUSDT",
-                "setup": "range_reversion",
-                "reason": "also a range",
-                "figures_used": [{"figure": "spread_bps", "value": "9.80"}],
-            },
-        ],
-        "excluded": [{"instrument": "BTCUSDT", "reason": "nothing on its own row"}],
-    }
+def test_a_pass_measures_every_candidate_and_asks_no_model(tmp_path: Path) -> None:
     screened = sweep(
         Universe(instruments=("BTCUSDT", "ETHUSDT", "SOLUSDT"), max_per_cycle=1, screener=True),
         chains(),
         trigger=Trigger(),
         root=tmp_path / "cycles",
         now=NOW,
-        ask=asking(FakeCompleter([json.dumps(answer)]), mechanism="reversion", at="x"),
         listed={"SOLUSDT": {"quote_volume_24h": "592230876", "change_24h_pct": "-0.17"}},
     )
-    assert screened.chosen == ("SOLUSDT",)
-    # Code's own order is kept beside the screener's, for the comparison later.
-    assert screened.code_order == ("BTCUSDT", "ETHUSDT", "SOLUSDT")
+    assert len(screened.chosen) == 1 and screened.chosen[0] == screened.code_order[0]
     by = {c.instrument: c for c in screened.candidates}
-    assert by["SOLUSDT"].pick_rank == 1 and by["ETHUSDT"].pick_rank == 2
     assert by["SOLUSDT"].features["quote_volume_24h"] == "592230876"
     assert "regime" in by["BTCUSDT"].features and "zscore" in by["BTCUSDT"].features
-    assert not by["BTCUSDT"].kept_by_screener
+    assert all("asked_screener" not in json.dumps(c.record()) for c in screened.candidates)
 
 
 def test_the_pass_measures_on_the_bars_the_cycle_decides_on() -> None:

@@ -22,11 +22,11 @@ with its reason, so you can check afterwards what happened and why.
 It is an early release, so expect settings to change between versions. What works
 today: linear perpetuals, spot pairs (stock perpetuals and tokenized stocks among them) and
 prediction market outcomes through one order path, a universe of perpetuals found and measured by
-the system, a screener that picks where to look, the full autonomous cycle on live data, one analyst that proposes, three readings of
+the system and ordered by the room its own paths expect, the full autonomous cycle on live data, a structure lead that proposes, three readings of
 your own series computed by code, up to three reviewers, stops and
 targets the analyst names inside bounds you set, the gates that decide, sizing from your own rules,
-real orders on a venue's practice environment behind a mandate you sign, a risk manager that can
-only make the desk more careful, and two auditors that read the records.
+real orders on a venue's practice environment behind a mandate you sign and a signed risk gate,
+and two auditors that read the records.
 
 The command is `tra`. Start with the [quick start](/opensource/quick-start).
 
@@ -52,7 +52,7 @@ flowchart TD
     find[["the system finds the universe and measures each instrument<br/>one data pull each; every value carries its source and age"]] --> wake
     wake{"trigger<br/>has anything moved since the last look?"}
     wake -- "no" --> held["held: one data pull, no tokens spent"]
-    wake -- "yes" --> pick["the screener picks among what the system admitted<br/>citing each instrument's own figures"]
+    wake -- "yes" --> pick["the system orders what it admitted<br/>the room its own paths expect over the spread"]
     pick -- "none taken" --> held
     pick -- "taken" --> briefs
     briefs["the system writes the briefs<br/>each role sees only the figures its job needs"] --> readers
@@ -79,10 +79,8 @@ flowchart TD
 | blind confirmer (optional) | the structure lead's own brief, blind to its answer, ideally on another model family | the same schema, independently | trade alone: the two reads must name the same side, and the lower confidence counts |
 | flow specialist (optional) | the book, the spread, funding and open interest, which then leave the analyst's brief | a side and a confidence, with the figures it rests on | name a level or a size; it is one voice in conviction |
 | macro, on-chain and sentiment readings (code, not agents) | dated rates and levels, chain and derivatives figures, scores and notes you curate | a declared state and a graded score: each series against the lines you drew | ask a model, or propose a direction |
-| market screener | what the system measured for each admitted instrument: move, spread, regime, volume, correlation to BTC | which instruments to take, in what order, citing their figures | add an instrument the system did not admit |
 | reviewers: pro and contra | the proposal and the figures behind it, each without the other's case | the strongest case for or against, as cited claims | see the other side's case, or cite a figure it wasn't given |
-| reviewer: neutral, as judge | the same, and both cases once code has checked every claim | support, oppose or abstain, the one verdict that counts | see the advocates' verdicts, or count claims instead of weighing them |
-| risk manager | what the run recorded: round trips, the losing streak, your limits, the alarm that woke it | continue, cut the size of new entries, pause instruments, or halt, each for a stated number of hours | loosen a limit you set, or add size |
+| reviewer: neutral, as judge (Jev when `[judge]` is declared) | the same, and both cases once code has checked every claim | support, oppose or abstain, the one verdict that counts; from the typed judge, a probability for each | see the advocates' verdicts, or count claims instead of weighing them |
 | technology and quant auditors | the cycles this desk recorded | findings and proposed changes | change anything |
 
 Everything after the models answer is arithmetic over numbers you declared. No model can place, cancel

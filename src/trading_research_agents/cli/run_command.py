@@ -16,7 +16,6 @@ from typing import Any
 from trading_research_agents.agents.context import (
     declared_in,
 )
-from trading_research_agents.agents.risk_manager.run import Overrides as RiskOverrides
 from trading_research_agents.cli import shutdown
 from trading_research_agents.cli.auditing import Auditing
 from trading_research_agents.cli.common import (
@@ -391,19 +390,8 @@ class _DeskRun:
         return result, ""
 
     def _cycle(self, instrument: str) -> Any:
-        """One cycle on one instrument, or nothing when the risk manager has paused it."""
+        """One cycle on one instrument."""
         desk = self.desk
-        moment = datetime.now(UTC)
-        guard = RiskOverrides.load(desk.out, moment)
-        paused = guard.pause_of(instrument, moment)
-        if paused is not None:
-            emit(
-                {"instrument": instrument, "paused_until": paused.isoformat()},
-                desk.args.json,
-                [f"risk manager: {instrument} paused until {paused:%H:%M}Z; not asked"],
-            )
-            return None
-        multiple = guard.multiple(moment)
         before = desk.usage.cost
         held = self.carried.get(instrument, Decimal(0))
         sends = (
@@ -412,7 +400,7 @@ class _DeskRun:
             else None
         )
         self.mid_cycle = True
-        cfg = self._config_for(instrument, multiple, held, sends)
+        cfg = self._config_for(instrument, held, sends)
         result = _one_cycle(cfg, desk.usage, self.spine, desk.args)
         self.mid_cycle = False
         self.carried[instrument] = Decimal(0) if result.acted else held + (desk.usage.cost - before)
@@ -423,7 +411,7 @@ class _DeskRun:
         self.cleared = CLEARED if result.stopped_by is None else REFUSED
         return result
 
-    def _config_for(self, instrument: str, multiple: Decimal, held: Decimal, sends: Any) -> Any:
+    def _config_for(self, instrument: str, held: Decimal, sends: Any) -> Any:
         cfg = self.desk.cfg
         base = self.cycle_cfg
         facts = _market_facts(cfg, self.desk.beside, instrument, sends)
@@ -434,10 +422,6 @@ class _DeskRun:
             asset_class=facts[1],
             market=facts[2],
             size_step=_step_for(cfg, instrument),
-            # The risk manager's cut, if one is in force; the client's caps apply after it as
-            # always.
-            size=base.size * multiple,
-            size_quote=None if base.size_quote is None else base.size_quote * multiple,
             # A unit cap was written for [run].instrument; with a quote cap declared, other
             # instruments are held to that one alone.
             max_position=(

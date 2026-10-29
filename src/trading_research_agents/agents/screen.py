@@ -6,14 +6,13 @@ applied to each, and an order that puts the instrument with the most movement ag
 at the front. What comes out is one or two instruments the cycle then runs in full, and a record of
 every instrument that was looked at and why it was not chosen.
 
-The screener role may narrow that list and say why, from the same figures. It may not add an
-instrument, reorder the run, or say anything about a direction or a size: by the time it is asked,
-code has already decided which instruments are admissible and in what order.
+No model is asked here. Code decides which instruments are admissible and in what order: the room
+the instrument's own paths draw over the hold against its spread first, then the move already seen,
+then the order the operator wrote.
 """
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import replace
 from datetime import datetime
@@ -22,21 +21,15 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
-from trading_research_agents.agents import market_screener
 from trading_research_agents.agents.briefs import bars_of, base_of
-from trading_research_agents.agents.cited import figures_of as figures_of_row
-from trading_research_agents.agents.cited import survived
 from trading_research_agents.agents.progress import (
     DONE,
-    FAILED,
     HELD,
     RUNNING,
     Watch,
     announce,
     silent,
 )
-from trading_research_agents.agents.roles import RoleError, prompt
-from trading_research_agents.agents.scope import brief_for, dropped
 from trading_research_agents.agents.structure_lead.tools import features
 from trading_research_agents.data.sources.chain import SourceChain
 from trading_research_agents.execution.desk import Desk
@@ -50,19 +43,18 @@ from trading_research_agents.execution.trigger import (
     worth_asking,
 )
 from trading_research_agents.execution.universe import Candidate, Screened, Universe, order, take
-from trading_research_agents.llm.completer import Completer
-from trading_research_agents.records import COMPACT
+from trading_research_agents.forecast.paths import PathError, PathSettings, read_paths
 from trading_research_agents.store.snapshot import Snapshot, cycle_id, take_snapshot
 
 BPS = Decimal(10_000)
 # A correlation on ten bars is a number with no claim behind it.
 MIN_CORRELATION_POINTS = 20
-# The screener answers the same schema in a session and in a cycle, but it is given different
-# figures and asked a different question, so the doctrine is per brief rather than per role.
-LIVE_PROMPT = "market_screener_live"
 # What the look costs: the book to price the spread, the bars to see the window's range. Funding and
 # open interest are a cycle's business, not a screen's.
 KINDS = ("orderbook", "ohlcv")
+# The hold the room ahead is read over, and how many paths read it: a cheap look, not a cycle.
+HOLD_BARS = 24
+SCREEN_PATHS = 300
 # What every other instrument's correlation is measured against: Bitcoin, whatever the venue
 # calls it or settles it in.
 REFERENCE_BASE = "BTC"
@@ -131,7 +123,7 @@ def correlation(left: Sequence[float], right: Sequence[float]) -> Decimal | None
 
 
 def measured(snapshot: Snapshot, interval_s: int, rule: RegimeRule) -> dict[str, Any]:
-    """What code can say about an instrument from the bars of one look, for the screener."""
+    """What code can say about an instrument from the bars of one look, kept in the screen."""
     try:
         candles = list(snapshot.get("ohlcv").value or ())
     except KeyError:
@@ -172,6 +164,7 @@ def look(
     listed: Mapping[str, Any] | None = None,
     rule: RegimeRule | None = None,
     looks: Mapping[str, tuple[Decimal, datetime]] | None = None,
+    horizon_bars: int = HOLD_BARS,
 ) -> Candidate:
     """One instrument, looked at for the price of a data pull and no tokens at all."""
     snapshot = take_snapshot(instrument, chains, kinds=KINDS, options=options)
@@ -209,7 +202,26 @@ def look(
         age_s=figures["age_s"],
         reasons=(*reasons, *wake.reasons),
         features=found,
+        paths_range_bps=paths_range(snapshot, horizon_bars),
     )
+
+
+def paths_range(snapshot: Snapshot, horizon_bars: int) -> Decimal | None:
+    """The range the instrument's own paths draw over the hold, or nothing when they cannot."""
+    try:
+        candles = list(snapshot.get("ohlcv").value or [])
+        ohlc = [[float(c.open), float(c.high), float(c.low), float(c.close)] for c in candles]
+        read = read_paths(
+            ohlc,
+            side="long",
+            take_bps=None,
+            stop_bps=None,
+            horizon_bars=horizon_bars,
+            settings=PathSettings(paths=SCREEN_PATHS),
+        )
+    except (KeyError, TypeError, AttributeError, PathError):
+        return None
+    return Decimal(f"{read.range_bps:.2f}")
 
 
 def sweep(
@@ -221,7 +233,6 @@ def sweep(
     now: datetime,
     max_round_trips_per_day: int | None = None,
     options: Mapping[str, Mapping[str, Any]] | None = None,
-    ask: Callable[[list[Candidate]], tuple[list[Candidate], list[str]]] | None = None,
     desk: Desk | None = None,
     held: Callable[[], tuple[Any, str]] | None = None,
     watch: Watch = silent,
@@ -298,20 +309,6 @@ def sweep(
             )
             return out
 
-    if ask is not None and any(c.admitted for c in out.candidates):
-        out.asked_screener = True
-        announce(watch, "market_screener", RUNNING)
-        try:
-            narrowed, said = ask([c for c in out.candidates if c.admitted])
-        except Exception as exc:
-            announce(watch, "market_screener", FAILED, exc.__class__.__name__)
-            raise
-        announce(watch, "market_screener", DONE, f"kept {len(narrowed)}")
-        out.refusals.extend(said)
-        answered = {c.instrument: c for c in narrowed}
-        out.candidates = [
-            answered.get(c.instrument, c) if c.admitted else c for c in out.candidates
-        ]
     out.candidates = order(out.candidates, universe.instruments)
     out.chosen = take(universe, out.candidates)
     return out
@@ -396,124 +393,3 @@ def _with_btc(candidates: list[Candidate], moves: Mapping[str, list[float]]) -> 
             )
         )
     return out
-
-
-def screener_brief(candidates: list[Candidate], *, mechanism: str, at: str) -> dict[str, Any]:
-    """What the screener is given: the figures code computed, and the mechanism it screens for.
-
-    A figure that does not apply is left out rather than sent as null. On the first look at an
-    instrument there is no recent mid, so there is no move and no pressure - and a null in a brief
-    reads as a measurement that failed, which is a different thing and one a reader will hold
-    against the instrument.
-    """
-    rows: list[dict[str, Any]] = []
-    for c in candidates:
-        row: dict[str, Any] = {"instrument": c.instrument, "first_look": c.moved_bps is None}
-        for name, value in (
-            ("spread_bps", c.spread_bps),
-            ("range_bps", c.range_bps),
-            ("moved_bps", c.moved_bps),
-            ("pressure", c.pressure),
-        ):
-            if value is not None:
-                row[name] = str(value)
-        if c.age_s is not None:
-            row["age_s"] = c.age_s
-        row.update(c.features)
-        rows.append(row)
-    return {
-        "as_of": at,
-        "mechanism": mechanism,
-        "basis": (
-            "every figure here was computed by code from one snapshot per instrument and the "
-            "venue's 24-hour ticker; where first_look is true this desk has not looked at that "
-            "instrument lately, so it has no move and no pressure to report and neither is missing"
-        ),
-        "candidates": rows,
-    }
-
-
-def choose(
-    candidates: list[Candidate],
-    said: market_screener.LiveScreen,
-    brief: Mapping[str, Any],
-) -> tuple[list[Candidate], list[str]]:
-    """Apply the screener's order. A pick must be an admitted instrument, cite at least one figure
-    from that instrument's own row that holds, and appear once; anything else is refused by name.
-    An instrument it does not pick is not taken this pass."""
-    rows = {str(r.get("instrument")): r for r in brief.get("candidates") or []}
-    known = {c.instrument for c in candidates}
-    refusals: list[str] = []
-    ranked: dict[str, tuple[int, str, str]] = {}
-    for pick in said.picks:
-        name = pick.instrument
-        if name not in known:
-            refusals.append(f"market_screener: picked an instrument it was not given: {name!r}")
-            continue
-        if name in ranked:
-            refusals.append(f"market_screener: picked {name} twice; the first stands")
-            continue
-        kept, lost = survived(pick.figures_used, figures_of_row(rows.get(name, {})))
-        for gone in lost:
-            refusals.append(f"market_screener: {name}: discarded a citation, {gone}")
-        if not kept:
-            refusals.append(
-                f"market_screener: {name} picked on no figure from its own row; not taken"
-            )
-            continue
-        ranked[name] = (len(ranked) + 1, pick.setup, pick.reason)
-    dropped_by = {
-        str(row.get("instrument")): str(row.get("reason") or "excluded")
-        for row in said.excluded
-        if isinstance(row, dict)
-    }
-    out: list[Candidate] = []
-    for candidate in candidates:
-        name = candidate.instrument
-        if name in ranked:
-            rank, setup, reason = ranked[name]
-            out.append(
-                replace(
-                    candidate,
-                    kept_by_screener=True,
-                    pick_rank=rank,
-                    setup=setup,
-                    screener_said=f"#{rank} {setup}: {reason}",
-                )
-            )
-            continue
-        why = dropped_by.get(name, "not picked by the screener")
-        refusals.append(f"market_screener: {name} not picked, {why}")
-        out.append(replace(candidate, kept_by_screener=False, screener_said=why))
-    return out, refusals
-
-
-def asking(
-    completer: Completer, *, mechanism: str, at: str
-) -> Callable[[list[Candidate]], tuple[list[Candidate], list[str]]]:
-    """The screener as one call, with its own scope filter and its own failure kept local."""
-
-    def ask(candidates: list[Candidate]) -> tuple[list[Candidate], list[str]]:
-        brief = screener_brief(candidates, mechanism=mechanism, at=at)
-        extra = dropped(market_screener.ROLE, brief)
-        refusals = (
-            [f"market_screener: not this role's to read, removed: {list(extra)}"] if extra else []
-        )
-        try:
-            asked = brief_for(market_screener.ROLE, brief)
-            done = completer.complete(
-                system=prompt(LIVE_PROMPT),
-                user=json.dumps(asked, sort_keys=True, default=str, separators=COMPACT),
-                schema=dict(market_screener.LIVE_SCHEMA),
-            )
-            said = market_screener.parse_live(done.text)
-        except (RoleError, ValueError, RuntimeError, OSError, TimeoutError) as exc:
-            # A screener that cannot answer does not stop the pass: code's own order stands.
-            return candidates, [
-                *refusals,
-                f"market_screener: {exc.__class__.__name__}: {exc}; the system's order stands",
-            ]
-        chosen, said_about = choose(candidates, said, asked)
-        return chosen, [*refusals, *said_about]
-
-    return ask

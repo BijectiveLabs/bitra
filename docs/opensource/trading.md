@@ -116,7 +116,7 @@ exit problem, and no amount of work on entries will fix it. A trade that closed 
 standing fourteen under water is a stop that nearly fired, and it will fire on the next one like
 it. Neither fact is visible in the net, and both change what an operator should do next.
 
-The risk manager's brief carries the summary over a run: the median and the best favourable
+The figures a session's risk rule and the auditors read carry the summary over a run: the median and the best favourable
 excursion, the median and the worst adverse one, and the median of what the winners gave back
 before they closed. `execution/excursion.py` computes it; nothing about it enters the cost
 identity, and nothing about it changes what a trade earned.

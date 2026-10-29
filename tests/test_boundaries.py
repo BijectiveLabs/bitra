@@ -40,7 +40,8 @@ _ALLOWED: dict[str, set[str]] = {
     # The harness replays features over the archive and prices ideas with the desk's own costs.
     "evaluation": {"features", "market_data", "data", "envelope", "execution", "forecast"},
     "chain": {"ledger", "envelope", "data"},
-    "execution": {"ledger", "envelope", "data", "chain"},
+    # The stops may be measured from the paths the forecast draws; the forecast imports nothing.
+    "execution": {"ledger", "envelope", "data", "chain", "forecast"},
     # The gate every new order passes: the execution layer's arithmetic, and nothing above it.
     "risk": {"execution"},
     "strategy": {"ledger", "envelope", "data", "chain", "execution"},

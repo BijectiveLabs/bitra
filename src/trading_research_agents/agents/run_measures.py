@@ -1,4 +1,4 @@
-"""What the risk manager is handed: the figures a control decision rests on, from a run directory.
+"""The figures a session's risk rule reads from a run directory, and the auditors after it.
 
 Latency as measured from intent to fill; the rolling net return against the magnitude the
 registration claimed; drawdown of the closed round trips; which control refused, how often.

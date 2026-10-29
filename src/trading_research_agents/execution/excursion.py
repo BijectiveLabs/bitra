@@ -11,7 +11,7 @@ way a trader reads them: MFE is positive when the position was in front, MAE is 
 was under water, whichever way the position was facing.
 
 These are path figures, not cost terms. They never enter the cost identity, and they never change
-what a trade earned; they go into the record so the risk manager and the auditors can see the
+what a trade earned; they go into the record so the risk rule and the auditors can see the
 shape of what happened rather than only the outcome.
 """
 
@@ -116,7 +116,7 @@ def excursion_of(
 
 
 def summarise(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
-    """The excursions of many round trips, as the figures a risk manager reads.
+    """The excursions of many round trips, as the figures the auditors read.
 
     `stop_distance` and `take_distance` are left to the caller: what matters to an operator is how
     close the adverse excursions came to the stop that was set, and that stop lives in the config.

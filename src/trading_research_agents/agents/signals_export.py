@@ -1,4 +1,4 @@
-"""What the executor works with in the sandbox, and what it hands to the operator's own execution.
+"""What a run hands to the operator's own execution: the admitted intents, in a fixed shape.
 
 The runtime already writes every admitted intent. `export_signals` turns a run's admitted
 intents into a file with a fixed, documented shape (`signals.jsonl` or CSV) so that whoever

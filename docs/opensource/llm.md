@@ -69,7 +69,8 @@ Three checks stand between a model's text and anything that reads it.
 
 Measured on the same desk (342 calls, `openai/gpt-oss-120b` and `-20b` on Groq, before 0.11): a
 call carries a median of about 1,950 tokens for the structure lead, 1,390 for a reviewer and
-1,540 for the screener, system prompt included; the macro, on-chain and sentiment analysts of the
+1,540 for the market screener of the time (retired in 0.12; code orders the universe), system
+prompt included; the macro, on-chain and sentiment analysts of the
 time took 1,950, 1,730 and 1,350, and since 0.11 they are readings that ask no model. The
 largest was 2,915. Each call starts from a fresh context, so nothing accumulates across a cycle or a
 day, and no role comes near any current model's window. The one place a context grows is the
@@ -122,13 +123,12 @@ What happens next depends on the role, and none of it can make a trade larger:
 | blind confirmer | no trade | the team trades only when both reads agree |
 | flow specialist | its voice is absent; the cycle goes on | a voice that said nothing neither helps nor hurts |
 | reviewer | the trade is refused (`[agents].on_missing_reviewer = "refuse"`, the default); with `"continue"` it goes on with the votes that came back | a check you declared that did not happen is not a check |
-| market screener | the instruments the system admitted go on unfiltered | the screener can only remove, never add |
 | auditor | a line in the report | auditors never act |
 
 Every failure is a refusal line in `cycle.json` with the vendor's own message, and a provider
 failure wakes the technical auditor (`[audit].on_alarm`). The way to make all of this rarer is
-capacity, not code: a provider tier whose tokens-per-minute covers a whole cycle (the screener,
-the analysts and two reviewers measured 9,200 to 10,200 tokens inside one minute on the demo
+capacity, not code: a provider tier whose tokens-per-minute covers a whole cycle (the screener
+and the analysts of the time and two reviewers measured 9,200 to 10,200 tokens inside one minute on the demo
 desk before 0.11, against a free tier's 8,000; the readings no longer ask a model), roles split across vendors with `[agents.roles.<role>]`, and a
 fallback from a different vendor.
 A pass also stops asking anyone when the desk is already at `[desk].max_open_positions`, so a full
@@ -138,7 +138,7 @@ book does not spend a provider's rate on cycles that could only be refused.
 
 The Anthropic adapter marks the system prompt as cacheable and reads back what the provider says it
 cached; the OpenAI-compatible adapter reads `prompt_tokens_details.cached_tokens` where a server
-reports it. Groq reported a cached prefix on 14 of the 342 calls above (12 of them the screener's).
+reports it. Groq reported a cached prefix on 14 of the 342 calls above (12 of them the screener's, a seat retired in 0.12).
 Both figures are written to `usage.jsonl` per call:
 
 ```json
@@ -228,7 +228,7 @@ Undeclared, the field is left out of the request entirely, which matters: most s
 sent nothing. A level a vendor cannot take is mapped rather than refused, because a fallback chain
 that dies on a spelling is a chain that does not help on the day it is needed.
 
-Roles that read a table the system already computed (the screener and the reviewers) take `low`
+Roles that read a table the system already computed (the reviewers) take `low`
 when `[agents].effort` is declared and their own role table does not say otherwise; the structure
 lead keeps `[agents].effort`. With nothing declared, no role is sent an effort at all, for the
 reason above.

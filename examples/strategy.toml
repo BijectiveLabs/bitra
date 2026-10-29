@@ -284,18 +284,13 @@ kill_switch = "KILL"               # `tra kill` sets it: flatten and stop; `tra 
 
 # What this desk watches. Left out, every cycle is [run].instrument and nothing else. Declared, a
 # pass looks at each instrument for the price of one data pull - no tokens - applies the [trigger]
-# above to each of them, orders what survives by how far it has moved against its own spread, and
-# spends its cycles on the top of that order. The order is set by the system, because it decides where capital
-# gets to be considered at all.
-#
-# screener asks the market screener to narrow what the system admitted, from the same figures. It can
-# only take an instrument out; it cannot add one, change the order, or say anything about a
-# direction or a size.
+# above to each of them, orders what survives by the room its own paths expect over the hold
+# against its spread, then by how far it has moved, and spends its cycles on the top of that
+# order. The order is set by the system, because it decides where capital gets to be considered.
 # [universe]
 # instruments = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
 # max_per_cycle = 1                # how many of them one pass runs a full cycle on
 # max_intents_per_day = 6          # across every instrument, not per one
-# screener = false                 # true: the screener chooses and orders what the system admitted
 #
 # Discovery: the system adds the venue's most traded perpetuals each pass (needs [run].size_quote).
 # `tra universe` shows what it would find now.

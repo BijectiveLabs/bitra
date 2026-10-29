@@ -23,7 +23,7 @@ def screen_options_for(cycle_cfg: Any) -> dict[str, dict[str, Any]]:
     """What the pass pulls per instrument: data.toml's options, on the cycle's own bars.
 
     Read off data.toml's candle settings, the pass judged a 15-minute desk's market from four hours
-    of one-minute bars, and the screener and the analyst saw two regimes for one instrument.
+    of one-minute bars, and the pass and the lead saw two regimes for one instrument.
     """
     options = {kind: dict(opts) for kind, opts in cycle_cfg.data_options.items()}
     options.setdefault("ohlcv", {}).update(
@@ -47,9 +47,8 @@ def _sweep(
     takes the cheap look first - one data pull each, the same trigger applied per instrument - and
     spends its cycles on what that admitted.
     """
-    from trading_research_agents.agents.screen import asking, sweep
+    from trading_research_agents.agents.screen import sweep
     from trading_research_agents.execution.trigger import Trigger
-    from trading_research_agents.store.snapshot import cycle_id
 
     universe = cfg.universe
     if args.instrument or universe.idle:
@@ -59,10 +58,6 @@ def _sweep(
     # --now overrides the trigger for the cycle, so it overrides it for the pass that feeds the
     # cycle too: an operator who asked anyway should not be told nothing was worth looking at.
     trigger = Trigger() if args.now else cfg.trigger
-    screener = None
-    if universe.screener:
-        screener = asking(ask("market_screener"), mechanism=cycle_cfg.mechanism, at=cycle_id(now))
-
     open_now: set[str] = set()
     if cfg.execution.places_orders and not cfg.execution.adopt_open_position:
         reader = cycle_cfg.held
@@ -93,7 +88,6 @@ def _sweep(
             now=now,
             max_round_trips_per_day=cfg.targets.max_round_trips_per_day,
             options=screen_options,
-            ask=screener,
             desk=cfg.desk,
             held=cycle_cfg.held,
             watch=watch,
@@ -109,7 +103,7 @@ def _sweep(
     else:
         # A pass pulls one snapshot per instrument before any cycle starts; on a slow venue that
         # is seconds per name, and a blank terminal for that long reads as a hung process.
-        steps = [*universe.instruments, *(["market_screener"] if universe.screener else [])]
+        steps = list(universe.instruments)
         with _cycle_ui().CycleView(cycle_cfg.usage, steps, title="screen") as view:
             screened = look(view.on_step)
     screened.discovered = discovered
@@ -125,7 +119,6 @@ def _screen_report(screened: Any) -> tuple[dict[str, Any], list[str]]:
     from trading_research_agents.execution.universe import why_no_cycle
 
     payload = screened.record()
-    # Admitted by the system's own measures, before the screener narrowed them.
     admitted = sum(1 for c in screened.candidates if c.admitted)
     lines = [
         f"screen {screened.at}: {len(screened.candidates)} instrument(s) looked at, "
@@ -141,18 +134,15 @@ def _screen_report(screened: Any) -> tuple[dict[str, Any], list[str]]:
             f"  {candidate.instrument:<12} {state:<9} "
             f"moved {candidate.moved_bps if candidate.moved_bps is not None else '-'} bps, "
             f"spread {candidate.spread_bps if candidate.spread_bps is not None else '-'} bps, "
-            f"pressure {candidate.pressure if candidate.pressure is not None else '-'}"
+            f"pressure {candidate.pressure if candidate.pressure is not None else '-'}, "
+            f"room {candidate.room if candidate.room is not None else '-'}"
         )
     for refusal in screened.refusals[:8]:
         lines.append(f"  held {refusal}")
     if not screened.chosen:
         lines.append(
-            f"no cycle this pass: {why_no_cycle(payload.get('candidates') or [])}"
-            + (
-                "; only the screener was asked"
-                if screened.asked_screener
-                else "; no model was asked"
-            )
+            f"no cycle this pass: {why_no_cycle(payload.get('candidates') or [])}; "
+            "no model was asked"
         )
     return payload, lines
 

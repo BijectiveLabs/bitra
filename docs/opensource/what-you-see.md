@@ -24,9 +24,8 @@ steps through them live:
 
 ## 3. One cycle per instrument it takes
 
-The system found the candidates and measured them; the screener chose among them and cited each
-instrument's own figures; the system's own order is kept beside the choice. The instruments taken get a
-full cycle. The terminal shows the whole pipeline from the start and updates it as each step begins
+The system found the candidates, measured them and ordered them by the room their own paths
+expect over the spread; no model chooses. The instruments taken get a full cycle. The terminal shows the whole pipeline from the start and updates it as each step begins
 and ends. Steps that run at the same time spin at the same time, each with its own clock, and the
 line underneath says who is working right now:
 
@@ -34,7 +33,7 @@ line underneath says who is working right now:
 
 ## 4. The result
 
-When the cycle finishes, the table gives way to the pass over the universe: what the screener took,
+When the cycle finishes, the table gives way to the pass over the universe: what the system took,
 what waited and what was held, and why. Then the cycle itself: what the analyst proposed and from
 which figures, and every refusal with the number behind it. Here an ETH short in a ranging market
 stopped at its exits: with its own stop and target and the round trip, more than half of trades
@@ -87,7 +86,7 @@ of twice the cost and got 1.94 times. A refusal names the figure behind it, ever
 | What | Where | Notes |
 |---|---|---|
 | everything one cycle did | `runs/cycles/<id>/` | snapshot, briefs, answers, intent, `placed.json`, `cycle.json`, and `inputs.json.gz` with the raw inputs; `cycle.json` holds a sha256 of each file |
-| the pass over the universe | `runs/screens/` | every instrument measured, what the screener chose and why |
+| the pass over the universe | `runs/screens/` | every instrument measured, the order the system took them in and why |
 | every model call | `runs/cycles/usage.jsonl` | tokens, latency, price |
 | when the desk ran and what stopped it | `runs/cycles/scheduler.jsonl` | one line per start and stop |
 | every position closed, by time, by the venue or by the kill switch | `runs/cycles/positions.jsonl` | venue mode |

@@ -122,7 +122,8 @@ def agent_session(args: argparse.Namespace) -> int:
     for name, r in result.reports.items():
         lines.append(f"  {name}: {r.round_trips} round trips, net {r.net_bps_total} bps")
     if result.risk is not None:
-        lines.append(f"risk manager: {result.risk['decision']}: {result.risk['reason']}")
+        reasons = "; ".join(result.risk.get("reasons") or []) or "no rule fired"
+        lines.append(f"risk rule: {result.risk['decision']}: {reasons}")
     if result.audit is not None:
         lines.append(f"auditor: {result.audit['verdict']}: {result.audit['summary']}")
     for refusal in result.refusals[:5]:

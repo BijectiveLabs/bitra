@@ -113,7 +113,7 @@ cover the hold in at most 1000 bars are used, one minute for most holds.
 | `timeframe`, `complete` | the candles read, and whether they covered the whole hold |
 
 The first and the last bar can include prices from just before the entry and just after the exit,
-which is why the finest candles are used. The quant auditor and the risk manager read these figures;
+which is why the finest candles are used. The quant auditor and a session's risk rule read these figures;
 they no longer have to infer the shape of a trade from its result.
 
 ## Where it shows

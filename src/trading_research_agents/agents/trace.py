@@ -175,19 +175,6 @@ def _answer_line(role: str, response: Any) -> str:
         return "unparseable answer"
     if not isinstance(answer, dict):
         return "unparseable answer"
-    if role == "market_screener":
-        kept = [str(k.get("instrument")) for k in answer.get("kept", []) if isinstance(k, dict)]
-        excluded = answer.get("excluded", [])
-        return f"kept {kept}, excluded {len(excluded)}"
-    if role == "risk_manager":
-        return f"{answer.get('decision')}: {answer.get('reason', '')}"
-    if role == "executor":
-        parts = [
-            f"{a.get('instrument')} {a.get('fraction')}"
-            for a in answer.get("allocations", [])
-            if isinstance(a, dict)
-        ]
-        return f"size {answer.get('size')}; " + ", ".join(parts)
     if role == "auditor":
         return f"{answer.get('verdict')}: {answer.get('summary', '')}"
     return json.dumps(answer, sort_keys=True)[:160]

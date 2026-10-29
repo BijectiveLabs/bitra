@@ -297,3 +297,21 @@ def test_a_cycle_written_before_the_rename_still_gives_its_previous_reading(
         within_s=3600,
     )
     assert said is not None and said["target"] == "long" and said["confidence"] == 0.9
+
+
+def test_a_desk_that_still_configures_a_retired_seat_runs_and_is_told() -> None:
+    from test_config import AGENTS, agent_raw
+    from trading_research_agents.trading.config import parse_strategy_config
+    from trading_research_agents.trading.config_agents import renamed_in
+
+    raw = agent_raw(
+        agents={**AGENTS, "roles": {"market_screener": {"model": "m"}, "risk_manager": {}}},
+        universe={"instruments": ["BTCUSDT"], "screener": True},
+        audit={"risk_manager": True},
+    )
+    cfg = parse_strategy_config(raw)
+    assert cfg.agents is not None and "market_screener" not in cfg.agents.roles
+    notes = "\n".join(renamed_in(raw))
+    assert "[agents.roles.market_screener] does nothing since 0.12" in notes
+    assert "[universe].screener does nothing since 0.12" in notes
+    assert "[audit].risk_manager does nothing since 0.12" in notes

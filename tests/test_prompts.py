@@ -10,15 +10,12 @@ ROLES = ("bound", "memo", "critique", "registration")
 # The roles a cycle or a session asks. Every one of them ships a prompt, and the prompt is held to
 # the same rule as the doctrine: it names what to read and never promises an outcome.
 AGENTS = (
-    "market_screener",
-    # The screener answers the same schema over two different briefs - recorded trades in a
-    # session, one live snapshot per instrument in a cycle - so it carries a prompt for each.
-    "market_screener_live",
     "structure_lead",
-    "risk_manager",
-    "executor",
+    "structure_lead_live",
+    "flow_specialist",
     "auditor",
     "reviewer",
+    "reviewer_judge",
 )
 FORBIDDEN = ("win rate", "profit", "guaranteed", "alpha")
 

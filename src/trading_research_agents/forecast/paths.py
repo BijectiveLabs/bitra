@@ -337,3 +337,28 @@ def _reading(
         range_bps=float(np.mean(np.expm1(walk.high) - np.expm1(walk.low)) * BPS),
         seed=settings.seed,
     )
+
+
+def adverse_bps(
+    ohlc: Sequence[Sequence[float]],
+    *,
+    side: str,
+    horizon_bars: int,
+    quantile: float,
+    settings: PathSettings = DEFAULT,
+) -> float:
+    """How far against the side the paths reach inside the hold, at this quantile, in bps.
+
+    A stop placed here is reached by noise on `1 - quantile` of the paths: the range the paths
+    draw, wicks included, rather than an average true range scaled by the square root of time.
+    """
+    if side not in SIDES:
+        raise PathError(f"side {side!r} is not long or short")
+    if not 0 < quantile < 1:
+        raise PathError("the quantile is between 0 and 1")
+    if horizon_bars < 1:
+        raise PathError("a reading looks at least one bar ahead")
+    window = _window(ohlc, settings)
+    walk = _walk(window, settings, horizon_bars, (math.inf, -math.inf), stop_up=False)
+    against = -np.expm1(walk.low) if side == "long" else np.expm1(walk.high)
+    return float(np.quantile(np.maximum(against, 0.0), quantile) * BPS)

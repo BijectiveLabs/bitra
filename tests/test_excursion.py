@@ -184,7 +184,7 @@ def test_a_replay_records_the_excursion_of_every_round_trip(tmp_path: Path) -> N
     assert trade["bars_to_mfe"] >= 1 and trade["bars"] >= trade["bars_to_mfe"]
 
     # And the risk manager's brief carries the summary, so an agent sees the path, not just the net.
-    from trading_research_agents.agents.risk_manager.tools import excursions
+    from trading_research_agents.agents.run_measures import excursions
 
     summary = excursions(tmp_path / "out")
     assert summary["round_trips"] == 1 and summary["measured"] == 1

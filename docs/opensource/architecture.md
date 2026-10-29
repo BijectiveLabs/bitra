@@ -19,11 +19,15 @@ trading_research_agents/
   extras.py    how to add a missing optional dependency, worded once            depends on nothing
   ledger/      verdict vocabulary, axes, transferability, kill-ledger rows      depends on nothing
   envelope/    operator parameters: fees per channel, latency, venue access     depends on nothing
+  forecast/    the instrument's own candles drawn forward and read at a trade's
+               levels; a logistic fit, Platt and isotonic calibration, the
+               expected value of a side; numerics only                          depends on nothing
   data/        any trade data to Parquet, dataset audit, manifest; venue
                archive plugins in data/venues, column maps for the rest      -> ledger, envelope
   chain/       falsification chain, layers 0 to 5                               -> ledger, envelope, data
   execution/   cost identity, fills after latency, trade-through matching,
-               fill probability, markout, orders whose send went unanswered     -> ledger, envelope, data, chain
+               fill probability, markout, orders whose send went unanswered,
+               stops measured by ATR or by the paths                            -> ledger, envelope, data, chain, forecast
   risk/        the gate every new order passes: hard caps, the loss at the stop
                recomputed, switches, unanswered sends, today's trades and losses;
                signs the intent it approves                                     -> execution
@@ -39,11 +43,8 @@ trading_research_agents/
                (listed on the MCP page); shared by mcp and agents                -> everything above
   readings/    macro, on-chain and sentiment: the operator's series against the
                operator's thresholds, a declared state and a graded score; no model -> data
-  forecast/    the instrument's own candles drawn forward and read at a trade's
-               levels; a logistic fit, Platt and isotonic calibration, the
-               expected value of a side; numerics only                          depends on nothing
   agents/      the research roles at layers 0, 2 and 3; the session roles; the
-               cycle and its seats, reviewers and screener                      -> everything above, llm, store, surface, readings, forecast
+               cycle and its seats and reviewers; the session's written rules     -> everything above, llm, store, surface, readings
   mcp/         the gates as MCP tools                                            -> everything except agent
   market_data/ one-minute flow and book bars, derivatives and liquidations, dated
                text, gap marks; the verified archive in day files and hour parts,
@@ -241,29 +242,24 @@ the same archive before the new one replaces the old.
 ```mermaid
 sequenceDiagram
     participant C as system
-    participant S as screener
-    participant A as analyst (core)
-    participant R as risk manager
-    participant E as executor
+    participant A as structure lead (core)
     participant U as auditor
     C->>C: figures per dataset, cost floor, layer 1 when declared
-    C->>S: figures only
-    S-->>C: kept / excluded, a reason each
+    C->>C: screen by rule: kept / excluded, a reason each
     loop every closed bar, per kept instrument
         C->>A: compact bars, features
         A-->>C: target, confidence, horizon
         C->>C: controls admit or refuse, the venue fills, exits run
     end
-    C->>R: run reports, measured latency and costs
-    R-->>C: continue / tighten / demote / halt
-    C->>E: kept instruments, limits after
-    E-->>C: allocation fractions (nothing is sent)
+    C->>C: risk by rule: continue / demote / halt, on the measured figures
+    C->>C: allocation by rule: an equal share each (nothing is sent)
     C->>U: run reports, ledger, ladder, usage (a bounded tool loop)
     U-->>C: verdict, findings
 ```
 
-The macro and on-chain roles, when series are declared, are read between the screener and the
-runs: their briefs are measured by the system, read against the operator's thresholds by code, and
+The screen, the risk ruling and the allocation are written rules (`agents/session_rules.py`):
+the same answer every time, at no cost, each naming the figure that decided it. The macro and
+on-chain readings, when series are declared, are read between the screen and the runs: their briefs are measured by the system, read against the operator's thresholds by code, and
 ask no model.
 
 ## The chain

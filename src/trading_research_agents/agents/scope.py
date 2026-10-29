@@ -27,7 +27,6 @@ from typing import Any
 from trading_research_agents.agents import blind_confirmer, flow_specialist, structure_lead
 
 REVIEWER = "reviewer"
-SCREENER = "market_screener"
 TECH_AUDITOR = "tech_auditor"
 QUANT_AUDITOR = "quant_auditor"
 
@@ -47,7 +46,7 @@ NOT_YOURS: dict[str, tuple[str, ...]] = {
     ),
     "a size": ("position size", "size up", "size down", "leverage", "risk per trade"),
     "an exit": ("stop loss", "stop-loss", "take profit", "take-profit", "price target"),
-    "another role": ("risk manager", "the executor", "the reviewer", "the structure lead"),
+    "another role": ("the reviewer", "the structure lead", "the blind confirmer"),
 }
 # No role is told the desk's rules, so a rule one states is a rule it made up. Every role, the one
 # that decides included, is held to this: recorded beside the answer, which code never reads.
@@ -150,15 +149,6 @@ SCOPES: dict[str, Scope] = {
         answers=("target", "confidence", "reason", "figures_used"),
         decides="one voice in conviction, signed by the side it reads; never a level or a size",
         prose=("reason",),
-    ),
-    SCREENER: Scope(
-        role=SCREENER,
-        reads=("as_of", "basis", "mechanism", "candidates"),
-        answers=("kept", "excluded", "picks"),
-        decides=(
-            "which of the instruments code found and admitted are worth a cycle, and in what "
-            "order; it cannot add one, or say anything about a direction or a size"
-        ),
     ),
     TECH_AUDITOR: Scope(
         role=TECH_AUDITOR,

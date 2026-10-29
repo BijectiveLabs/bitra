@@ -46,9 +46,8 @@ def run_session(cfg: SessionConfig) -> SessionResult:
         json.dumps([f.record() for f in figures], indent=2, sort_keys=True) + "\n", "utf-8"
     )
     tell("figures", "done", f"{len(figures)} measured")
-    tell("market_screener", "running")
     kept, excluded = s.screen(figures)
-    tell("market_screener", "done", f"{len(kept)} kept, {len(excluded)} excluded")
+    tell("screen", "done", f"{len(kept)} kept, {len(excluded)} excluded, by rule")
     reference = next(iter(cfg.datasets.values()))
     macro = s.context(MACRO, cfg.macro_series, reference)
     tell(MACRO, *_read_by_code(macro))
@@ -65,13 +64,10 @@ def run_session(cfg: SessionConfig) -> SessionResult:
         reports[name] = s.analyse(name, Path(cfg.datasets[name]), limits)
         r = reports[name]
         tell(f"run:{name}", "done", f"{r.round_trips} round trips, net {r.net_bps_total} bps")
-    tell("risk_manager", "running" if reports else "skipped")
     risk, limits_after = s.risk(reports, limits, ladder) if reports else (None, limits)
-    if reports:
-        tell("risk_manager", "done", "refused" if risk is None else str(risk.decision))
-    tell("executor", "running")
+    tell("risk", "done" if reports else "skipped", "" if risk is None else risk.decision)
     allocation = s.allocate(kept, limits_after)
-    tell("executor", "done", f"{len(allocation)} allocations")
+    tell("allocation", "done", f"{len(allocation)} equal shares")
     tell("auditor", "running")
     audit = s.audit(reports, risk, allocation, ladder)
     tell("auditor", "done", "refused" if audit is None else str(audit.get("verdict")))
@@ -83,7 +79,7 @@ def run_session(cfg: SessionConfig) -> SessionResult:
         macro=macro,
         onchain=onchain,
         reports=reports,
-        risk=None if risk is None else risk.__dict__,
+        risk=None if risk is None else risk.record(),
         limits_after=limits_after,
         allocation=allocation,
         audit=audit,

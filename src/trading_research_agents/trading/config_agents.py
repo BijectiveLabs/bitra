@@ -111,10 +111,7 @@ class AgentSettings:
 
 
 # Roles whose brief is a table of figures code already computed.
-TABLE_READERS = (
-    "market_screener",
-    "reviewer",
-)
+TABLE_READERS = ("reviewer",)
 
 
 # The readings: code reads the operator's series against the operator's thresholds. The `readings`
@@ -142,6 +139,13 @@ RENAMED_SEATS = {
     "event_analyst": "outcome_assessor",
     "validator": "reviewer",
 }
+# Seats retired in 0.12 because a written rule does their job, with what does it now. A desk that
+# still configures one runs unchanged; `tra check` names the rule.
+RETIRED_SEATS = {
+    "market_screener": "code orders the universe by the room its paths expect over the spread",
+    "risk_manager": "the risk gate and the controls hold the risk in code",
+    "executor": "a research session splits its allocation by an equal-share rule",
+}
 # Keys renamed with the seat they configure. Read under either name, never both.
 RENAMED_KEYS = {
     "validators": "reviewers",
@@ -164,12 +168,9 @@ LOW_EFFORT = "low"
 
 
 KNOWN_ROLES = (
-    "market_screener",
     "structure_lead",
     "blind_confirmer",
     "flow_specialist",
-    "risk_manager",
-    "executor",
     "auditor",
     # One stance is one call, so a reviewer may run on its own model like any other role.
     "reviewer",
@@ -267,6 +268,12 @@ def renamed_in(raw: Mapping[str, Any]) -> tuple[str, ...]:
         for role in roles
         if role in RENAMED_SEATS
     )
+    notes.extend(
+        f"[agents.roles.{role}] does nothing since 0.12: {RETIRED_SEATS[role]}"
+        for role in roles
+        if role in RETIRED_SEATS
+    )
+    notes.extend(_retired_flags(raw))
     named: list[tuple[str, Any]] = [
         ("[agents].readings", agents.get("readings") or agents.get("analysts")),
         ("[agents].team", agents.get("team")),
@@ -283,6 +290,19 @@ def renamed_in(raw: Mapping[str, Any]) -> tuple[str, ...]:
         if key in RENAMED_KEYS
     )
     return tuple(notes)
+
+
+def _retired_flags(raw: Mapping[str, Any]) -> list[str]:
+    said = []
+    if (raw.get("universe") or {}).get("screener"):
+        said.append(
+            f"[universe].screener does nothing since 0.12: {RETIRED_SEATS['market_screener']}"
+        )
+    if "risk_manager" in (raw.get("audit") or {}):
+        said.append(
+            f"[audit].risk_manager does nothing since 0.12: {RETIRED_SEATS['risk_manager']}"
+        )
+    return said
 
 
 def _renamed_names(where: str, names: Any) -> list[str]:
@@ -303,7 +323,7 @@ def _roles(raw: Any) -> dict[str, dict[str, Any]]:
         raise ConfigError("[agents.roles] holds one table per role")
     out: dict[str, dict[str, Any]] = {}
     for named, table in raw.items():
-        if named in RETIRED_READERS:
+        if named in RETIRED_READERS or named in RETIRED_SEATS:
             # The reading asks no model, so the table configures nothing; `tra check` says so.
             continue
         role = RENAMED_SEATS.get(named, named)

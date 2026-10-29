@@ -136,22 +136,23 @@ def test_views_render_the_figures(recorded: Console, tmp_path: Path) -> None:
 
     result = Result(
         reports={"AAAUSDT": report},
-        risk={"decision": "tighten", "reason": "one loss"},
+        risk={"decision": "demote", "reasons": ["AAAUSDT: latency 4.0x the declared one"]},
         allocation=[{"instrument": "AAAUSDT", "fraction": 0.5}],
         audit={"verdict": "sound", "summary": "fine"},
-        refusals=["executor: x"],
+        refusals=["risk: x"],
     )
     tui.show(tui_desk.session_report(result, Usage(), "runs/s"))
     text = recorded.export_text()
-    assert "kept" in text and "excluded" in text and "tighten: one loss" in text
-    assert "sound: fine" in text and "1200 (cost 0.01)" in text and "executor: x" in text
+    assert "kept" in text and "excluded" in text and "demote: AAAUSDT: latency 4.0x" in text
+    assert "sound: fine" in text and "1200 (cost 0.01)" in text and "risk: x" in text
 
     with tui_desk.SessionView(Usage()) as view:
-        view.on_step("market_screener", "done", "1 kept")
+        view.on_step("screen", "done", "1 kept, 1 excluded, by rule")
         view.on_step("run:AAAUSDT", "running", "")
-        assert view.order.index("run:AAAUSDT") < view.order.index("risk_manager")
+        assert view.order.index("screen") < view.order.index("run:AAAUSDT")
+        assert view.order.index("run:AAAUSDT") < view.order.index("risk")
     text = recorded.export_text()
-    assert "market_screener" in text and "run:AAAUSDT" in text
+    assert "screen" in text and "run:AAAUSDT" in text
 
     with tui_desk.RunView("runs/x") as live:
         live.observe(report, None)
