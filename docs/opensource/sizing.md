@@ -1,5 +1,5 @@
 ---
-description: "How a desk's own finished trades lower its risk per trade: the Kelly fraction from the record, a seeded Monte Carlo of the drawdown ahead, and the excursion of every trade, all computed by code and repeatable to the digit."
+description: "How a desk's own finished trades lower its risk per trade: the Kelly fraction from the record, a seeded Monte Carlo of the drawdown ahead, and the excursion of every trade, all computed by the system and repeatable to the digit."
 ---
 
 # Sizing from the record

@@ -663,11 +663,11 @@ def test_the_readings_are_read_by_code_and_ask_no_model(tmp_path: Path, envelope
     assert result.context["macro"]["declared_state"]["declared"] == "bearish"
     assert result.context["onchain"]["declared_state"]["declared"] == "undeclared"
     assert {said["read_by"] for said in result.context.values()} == {"code"}
-    assert ("macro", "done", "read by code: risk-off") in steps
+    assert ("macro", "done", "read by the system: risk-off") in steps
     from trading_research_agents.cli.cycle_report import _cycle_report
 
     _, lines = _cycle_report(result, usage, "sandbox")
-    assert "macro      read by code: bearish (risk-off)" in lines
+    assert "macro      read by the system: bearish (risk-off)" in lines
     assert not any("None" in line for line in lines if line.startswith("macro"))
 
     where = Path(str(result.path))

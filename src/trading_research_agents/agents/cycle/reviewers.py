@@ -218,7 +218,7 @@ def _judge(
             "verdict": verdict,
             "claims": [],
             "discarded": [],
-            "reason": f"{decided}; judged by code, neutral was not asked",
+            "reason": f"{decided}; judged by the system, neutral was not asked",
             "judged": "code",
         }
         announce(cfg.watch, name, DONE, f"{verdict}: {decided}")

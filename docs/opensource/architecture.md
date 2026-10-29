@@ -148,7 +148,7 @@ not unify: the historical trade archives in `data/venues/`, and the account chec
 ## The market data plane
 
 Everything a decision or a replay reads about a market comes through one plane, and the plane is
-code: no model touches it. The same bar builder makes a minute whether it is fed by the venue's
+the system's: no model touches it. The same bar builder makes a minute whether it is fed by the venue's
 daily archive or by its live stream, so a replay and a live decision read the same object.
 
 ```mermaid
@@ -218,18 +218,18 @@ shared store; nothing in the package needs one.
 flowchart LR
     subgraph now["the cycle today"]
         direction TB
-        f1["features and briefs, by code"] --> r1["readings, by code"]
-        r1 --> m1["deciding team<br/>lead, blind confirmer, flow; code combines"]
+        f1["features and briefs, by the system"] --> r1["readings, by the system"]
+        r1 --> m1["deciding team<br/>lead, blind confirmer, flow; the system combines"]
         m1 --> g1["gates: cost, exits,<br/>confluence, conviction"]
     end
     subgraph next["the decision being built: in the arena today, live in 0.13"]
         direction TB
-        f2["features, by code"] --> fc["forecast and calibrator<br/>a probability fitted on outcomes"]
+        f2["features, by the system"] --> fc["forecast and calibrator<br/>a probability fitted on outcomes"]
         j2["typed judge<br/>text events today,<br/>claims checked from 0.13"] -.-> fc
         s2["reasoning model<br/>woken only when worth it"] -.-> fc
         fc --> ev["one expected-value decision<br/>p x take - (1 - p) x stop - cost"]
     end
-    g1 --> gate["risk gate, by code"]
+    g1 --> gate["risk gate, by the system"]
     ev --> gate
     gate --> ex["execution: one order, exits attached"]
 ```
@@ -259,7 +259,7 @@ sequenceDiagram
 
 The screen, the risk ruling and the allocation are written rules (`agents/session_rules.py`):
 the same answer every time, at no cost, each naming the figure that decided it. The macro and
-on-chain readings, when series are declared, are read between the screen and the runs: their briefs are measured by the system, read against the operator's thresholds by code, and
+on-chain readings, when series are declared, are read between the screen and the runs: their briefs are measured by the system, read against the operator's thresholds by the system, and
 ask no model.
 
 ## The chain

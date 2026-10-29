@@ -98,7 +98,7 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
         good.extend(_shelf_notes(args, shelf, bad))
         readings = (cfg.agents.readings if cfg.agents is not None else ()) or shelf.readings
         roster = ("structure_lead", *readings)
-        read = f"{', '.join(readings)} read by code" if readings else "no reading declared"
+        read = f"{', '.join(readings)} read by the system" if readings else "no reading declared"
         good.append(f"roster: structure_lead asks a model; {read}; `tra run` uses these")
         ready, missing = _gate_lines(
             cfg,

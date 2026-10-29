@@ -148,7 +148,7 @@ What the same order path does when the market is spot:
 
 And in the cycle, before any order:
 
-- **A short is refused by code** before it is priced, whatever the analyst proposed.
+- **A short is refused by the system** before it is priced, whatever the analyst proposed.
 - **Funding and open interest are not asked for.** They belong to contracts; on spot they would be
   refused every cycle and wake the technical auditor for nothing.
 - **The fees are the spot pair's.** A spot pair usually costs more than the perpetual on the same
@@ -235,7 +235,7 @@ different role:
   when it resolves, the book, the recent prices and your dated notes, and answers with the
   probability that the outcome wins. With nothing beyond the price to go on, the answer is the
   mid with a low confidence, and the desk does nothing.
-- **Code prices it to resolution.** Bought at the ask with a fee per share, the share is worth
+- **The system prices it to resolution.** Bought at the ask with a fee per share, the share is worth
   `probability - ask - fee`; the desk buys only when that, as a share of the ask, clears the margin.
   A probability that cites nothing from its brief is refused.
 - **The stake is the stop.** A share cannot lose more than it cost, so the size is cut until its

@@ -6,7 +6,7 @@ description: Where the macro, on-chain and sentiment readings' figures come from
 
 The structure lead reads the venue: candles, the book, funding and open interest, pulled through
 `data.toml` on every cycle with their age attached. The macro, on-chain and sentiment readings are
-code over something else: dated series you declare under `sources/`. This page is about those, and about how
+the system's arithmetic over something else: dated series you declare under `sources/`. This page is about those, and about how
 you can tell, on any cycle, that they read a real figure and how old it was.
 
 ## The short version

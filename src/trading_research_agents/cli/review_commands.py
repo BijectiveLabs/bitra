@@ -268,8 +268,8 @@ def _hindsight_lines(payload: dict[str, Any]) -> list[str]:
     levels = payload.get("levels") or {}
     if levels.get("applied", {}).get("decisions"):
         lines.append(
-            f"  levels: code's {levels['applied']['mean_net_bps']} bps against the analyst's own "
-            f"{levels['analyst_own']['mean_net_bps']}; {levels['verdict']}"
+            f"  levels: the system's {levels['applied']['mean_net_bps']} bps against the analyst's "
+            f"own {levels['analyst_own']['mean_net_bps']}; {levels['verdict']}"
         )
     for name, said in (payload.get("calibration") or {}).items():
         if not said.get("decisions"):

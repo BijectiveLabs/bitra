@@ -36,7 +36,7 @@ def tech_brief(cycles: Cycles, *, usage: Path | None = None) -> dict[str, Any]:
     rows = read_usage(usage) if usage is not None else ()
     return {
         "basis": (
-            "counts and medians computed by code over the cycle records this project wrote; "
+            "counts and medians computed by the system over the cycle records this project wrote; "
             "seconds are wall clock per role, tokens are what the models were billed for, and a "
             "refusal is one gate saying no in one cycle"
         ),

@@ -23,7 +23,7 @@ It is an early release, so expect settings to change between versions. What work
 today: linear perpetuals, spot pairs (stock perpetuals and tokenized stocks among them) and
 prediction market outcomes through one order path, a universe of perpetuals found and measured by
 the system and ordered by the room its own paths expect, the full autonomous cycle on live data, a structure lead that proposes, three readings of
-your own series computed by code, up to three reviewers, stops and
+your own series computed by the system, up to three reviewers, stops and
 targets the analyst names inside bounds you set, the gates that decide, sizing from your own rules,
 real orders on a venue's practice environment behind a mandate you sign and a signed risk gate,
 and two auditors that read the records.
@@ -40,7 +40,7 @@ The command is `tra`. Start with the [quick start](/opensource/quick-start).
 | A model "decides" to ignore your settings | Your declared thresholds decide. A model's opinion is recorded beside them, never instead of them. |
 | Something went wrong and there is no trace | Each cycle keeps its snapshot, briefs, answers, the intent and what the venue said. Nothing is rewritten. |
 | A crash leaves a position with no stop | The stop and take profit go to the venue with the entry, or right after the fill where the venue takes them no other way, so they survive this process dying. |
-| Text from a feed tells the model what to do | The model that proposes a direction reads numbers code computed; outside text reaches no model at all, and no model can send an order or reach a key. |
+| Text from a feed tells the model what to do | The model that proposes a direction reads numbers the system computed; outside text reaches no model at all, and no model can send an order or reach a key. |
 
 None of these is hypothetical. [Why it is built this way](/opensource/why) lists the documented
 failures behind each one, with their sources.
@@ -56,7 +56,7 @@ flowchart TD
     pick -- "none taken" --> held
     pick -- "taken" --> briefs
     briefs["the system writes the briefs<br/>each role sees only the figures its job needs"] --> readers
-    readers["readings, by code, no model<br/>macro, on-chain, sentiment against your lines"] --> tech
+    readers["readings, by the system, no model<br/>macro, on-chain, sentiment against your lines"] --> tech
     tech["structure lead, alone or with its team<br/>a blind confirmer that must agree, a flow specialist<br/>a direction, a confidence, a horizon"] --> price["the system prices the round trip<br/>fee, spread, impact, funding, slippage"]
     price --> exits{"the stop and the target<br/>the analyst's levels, held inside your bounds<br/>does the trade break even at half its kind winning?"}
     exits -- "no" --> refused
@@ -78,9 +78,9 @@ flowchart TD
 | structure lead | candles, spread, funding, book imbalance, open interest change, and the regime on its timeframe and the higher ones you declare | a direction, a setup from a fixed list, a confidence, a horizon, and where its stop and target sit | size the trade, place a level outside your `[exit]` bounds, run a trend setup in a range, or fade a market that is not a measured range |
 | blind confirmer (optional) | the structure lead's own brief, blind to its answer, ideally on another model family | the same schema, independently | trade alone: the two reads must name the same side, and the lower confidence counts |
 | flow specialist (optional) | the book, the spread, funding and open interest, which then leave the analyst's brief | a side and a confidence, with the figures it rests on | name a level or a size; it is one voice in conviction |
-| macro, on-chain and sentiment readings (code, not agents) | dated rates and levels, chain and derivatives figures, scores and notes you curate | a declared state and a graded score: each series against the lines you drew | ask a model, or propose a direction |
+| macro, on-chain and sentiment readings (the system, not agents) | dated rates and levels, chain and derivatives figures, scores and notes you curate | a declared state and a graded score: each series against the lines you drew | ask a model, or propose a direction |
 | reviewers: pro and contra | the proposal and the figures behind it, each without the other's case | the strongest case for or against, as cited claims | see the other side's case, or cite a figure it wasn't given |
-| reviewer: neutral, as judge (Jev when `[judge]` is declared) | the same, and both cases once code has checked every claim | support, oppose or abstain, the one verdict that counts; from the typed judge, a probability for each | see the advocates' verdicts, or count claims instead of weighing them |
+| reviewer: neutral, as judge (Jev when `[judge]` is declared) | the same, and both cases once the system has checked every claim | support, oppose or abstain, the one verdict that counts; from the typed judge, a probability for each | see the advocates' verdicts, or count claims instead of weighing them |
 | technology and quant auditors | the cycles this desk recorded | findings and proposed changes | change anything |
 
 Everything after the models answer is arithmetic over numbers you declared. No model can place, cancel

@@ -121,7 +121,7 @@ def _ask_lead(p: Pass) -> bool:
     members = tasks(p)
     for name, brief in p.reading_briefs.items():
         write_json(p.where.brief(name), brief)
-        announce(cfg.watch, name, DONE, f"read by code: {states[name]['declared']}")
+        announce(cfg.watch, name, DONE, f"read by the system: {states[name]['declared']}")
     fan = run_tasks([task, *members], max_workers=cfg.max_workers)
     result.fan = fan
     p.answers = dict(fan.answers)

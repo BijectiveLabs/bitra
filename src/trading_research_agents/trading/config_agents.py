@@ -143,7 +143,7 @@ RENAMED_SEATS = {
 # still configures one runs unchanged; `tra check` names the rule.
 RETIRED_SEATS = {
     "market_screener": "code orders the universe by the room its paths expect over the spread",
-    "risk_manager": "the risk gate and the controls hold the risk in code",
+    "risk_manager": "the risk gate and the controls hold the risk in the system",
     "executor": "a research session splits its allocation by an equal-share rule",
 }
 # Keys renamed with the seat they configure. Read under either name, never both.

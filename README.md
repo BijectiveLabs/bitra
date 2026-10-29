@@ -50,7 +50,7 @@ It's an early release, so expect settings to change between versions. What works
 today: linear perpetuals, spot pairs (stock perpetuals and tokenized stocks among them) and
 prediction market outcomes through one order path, a universe of perpetuals found and measured by
 the system and ordered by the room its own paths expect, the full autonomous cycle on live data, a structure lead that proposes, three readings of
-your own series computed by code, up to three reviewers, stops and
+your own series computed by the system, up to three reviewers, stops and
 targets the lead names inside bounds you set, the gates that decide, sizing from your own rules,
 real orders on a venue's practice environment behind a mandate you sign and a signed risk gate,
 and two auditors that read the records. Under it, a market data
@@ -87,7 +87,7 @@ beaten, net of the desk's own costs.
 | A model "decides" to ignore your settings | Your declared thresholds decide. A model's opinion is recorded beside them, never instead of them. |
 | Something went wrong and there is no trace | Each cycle keeps its snapshot, briefs, answers, the intent and what the venue said. Nothing is rewritten. |
 | A crash leaves a position with no stop | The stop and take profit go to the venue with the entry, or right after the fill where the venue takes them no other way, so they survive this process dying. |
-| Text from a feed tells the model what to do | The model that proposes a direction reads numbers code computed; outside text reaches no model at all, and no model can send an order or reach a key. |
+| Text from a feed tells the model what to do | The model that proposes a direction reads numbers the system computed; outside text reaches no model at all, and no model can send an order or reach a key. |
 | A strategy looks good on a lucky sample | The arena replays it over the recorded market beside buy-and-hold, momentum, its own fade and a seeded random null, net of costs, and says "sample too small" until the sample is not. |
 
 None of these is hypothetical. [Why it is built this way](https://docs.bijectivelabs.dev/opensource/why)
@@ -95,15 +95,15 @@ lists the documented failures behind each one, with their sources.
 
 ## How it is built
 
-Three kinds of work, kept apart because they fail differently. Code is in control; Jev, TypeSafe's
-typed judge, is the fast system that perceives and verifies; the reasoning seats deliberate only
-inside what code computed, and their answers are checked before anything counts.
+Three kinds of work, kept apart because they fail differently. The system is in control; Jev, TypeSafe's
+typed judge, is the fast System One model that perceives and verifies; the reasoning seats deliberate only
+inside what the system computed, and their answers are checked before anything counts.
 
 | | Does | Never does | Today |
 |---|---|---|---|
-| **Code** | records the market, computes every figure, reads your own series against your lines (the macro, on-chain and sentiment readings), prices the round trip, applies your limits, sizes, sends one order with its exits, settles every replayed idea | guess, or carry a stale value forward as current | everything around the model call |
-| **A reasoning model** | reads figures code computed and proposes a direction, a setup and its levels, citing the figures it used | compute a number, size a trade, touch an order or a key, loosen a limit | the structure lead, with a blind confirmer and a flow specialist when you declare the team; reviewers when you declare them |
-| **Jev, the typed judge** | turns dated text into typed events with probabilities, screens text for instructions to a machine, checks each structure reason against the regime code measured, and from 0.13 checks every claim against its brief | decide a direction from numbers, size, or reach an order | Jev through the TypeSafe adapter, behind a vendor-neutral port (`[judge]`): the archived headlines into text features, and the deciding team's reasons checked before a trade |
+| **The system** | records the market, computes every figure, reads your own series against your lines (the macro, on-chain and sentiment readings), prices the round trip, applies your limits, sizes, sends one order with its exits, settles every replayed idea | guess, or carry a stale value forward as current | everything around the model call |
+| **A reasoning model** | reads figures the system computed and proposes a direction, a setup and its levels, citing the figures it used | compute a number, size a trade, touch an order or a key, loosen a limit | the structure lead, with a blind confirmer and a flow specialist when you declare the team; reviewers when you declare them |
+| **Jev, the typed judge** | turns dated text into typed events with probabilities, screens text for instructions to a machine, checks each structure reason against the regime the system measured, and from 0.13 checks every claim against its brief | decide a direction from numbers, size, or reach an order | Jev through the TypeSafe adapter, behind a vendor-neutral port (`[judge]`): the archived headlines into text features, and the deciding team's reasons checked before a trade |
 
 ```mermaid
 flowchart LR
@@ -113,13 +113,13 @@ flowchart LR
         rest["REST history<br/>funding, open interest, mark, index, long/short"]
         archives["daily trade archives"]
     end
-    subgraph plane["market data plane: code"]
+    subgraph plane["market data plane: the system"]
         direction TB
         record["tra record<br/>one bar builder, hour parts, gap marks"]
         bars["tra data bars<br/>the same builder over the archive"]
         store[("verified archive<br/>Parquet, sha256 per file<br/>flow, book, derivatives, text")]
     end
-    subgraph decide["decision: code around the deciding team"]
+    subgraph decide["decision: the system around the deciding team"]
         direction TB
         judge["Jev, the typed judge<br/>headlines into typed events<br/>reasons checked against the regime"]
         features["features<br/>41 figures known at the bar's close"]
@@ -128,7 +128,7 @@ flowchart LR
         gates["gates<br/>cost, exits, paths, confluence, conviction"]
     end
     shelf[("sources/<br/>dated series you declare")]
-    subgraph act["risk and execution: code"]
+    subgraph act["risk and execution: the system"]
         direction TB
         risk["risk gate, signed<br/>caps, loss at the stop, switches,<br/>daily loss, drawdown"]
         order["one order<br/>stop and take profit attached"]
@@ -306,8 +306,8 @@ cycle 2026-09-29T02-59-16Z BTCUSDT: 5.344s of agents, 15.042s of reviewers
   funding        ccxt:bybit         age 4.267s
   ohlcv          ccxt:bybit         age 32.746s
   orderbook      ccxt:bybit         age 7.544s
-macro      read by code: bullish (risk-on)
-sentiment  read by code: bullish (positive)
+macro      read by the system: bullish (risk-on)
+sentiment  read by the system: bullish (positive)
 lead:      long on range_reversion at 0.65 over 5 bars: the close is stretched low in the window
 read: zscore=-0.587, vwap_gap_bps=-3.99, ret_1_bps=1.59
 reviewer contra    oppose on 2 cited figure(s)
@@ -333,7 +333,7 @@ flowchart TD
     pick -- "none taken" --> held
     pick -- "taken" --> briefs
     briefs["the system writes the briefs<br/>each role sees only the figures its job needs"] --> readers
-    readers["readings, by code, no model<br/>macro, on-chain, sentiment against your lines"] --> tech
+    readers["readings, by the system, no model<br/>macro, on-chain, sentiment against your lines"] --> tech
     tech["structure lead, alone or with its team<br/>a blind confirmer that must agree, a flow specialist<br/>a direction, a confidence, a horizon"] --> price["the system prices the round trip<br/>fee, spread, impact, funding, slippage"]
     price --> exits{"the stop and the target<br/>the analyst's levels, held inside your bounds<br/>does the trade break even at half its kind winning?"}
     exits -- "no" --> refused
@@ -355,12 +355,12 @@ Who does what:
 | structure lead | candles, spread, funding, book imbalance, open interest change, and the regime on its timeframe and the higher ones you declare | a direction, a setup from a fixed list, a confidence, a horizon, and where its stop and target sit | size the trade, place a level outside your `[exit]` bounds, run a trend setup in a range, or fade a market that is not a measured range |
 | blind confirmer (optional) | the structure lead's own brief, blind to its answer, ideally on another model family | the same schema, independently | trade alone: the two reads must name the same side, and the lower confidence counts |
 | flow specialist (optional) | the book, the spread, funding and open interest, which then leave the analyst's brief | a side and a confidence, with the figures it rests on | name a level or a size; it is one voice in conviction |
-| macro, on-chain and sentiment readings (code, not agents) | dated rates and levels, chain and derivatives figures, scores and notes you curate | a declared state and a graded score: each series against the lines you drew | ask a model, or propose a direction |
+| macro, on-chain and sentiment readings (the system, not agents) | dated rates and levels, chain and derivatives figures, scores and notes you curate | a declared state and a graded score: each series against the lines you drew | ask a model, or propose a direction |
 | reviewers: pro and contra | the proposal and the figures behind it, each without the other's case | the strongest case for or against, as cited claims | see the other side's case, or cite a figure it wasn't given |
-| reviewer: neutral, as judge (Jev when `[judge]` is declared) | the same, and both cases once code has checked every claim | support, oppose or abstain, the one verdict that counts; from the typed judge, a probability for each | see the advocates' verdicts, or count claims instead of weighing them |
+| reviewer: neutral, as judge (Jev when `[judge]` is declared) | the same, and both cases once the system has checked every claim | support, oppose or abstain, the one verdict that counts; from the typed judge, a probability for each | see the advocates' verdicts, or count claims instead of weighing them |
 | technology and quant auditors | the cycles this desk recorded | findings and proposed changes | change anything |
 
-The macro, on-chain and sentiment readings are code over dated series you declare under
+The macro, on-chain and sentiment readings are the system's arithmetic over dated series you declare under
 `sources/`, and ask no model: until 0.11 each was an analyst whose model labelled the same figures,
 no decision ever rested on that label, and the calls were retired. Each series
 is either a file you keep or a feed the desk refreshes itself (FRED, the Crypto Fear & Greed Index,

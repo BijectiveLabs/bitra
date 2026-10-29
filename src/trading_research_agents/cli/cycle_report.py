@@ -155,7 +155,7 @@ def _voice_lines(result: Any) -> list[str]:
         word = declared.get("declared", "undeclared")
         spoken = declared.get("in_its_words")
         state = f"{word} ({spoken})" if spoken else word
-        lines.append(f"{name:<10} read by code: {state}")
+        lines.append(f"{name:<10} read by the system: {state}")
     lines.extend(_team_lines(result.context))
     if result.analyst is not None:
         lines.append(

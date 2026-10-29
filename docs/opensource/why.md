@@ -25,7 +25,7 @@ $12,231 and DeepSeek at $10,489.
 
 **What the software does.** A model proposes a direction, a setup and the levels that bound the
 idea. It does not size the trade, set the leverage, decide whether the trade is worth its cost or
-send the order: code does, from limits the operator declared, and every gate that refuses records
+send the order: the system does, from limits the operator declared, and every gate that refuses records
 why. Whether the model's side is any good is measured, not assumed: `tra hindsight` replays every
 decision against its exact reverse. Desks start on a demo or testnet API, and real capital needs a
 signed mandate and evidence on the ladder.
@@ -54,11 +54,11 @@ tax and rules for debt and student loans that do not exist. Earlier, in November
 FinanceBench found that GPT-4-Turbo used with a retrieval system answered 81% of its questions about
 public companies' filings incorrectly or refused to answer them.
 
-**What the software does.** No model calculates. Code pulls the data, computes every figure the
+**What the software does.** No model calculates. The system pulls the data, computes every figure the
 models read (returns, volatility, market structure, the regime, the cost of a trade) and records it.
-A model answers in a closed schema and cites the figures it relied on by name and value; code checks
+A model answers in a closed schema and cites the figures it relied on by name and value; the system checks
 each citation against the brief and discards the ones that do not hold, and a deciding answer with
-nothing left is refused. Sizes, stops, costs and limits are arithmetic in code, the same every time.
+nothing left is refused. Sizes, stops, costs and limits are arithmetic in the system, the same every time.
 
 ## Instructions hidden in data
 
@@ -70,10 +70,10 @@ planted in an agent's stored history could lead it to send funds to an attacker,
 defences gave only limited protection once that stored context was corrupted. OWASP ranks prompt
 injection first among the risks of LLM applications (LLM01:2025).
 
-**What the software does.** The role that proposes a direction reads numbers computed by code, not
-text from outside. Headlines and notes reach no model at all: the readings that hold them are code
-over the operator's thresholds, and every prompt says that text inside a brief is
-material to read, never an instruction to follow. There is no memory a model writes for itself: what a role sees is built by code for each
+**What the software does.** The role that proposes a direction reads numbers computed by the system, not
+text from outside. Headlines and notes reach no model at all: the readings that hold them are the
+system's arithmetic over the operator's thresholds, and every prompt says that text inside a brief is
+material to read, never an instruction to follow. There is no memory a model writes for itself: what a role sees is built by the system for each
 call and recorded. And whatever a model says, it cannot send, cancel or change an order, or reach a
 key.
 
@@ -117,14 +117,14 @@ device per subscription was a security policy; there was no such policy, and use
 the company corrected it.
 
 **What the software does.** No limit here is a sentence a model is asked to respect. Every one is
-code that runs after the model has answered, and no model is in that path.
+held by the system after the model has answered, and no model is in that path.
 
 - The rules are not in the deciding role's brief. The structure lead is not told what a trade
   costs, what it has to clear, the size or the limits, so there is nothing to argue with or around.
-- An answer is a closed schema. Code reads its fields, a value outside its list is refused, and no
+- An answer is a closed schema. The system reads its fields, a value outside its list is refused, and no
   sentence a model writes is read to decide anything.
 - No model touches a limit. Until 0.12 a risk manager seat could tighten one between cycles; it
-  was retired for the signed risk gate and the controls, which are code, and for a session's
+  was retired for the signed risk gate and the controls, which are the system's, and for a session's
   written risk rule, which can only demote the ladder or arm the kill switch.
 - No model can change the configuration, send an order or reach a key. An auditor's proposed change
   has to name a setting the configuration accepts, and the loader refuses a setting it does not know
@@ -171,7 +171,7 @@ mentions:
 | A demo API served an order book 3.2 hours old, 35 bps from where its own trades printed | orders are refused against a book older than 30 seconds |
 | A library reported a fee the venue charged as a rebate | fees are read as the venue charged them |
 | A venue's leverage call answered "success" while the setting stayed where it was | leverage and margin mode are confirmed by reading them back |
-| The structure lead could see the other analysts' conclusions | the structure lead reads only its own market; code weighs the readings once |
+| The structure lead could see the other analysts' conclusions | the structure lead reads only its own market; the system weighs the readings once |
 | An auditor could propose a change to a setting that does not exist, as long as its table did | a proposed setting has to be one its table accepts |
 
 The details are on [Venues](/opensource/venues), [Agents](/opensource/agents) and

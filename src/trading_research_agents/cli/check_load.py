@@ -33,8 +33,8 @@ def _load_notes(a: Any, roster: tuple[str, ...]) -> list[str]:
     ]
     if reading:
         said.append(
-            f"readers: {', '.join(reading)} are read by code against your thresholds and ask no "
-            "model"
+            f"readers: {', '.join(reading)} are read by the system against your thresholds and "
+            "ask no model"
         )
     if "blind_confirmer" in a.team:
         lead, peer = a.for_role("structure_lead"), a.for_role("blind_confirmer")

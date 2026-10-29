@@ -193,7 +193,7 @@ and the order you wrote breaks the last tie. `runs/screens/<time>.json` keeps ev
 its room and pressure and the `code_order`.
 
 Until 0.12 a market screener, a model, could narrow and reorder this list. It was retired: ordering
-by a measured, forward-looking range is what it was asked to judge, and code answers it the same way
+by a measured, forward-looking range is what it was asked to judge, and the system answers it the same way
 every time at no cost. `[universe].screener` is still read, so an older desk runs, and does nothing;
 `tra check` says so.
 
@@ -401,16 +401,16 @@ structure lead's proposal after it has answered.
 
 ## Who is asked, and what is read
 
-One model is asked. Everything else beside the market is read by code.
+One model is asked. Everything else beside the market is read by the system.
 
 | Step | Reads | Gives | When |
 |---|---|---|---|
 | `structure_lead` (a model) | the closed candles of the snapshot, the spread, the funding rate, the regime on each timeframe, the book imbalance, the open interest change; none of the readings | a target, a named setup, a confidence, a horizon, a reason, and the figures it read | every cycle; the role that proposes |
 | `blind_confirmer` (a model, optional) | the structure lead's brief, blind to its answer | the same, independently; the side must agree | when `[agents].team` names it |
 | `flow_specialist` (a model, optional) | the spread, the book imbalance, funding and open interest, which then leave the analyst's brief | a side and a confidence | when `[agents].team` names it |
-| `macro` (code) | macro series and the dated text of `news.toml` | the declared state of your thresholds and its graded score | when `sources/macro.toml` or `sources/news.toml` declares something, or `--macro` / `--news` names a file |
-| `onchain` (code) | chain figures and derivative figures, read side by side | the declared state and its graded score | when `sources/onchain.toml` or `sources/derivatives.toml` declares something, or `--onchain` / `--derivatives` |
-| `sentiment` (code) | dated scores, plus the same dated text as notes | the declared state and its graded score; `undeclared` when nothing crosses a line | when `sources/sentiment.toml` declares something, or `--sentiment` |
+| `macro` (system) | macro series and the dated text of `news.toml` | the declared state of your thresholds and its graded score | when `sources/macro.toml` or `sources/news.toml` declares something, or `--macro` / `--news` names a file |
+| `onchain` (system) | chain figures and derivative figures, read side by side | the declared state and its graded score | when `sources/onchain.toml` or `sources/derivatives.toml` declares something, or `--onchain` / `--derivatives` |
+| `sentiment` (system) | dated scores, plus the same dated text as notes | the declared state and its graded score; `undeclared` when nothing crosses a line | when `sources/sentiment.toml` declares something, or `--sentiment` |
 
 The readings ask no model. Until 0.11 each was an analyst whose model also labelled its figures;
 every gate already read the declared state rather than the label, measured on the demo desks the
@@ -522,7 +522,7 @@ sentence carry no authority and leave a mark when it tries to.
 The same check looks for a rule a role made up. No role is told the desk's rules, so an answer that
 says "the desk requires" or names a desk minimum is stating one that does not exist. That is
 recorded for every role, the structure lead included, and changes nothing: the rules that apply
-are the ones in your configuration, run by code after the answer.
+are the ones in your configuration, run by the system after the answer.
 
 ## The confluence matrix
 
@@ -559,7 +559,7 @@ With all three, they work as a judged case rather than a vote:
 ```
 proposal -> pro    (the strongest case that the reading is right)  \  apart, at the same time,
          -> contra (the strongest case that it is wrong or noise)  /   neither sees the other
-         -> code checks every claim in both cases against the figures
+         -> the system checks every claim in both cases against the figures
          -> neutral (judges the two checked cases)  -> the one verdict that counts
 ```
 
@@ -575,12 +575,12 @@ votes. It is told to weigh claims about the premise of the setup above claims ab
 treat several claims that say the same thing as one, and to abstain only when the two cases are
 even. Its verdict is the one that counts in confluence and conviction.
 
-When there is nothing to weigh, code decides without paying for the call: no surviving claim on
+When there is nothing to weigh, the system decides without paying for the call: no surviving claim on
 either side is an abstention, a contra with nothing that holds is support, a pro with nothing that
 holds is opposition, and the record says neutral was not asked.
 
 Every stance receives the proposal and the figures it was built from: not the round trip, not the
-claimed edge, and not the macro, on-chain or sentiment readings, which code weighs once in
+claimed edge, and not the macro, on-chain or sentiment readings, which the system weighs once in
 conviction. Each
 answers with claims that cite a figure by the brief's own name, with that figure's value:
 
@@ -1026,7 +1026,7 @@ than counting them as free.
 
 ## The paths
 
-The structure lead names where a trade is wrong and where it is done. Code then asks the
+The structure lead names where a trade is wrong and where it is done. The system then asks the
 instrument's own history how often a take at that distance comes before a stop at that distance
 inside the hold. It does not predict the next price; it reads the odds at the two levels the trade
 carries.

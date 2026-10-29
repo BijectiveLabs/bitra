@@ -114,7 +114,8 @@ def test_the_shelf_starts_empty_and_check_says_what_filling_it_in_does(
     out = capsys.readouterr().out
     assert "ok    sources/macro.toml: 1 declared (us10y)" in out
     assert (
-        "ok    roster: structure_lead asks a model; macro read by code; `tra run` uses these" in out
+        "ok    roster: structure_lead asks a model; macro read by the system; "
+        "`tra run` uses these" in out
     )
 
 

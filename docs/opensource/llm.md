@@ -28,7 +28,7 @@ between an operator and the reason their trade was refused.
 | What people mean by memory | What this project uses |
 |---|---|
 | conversation history in a thread | Nothing. Each role call is stateless: one system prompt, one brief built by the system. |
-| what it said last time | The structure lead's brief carries its own last reading of the instrument, when there is one inside the window it reads (`previous`): how long ago, the target, setup, confidence and levels it gave, the close then and how far it has moved since. Code builds it from the record. What became of that reading (traded, refused, won, lost) is left out, since that would tell a proposing role the desk's rules. |
+| what it said last time | The structure lead's brief carries its own last reading of the instrument, when there is one inside the window it reads (`previous`): how long ago, the target, setup, confidence and levels it gave, the close then and how far it has moved since. The system builds it from the record. What became of that reading (traded, refused, won, lost) is left out, since that would tell a proposing role the desk's rules. |
 | what happened in earlier cycles | The record on disk: `runs/cycles/*/cycle.json`, the intents, `usage.jsonl`, the ledger. The auditors read exactly that. |
 | one store the roles share | The cycle directory. Every brief and every answer is a file in it, written atomically (a temporary file, then a rename), and an index per day finds them again. |
 | a vector store of past decisions | Not used. A decision is retrieved by reading the cycle it belongs to, which is a file with a timestamp in its name. |
@@ -51,7 +51,7 @@ Three checks stand between a model's text and anything that reads it.
 
 1. **The schema is enforced at the vendor where the vendor can**: strict JSON schema output on
    Anthropic, Google and the OpenAI-compatible servers that support it, JSON mode with the schema in
-   the prompt on the rest. Code then parses the answer again and refuses any field outside it, a
+   the prompt on the rest. The system then parses the answer again and refuses any field outside it, a
    wrong value in a closed list, or a number out of range.
 2. **A malformed answer is asked once more, with the reason.** The second call carries the same
    brief, then one line saying what was wrong ("response lacks verdict, reason"), so the model does
@@ -69,7 +69,7 @@ Three checks stand between a model's text and anything that reads it.
 
 Measured on the same desk (342 calls, `openai/gpt-oss-120b` and `-20b` on Groq, before 0.11): a
 call carries a median of about 1,950 tokens for the structure lead, 1,390 for a reviewer and
-1,540 for the market screener of the time (retired in 0.12; code orders the universe), system
+1,540 for the market screener of the time (retired in 0.12; the system orders the universe), system
 prompt included; the macro, on-chain and sentiment analysts of the
 time took 1,950, 1,730 and 1,350, and since 0.11 they are readings that ask no model. The
 largest was 2,915. Each call starts from a fresh context, so nothing accumulates across a cycle or a
@@ -235,7 +235,7 @@ reason above.
 
 ## Not paying twice for the same reading
 
-The macro, on-chain and sentiment readings ask no model. Their figures are read by code against
+The macro, on-chain and sentiment readings ask no model. Their figures are read by the system against
 the thresholds you declared, and that declared state is what confluence and conviction read; until
 0.11 a model also labelled each of them, and no decision ever rested on the label, so the calls
 were retired.
@@ -250,16 +250,16 @@ briefs are sent as JSON without spaces, which are tokens that carry nothing.
 A reasoning model writes sentences. A typed judge answers closed questions about a piece of text
 with a probability for each answer it was offered, and writes nothing else. In TRA that judge is
 Jev, by TypeSafe, and it holds the place a reasoning model is weakest in: it is the fast system that
-perceives and verifies, between the figures code computes and the seats that deliberate.
+perceives and verifies, between the figures the system computes and the seats that deliberate.
 
 | Job | Jev | Why |
 |---|---|---|
 | Typed events from dated text: listing, delisting, hack or exploit, outage, regulatory action, macro release, with the asset it concerns | yes | a closed set of labels with probabilities to threshold, where the macro and sentiment labellers it replaced cost a quarter of the tokens and no gate read them |
 | Screening fetched text for instructions to a machine before any model reads it | yes | outside text is untrusted input |
-| Checking each structure reason against the regime code measured | yes | a reason that does not describe the market is caught by a check, not by a second opinion |
-| Checking every claim of a proposal against its brief | from 0.13 | the semantic half of the review; the numeric half stays in code |
+| Checking each structure reason against the regime the system measured | yes | a reason that does not describe the market is caught by a check, not by a second opinion |
+| Checking every claim of a proposal against its brief | from 0.13 | the semantic half of the review; the numeric half stays in the system |
 | A direction from numbers, the odds of a take before a stop | no | numbers and comparisons are the vendor's documented weak spot; the paths and the calibrated forecast answer them |
-| Size, stops, exposure, the risk gate, orders | no | code, always |
+| Size, stops, exposure, the risk gate, orders | no | the system, always |
 
 It never decides a direction from numbers, sizes a trade or reaches an order.
 

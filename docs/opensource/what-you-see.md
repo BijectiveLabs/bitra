@@ -63,8 +63,8 @@ cycle 2026-09-29T02-59-16Z BTCUSDT: 5.344s of agents, 15.042s of reviewers
   funding        ccxt:bybit         age 4.267s
   ohlcv          ccxt:bybit         age 32.746s
   orderbook      ccxt:bybit         age 7.544s
-macro      read by code: bullish (risk-on)
-sentiment  read by code: bullish (positive)
+macro      read by the system: bullish (risk-on)
+sentiment  read by the system: bullish (positive)
 lead:      long on range_reversion at 0.65 over 5 bars: the close is stretched low in the window
 read: zscore=-0.587, vwap_gap_bps=-3.99, ret_1_bps=1.59
 reviewer contra    oppose on 2 cited figure(s)
