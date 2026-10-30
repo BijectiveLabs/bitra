@@ -445,3 +445,42 @@ def test_the_technical_team_is_declared_and_its_members_take_their_own_models() 
     for team, message in ((["astrologer"], "is not one of"), (["flow_specialist"] * 2, "twice")):
         with pytest.raises(ConfigError, match=message):
             parse_strategy_config(agent_raw(agents={**AGENTS, "team": team}))
+
+
+def test_a_role_on_another_server_is_probed_on_that_server() -> None:
+    from types import SimpleNamespace
+
+    from trading_research_agents.cli.credentials import endpoints_in_play, provider_row
+
+    agents = dict(AGENTS, provider="openai", model="gpt-oss-120b", fallback=["groq:x"])
+    # The name the reporter used; it is read as structure_lead since 0.12.
+    agents["roles"] = {
+        "technical_analyst": {"model": "gpt-oss-120b", "base_url": "https://api.cerebras.ai/v1"},
+        "reviewer": {"provider": "google"},
+    }
+    cfg = parse_strategy_config(agent_raw(agents=agents))
+    assert cfg.agents is not None
+    assert endpoints_in_play(cfg.agents) == [
+        ("openai", "[agents].provider", None),
+        ("google", "[agents.roles.reviewer].provider", None),
+        ("openai", "[agents.roles.structure_lead].base_url", "https://api.cerebras.ai/v1"),
+        ("groq", "[agents].fallback", None),
+    ]
+
+    asked: list[str | None] = []
+
+    def verify(model: str | None, base_url: str | None) -> str:
+        asked.append(base_url)
+        return ""
+
+    openai = SimpleNamespace(
+        key_env="OPENAI_API_KEY", installed=True, needs=("openai", "openai"), note="", verify=verify
+    )
+    row = provider_row(
+        openai,
+        {"OPENAI_API_KEY": "c" * 40},
+        label="provider openai",
+        verify=True,
+        base_url="https://api.cerebras.ai/v1",
+    )
+    assert asked == ["https://api.cerebras.ai/v1"] and row.verdict == "verified"

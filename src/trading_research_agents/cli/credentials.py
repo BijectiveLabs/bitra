@@ -113,9 +113,18 @@ def _held(env: Mapping[str, str], names: Sequence[str]) -> tuple[tuple[str, ...]
 
 
 def provider_row(
-    provider: Any, env: Mapping[str, str], *, label: str, verify: bool = False
+    provider: Any,
+    env: Mapping[str, str],
+    *,
+    label: str,
+    verify: bool = False,
+    base_url: str | None = None,
 ) -> Credential:
-    """One model provider: its key, its SDK, and on request one free authenticated call."""
+    """One model provider: its key, its SDK, and on request one free authenticated call.
+
+    The call goes to `base_url` when one is given: a role pointed at another server through an
+    OpenAI-compatible provider is proven against that server, with the key it will be sent.
+    """
     names = (provider.key_env,) if provider.key_env else ()
     present, missing = _held(env, names)
     row = Credential(
@@ -132,7 +141,7 @@ def provider_row(
         return row
     if provider.verify is None:
         return Credential(**{**vars(row), "verified": None})
-    said = provider.verify(None, None)
+    said = provider.verify(None, base_url)
     return Credential(**{**vars(row), "verified": scrub(said, [env[name] for name in present])})
 
 
@@ -159,6 +168,34 @@ def venue_row(
             **{**vars(row), "verified": scrub(f"{exc.__class__.__name__}: {exc}", secrets)[:240]}
         )
     return Credential(**{**vars(row), "verified": ""})
+
+
+def endpoints_in_play(agents: Any) -> list[tuple[str, str, str | None]]:
+    """Every provider and server this configuration can reach, as (provider, why, base_url).
+
+    A role that keeps the provider but names its own `base_url` reaches another server with the
+    same key, so it is a separate entry. Fallback links are built on the provider's own endpoint.
+    """
+    out: list[tuple[str, str, str | None]] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add(name: str, why: str, base_url: str | None) -> None:
+        if name and (name, base_url or "") not in seen:
+            seen.add((name, base_url or ""))
+            out.append((name, why, base_url))
+
+    add(agents.provider, "[agents].provider", agents.base_url)
+    for role, table in sorted(agents.roles.items()):
+        if table.get("provider") or table.get("base_url"):
+            settings = agents.for_role(role)
+            key = "provider" if table.get("provider") else "base_url"
+            add(settings.provider, f"[agents.roles.{role}].{key}", settings.base_url)
+    for name in agents.fallback:
+        add(name.partition(":")[0], "[agents].fallback", None)
+    for role, table in sorted(agents.roles.items()):
+        for name in table.get("fallback") or ():
+            add(str(name).partition(":")[0], f"[agents.roles.{role}].fallback", None)
+    return out
 
 
 def in_play(agents: Any) -> list[tuple[str, str]]:

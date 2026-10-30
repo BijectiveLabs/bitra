@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from itertools import islice
@@ -65,13 +64,13 @@ def _context_frames(cfg: CycleConfig, result: CycleResult) -> dict[int, Fetched]
         return {}
     out: dict[int, Fetched] = {}
     for seconds in cfg.context_intervals:
-        # A closed candle on this timeframe is up to one interval old by construction, so the
-        # decision chain's freshness bar would refuse every one of them.
-        wider = replace(chain, ttl_s=chain.ttl_s + seconds)
+        # A closed candle on this timeframe is up to one interval old by construction. The chain
+        # already allows for that from the interval the candles carry (Chain.allowed_age), so the
+        # decision chain is asked as it is: widening it here as well allowed two intervals.
         options = dict(cfg.data_options.get("ohlcv", {}))
         options.update({"interval_s": seconds, "limit": max(cfg.lookback_bars, 2)})
         try:
-            got = wider.fetch(cfg.instrument, **options)
+            got = chain.fetch(cfg.instrument, **options)
         except ChainExhaustedError as exc:
             result.refusals.append(f"context {interval_name(seconds)}: {exc}")
             continue

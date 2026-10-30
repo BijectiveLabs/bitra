@@ -134,7 +134,13 @@ def watch_desk(args: argparse.Namespace) -> int:
 
 def show_keys(args: argparse.Namespace) -> int:
     """Every credential this configuration would reach, and whether it is in a position to work."""
-    from trading_research_agents.cli.credentials import Readiness, in_play, provider_row, venue_row
+    from trading_research_agents.cli.credentials import (
+        Readiness,
+        endpoints_in_play,
+        in_play,
+        provider_row,
+        venue_row,
+    )
 
     _load_env(args)
     beside = args.config.resolve().parent
@@ -146,25 +152,32 @@ def show_keys(args: argparse.Namespace) -> int:
             cfg = load_strategy_config(args.config)
         except (ConfigError, OSError, ValueError) as exc:
             print(f"tra: {args.config}: {exc}", file=sys.stderr)
-    wanted: list[tuple[str, str]] = []
+    wanted: list[tuple[str, str, str | None]] = []
     if cfg is not None and cfg.agents is not None and not args.every:
-        wanted = in_play(cfg.agents)
+        wanted = endpoints_in_play(cfg.agents)
     else:
         # No project, no agents in it, or --all: say what this machine is holding keys for.
         reached = dict(in_play(cfg.agents)) if cfg is not None and cfg.agents is not None else {}
         wanted = [
-            (name, reached.get(name, "a key is named for it"))
+            (name, reached.get(name, "a key is named for it"), None)
             for name in providers()
             if _named(name, env)
         ]
-    for name, why in wanted:
+    for name, why, base_url in wanted:
         try:
             p = provider(name)
         except UnknownProviderError as exc:
             out.rows.append(_unknown_provider(name, why, str(exc)))
             continue
+        at = f" at {base_url}" if base_url else ""
         out.rows.append(
-            provider_row(p, env, label=f"provider {name} ({why})", verify=bool(args.probe))
+            provider_row(
+                p,
+                env,
+                label=f"provider {name}{at} ({why})",
+                verify=bool(args.probe),
+                base_url=base_url,
+            )
         )
     probe_asked = bool(args.probe or getattr(args, "prepare", False))
     judge = _judge_row(beside / "data.toml", env, every=bool(args.every), probe=probe_asked)

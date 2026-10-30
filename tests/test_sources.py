@@ -395,3 +395,45 @@ def test_a_plugin_book_is_held_to_the_execution_venue(
     # Candles may come from anywhere; only what an order is priced on is held to the venue.
     assert bool(found) is refused
     assert all(row.startswith("orderbook: vendor:relay") for row in found)
+
+
+def test_a_context_candle_is_allowed_one_interval_of_age_not_two() -> None:
+    from types import SimpleNamespace
+
+    from trading_research_agents.agents.cycle.briefing import _context_frames
+
+    four_hours = 14_400
+
+    class Closed(Fake):
+        def fetch(self, kind: str, instrument: str, **options: Any) -> Fetched:
+            fetched = super().fetch(kind, instrument, **options)
+            return Fetched(
+                kind=fetched.kind,
+                instrument=fetched.instrument,
+                value=fetched.value,
+                source=fetched.source,
+                tier=fetched.tier,
+                fetched_at=fetched.fetched_at,
+                as_of_ns=fetched.as_of_ns,
+                detail={**fetched.detail, "interval_s": options["interval_s"]},
+            )
+
+    def frames(age_s: float) -> tuple[dict[int, Fetched], list[str]]:
+        chain = SourceChain(
+            kind="ohlcv", sources=(Closed("venue", age_s=age_s),), ttl_s=30, clock=lambda: NOW
+        )
+        cfg = SimpleNamespace(
+            chains={"ohlcv": chain},
+            context_intervals=(four_hours,),
+            data_options={},
+            instrument="BTCUSDT",
+            lookback_bars=5,
+        )
+        result = SimpleNamespace(refusals=[], briefs={})
+        return _context_frames(cfg, result), result.refusals  # type: ignore[arg-type]
+
+    # The ttl plus one interval, less the minute the ttl is written for: 30 + 14400 - 60.
+    kept, refused = frames(age_s=14_370)
+    assert four_hours in kept and refused == []
+    kept, refused = frames(age_s=14_400)
+    assert kept == {} and refused and refused[0].startswith("context 4h:")
