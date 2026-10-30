@@ -6,6 +6,14 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `tra keys --probe` proves a role's key on the server the role is sent to: a role that names its
+  own `base_url` (an OpenAI-compatible server under the `openai` provider, for example) is its own
+  line, probed there, rather than on the provider's default endpoint (#16).
+- A context timeframe's candle is allowed one interval of age, as intended, not two: the chain
+  already adds the interval to its freshness bar, and the cycle added it a second time (#17).
+
 ## [0.12.1] - 2026-10-29
 
 ### Added

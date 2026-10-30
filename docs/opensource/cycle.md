@@ -1230,6 +1230,8 @@ ok    venue bybit (demo), for `tra run`: verified [BYBIT_API_KEY da8c3e5b, BYBIT
 The last two rows are two different clients reaching the same venue: `tra live` has its own signed
 REST client and `tra run` sends through ccxt. They are listed separately because a readiness check
 that proves one path works proves nothing about the other, and it is the second one a cycle uses.
+A role that names its own `base_url` is a row of its own for the same reason, probed on that server
+with the key it will be sent: `provider openai at https://... ([agents.roles.<role>].base_url)`.
 
 A desk that watches several instruments builds one hand per instrument, and a hand refuses an intent
 about any other instrument. One symbol, one instrument, one order.
