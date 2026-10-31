@@ -484,3 +484,22 @@ def test_a_role_on_another_server_is_probed_on_that_server() -> None:
         base_url="https://api.cerebras.ai/v1",
     )
     assert asked == ["https://api.cerebras.ai/v1"] and row.verdict == "verified"
+
+
+def test_a_unit_cap_over_several_instruments_is_a_thing_to_fix() -> None:
+    from types import SimpleNamespace
+
+    from trading_research_agents.cli.check_gates import _unit_cap_shared
+
+    def desk(instruments: tuple[str, ...], quote: Decimal | None) -> Any:
+        return SimpleNamespace(
+            run=SimpleNamespace(instrument="BTCUSDT"),
+            universe=SimpleNamespace(instruments=instruments),
+            limits=SimpleNamespace(max_position=Decimal("0.05"), max_position_quote=quote),
+        )
+
+    (said,) = _unit_cap_shared(desk(("BTCUSDT", "HYPEUSDT", "ETHUSDT"), None))
+    assert "holds each of the 3 instruments to 0.05 units" in said
+    assert "[controls].max_position_quote" in said
+    assert _unit_cap_shared(desk(("BTCUSDT", "HYPEUSDT"), Decimal(200))) == []
+    assert _unit_cap_shared(desk((), None)) == []

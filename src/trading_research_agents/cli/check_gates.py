@@ -58,6 +58,7 @@ def _gate_lines(
     good.extend(_audit_notes(cfg))
     good.extend(_universe_notes(cfg, bad))
     good.extend(_size_notes(cfg))
+    bad.extend(_unit_cap_shared(cfg))
     good.extend(_desk_notes(cfg, bad))
     good.append(_limit_line(cfg))
     good.append(
@@ -337,6 +338,26 @@ def _one_sided(path: Path) -> list[str]:
         if bull != bear:
             found.append(str(entry.get("name", "?")))
     return found
+
+
+def _unit_cap_shared(cfg: Any) -> list[str]:
+    """A cap in base units over several instruments, with no cap in quote currency beside it.
+
+    Every instrument is then held to the same count of units, which is a different amount of money
+    on each: on a coin priced at a few dollars, a cap written for BTC can fall below the venue's
+    minimum order, and every order there is refused (reported on Bitget, 2026-10-31: 0.05 units
+    held HYPE at about 4.5 USDT, under a 5 USDT minimum). Discovery already refuses this at load.
+    """
+    names = {cfg.run.instrument, *cfg.universe.instruments}
+    cap = cfg.limits.max_position
+    if len(names) < 2 or cap is None or cfg.limits.max_position_quote is not None:
+        return []
+    return [
+        f"size: [controls].max_position {cap} is in base units and holds each of the "
+        f"{len(names)} instruments to {cap} units, a different amount of money on each and on a "
+        "cheap one possibly below the venue's minimum order; declare "
+        "[controls].max_position_quote, the cap in quote currency"
+    ]
 
 
 def _size_notes(cfg: Any) -> list[str]:
