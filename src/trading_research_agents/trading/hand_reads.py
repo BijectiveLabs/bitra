@@ -9,6 +9,7 @@ from contextlib import suppress
 from decimal import Decimal
 from typing import Any
 
+from trading_research_agents.data.sources.ccxt_client import fresh_connection, unanswered
 from trading_research_agents.trading.capital import (
     CapitalError,
     liquidation_estimate,
@@ -251,12 +252,9 @@ class HandReads(HandTerms):
         try:
             return fetch(self.symbol)
         except Exception as exc:
-            if not _unanswered(exc):
+            if not unanswered(exc):
                 raise
-            session = getattr(self.client, "session", None)
-            close = getattr(session, "close", None)
-            if callable(close):
-                close()
+            fresh_connection(self.client)
             return fetch(self.symbol)
 
     def _position_in_list(self) -> Mapping[str, Any] | None:
@@ -591,9 +589,3 @@ class HandReads(HandTerms):
         except Exception as exc:
             return self.redact(f"{exc.__class__.__name__}: {exc}")[:200]
         return ""
-
-
-def _unanswered(exc: BaseException) -> bool:
-    """A failure in which no answer arrived, as opposed to one the venue gave."""
-    names = {kind.__name__ for kind in type(exc).__mro__}
-    return bool(names & {"NetworkError", "TimeoutError", "ConnectionError"})
