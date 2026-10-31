@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-10-31
+
 ### Fixed
 
 - `tra keys --probe` proves a role's key on the server the role is sent to: a role that names its
@@ -24,6 +26,12 @@ All notable changes to this project are recorded here. The format follows
 - `tra check` names a base-unit `[controls].max_position` over several instruments, with no
   `max_position_quote` beside it, as a thing to fix: one count of units is a different amount of
   money on each, and on a cheap instrument it can fall below the venue's minimum order (#19).
+
+### Security
+
+- `pyasn1` 0.6.5 in the lock, for GHSA-9m75-vc3g-4x39, GHSA-mm57-4v3p-rchx, GHSA-fm9c-5rcf-2q5p and
+  GHSA-2qm8-x737-gmw5 (quadratic-time decoding). It is a transitive dependency; an install from
+  PyPI already resolves the fixed version.
 
 ## [0.12.1] - 2026-10-29
 
