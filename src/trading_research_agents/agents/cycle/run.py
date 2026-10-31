@@ -108,7 +108,7 @@ def _trigger(p: Pass) -> bool:
         cfg.trigger,
         mid=p.mid_now,
         spread_bps=p.spread_now,
-        seen=last_seen(cfg.root, instrument=cfg.instrument),
+        seen=last_seen(cfg.root, instrument=cfg.instrument, min_move_bps=cfg.trigger.min_move_bps),
         now=cfg.clock(),
         round_trips_today=intents_today(cfg.root, at=cfg.clock(), instrument=cfg.instrument),
         max_round_trips_per_day=cfg.targets.max_round_trips_per_day,

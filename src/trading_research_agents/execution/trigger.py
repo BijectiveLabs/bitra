@@ -224,7 +224,9 @@ def spread_of(bid: Decimal | None, ask: Decimal | None) -> tuple[Decimal | None,
     return mid, ((ask - bid) / mid * BPS).quantize(Decimal("0.01"))
 
 
-def last_seen(root: Path, *, instrument: str, look_back: int = 40) -> Seen:
+def last_seen(
+    root: Path, *, instrument: str, look_back: int = 40, min_move_bps: Decimal | None = None
+) -> Seen:
     """Read the recent cycles for this instrument: the last mid, and how long it has been refusing.
 
     From disk rather than from memory, because a process that restarts must not forget that it has
@@ -235,12 +237,17 @@ def last_seen(root: Path, *, instrument: str, look_back: int = 40) -> Seen:
     looking and finding nothing, and counting it would let the trigger widen its own bar every few
     minutes of quiet until nothing could wake it. Nor is a cycle that stopped before the lead was
     asked (data that would not come, a loss limit, a brief that could not be built): nobody looked.
+
+    With `min_move_bps`, a real move also ends the streak: when the mid moved at least that much
+    between two refused cycles, the refusals before the move are about a market that is gone, and
+    only the ones after it count.
     """
     mid: Decimal | None = None
     at: datetime | None = None
     refusals = 0
     last_intent: datetime | None = None
     counting = True
+    newer: Decimal | None = None
 
     for row, when in _summaries(root, instrument=instrument, look_back=look_back):
         if mid is None:
@@ -255,7 +262,12 @@ def last_seen(root: Path, *, instrument: str, look_back: int = 40) -> Seen:
             if last_intent is None:
                 last_intent = _intent_at(row) or when
         elif counting:
-            refusals += 1
+            older = _mid_of(row)
+            if _moved(newer, older, min_move_bps):
+                counting = False
+            else:
+                refusals += 1
+                newer = older if older is not None else newer
         if mid is not None and last_intent is not None:
             break
     return Seen(mid=mid, at=at, refusals=refusals, last_intent_at=last_intent)
@@ -308,6 +320,13 @@ def _summaries(
             continue
         out.append((row, at_of(path.parent.name)))
     return out
+
+
+def _moved(newer: Decimal | None, older: Decimal | None, min_move_bps: Decimal | None) -> bool:
+    """Whether the mid moved by at least the declared minimum between two refused cycles."""
+    if min_move_bps is None or newer is None or older is None or older <= 0:
+        return False
+    return abs(newer - older) / older * BPS >= min_move_bps
 
 
 def _asked(row: dict[str, Any]) -> bool:

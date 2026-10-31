@@ -503,3 +503,25 @@ def test_the_index_says_whether_the_lead_was_asked() -> None:
         summary_sha256=None,
     )
     assert asked["asked"] is True and stopped["asked"] is False
+
+
+def test_a_real_move_between_two_refusals_ends_the_streak(tmp_path: Path) -> None:
+    root = tmp_path / "cycles"
+    # Five refused cycles, oldest first; the mid moves 98 bps between the third and the fourth.
+    for minute, mid in enumerate(["100.00", "100.01", "100.02", "100.99", "100.98"]):
+        where = root / f"2026-10-31T09-{minute:02d}-00Z"
+        where.mkdir(parents=True)
+        payload = {
+            "instrument": "BTCUSDT",
+            "seen": {"mid": mid},
+            "intent": None,
+            "analyst": {"target": "flat"},
+        }
+        (where / "cycle.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    # Without a declared minimum every refusal since the last intent counts, as before.
+    assert last_seen(root, instrument="BTCUSDT").refusals == 5
+    # With it, the refusals before the move are about a market that is gone.
+    assert last_seen(root, instrument="BTCUSDT", min_move_bps=Decimal(15)).refusals == 2
+    # A move below the minimum does not end it.
+    assert last_seen(root, instrument="BTCUSDT", min_move_bps=Decimal(100)).refusals == 5
