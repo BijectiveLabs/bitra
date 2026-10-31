@@ -13,6 +13,17 @@ All notable changes to this project are recorded here. The format follows
   line, probed there, rather than on the provider's default endpoint (#16).
 - A context timeframe's candle is allowed one interval of age, as intended, not two: the chain
   already adds the interval to its freshness bar, and the cycle added it a second time (#17).
+- A market-data read through ccxt that got no answer (a timeout or a dropped connection) is made
+  once more on a fresh connection, so a desk idle between passes no longer loses its funding, book
+  or candles to a stale keep-alive (#18). The position read of #13 now repeats on the same two
+  classes only: `RequestTimeout` and `NetworkError` itself, not the subclasses that are the venue
+  answering, such as `RateLimitExceeded`.
+- A refusal streak ends with a real move as well as an intent: when the mid moved at least
+  `[trigger].min_move_bps` between two refused cycles, only the refusals after the move widen the
+  bar (#20).
+- `tra check` names a base-unit `[controls].max_position` over several instruments, with no
+  `max_position_quote` beside it, as a thing to fix: one count of units is a different amount of
+  money on each, and on a cheap instrument it can fall below the venue's minimum order (#19).
 
 ## [0.12.1] - 2026-10-29
 

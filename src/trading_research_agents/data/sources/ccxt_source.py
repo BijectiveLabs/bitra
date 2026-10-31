@@ -32,7 +32,12 @@ from trading_research_agents.data.sources.base import (
     OrderBook,
     SourceError,
 )
-from trading_research_agents.data.sources.ccxt_client import build, is_prediction
+from trading_research_agents.data.sources.ccxt_client import (
+    build,
+    fresh_connection,
+    is_prediction,
+    unanswered,
+)
 from trading_research_agents.data.sources.resolve import ResolveError, resolve
 from trading_research_agents.extras import install_hint
 
@@ -140,6 +145,19 @@ class CcxtSource:
         return ("ohlcv", "orderbook", "funding", "open_interest")
 
     def fetch(self, kind: str, instrument: str, **options: Any) -> Fetched:
+        """One reading of `kind`. A read that got no answer is made once more on a fresh
+        connection: it changes nothing at the venue, and a pooled connection left idle past the
+        venue's keep-alive hangs until the timeout (seen on Bitget, 2026-10-31, after 15 minutes
+        idle). An answer the venue gave, a rate limit included, is never repeated here."""
+        try:
+            return self._read(kind, instrument, **options)
+        except SourceError as exc:
+            if not unanswered(exc.__cause__ or exc):
+                raise
+        fresh_connection(self._client)
+        return self._read(kind, instrument, **options)
+
+    def _read(self, kind: str, instrument: str, **options: Any) -> Fetched:
         symbol = self._symbol(instrument)
         try:
             if kind == "ohlcv":

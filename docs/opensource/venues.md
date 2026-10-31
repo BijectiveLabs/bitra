@@ -513,6 +513,20 @@ position was closed by its own stop at the venue three minutes after entry. Bitg
 profit that is not beyond the order's own limit price, so a target inside the slippage band of a
 taker entry is refused by the venue: nothing fills, and the cycle records Bitget's answer.
 
+A user report from 0.12.1 (#19), on a unified demo account at 3x with nine USDT perpetuals and
+hourly decisions, adds what a multi-instrument desk meets there:
+
+- Entries carried the stop and take profit in one order, a venue stop closed a position, and the
+  risk gate approved and refused as documented. Position, open orders, fills, order status and
+  leverage read back correctly.
+- Bitget refuses an order below its minimum amount (error 45110). `[controls].max_position` counts
+  base units, so a cap written for BTC held a coin priced at a few dollars under that minimum.
+  Declare `[controls].max_position_quote` on a desk with several instruments; `tra check` now
+  names this as a thing to fix.
+- Market-data reads timed out after the desk had been idle between passes, on pooled connections
+  past the venue's keep-alive (#18). A read that gets no answer is now made once more on a fresh
+  connection.
+
 ## Adding a venue you trade on
 
 Four steps, and the command writes most of them for you.

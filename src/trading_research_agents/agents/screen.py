@@ -177,7 +177,7 @@ def look(
     if moves is not None:
         moves[instrument] = returns_of(snapshot)
     reasons = [f"data {kind}: {why}" for kind, why in sorted(snapshot.refused.items())]
-    seen = last_seen(root, instrument=instrument)
+    seen = last_seen(root, instrument=instrument, min_move_bps=trigger.min_move_bps)
     earlier = (looks or {}).get(instrument)
     if earlier is not None and (seen.at is None or earlier[1] > seen.at):
         seen = replace(seen, mid=earlier[0], at=earlier[1])

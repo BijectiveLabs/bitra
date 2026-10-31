@@ -99,6 +99,30 @@ def market_of(client: Any, symbol: str) -> dict[str, Any]:
     return {}
 
 
+# The two classes ccxt raises when no answer arrived. Read in ccxt 4.5.85 `Exchange.fetch` on
+# 2026-10-31: a requests Timeout, or a connection error that says "Read timed out", becomes
+# RequestTimeout; a dropped or reset connection becomes NetworkError itself. Its subclasses
+# (RateLimitExceeded, DDoSProtection, ExchangeNotAvailable, OnMaintenance, InvalidNonce) are the
+# venue answering, and are not in this set.
+UNANSWERED = ("RequestTimeout", "NetworkError")
+
+
+def unanswered(exc: BaseException) -> bool:
+    """Whether no answer arrived at all, as opposed to an answer the venue gave."""
+    return type(exc).__name__ in UNANSWERED or isinstance(exc, TimeoutError | ConnectionError)
+
+
+def fresh_connection(client: Any) -> None:
+    """Drop the client's pooled connections, so the next request opens a new one.
+
+    A connection left idle past the venue's keep-alive can hang until the client's timeout.
+    Closing a requests Session closes its pools and leaves the Session usable.
+    """
+    close = getattr(getattr(client, "session", None), "close", None)
+    if callable(close):
+        close()
+
+
 def build(venue: str, config: Mapping[str, Any] | None = None) -> Any:
     """A synchronous client for `venue`; None when ccxt has no such venue."""
     factory = exchange_class(venue)

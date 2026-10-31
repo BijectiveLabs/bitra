@@ -307,3 +307,77 @@ def test_a_source_can_read_the_practice_environment_orders_go_to() -> None:
     assert isinstance(built, CcxtSource) and built.name == "ccxt:okx@testnet"
     # OKX reaches its demo through ccxt's sandbox switch, which sets this header.
     assert built._client.headers.get("x-simulated-trading") == "1"
+
+
+class NetworkError(Exception):
+    """Named as ccxt names it: a dropped or reset connection."""
+
+
+class RequestTimeout(NetworkError):  # noqa: N818 - named as ccxt names it
+    """Named as ccxt names it: no answer inside the timeout."""
+
+
+class RateLimitExceeded(NetworkError):  # noqa: N818 - named as ccxt names it
+    """Named as ccxt names it: the venue answered, asking to slow down."""
+
+
+class Session:
+    def __init__(self) -> None:
+        self.closed = 0
+
+    def close(self) -> None:
+        self.closed += 1
+
+
+class Idle(FakeCcxt):
+    """A client whose pooled connection went stale: the first read hangs, then it answers."""
+
+    def __init__(self, first: Exception, **answers: Any) -> None:
+        super().__init__(**answers)
+        self.session = Session()
+        self.first: Exception | None = first
+
+    def fetch_funding_rate(self, *args: Any) -> Any:
+        if self.first is not None:
+            failure, self.first = self.first, None
+            self.seen.append(("fetch_funding_rate", args))
+            raise failure
+        return super().fetch_funding_rate(*args)
+
+
+def test_a_read_that_got_no_answer_is_made_once_more_on_a_fresh_connection() -> None:
+    funding = {"fundingRate": "0.0001", "timestamp": OPEN_AT}
+    for silent in (RequestTimeout("bitget GET .../current-fund-rate"), NetworkError("reset")):
+        client = Idle(silent, fetch_funding_rate=funding)
+        got = source(client, now_ms=OPEN_AT).fetch("funding", "BTCUSDT")
+        assert got.value == Decimal("0.0001")
+        assert client.session.closed == 1 and len(client.seen) == 2
+
+    # The venue answered: a rate limit is not repeated here, the chain moves on.
+    limited = Idle(RateLimitExceeded("429"), fetch_funding_rate=funding)
+    with pytest.raises(SourceError, match="RateLimitExceeded"):
+        source(limited, now_ms=OPEN_AT).fetch("funding", "BTCUSDT")
+    assert limited.session.closed == 0 and len(limited.seen) == 1
+
+    # Twice without an answer is a venue that is not answering: one repeat, then the chain.
+    down = Idle(RequestTimeout("first"), fetch_funding_rate=RequestTimeout("second"))
+    with pytest.raises(SourceError, match="RequestTimeout: second"):
+        source(down, now_ms=OPEN_AT).fetch("funding", "BTCUSDT")
+    assert len(down.seen) == 2
+
+
+def test_only_the_classes_ccxt_raises_without_an_answer_are_unanswered() -> None:
+    ccxt = pytest.importorskip("ccxt")
+    from trading_research_agents.data.sources.ccxt_client import unanswered
+
+    assert unanswered(ccxt.RequestTimeout("x")) and unanswered(ccxt.NetworkError("x"))
+    assert unanswered(TimeoutError("x")) and unanswered(ConnectionResetError("x"))
+    # Subclasses of NetworkError that are the venue answering.
+    for answered in (
+        "RateLimitExceeded",
+        "DDoSProtection",
+        "ExchangeNotAvailable",
+        "OnMaintenance",
+    ):
+        assert not unanswered(getattr(ccxt, answered)("x")), answered
+    assert not unanswered(ccxt.InsufficientFunds("x"))

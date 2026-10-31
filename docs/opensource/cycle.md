@@ -231,8 +231,10 @@ trigger admits it instead of measuring hours of drift against it.
 
 `widen_after` is the part that answers a whole quiet day. After a run of refusals with nothing
 changing, the movement required grows with the streak, to a hard ceiling of eight times the
-declared minimum so a desk can never be talked into going blind. The streak is the cycles since
-the last intent, so the first intent brings the bar straight back to the baseline. A cycle the
+declared minimum so a desk can never be talked into going blind. The streak is the refused cycles
+since the last intent, and a real move ends it as well: when the mid moved at least `min_move_bps`
+between two refused cycles, only the refusals after that move count. Either brings the bar straight
+back to the baseline. A cycle the
 trigger itself held does not count towards the streak, and neither does one that stopped before the
 lead was asked (data that would not come, a loss limit): that is the desk not looking, not the desk
 looking and finding nothing.
