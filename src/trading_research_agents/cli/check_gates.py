@@ -42,7 +42,8 @@ def _gate_lines(
     out: a required role nobody asks, or a vote count nobody can cast.
     """
     bad: list[str] = []
-    good = _reviewer_notes(cfg)
+    good = _experiment_notes(cfg)
+    good.extend(_reviewer_notes(cfg))
     good.extend(_confluence_notes(cfg, roster, bad))
     good.extend(_execution_notes(cfg, project, tier, env, entry_role, bad))
     good.extend(_fallback_notes(cfg, bad))
@@ -340,6 +341,49 @@ def _one_sided(path: Path) -> list[str]:
     return found
 
 
+def experiments_on(cfg: Any) -> list[str]:
+    """The layers beyond the core this desk has on, by the setting that turns each one on.
+
+    The core is data, one decision, the exits, the cost rule in [targets], the risk gate and
+    execution. Everything else that can refuse or resize a trade is an experiment until the arena
+    shows the core with it doing better than the core without it, out of sample, which none has
+    yet. The auditors are not on the list: they report and act on nothing.
+    """
+    agents = cfg.agents
+    found = []
+    if agents is not None and agents.reviewers:
+        found.append(f"reviewers ({', '.join(agents.reviewers)})")
+    if agents is not None and agents.team:
+        found.append(f"the team ({', '.join(agents.team)})")
+    if agents is not None and agents.readings:
+        found.append(f"readings ({', '.join(agents.readings)})")
+    checks = (
+        (not cfg.confluence.idle, "[confluence]"),
+        (not cfg.conviction.idle, "[conviction]"),
+        (cfg.targets.min_net_bps is not None, "[targets].min_net_bps"),
+        (cfg.targets.min_path_ev_bps is not None, "[targets].min_path_ev_bps"),
+        (cfg.regime.setups_must_fit, "[regime].setups_must_fit"),
+        (cfg.trigger.widen_after is not None, "[trigger].widen_after"),
+        (cfg.trigger.min_move_atr is not None, "[trigger].min_move_atr"),
+        (cfg.universe.discover, "[universe].discover"),
+        (getattr(cfg.sizing, "kelly_fraction", None) is not None, "[sizing]"),
+    )
+    found.extend(name for on, name in checks if on)
+    return found
+
+
+def _experiment_notes(cfg: Any) -> list[str]:
+    if cfg.agents is None:
+        return []
+    found = experiments_on(cfg)
+    if not found:
+        return ["experiments: none; the desk is the core"]
+    return [
+        f"experiments: {', '.join(found)} on beside the core; none has been measured against the "
+        "core yet, so keep one only if `tra arena` shows it doing better out of sample"
+    ]
+
+
 def _unit_cap_shared(cfg: Any) -> list[str]:
     """A cap in base units over several instruments, with no cap in quote currency beside it.
 
@@ -496,7 +540,17 @@ def _trigger_notes(cfg: Any) -> list[str]:
             "anything moved; [trigger].min_move_bps is what makes a quiet hour cheap"
         ]
     said = []
-    if trigger.min_move_bps is not None:
+    if trigger.min_move_atr is not None:
+        fallback = (
+            f", {trigger.min_move_bps} bps when the ATR cannot be read"
+            if trigger.min_move_bps is not None
+            else ", and no move asked for when the ATR cannot be read"
+        )
+        said.append(
+            f"{trigger.min_move_atr} of the instrument's own ATR of movement since the last "
+            f"look{fallback}"
+        )
+    elif trigger.min_move_bps is not None:
         said.append(f"{trigger.min_move_bps} bps of movement since the last look")
     if trigger.max_spread_bps is not None:
         said.append(f"a book no wider than {trigger.max_spread_bps} bps")
@@ -504,6 +558,7 @@ def _trigger_notes(cfg: Any) -> list[str]:
         said.append(f"{trigger.cooldown_s}s since the last intent")
     if trigger.widen_after is not None:
         said.append(f"more movement after {trigger.widen_after} straight refusals")
-    if trigger.min_move_bps is not None and trigger.look_valid_s is not None:
+    moves = trigger.min_move_bps is not None or trigger.min_move_atr is not None
+    if moves and trigger.look_valid_s is not None:
         said.append(f"a last look older than {trigger.look_valid_s}s counts as a first look")
     return ["trigger: asks the roster only on " + "; ".join(said)]

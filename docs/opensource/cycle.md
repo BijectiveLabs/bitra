@@ -8,7 +8,7 @@ One cycle is one pass from what the market is doing to a decision that is either
 refusal with a reason. It is the unit this project works in, and the unit an auditor replays.
 
 ```bash
-tra init my-desk --profile autonomous     # the cycle laid down wired, every line commented
+tra init my-desk --profile autonomous     # the core laid down wired, the experiments commented
 tra run                                   # data.toml, strategy.toml, envelope.toml and .env from the project
 tra run --instrument ETHUSDT --margin 5 --mode signals
 tra run --every 15m --cycles 12           # one cycle every fifteen minutes, on the boundary
@@ -91,22 +91,23 @@ a supervisor, not in a window.
 
 `tra init my-desk --profile autonomous` is the short way in. It writes the same project as
 `tra init`, with these differences: the structure lead is the core, deciding on 15-minute bars
-with the hour and four hours as context and naming its own stop and target; the confluence matrix,
-the conviction ladder and the targets are live tables rather than commented ones;
-`[execution].mode` is `sandbox`; and the project's README opens with what is still yours before a
-cycle can decide anything - a model and its key, and the mechanism the analyst reasons from. Add
+with the hour and four hours as context and naming its own stop and target; `[execution].mode` is
+`sandbox`; and the project's README opens with what is still yours before a cycle can decide
+anything - a model and its key, and the mechanism the analyst reasons from. Add
 `--agent PROVIDER --model MODEL` and the model is named for you. `tra check` names whatever is still
 missing, including the provider placeholder, and reads the three files against each other: the
 instrument as the sources know it, a venue supplying data that is not the venue whose fees are
 priced, and an `[execution].venue` that does not match `[run].venue_key` - that last one is a
 refusal rather than a note.
 
-The gates it writes ask for nothing until you give them something: `[confluence].required` is empty,
-because a reading nobody read has agreed to nothing, and `[conviction].weights` names only the
-deciding analyst, so the conviction score is that analyst's own confidence. Fill in a file under
-`sources/` and its reading joins the roster; give that reading a weight and its agreement starts
-changing the size; name it in `required` and its disagreement starts refusing the trade. Three steps,
-in that order, each one visible in `tra check` before it costs a token.
+What it writes is the core and nothing more: data, one decision, the exits, one cost rule
+(`[targets].min_edge_multiple`, the edge as a multiple of the round trip), the risk gate and
+execution, with `[trigger]` deciding when a cycle is worth asking. Everything else that can refuse
+or resize a trade is an experiment: the confluence matrix, the conviction ladder, a regime the setup
+must fit, the trigger's widening, a floor in bps beside the multiple, reviewers, the team and the
+readings. They are written commented, under "Experiments", because none has been measured against
+the core yet. `tra check` lists the ones a desk has on. Turn on one at a time, and keep it only if
+`tra arena` shows the core with it doing better than the core without it, out of sample.
 
 ```
 the universe (system: one data pull each, the trigger per instrument, ordered by movement over cost)
@@ -212,6 +213,8 @@ schedule. It is to put a check in front of it that costs nothing.
 ```toml
 [trigger]
 min_move_bps = 15                # the mid has to have moved this far since the last cycle
+# min_move_atr = 0.25            # or a fraction of the instrument's own ATR; the bps above when
+#                                # the ATR cannot be read (an experiment, like the widening)
 max_spread_bps = 8               # a book wider than this cannot be traded through
 cooldown_s = 900                 # one decision per instrument in this window
 widen_after = 6                  # after this many straight refusals, ask for more movement

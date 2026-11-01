@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 import statistics
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
@@ -19,6 +19,7 @@ from typing import Any
 
 from trading_research_agents import __version__
 from trading_research_agents.evaluation.baselines import BASELINES_VERSION, HOLD_BARS
+from trading_research_agents.evaluation.desk import base_of, chosen
 from trading_research_agents.evaluation.forecast import FORECAST_VERSION, FitContext
 from trading_research_agents.evaluation.history import MarketHistory, Views, load_history
 from trading_research_agents.evaluation.policy import DecisionView, Policy, Scored, TradeIdea
@@ -60,12 +61,23 @@ class ArenaConfig:
     v1_hold_s: int = 14_400
     fit_days: int | None = None
     test_days: int | None = None
+    # The spread and slippage of a market whose liquidity is not the default's. A coin that trades
+    # a fraction of BTC's volume does not cross the same book, and one figure for every class of
+    # market overstates the edge exactly where it is thinnest.
+    instrument_costs: Mapping[str, Costs] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.instruments or len(set(self.instruments)) != len(self.instruments):
             raise MarketDataError("an arena names each instrument once, and at least one")
         if not self.rows or len(set(self.rows)) != len(self.rows):
             raise MarketDataError("an arena names each row once, and at least one")
+        for row in self.rows:
+            base = base_of(row)
+            if base is not None and (not base or base == V1_RECORD or base_of(base) is not None):
+                raise MarketDataError(
+                    f"{row!r}: a desk row names a row it asks, such as desk:paths; not the v1 "
+                    "record, which has its own times, and not another desk row"
+                )
         if self.end < self.start:
             raise MarketDataError(f"the window ends ({self.end}) before it starts ({self.start})")
         spans = (self.interval_s, self.context_interval_s, self.v1_hold_s)
@@ -75,6 +87,14 @@ class ArenaConfig:
             raise MarketDataError("funding is 'archive' (measured) or 'none' (a market without)")
         if (self.fit_days is None) != (self.test_days is None):
             raise MarketDataError("walk-forward splits need both fit_days and test_days")
+        stray = sorted(set(self.instrument_costs) - set(self.instruments))
+        if stray:
+            raise MarketDataError(
+                f"costs are declared for {stray}, which this arena does not trade"
+            )
+
+    def costs_for(self, instrument: str) -> Costs:
+        return self.instrument_costs.get(instrument, self.costs)
 
     @property
     def interval_ns(self) -> int:
@@ -88,6 +108,9 @@ class ArenaConfig:
             "to": self.end.isoformat(),
             "rows": list(self.rows),
             "costs": self.costs.record(),
+            "instrument_costs": {
+                name: costs.record() for name, costs in sorted(self.instrument_costs.items())
+            },
             "interval_s": self.interval_s,
             "context_interval_s": self.context_interval_s,
             "context": list(self.context),
@@ -153,22 +176,30 @@ class _Run:
             histories=histories,
             instruments=config.instruments,
             costs=config.costs,
+            instrument_costs=config.instrument_costs,
             funding=self.funding,
             interval_ns=config.interval_ns,
             first_ns=midnight_ns(config.start - timedelta(days=WARMUP_DAYS)),
         )
-        self.policies: dict[str, Policy] = {
-            name: make_policy(
+
+        def made(name: str) -> Policy:
+            return make_policy(
                 name,
                 seed=config.seed,
                 end_ns=window.end_ns,
                 interval_ns=config.interval_ns,
                 fit=fit,
             )
-            for name in config.rows
-            if name != V1_RECORD
+
+        self.policies: dict[str, Policy] = {
+            name: made(name) for name in config.rows if name != V1_RECORD and base_of(name) is None
         }
-        for name, policy in self.policies.items():
+        # A desk row asks its own copy of the row's policy: one that is asked once per pass, not
+        # once per market, must not share the reading a plain row cached.
+        self.desks: dict[str, Policy] = {
+            name: made(str(base_of(name))) for name in config.rows if base_of(name) is not None
+        }
+        for name, policy in {**self.policies, **self.desks}.items():
             cutoff = policy.knowledge_cutoff
             self.rows[name].contaminated = cutoff is not None and cutoff > config.start
         self.free_at: dict[tuple[str, str], int] = {}
@@ -177,13 +208,32 @@ class _Run:
     def replay(self, views: Views) -> None:
         step = self.config.interval_ns
         for at_ns in range(self.window.start_ns + step, self.window.end_ns, step):
+            seen = []
             for instrument in self.config.instruments:
                 view = views.view(instrument, at_ns)
+                seen.append(view)
                 for feature, value in view.features[view.primary].items():
                     if isinstance(value, Absent):
                         self.absent[(feature, value.reason)] += 1
                 for name, policy in self.policies.items():
                     self._decide(self.rows[name], policy, view)
+            for name, policy in self.desks.items():
+                self._pass(self.rows[name], policy, seen)
+
+    def _pass(self, row: _Row, policy: Policy, views: list[DecisionView]) -> None:
+        """One pass of a desk: the market with the most room that is free, asked once."""
+        at_ns = views[0].at_ns
+        view = chosen(
+            views,
+            self.config.costs_for,
+            lambda instrument: self.free_at.get((row.name, instrument), 0) <= at_ns,
+        )
+        if view is None:
+            return
+        idea = policy.decide(view)
+        if idea is not None:
+            hold_ns = idea.max_hold_bars * self.config.interval_ns
+            self._settle(row, view.instrument, idea, view.at_ns, hold_ns)
 
     def _decide(self, row: _Row, policy: Policy, view: DecisionView) -> None:
         if isinstance(policy, Scored):
@@ -208,7 +258,7 @@ class _Run:
             decided_ns=decided_ns,
             hold_ns=hold_ns,
             tape=self.histories[instrument].tape,
-            costs=self.config.costs,
+            costs=self.config.costs_for(instrument),
             funding=self.funding[instrument],
         )
         if isinstance(outcome, Settlement):
@@ -287,7 +337,28 @@ def _reports(
         )
         if name == V1_RECORD:
             report["label"] = V1_LABEL
+        report["by_instrument"] = by_instrument(row.settled)
         yield report
+
+
+def by_instrument(settled: list[Settlement]) -> dict[str, dict[str, Any]]:
+    """Each market's own ideas, mean and sum net of its costs, and how many reached the take.
+
+    A row's total can come from one market alone; this is where that shows.
+    """
+    grouped: dict[str, list[Settlement]] = {}
+    for outcome in settled:
+        grouped.setdefault(outcome.instrument, []).append(outcome)
+    out: dict[str, dict[str, Any]] = {}
+    for name, found in sorted(grouped.items()):
+        nets = [float(s.net_bps) for s in found]
+        out[name] = {
+            "ideas": len(found),
+            "mean_net_bps": f"{statistics.mean(nets):.2f}",
+            "sum_net_bps": f"{sum(nets):.2f}",
+            "won": sum(1 for n in nets if n > 0),
+        }
+    return out
 
 
 def _ideas(rows: dict[str, _Row]) -> list[dict[str, Any]]:

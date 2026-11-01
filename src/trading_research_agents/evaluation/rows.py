@@ -40,7 +40,7 @@ def make_policy(
             raise UnknownRowError(
                 "the paths row prices with the arena's costs; it needs the context"
             )
-        return PathsPolicy(fit.costs)
+        return PathsPolicy(fit.costs, instrument_costs=fit.instrument_costs)
     if name == "buy_hold":
         return BuyHold(end_ns, interval_ns)
     if name == "momentum":

@@ -23,7 +23,14 @@ from trading_research_agents.agents.cycle.state import Pass, through
 from trading_research_agents.agents.progress import DONE, HELD, RUNNING, SKIPPED, announce
 from trading_research_agents.execution import session
 from trading_research_agents.execution.targets import intents_today
-from trading_research_agents.execution.trigger import Wake, last_seen, spread_of, worth_asking
+from trading_research_agents.execution.trigger import (
+    Wake,
+    base_move,
+    last_seen,
+    snapshot_atr,
+    spread_of,
+    worth_asking,
+)
 from trading_research_agents.store.cycles import CycleDir
 from trading_research_agents.store.snapshot import cycle_id, take_snapshot
 from trading_research_agents.trading.capital import (
@@ -104,14 +111,18 @@ def _trigger(p: Pass) -> bool:
         return True
     if cfg.trigger.idle:
         return True
+    atr = snapshot_atr(p.snapshot) if cfg.trigger.min_move_atr is not None else None
     wake = worth_asking(
         cfg.trigger,
         mid=p.mid_now,
         spread_bps=p.spread_now,
-        seen=last_seen(cfg.root, instrument=cfg.instrument, min_move_bps=cfg.trigger.min_move_bps),
+        seen=last_seen(
+            cfg.root, instrument=cfg.instrument, min_move_bps=base_move(cfg.trigger, atr)
+        ),
         now=cfg.clock(),
         round_trips_today=intents_today(cfg.root, at=cfg.clock(), instrument=cfg.instrument),
         max_round_trips_per_day=cfg.targets.max_round_trips_per_day,
+        atr_bps=atr,
     )
     result.wake = wake
     if not wake.ask:

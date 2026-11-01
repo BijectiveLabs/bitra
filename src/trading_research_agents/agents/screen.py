@@ -37,8 +37,10 @@ from trading_research_agents.execution.regime import RegimeRule, label
 from trading_research_agents.execution.targets import intents_today
 from trading_research_agents.execution.trigger import (
     Trigger,
+    base_move,
     last_seen,
     previous_looks,
+    snapshot_atr,
     spread_of,
     worth_asking,
 )
@@ -177,7 +179,8 @@ def look(
     if moves is not None:
         moves[instrument] = returns_of(snapshot)
     reasons = [f"data {kind}: {why}" for kind, why in sorted(snapshot.refused.items())]
-    seen = last_seen(root, instrument=instrument, min_move_bps=trigger.min_move_bps)
+    atr = snapshot_atr(snapshot) if trigger.min_move_atr is not None else None
+    seen = last_seen(root, instrument=instrument, min_move_bps=base_move(trigger, atr))
     earlier = (looks or {}).get(instrument)
     if earlier is not None and (seen.at is None or earlier[1] > seen.at):
         seen = replace(seen, mid=earlier[0], at=earlier[1])
@@ -189,6 +192,7 @@ def look(
         now=now,
         round_trips_today=intents_today(root, at=now, instrument=instrument),
         max_round_trips_per_day=max_round_trips_per_day,
+        atr_bps=atr,
     )
     if figures["mid"] is None:
         reasons.append("no two-sided book, so nothing here can be priced")

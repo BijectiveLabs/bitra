@@ -13,6 +13,7 @@ from trading_research_agents.data.sources.ccxt_client import (
     SIGNED_DEFAULTS,
     exchange_class,
     market_of,
+    with_markets,
 )
 from trading_research_agents.data.sources.ccxt_client import build as build_client
 from trading_research_agents.extras import install_hint
@@ -58,7 +59,10 @@ class HandTerms(HandState):
         client = build_client(self.venue, config)
         self.to_environment(client)
         route(self.venue, client, self.symbol)
-        return client
+        # Every cycle builds its hand afresh, so without this each one paid for the venue's whole
+        # market list before its first read; on a slow link that alone aged decisions past
+        # [execution].max_decision_age_s.
+        return with_markets(client, self.venue, self.environment, self.symbol, signed=True)
 
     def to_environment(self, client: Any) -> None:
         """Point the client at the environment the operator declared, or refuse to guess.

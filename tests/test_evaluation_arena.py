@@ -200,3 +200,58 @@ def test_a_different_archive_is_a_different_run(archive: Path, tmp_path: Path) -
     second = write_arena(run_arena(config(), root=root), tmp_path / "out")
     assert first != second
     assert (first / "arena.json").is_file() and (second / "arena.json").is_file()
+
+
+def test_a_market_priced_at_its_own_costs_and_reported_on_its_own(archive: Path) -> None:
+    from trading_research_agents.evaluation.settle import Costs
+    from trading_research_agents.market_data.bars import MarketDataError
+
+    thin = Costs(COSTS.channel, COSTS.spread_bps + Decimal(20), COSTS.slippage_bps + Decimal(15))
+    plain = run_arena(config(rows=("momentum",)), root=archive)
+    priced = run_arena(config(rows=("momentum",), instrument_costs={"ETHUSDT": thin}), root=archive)
+    before = plain.rows[0]["by_instrument"]
+    after = priced.rows[0]["by_instrument"]
+    assert set(before) == {"BTCUSDT", "ETHUSDT"}
+    # BTC keeps the default; ETH pays its own 35 bps more on every round trip.
+    assert after["BTCUSDT"] == before["BTCUSDT"]
+    shift = float(after["ETHUSDT"]["mean_net_bps"]) - float(before["ETHUSDT"]["mean_net_bps"])
+    assert after["ETHUSDT"]["ideas"] == before["ETHUSDT"]["ideas"] and round(shift, 2) == -35.0
+    assert priced.config.record()["instrument_costs"]["ETHUSDT"]["spread_bps"] == str(
+        thin.spread_bps
+    )
+    with pytest.raises(MarketDataError, match="which this arena does not trade"):
+        config(instrument_costs={"SOLUSDT": thin})
+
+
+def test_a_desk_row_takes_one_market_per_pass_by_room(archive: Path) -> None:
+    from trading_research_agents.market_data.bars import MarketDataError
+
+    result = run_arena(config(rows=("momentum", "desk:momentum")), root=archive)
+    plain, desk = (r for r in result.rows)
+    assert desk["row"] == "desk:momentum" and set(desk["by_instrument"]) <= {"BTCUSDT", "ETHUSDT"}
+    # One cycle a pass instead of one per market: never more ideas than the plain row.
+    assert 0 < desk["ideas"] <= plain["ideas"]
+    ideas = [i for i in result.ideas if i["row"] == "desk:momentum"]
+    decided = [i["decided_ns"] for i in ideas]
+    assert len(decided) == len(set(decided))  # at most one idea per pass
+    for bad in ("desk:v1_record", "desk:desk:momentum", "desk:"):
+        with pytest.raises(MarketDataError, match="a desk row names a row"):
+            config(rows=(bad,))
+
+
+def test_a_pass_takes_the_free_market_with_the_most_room(monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+
+    from trading_research_agents.evaluation import desk
+
+    rooms = {"BTCUSDT": Decimal(40), "ETHUSDT": Decimal(90), "SOLUSDT": None}
+    monkeypatch.setattr(desk, "room", lambda view, costs: rooms[view.instrument])
+    views = [SimpleNamespace(instrument=n) for n in ("BTCUSDT", "ETHUSDT", "SOLUSDT")]
+
+    def pick(free: set[str]) -> str | None:
+        got = desk.chosen(views, lambda _: COSTS, lambda name: name in free)  # type: ignore[arg-type]
+        return None if got is None else got.instrument
+
+    assert pick({"BTCUSDT", "ETHUSDT", "SOLUSDT"}) == "ETHUSDT"
+    assert pick({"BTCUSDT", "SOLUSDT"}) == "BTCUSDT"  # room before none, then the declared order
+    assert pick({"SOLUSDT"}) == "SOLUSDT" and pick(set()) is None

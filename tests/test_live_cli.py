@@ -340,15 +340,12 @@ def test_the_autonomous_profile_lays_the_cycle_down_wired(
 
     cfg = load_strategy_config(target / "strategy.toml")
     assert cfg.agents is not None and cfg.agents.role == "structure_lead"
-    # The gates are live rather than commented, and they are the operator's to change.
-    assert not cfg.conviction.idle and cfg.conviction.min_score == Decimal("0.4")
-    assert [str(t.size_multiple) for t in cfg.conviction.ladder] == ["1.0", "0.5", "0.25"]
-    assert cfg.targets.min_net_bps == Decimal("5")
+    # The core: one cost rule live, and every layer beyond it off until the arena earns it a place.
+    assert cfg.targets.min_edge_multiple == Decimal("2.0") and cfg.targets.min_net_bps is None
+    assert cfg.conviction.idle and cfg.confluence.idle and not cfg.regime.setups_must_fit
+    assert cfg.trigger.widen_after is None and cfg.trigger.min_move_bps == Decimal("15")
     assert cfg.execution.mode == "sandbox"
-    # Nothing is required of the matrix yet: no source is declared, and a role nobody asked has
-    # agreed to nothing.
-    assert cfg.confluence.required == ()
-    assert cfg.conviction.weights == {"structure_lead": Decimal("2.0")}
+    assert "# [conviction]" in (target / "strategy.toml").read_text("utf-8")
 
     # The data section survived the rewrite that put [agents] in, and so did the shelf.
     assert "[data]" in (target / "strategy.toml").read_text("utf-8")
@@ -359,7 +356,7 @@ def test_the_autonomous_profile_lays_the_cycle_down_wired(
     capsys.readouterr()
     main(["check"])
     out = capsys.readouterr().out
-    assert "ok    conviction: floor 0.4" in out
+    assert "ok    experiments: none; the desk is the core" in out
     assert "ok    execution: sandbox; nothing leaves the machine" in out
     assert "todo  [agents].provider is still the placeholder" in out
 

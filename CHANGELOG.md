@@ -6,6 +6,37 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- `tra init --profile autonomous` writes the core: data, one decision, the exits, one cost rule
+  (`[targets].min_edge_multiple`), the risk gate and execution, with `[trigger]` deciding when a
+  cycle is worth asking. The conviction ladder, the confluence matrix, a regime the setup must fit,
+  the trigger's widening and `[targets].min_net_bps` are written commented under "Experiments",
+  because none has been measured against the core. A desk already written keeps what it declared.
+
+### Added
+
+- `tra check` lists the experiments a desk has on beside the core: reviewers, the team, readings,
+  confluence, conviction, the bps floor, the paths floor, regime fit, the trigger's widening,
+  discovery and Kelly sizing.
+- `tra arena` prices each market at its own costs, from `[arena.instrument_costs.<NAME>]` in
+  `arena.toml`, and breaks every row down by instrument: ideas, mean and sum net, and wins.
+- Desk rows in the arena, `desk:<row>` such as `desk:paths`: the row asked the way a live desk asks
+  it, one market per pass, the one with the most room that has no open idea.
+- `[trigger].min_move_atr`, an experiment: the move asked for as a fraction of the instrument's own
+  ATR on the decision timeframe, so a fixed 15 bps is not noise on one coin and a real move on
+  another. With no ATR to read, `min_move_bps` applies.
+
+### Fixed
+
+- A venue's market list is loaded once per venue and environment and shared by every client for an
+  hour, through ccxt's own `set_markets_from_exchange`, instead of once per data source, per
+  cycle's order hand and per position read. Measured on the demo desk's settings from a slow link:
+  a sandbox cycle went from 24 s to 9.5 s, and a pass from 62 s to 57 s, most of what remains
+  being the screen's own reads. In venue mode the reload per cycle had aged decisions past
+  `[execution].max_decision_age_s` (121 s against 120), and every intent of the desk's last 58
+  cycles was refused before it was sent.
+
 ## [0.12.2] - 2026-10-31
 
 ### Fixed

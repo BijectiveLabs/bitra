@@ -240,7 +240,7 @@ def test_a_run_of_refusals_raises_the_desks_own_bar_and_one_move_lowers_it() -> 
     )
     assert not held.ask and held.required_bps == Decimal("30")
     assert "widened by 4 refusals" in held.reasons[0]
-    with pytest.raises(TriggerError, match="min_move_bps comes with it"):
+    with pytest.raises(TriggerError, match="min_move_bps or min_move_atr comes with it"):
         Trigger(widen_after=2)
 
 
@@ -525,3 +525,33 @@ def test_a_real_move_between_two_refusals_ends_the_streak(tmp_path: Path) -> Non
     assert last_seen(root, instrument="BTCUSDT", min_move_bps=Decimal(15)).refusals == 2
     # A move below the minimum does not end it.
     assert last_seen(root, instrument="BTCUSDT", min_move_bps=Decimal(100)).refusals == 5
+
+
+def test_the_move_asked_for_can_be_a_fraction_of_the_instruments_own_atr() -> None:
+    from types import SimpleNamespace
+
+    from trading_research_agents.execution.trigger import atr_bps_of, base_move
+
+    def candle(high: str, low: str, close: str) -> Any:
+        return SimpleNamespace(high=Decimal(high), low=Decimal(low), close=Decimal(close))
+
+    # Every bar spans 2 around a close of 100: an ATR of 2, which is 200 bps of the last close.
+    bars = [candle("101", "99", "100") for _ in range(20)]
+    assert atr_bps_of(bars) == Decimal("200.00")
+    assert atr_bps_of(bars[:1]) is None and atr_bps_of([]) is None
+
+    trigger = Trigger(min_move_bps=Decimal(15), min_move_atr=Decimal("0.25"))
+    assert base_move(trigger, Decimal(200)) == Decimal("50.00")  # a quarter of the ATR
+    assert base_move(trigger, None) == Decimal(15)  # no ATR: the declared bps
+    now = datetime(2026, 9, 27, 10, 0, tzinfo=UTC)
+    seen = Seen(mid=Decimal(100), at=datetime(2026, 9, 27, 9, 55, tzinfo=UTC), refusals=0)
+    quiet = worth_asking(
+        trigger, mid=Decimal("100.30"), spread_bps=None, seen=seen, now=now, atr_bps=Decimal(200)
+    )
+    assert not quiet.ask and "0.25 of an ATR of 200 bps" in quiet.reasons[0]
+    moved = worth_asking(
+        trigger, mid=Decimal("100.60"), spread_bps=None, seen=seen, now=now, atr_bps=Decimal(200)
+    )
+    assert moved.ask
+    with pytest.raises(TriggerError, match="min_move_atr"):
+        Trigger(min_move_atr=Decimal(0))
