@@ -72,6 +72,14 @@ slippage_bps = 15
 Name the instruments you would trade. A universe discovered from today's volume cannot be replayed
 on any archive, so evidence comes from a declared list.
 
+A live desk with several instruments does not trade all of them at every decision: a pass orders
+them by room (the range the instrument's own paths draw over the hold, against its spread) and
+spends one cycle on the first that has no open idea. If that cycle decides nothing, the pass ends.
+The plain rows ask every market every time, which is a different set of trades. A desk row,
+`desk:<row>` such as `desk:paths`, asks the row that way, so what is measured is what the desk would
+have taken. It does not replay the trigger, the correlation filter or the daily intent cap, which
+depend on the desk's own record of earlier looks.
+
 ## Rows
 
 | Row | Definition |

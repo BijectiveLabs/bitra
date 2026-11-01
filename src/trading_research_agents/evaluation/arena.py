@@ -19,6 +19,7 @@ from typing import Any
 
 from trading_research_agents import __version__
 from trading_research_agents.evaluation.baselines import BASELINES_VERSION, HOLD_BARS
+from trading_research_agents.evaluation.desk import base_of, chosen
 from trading_research_agents.evaluation.forecast import FORECAST_VERSION, FitContext
 from trading_research_agents.evaluation.history import MarketHistory, Views, load_history
 from trading_research_agents.evaluation.policy import DecisionView, Policy, Scored, TradeIdea
@@ -70,6 +71,13 @@ class ArenaConfig:
             raise MarketDataError("an arena names each instrument once, and at least one")
         if not self.rows or len(set(self.rows)) != len(self.rows):
             raise MarketDataError("an arena names each row once, and at least one")
+        for row in self.rows:
+            base = base_of(row)
+            if base is not None and (not base or base == V1_RECORD or base_of(base) is not None):
+                raise MarketDataError(
+                    f"{row!r}: a desk row names a row it asks, such as desk:paths; not the v1 "
+                    "record, which has its own times, and not another desk row"
+                )
         if self.end < self.start:
             raise MarketDataError(f"the window ends ({self.end}) before it starts ({self.start})")
         spans = (self.interval_s, self.context_interval_s, self.v1_hold_s)
@@ -173,18 +181,25 @@ class _Run:
             interval_ns=config.interval_ns,
             first_ns=midnight_ns(config.start - timedelta(days=WARMUP_DAYS)),
         )
-        self.policies: dict[str, Policy] = {
-            name: make_policy(
+
+        def made(name: str) -> Policy:
+            return make_policy(
                 name,
                 seed=config.seed,
                 end_ns=window.end_ns,
                 interval_ns=config.interval_ns,
                 fit=fit,
             )
-            for name in config.rows
-            if name != V1_RECORD
+
+        self.policies: dict[str, Policy] = {
+            name: made(name) for name in config.rows if name != V1_RECORD and base_of(name) is None
         }
-        for name, policy in self.policies.items():
+        # A desk row asks its own copy of the row's policy: one that is asked once per pass, not
+        # once per market, must not share the reading a plain row cached.
+        self.desks: dict[str, Policy] = {
+            name: made(str(base_of(name))) for name in config.rows if base_of(name) is not None
+        }
+        for name, policy in {**self.policies, **self.desks}.items():
             cutoff = policy.knowledge_cutoff
             self.rows[name].contaminated = cutoff is not None and cutoff > config.start
         self.free_at: dict[tuple[str, str], int] = {}
@@ -193,13 +208,32 @@ class _Run:
     def replay(self, views: Views) -> None:
         step = self.config.interval_ns
         for at_ns in range(self.window.start_ns + step, self.window.end_ns, step):
+            seen = []
             for instrument in self.config.instruments:
                 view = views.view(instrument, at_ns)
+                seen.append(view)
                 for feature, value in view.features[view.primary].items():
                     if isinstance(value, Absent):
                         self.absent[(feature, value.reason)] += 1
                 for name, policy in self.policies.items():
                     self._decide(self.rows[name], policy, view)
+            for name, policy in self.desks.items():
+                self._pass(self.rows[name], policy, seen)
+
+    def _pass(self, row: _Row, policy: Policy, views: list[DecisionView]) -> None:
+        """One pass of a desk: the market with the most room that is free, asked once."""
+        at_ns = views[0].at_ns
+        view = chosen(
+            views,
+            self.config.costs_for,
+            lambda instrument: self.free_at.get((row.name, instrument), 0) <= at_ns,
+        )
+        if view is None:
+            return
+        idea = policy.decide(view)
+        if idea is not None:
+            hold_ns = idea.max_hold_bars * self.config.interval_ns
+            self._settle(row, view.instrument, idea, view.at_ns, hold_ns)
 
     def _decide(self, row: _Row, policy: Policy, view: DecisionView) -> None:
         if isinstance(policy, Scored):

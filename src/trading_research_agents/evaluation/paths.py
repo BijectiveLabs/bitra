@@ -28,7 +28,8 @@ ARENA_PATHS = 400
 _Read = tuple[dict[str, PathReading], float]
 
 
-def _ohlc(bars: Sequence[FlowBar]) -> list[list[float]]:
+def ohlc_of(bars: Sequence[FlowBar]) -> list[list[float]]:
+    """Open, high, low and close of every bar that traded, in the order the path reader takes."""
     return [
         [float(b.open), float(b.high), float(b.low), float(b.close)]
         for b in bars
@@ -101,7 +102,7 @@ class PathsPolicy:
         try:
             readings = {
                 side: read_paths(
-                    _ohlc(view.bars),
+                    ohlc_of(view.bars),
                     side=side,
                     take_bps=float(TAKE_ATR) * atr,
                     stop_bps=float(STOP_ATR) * atr,

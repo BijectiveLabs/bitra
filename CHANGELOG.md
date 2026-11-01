@@ -21,6 +21,8 @@ All notable changes to this project are recorded here. The format follows
   discovery and Kelly sizing.
 - `tra arena` prices each market at its own costs, from `[arena.instrument_costs.<NAME>]` in
   `arena.toml`, and breaks every row down by instrument: ideas, mean and sum net, and wins.
+- Desk rows in the arena, `desk:<row>` such as `desk:paths`: the row asked the way a live desk asks
+  it, one market per pass, the one with the most room that has no open idea.
 
 ### Fixed
 
