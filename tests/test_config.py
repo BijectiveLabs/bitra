@@ -221,7 +221,7 @@ def test_the_trigger_is_read_and_widening_needs_something_to_widen() -> None:
     )
     assert declared.trigger.min_move_bps == Decimal("15")
     assert declared.trigger.cooldown_s == 900 and declared.trigger.widen_after == 6
-    with pytest.raises(ConfigError, match="min_move_bps comes with it"):
+    with pytest.raises(ConfigError, match="min_move_bps or min_move_atr comes with it"):
         parse_strategy_config(agent_raw(trigger={"widen_after": 3}))
     with pytest.raises(ConfigError, match="unknown"):
         parse_strategy_config(agent_raw(trigger={"min_move": Decimal("15")}))

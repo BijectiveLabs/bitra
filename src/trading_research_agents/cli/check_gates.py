@@ -364,6 +364,7 @@ def experiments_on(cfg: Any) -> list[str]:
         (cfg.targets.min_path_ev_bps is not None, "[targets].min_path_ev_bps"),
         (cfg.regime.setups_must_fit, "[regime].setups_must_fit"),
         (cfg.trigger.widen_after is not None, "[trigger].widen_after"),
+        (cfg.trigger.min_move_atr is not None, "[trigger].min_move_atr"),
         (cfg.universe.discover, "[universe].discover"),
         (getattr(cfg.sizing, "kelly_fraction", None) is not None, "[sizing]"),
     )
@@ -539,7 +540,17 @@ def _trigger_notes(cfg: Any) -> list[str]:
             "anything moved; [trigger].min_move_bps is what makes a quiet hour cheap"
         ]
     said = []
-    if trigger.min_move_bps is not None:
+    if trigger.min_move_atr is not None:
+        fallback = (
+            f", {trigger.min_move_bps} bps when the ATR cannot be read"
+            if trigger.min_move_bps is not None
+            else ", and no move asked for when the ATR cannot be read"
+        )
+        said.append(
+            f"{trigger.min_move_atr} of the instrument's own ATR of movement since the last "
+            f"look{fallback}"
+        )
+    elif trigger.min_move_bps is not None:
         said.append(f"{trigger.min_move_bps} bps of movement since the last look")
     if trigger.max_spread_bps is not None:
         said.append(f"a book no wider than {trigger.max_spread_bps} bps")
@@ -547,6 +558,7 @@ def _trigger_notes(cfg: Any) -> list[str]:
         said.append(f"{trigger.cooldown_s}s since the last intent")
     if trigger.widen_after is not None:
         said.append(f"more movement after {trigger.widen_after} straight refusals")
-    if trigger.min_move_bps is not None and trigger.look_valid_s is not None:
+    moves = trigger.min_move_bps is not None or trigger.min_move_atr is not None
+    if moves and trigger.look_valid_s is not None:
         said.append(f"a last look older than {trigger.look_valid_s}s counts as a first look")
     return ["trigger: asks the roster only on " + "; ".join(said)]

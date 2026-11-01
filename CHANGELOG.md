@@ -23,6 +23,9 @@ All notable changes to this project are recorded here. The format follows
   `arena.toml`, and breaks every row down by instrument: ideas, mean and sum net, and wins.
 - Desk rows in the arena, `desk:<row>` such as `desk:paths`: the row asked the way a live desk asks
   it, one market per pass, the one with the most room that has no open idea.
+- `[trigger].min_move_atr`, an experiment: the move asked for as a fraction of the instrument's own
+  ATR on the decision timeframe, so a fixed 15 bps is not noise on one coin and a real move on
+  another. With no ATR to read, `min_move_bps` applies.
 
 ### Fixed
 

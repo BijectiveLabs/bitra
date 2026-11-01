@@ -91,7 +91,14 @@ TARGET_KEYS = (
 )
 
 
-TRIGGER_KEYS = ("min_move_bps", "max_spread_bps", "cooldown_s", "widen_after", "look_valid_for")
+TRIGGER_KEYS = (
+    "min_move_bps",
+    "min_move_atr",
+    "max_spread_bps",
+    "cooldown_s",
+    "widen_after",
+    "look_valid_for",
+)
 
 
 AUDIT_KEYS = (
@@ -416,6 +423,7 @@ def _trigger(raw: dict[str, Any]) -> Trigger:
     try:
         return Trigger(
             min_move_bps=_dec(table, "min_move_bps") if "min_move_bps" in table else None,
+            min_move_atr=_dec(table, "min_move_atr") if "min_move_atr" in table else None,
             max_spread_bps=(_dec(table, "max_spread_bps") if "max_spread_bps" in table else None),
             cooldown_s=_count(table, "cooldown_s") if "cooldown_s" in table else None,
             widen_after=_count(table, "widen_after") if "widen_after" in table else None,

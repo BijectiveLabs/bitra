@@ -10,6 +10,8 @@ the cycle summaries on disk, and the clock. No model is called, so a cycle that 
 price of one data pull. What it looks at:
 
   min_move_bps      the market has to have moved since the last look, or nothing is new to read
+  min_move_atr      the same move, as a fraction of the instrument's own ATR on the decision
+                    timeframe: 15 bps is noise on a small coin and a real move on BTC
   max_spread_bps    a book this wide cannot be traded through whatever anyone concludes
   cooldown_s        one decision per instrument in this window; a second one is a second opinion
   widen_after       after a run of refusals with nothing changing, ask for a larger move each time
@@ -22,10 +24,11 @@ raises its own bar for being disturbed, and one real move brings it straight bac
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-from itertools import islice
+from itertools import islice, pairwise
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +50,7 @@ class Trigger:
     """[trigger]: what has to be true before the roster is paid to have an opinion."""
 
     min_move_bps: Decimal | None = None
+    min_move_atr: Decimal | None = None
     max_spread_bps: Decimal | None = None
     cooldown_s: int | None = None
     widen_after: int | None = None
@@ -59,6 +63,8 @@ class Trigger:
             raise TriggerError("[trigger].look_valid_for is at least one second")
         if self.min_move_bps is not None and self.min_move_bps < 0:
             raise TriggerError("[trigger].min_move_bps is not negative")
+        if self.min_move_atr is not None and self.min_move_atr <= 0:
+            raise TriggerError("[trigger].min_move_atr is a positive fraction of the ATR")
         if self.max_spread_bps is not None and self.max_spread_bps <= 0:
             raise TriggerError("[trigger].max_spread_bps is positive")
         if self.cooldown_s is not None and self.cooldown_s < 0:
@@ -66,15 +72,17 @@ class Trigger:
         if self.widen_after is not None:
             if self.widen_after < 1:
                 raise TriggerError("[trigger].widen_after counts refusals, so it is at least 1")
-            if self.min_move_bps is None:
+            if self.min_move_bps is None and self.min_move_atr is None:
                 raise TriggerError(
-                    "[trigger].widen_after widens the move required, so min_move_bps comes with it"
+                    "[trigger].widen_after widens the move required, so min_move_bps or "
+                    "min_move_atr comes with it"
                 )
 
     @property
     def idle(self) -> bool:
         return (
             self.min_move_bps is None
+            and self.min_move_atr is None
             and self.max_spread_bps is None
             and self.cooldown_s is None
             and self.widen_after is None
@@ -83,6 +91,7 @@ class Trigger:
     def record(self) -> dict[str, Any]:
         return {
             "min_move_bps": None if self.min_move_bps is None else str(self.min_move_bps),
+            "min_move_atr": None if self.min_move_atr is None else str(self.min_move_atr),
             "max_spread_bps": None if self.max_spread_bps is None else str(self.max_spread_bps),
             "cooldown_s": self.cooldown_s,
             "widen_after": self.widen_after,
@@ -137,14 +146,53 @@ def moved_bps(*, mid: Decimal, before: Decimal) -> Decimal:
     return (abs(mid - before) / before * BPS).quantize(Decimal("0.01"))
 
 
-def required_move(trigger: Trigger, *, refusals: int) -> Decimal | None:
+def base_move(trigger: Trigger, atr_bps: Decimal | None = None) -> Decimal | None:
+    """The move asked for before any widening: a fraction of the ATR where one is declared and
+    the ATR could be read, else the declared bps. With neither, nothing is asked for."""
+    if trigger.min_move_atr is not None and atr_bps is not None and atr_bps > 0:
+        return (trigger.min_move_atr * atr_bps).quantize(Decimal("0.01"))
+    return trigger.min_move_bps
+
+
+def required_move(
+    trigger: Trigger, *, refusals: int, atr_bps: Decimal | None = None
+) -> Decimal | None:
     """The move this cycle has to see, after a run of refusals has raised the desk's own bar."""
-    if trigger.min_move_bps is None:
+    base = base_move(trigger, atr_bps)
+    if base is None:
         return None
     if trigger.widen_after is None or refusals < trigger.widen_after:
-        return trigger.min_move_bps
+        return base
     over = min(refusals - trigger.widen_after + 2, MAX_WIDENING)
-    return trigger.min_move_bps * Decimal(over)
+    return base * Decimal(over)
+
+
+def atr_bps_of(candles: Sequence[Any], bars: int = 14) -> Decimal | None:
+    """The mean true range of the last `bars` closed candles, in bps of the last close.
+
+    Candles carry open, high, low and close; an empty interval (no close) is skipped. None when
+    fewer than two candles can be read.
+    """
+    rows = [c for c in candles if getattr(c, "close", None) is not None]
+    if len(rows) < 2:
+        return None
+    ranges: list[Decimal] = []
+    for before, now in list(pairwise(rows))[-bars:]:
+        high, low = Decimal(str(now.high)), Decimal(str(now.low))
+        prior = Decimal(str(before.close))
+        ranges.append(max(high - low, abs(high - prior), abs(low - prior)))
+    last = Decimal(str(rows[-1].close))
+    if last <= 0:
+        return None
+    return (sum(ranges, Decimal(0)) / len(ranges) / last * BPS).quantize(Decimal("0.01"))
+
+
+def snapshot_atr(snapshot: Any) -> Decimal | None:
+    """The ATR of a snapshot's own candles, in bps, or None when they cannot be read."""
+    try:
+        return atr_bps_of(list(snapshot.get("ohlcv").value or []))
+    except (KeyError, AttributeError, TypeError, ArithmeticError):
+        return None
 
 
 def worth_asking(
@@ -156,10 +204,11 @@ def worth_asking(
     now: datetime,
     round_trips_today: int = 0,
     max_round_trips_per_day: int | None = None,
+    atr_bps: Decimal | None = None,
 ) -> Wake:
     """Decide, from free figures only, whether this cycle should pay anyone for an opinion."""
     holds: list[str] = []
-    needed = required_move(trigger, refusals=seen.refusals)
+    needed = required_move(trigger, refusals=seen.refusals, atr_bps=atr_bps)
     travelled: Decimal | None = None
 
     if max_round_trips_per_day is not None and round_trips_today >= max_round_trips_per_day:
@@ -197,11 +246,12 @@ def worth_asking(
     if mid is not None and before is not None and before > 0:
         travelled = moved_bps(mid=mid, before=before)
     if needed is not None and travelled is not None and travelled < needed:
+        base = base_move(trigger, atr_bps)
         because = (
-            ""
-            if needed == trigger.min_move_bps
-            else f", widened by {seen.refusals} refusals with nothing changing"
+            f", widened by {seen.refusals} refusals with nothing changing" if needed != base else ""
         )
+        if trigger.min_move_atr is not None and base != trigger.min_move_bps:
+            because = f" ({trigger.min_move_atr} of an ATR of {atr_bps} bps){because}"
         holds.append(
             f"the mid has moved {travelled} bps since the last cycle and the declared minimum "
             f"is {needed} bps{because}; there is nothing new to read"

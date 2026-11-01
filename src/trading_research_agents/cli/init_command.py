@@ -372,7 +372,8 @@ setups_must_fit = false
 # quant_every_cycles = 20
 #
 # In [regime]: setups_must_fit = true, a setup the measured regime does not support is refused.
-# In [trigger]: widen_after = 6, a larger move asked for after a run of refusals.
+# In [trigger]: widen_after = 6, a larger move asked for after a run of refusals; min_move_atr =
+#   0.25, the move as a fraction of the instrument's own ATR instead of a fixed bps figure.
 # In [targets]: min_net_bps, a floor in bps beside the multiple.
 # In [agents]: reviewers = ["pro", "contra", "neutral"], team = ["blind_confirmer"], readings.
 

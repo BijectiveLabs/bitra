@@ -213,6 +213,8 @@ schedule. It is to put a check in front of it that costs nothing.
 ```toml
 [trigger]
 min_move_bps = 15                # the mid has to have moved this far since the last cycle
+# min_move_atr = 0.25            # or a fraction of the instrument's own ATR; the bps above when
+#                                # the ATR cannot be read (an experiment, like the widening)
 max_spread_bps = 8               # a book wider than this cannot be traded through
 cooldown_s = 900                 # one decision per instrument in this window
 widen_after = 6                  # after this many straight refusals, ask for more movement
