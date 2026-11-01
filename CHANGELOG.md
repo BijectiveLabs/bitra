@@ -8,10 +8,23 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- The edge the cost gate and `[targets]` weigh is the trade's value over the instrument's own paths
+  at its levels: the chance of the take before the stop times the take, less the chance of the stop
+  first times the stop, plus the paths that reach neither, before the round trip. It was the
+  distance to the take, as if every trade reached it. `[targets].min_path_ev_bps` is the core's
+  cost rule and on by default at 0 bps net; `"off"` restores the old claim. The paths' odds are
+  not calibrated on outcomes yet, and the arena and `tra hindsight` measure them.
+- Off by default, as experiments: `[targets].max_break_even_win_rate` (was 0.5),
+  `[exit].min_reward_to_risk` (was 1.5) and `[agents].min_confidence` (was 0.5). The first two read
+  the levels alone; the third reads a confidence the model states, and models are overconfident
+  when they state one. A desk that declared them keeps them.
+- `[universe].max_intents_per_day` is held as `[controls].max_trades_per_day`: both counted the
+  intents written today across every instrument. Declared in both places, the smaller holds.
 - `tra init --profile autonomous` writes the core: data, one decision, the exits, one cost rule
-  (`[targets].min_edge_multiple`), the risk gate and execution, with `[trigger]` deciding when a
+  (`[targets].min_path_ev_bps`), the risk gate and execution, with `[trigger]` deciding when a
   cycle is worth asking. The conviction ladder, the confluence matrix, a regime the setup must fit,
-  the trigger's widening and `[targets].min_net_bps` are written commented under "Experiments",
+  the trigger's widening, `[targets].min_edge_multiple` and `min_net_bps`, `[exit].min_reward_to_risk`
+  and `[agents].min_confidence` are written commented under "Experiments",
   because none has been measured against the core. A desk already written keeps what it declared.
 
 ### Added

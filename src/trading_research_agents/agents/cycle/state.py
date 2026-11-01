@@ -13,6 +13,7 @@ from typing import Any
 
 from trading_research_agents.agents.cycle.config import CycleConfig
 from trading_research_agents.agents.cycle.result import CycleResult
+from trading_research_agents.execution.pretrade import Certainty
 from trading_research_agents.execution.stops import Placement
 from trading_research_agents.store.cycles import CycleDir
 from trading_research_agents.store.snapshot import Snapshot
@@ -49,6 +50,7 @@ class Pass:
     placement: Placement | None = None
     edge: Decimal = Decimal(0)
     edge_source: str = ""
+    edge_certainty: Certainty = Certainty.DECLARED
     size: Decimal = Decimal(0)
     allowed_bps: Decimal | None = None
     capped: Any = None

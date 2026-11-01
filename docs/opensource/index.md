@@ -58,7 +58,7 @@ flowchart TD
     briefs["the system writes the briefs<br/>each role sees only the figures its job needs"] --> readers
     readers["readings, by the system, no model<br/>macro, on-chain, sentiment against your lines"] --> tech
     tech["structure lead, alone or with its team<br/>a blind confirmer that must agree, a flow specialist<br/>a direction, a confidence, a horizon"] --> price["the system prices the round trip<br/>fee, spread, impact, funding, slippage"]
-    price --> exits{"the stop and the target<br/>the analyst's levels, held inside your bounds<br/>does the trade break even at half its kind winning?"}
+    price --> exits{"the stop and the target<br/>the analyst's levels, held inside your bounds<br/>worth more than its cost over its own paths?"}
     exits -- "no" --> refused
     exits -- "yes" --> round2["reviewers, as many as you declare<br/>a claim that cites no figure is thrown away"]
     round2 --> matrix{"confluence<br/>do your declared states agree with the direction?"}

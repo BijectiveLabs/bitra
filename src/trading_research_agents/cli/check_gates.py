@@ -273,10 +273,10 @@ def _target_notes(cfg: Any, bad: list[str]) -> list[str]:
             f"paths: a trade worth less than {targets.min_path_ev_bps} bps over the instrument's "
             "own paths, net of the round trip, is refused, and so is one too few candles can read"
         )
-    if targets.min_edge_multiple is None:
+    if targets.min_path_ev_bps is None:
         good.append(
-            "targets: no edge multiple declared, so a trade worth two basis points more than it "
-            "costs can still pass; [targets].min_edge_multiple is what stops that"
+            "targets: [targets].min_path_ev_bps is off, so the cost gate weighs the distance to "
+            "the take as if it were certain; the paths' expected value is the core's cost rule"
         )
     priced = cfg.agents is not None and any(i > 0 or o > 0 for i, o in cfg.agents.pricing.values())
     if targets.max_research_bps is not None and not priced:
@@ -361,7 +361,13 @@ def experiments_on(cfg: Any) -> list[str]:
         (not cfg.confluence.idle, "[confluence]"),
         (not cfg.conviction.idle, "[conviction]"),
         (cfg.targets.min_net_bps is not None, "[targets].min_net_bps"),
-        (cfg.targets.min_path_ev_bps is not None, "[targets].min_path_ev_bps"),
+        (cfg.targets.min_edge_multiple is not None, "[targets].min_edge_multiple"),
+        (cfg.targets.max_break_even_win_rate < 1, "[targets].max_break_even_win_rate"),
+        (
+            getattr(cfg.exit_rule.volatility, "min_reward_to_risk", 0) > 0,
+            "[exit].min_reward_to_risk",
+        ),
+        (cfg.agents is not None and cfg.agents.min_confidence > 0, "[agents].min_confidence"),
         (cfg.regime.setups_must_fit, "[regime].setups_must_fit"),
         (cfg.trigger.widen_after is not None, "[trigger].widen_after"),
         (cfg.trigger.min_move_atr is not None, "[trigger].min_move_atr"),
@@ -490,9 +496,13 @@ def _exit_notes(cfg: Any, bad: list[str]) -> list[str]:
         (
             f"exits: the analyst names its stop and target; the stop is held between "
             f"{_bps(scale.min_stop_frac * 10_000)} and {_bps(scale.max_stop_frac * 10_000)} bps "
-            f"and never inside {scale.min_stop_atr} ATR, the target between "
-            f"{scale.min_reward_to_risk}x and {scale.max_reward_to_risk}x the "
-            f"stop; with no level named, {scale.stop_atr} x ATR({scale.atr_bars}) and "
+            f"and never inside {scale.min_stop_atr} ATR, the target "
+            + (
+                f"between {scale.min_reward_to_risk}x and {scale.max_reward_to_risk}x the stop"
+                if scale.min_reward_to_risk > 0
+                else f"brought in past {scale.max_reward_to_risk}x the stop"
+            )
+            + f"; with no level named, {scale.stop_atr} x ATR({scale.atr_bars}) and "
             f"{scale.reward_to_risk}x"
         )
         if scale.analyst_levels

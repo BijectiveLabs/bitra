@@ -50,11 +50,13 @@ class Targets:
     max_research_bps: Decimal | None = None
     max_round_trips_per_day: int | None = None
     # The share of trades like this one that must reach the take profit to cover the stops and the
-    # round trip. Arithmetic on the trade's own levels and costs; 1 turns the bound off.
-    max_break_even_win_rate: Decimal = Decimal("0.5")
-    # The value of the trade over the instrument's own paths at its levels, net of the round trip,
-    # in bps; undeclared, the paths are read and recorded but refuse nothing.
-    min_path_ev_bps: Decimal | None = None
+    # round trip. Arithmetic on the trade's own levels alone, which says nothing about how often the
+    # take is reached; an experiment since 0.13, so 1, off, unless declared.
+    max_break_even_win_rate: Decimal = Decimal("1")
+    # The core's cost rule since 0.13: the value of the trade over the instrument's own paths at
+    # its levels, net of the round trip, in bps, must be at least this. It is the one rule that
+    # weighs how often the take comes before the stop; `"off"` turns it off.
+    min_path_ev_bps: Decimal | None = Decimal(0)
 
     def __post_init__(self) -> None:
         if not Decimal(0) < self.max_break_even_win_rate <= Decimal(1):

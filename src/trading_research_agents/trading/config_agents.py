@@ -55,7 +55,9 @@ class AgentSettings:
     min_interval_s: int = 0
     call_timeout_s: int = 60
     lookback_bars: int = 60
-    min_confidence: float = 0.5
+    # A model's stated confidence is not calibrated (models are overconfident when they say how
+    # sure they are), so no floor applies unless one is declared.
+    min_confidence: float = 0.0
     pricing: dict[str, tuple[Decimal, Decimal]] = field(default_factory=dict)
     decide_every_bars: int = 1
     max_output_tokens: int | None = None
@@ -413,7 +415,7 @@ def _agents(raw: dict[str, Any], strategy_raw: dict[str, Any]) -> AgentSettings 
         if not isinstance(row, dict):
             raise ConfigError("[agents.pricing.<model>] is a table")
         pricing[str(model_name)] = (_dec(row, "input_per_million"), _dec(row, "output_per_million"))
-    confidence = table.get("min_confidence", 0.5)
+    confidence = table.get("min_confidence", 0.0)
     if isinstance(confidence, bool) or not isinstance(confidence, int | float | Decimal):
         raise ConfigError("[agents].min_confidence is a number in [0, 1]")
     return AgentSettings(

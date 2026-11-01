@@ -23,6 +23,7 @@ from trading_research_agents.data.schema import Candle, Direction
 from trading_research_agents.data.sources import Fetched, SourceChain, SourceError
 from trading_research_agents.envelope import Envelope, load_envelope
 from trading_research_agents.execution.pretrade import book_from_levels
+from trading_research_agents.execution.targets import Targets
 from trading_research_agents.llm import BudgetLimits, FakeCompleter, MeteredCompleter, UsageLedger
 from trading_research_agents.store.snapshot import Snapshot
 
@@ -294,6 +295,9 @@ def cycle_config(
         "magnitude_bps": Decimal("40"),
         "clock": lambda: datetime(2026, 9, 27, 10, 0, tzinfo=UTC),
         "lookback_bars": 5,
+        # Five candles are too few for the paths, so the fixture desks price on the old claim; the
+        # expected-value floor is tested on its own, on a tape long enough to read.
+        "targets": Targets(min_path_ev_bps=None),
     }
     settings.update(overrides)
     return CycleConfig(**settings), fake, usage
@@ -740,7 +744,7 @@ def test_the_targets_refuse_before_there_is_an_intent(tmp_path: Path, envelope: 
         tmp_path,
         envelope,
         [analyst_answer()],
-        targets=Targets(min_net_bps=Decimal("1000")),
+        targets=Targets(min_net_bps=Decimal("1000"), min_path_ev_bps=None),
     )
     result = run_cycle(cfg)
 
@@ -763,7 +767,7 @@ def test_the_round_trip_count_comes_from_the_intents_already_written(
         tmp_path,
         envelope,
         [analyst_answer()],
-        targets=Targets(max_round_trips_per_day=1),
+        targets=Targets(max_round_trips_per_day=1, min_path_ev_bps=None),
         clock=lambda: datetime(2026, 9, 27, 11, 0, tzinfo=UTC),
     )
     result = run_cycle(again)
@@ -804,6 +808,7 @@ def test_the_reviewers_argue_and_only_cited_claims_reach_the_matrix(
     cfg = CycleConfig(
         instrument="BTCUSDT",
         envelope=envelope,
+        targets=Targets(min_path_ev_bps=None),
         venue_key=envelope.cheapest(None).key,
         chains=chains(),
         completer_for=completer_for,
@@ -856,6 +861,7 @@ def test_a_reviewer_that_opposes_can_stop_a_cycle_the_cost_gate_would_have_passe
     cfg = CycleConfig(
         instrument="BTCUSDT",
         envelope=envelope,
+        targets=Targets(min_path_ev_bps=None),
         venue_key=envelope.cheapest(None).key,
         chains=chains(),
         completer_for=completer_for,
@@ -1439,6 +1445,7 @@ def judged_cycle(
     cfg = CycleConfig(
         instrument="BTCUSDT",
         envelope=envelope,
+        targets=Targets(min_path_ev_bps=None),
         venue_key=envelope.cheapest(None).key,
         chains=chains(),
         completer_for=completer_for,
@@ -1631,3 +1638,35 @@ def test_a_candle_nobody_traded_in_is_an_empty_bar_and_the_brief_goes_on() -> No
     snap.values["ohlcv"] = replaced(snap.values["ohlcv"], value=rows)
     brief = structure_brief(snap, mechanism="reversion", interval_s=60, lookback_bars=5, now=NOW)
     assert brief.record()["close"] == "103"
+
+
+def test_the_paths_expected_value_is_the_edge_the_gates_weigh(
+    tmp_path: Path, envelope: Envelope
+) -> None:
+    cfg, _, _ = cycle_config(
+        tmp_path,
+        envelope,
+        [analyst_answer()],
+        chains=chains(closes=RANGE_THEN_BREAK),
+        targets=Targets(min_path_ev_bps=Decimal(-1000)),
+    )
+    result = run_cycle(cfg)
+    paths = result.briefs["paths"]
+    gross = Decimal(str(paths["expected_bps"])) + Decimal(str(paths["round_trip_bps"]))
+    # Not the distance to the take, as if it were certain: the paths' value at these levels.
+    edge = result.briefs["edge"]
+    assert Decimal(edge["edge_bps"]) == gross.quantize(Decimal("0.0001"))
+    assert edge["source"].startswith("the instrument's own paths at these levels")
+    assert result.verdict is not None and result.verdict.edge_certainty.value == "estimated"
+
+
+def test_the_core_rule_is_on_and_the_geometry_and_confidence_floors_are_off_by_default() -> None:
+    from test_config import agent_raw
+    from trading_research_agents.trading.config import parse_strategy_config
+
+    cfg = parse_strategy_config(agent_raw())
+    assert cfg.targets.min_path_ev_bps == Decimal(0)
+    assert cfg.targets.max_break_even_win_rate == Decimal(1)
+    assert cfg.agents is not None and cfg.agents.min_confidence == 0.0
+    off = parse_strategy_config(agent_raw(targets={"min_path_ev_bps": "off"}))
+    assert off.targets.min_path_ev_bps is None

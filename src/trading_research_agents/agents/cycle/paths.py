@@ -2,9 +2,11 @@
 
 The structure lead names a side and where it is wrong and done. Code then draws the market forward
 from its own closed candles and reads how often the take comes before the stop inside the hold.
-The reading is a number the lead never sees, recorded on every cycle so the arena and hindsight
-can say whether it separates good trades from bad. It refuses a trade only when the operator
-declared `[targets].min_path_ev_bps`, and then a reading that cannot be made refuses too.
+The reading is a number the lead never sees. Since 0.13 it is the trade's claimed edge: the cost
+gate and the targets weigh what the trade is worth over the paths, the chance of the take against
+the chance of the stop, instead of the distance to the take as if it were certain. The trade is
+refused below `[targets].min_path_ev_bps`, 0 bps net unless declared, and a reading that cannot be
+made refuses too. With the floor `"off"`, the reading is recorded and the old claim stands.
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ from trading_research_agents.agents.cycle.pricing import _candles, _held_bars
 from trading_research_agents.agents.cycle.record import _finish
 from trading_research_agents.agents.cycle.state import Pass
 from trading_research_agents.agents.progress import DONE, REFUSED, announce
+from trading_research_agents.execution.pretrade import Certainty
 from trading_research_agents.forecast.paths import PathError, PathSettings, read_paths
 from trading_research_agents.records import write_json
 
@@ -67,6 +70,8 @@ def read_the_paths(p: Pass) -> bool:
         return _refuse(p, f"paths: [targets].min_path_ev_bps is declared and {exc}")
     result.briefs["paths"] = said
     write_json(p.where.brief("paths"), said)
+    if floor is not None:
+        _claim_from_paths(p, said)
     detail = (
         f"take first {said['take_first']:.2f}, stop first {said['stop_first']:.2f}, "
         f"{said['expected_bps']:+.2f} bps net"
@@ -79,6 +84,18 @@ def read_the_paths(p: Pass) -> bool:
         )
     announce(cfg.watch, "paths", DONE, detail)
     return True
+
+
+def _claim_from_paths(p: Pass, said: dict[str, Any]) -> None:
+    """The edge the trade claims, from the paths: what it is worth before the round trip."""
+    gross = Decimal(str(said["expected_bps"])) + Decimal(str(said["round_trip_bps"]))
+    p.edge = gross.quantize(Decimal("0.0001"))
+    p.edge_source = (
+        f"the instrument's own paths at these levels: take first {said['take_first']:.3f}, stop "
+        f"first {said['stop_first']:.3f} over {said['paths']} paths"
+    )
+    p.edge_certainty = Certainty.ESTIMATED
+    p.result.briefs["edge"] = {"edge_bps": str(p.edge), "source": p.edge_source}
 
 
 def _refuse(p: Pass, why: str) -> bool:

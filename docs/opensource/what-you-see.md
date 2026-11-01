@@ -37,7 +37,8 @@ When the cycle finishes, the table gives way to the pass over the universe: what
 what waited and what was held, and why. Then the cycle itself: what the analyst proposed and from
 which figures, and every refusal with the number behind it. Here an ETH short in a ranging market
 stopped at its exits: with its own stop and target and the round trip, more than half of trades
-like it would have had to win just to break even:
+like it would have had to win just to break even (the break-even bound of the time, an
+experiment since 0.13):
 
 ![one cycle](/images/cycle.png)
 

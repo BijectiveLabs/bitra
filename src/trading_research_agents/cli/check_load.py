@@ -197,8 +197,9 @@ def _universe_notes(cfg: Any, bad: list[str]) -> list[str]:
         )
     if universe.max_intents_per_day is not None:
         said.append(
-            f"universe: at most {universe.max_intents_per_day} intent(s) a day across every "
-            "instrument, counted from what is on disk"
+            f"universe: max_intents_per_day {universe.max_intents_per_day} is held as "
+            "[controls].max_trades_per_day since 0.13, the one daily cap across every instrument "
+            "(the smaller where both are declared)"
         )
     said.append(
         "universe: code orders what the trigger admitted, the room the paths expect over the hold "

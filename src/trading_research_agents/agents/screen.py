@@ -303,16 +303,6 @@ def sweep(
         for reason in candidate.reasons:
             out.refusals.append(f"{candidate.instrument}: {reason}")
 
-    if universe.max_intents_per_day is not None:
-        written = intents_today(root, at=now, instrument=None)
-        if written >= universe.max_intents_per_day:
-            out.refusals.append(
-                f"desk: {written} intent(s) written today across every instrument and the "
-                f"declared limit is {universe.max_intents_per_day}; nothing found this pass "
-                "could be acted on"
-            )
-            return out
-
     out.candidates = order(out.candidates, universe.instruments)
     out.chosen = take(universe, out.candidates)
     return out

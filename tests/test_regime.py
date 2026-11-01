@@ -279,7 +279,7 @@ def test_a_short_reads_its_exits_as_gains_and_losses_to_the_position(
         [analyst_answer(target="short")],
         stop_frac=Decimal("0.01"),
         take_frac=Decimal("0.02"),
-        targets=Targets(min_edge_multiple=Decimal("2.0")),
+        targets=Targets(min_edge_multiple=Decimal("2.0"), min_path_ev_bps=None),
         reward_to_risk=Decimal("2"),
     )
     record = run_cycle(cfg).record()

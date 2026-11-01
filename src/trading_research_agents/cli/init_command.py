@@ -264,7 +264,7 @@ VOLATILITY_EXIT = (
     "min_stop_frac = 0.002        # a stop never tighter than 0.2 percent of price\n"
     "max_stop_frac = 0.03         # and never wider than 3 percent\n"
     "min_stop_atr = 1.0           # nor inside one bar's ordinary range\n"
-    "min_reward_to_risk = 1.5     # a target closer than 1.5x the stop is refused\n"
+    "# min_reward_to_risk = 1.5   # an experiment: refuse a target closer than 1.5x the stop\n"
     "max_reward_to_risk = 4.0     # a target past 4x the stop is brought in\n"
     "stop_atr = 1.5               # with no level named: the stop in average true ranges\n"
     "reward_to_risk = 2.0         # and the take profit at twice it\n"
@@ -313,7 +313,7 @@ def _agent_config(text: str, provider_name: str, model: str) -> str:
         f'model = "{model}"\n'
         f'mechanism = "{AGENT_MECHANISM}"\n'
         "lookback_bars = 60\n"
-        "min_confidence = 0.6\n"
+        "# min_confidence = 0.6         # an experiment: stated confidence is uncalibrated\n"
         "magnitude_bps = 20                 # the claimed edge when the analyst names no target\n"
         '# effort = "medium"                # minimal .. max, where your vendor takes one\n'
         "\n"
@@ -331,10 +331,10 @@ def _agent_config(text: str, provider_name: str, model: str) -> str:
 
 AUTONOMOUS_GATES = """
 [targets]
-# The one cost rule of the core: the edge a trade claims has to be this many times what the round
-# trip costs. The cost is certain and the edge is not, so a trade worth a little more than it costs
-# is a trade that needs everything to go right.
-min_edge_multiple = 2.0
+# The one cost rule of the core: what the trade is worth over the instrument's own paths at its
+# levels, net of the round trip. It weighs how often the take comes before the stop, which no
+# distance between a stop and a target can say. 0 is the default; "off" turns it off.
+min_path_ev_bps = 0
 max_round_trips_per_day = 6
 
 [trigger]
@@ -374,7 +374,10 @@ setups_must_fit = false
 # In [regime]: setups_must_fit = true, a setup the measured regime does not support is refused.
 # In [trigger]: widen_after = 6, a larger move asked for after a run of refusals; min_move_atr =
 #   0.25, the move as a fraction of the instrument's own ATR instead of a fixed bps figure.
-# In [targets]: min_net_bps, a floor in bps beside the multiple.
+# In [targets]: min_edge_multiple = 2.0 and min_net_bps, on the paths' expected value;
+#   max_break_even_win_rate = 0.5, on the levels alone.
+# In [exit]: min_reward_to_risk = 1.5, on the levels alone.
+# In [agents]: min_confidence, on a confidence the model states and nobody calibrated.
 # In [agents]: reviewers = ["pro", "contra", "neutral"], team = ["blind_confirmer"], readings.
 
 # What this desk watches. Left out, every cycle is [run].instrument. For evidence, name the

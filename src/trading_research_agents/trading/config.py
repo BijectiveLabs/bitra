@@ -8,7 +8,7 @@ import importlib.util
 import sys
 import tomllib
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -191,6 +191,19 @@ TABLES = (
 )
 
 
+def _one_daily_cap(limits: Any, intents_per_day: int | None) -> Any:
+    """`[universe].max_intents_per_day` counts what `[controls].max_trades_per_day` counts, the
+    intents written today across every instrument, so since 0.13 it is that one limit, held by the
+    scheduler and the risk gate. Declared in both places, the smaller holds."""
+    if intents_per_day is None:
+        return limits
+    held = limits.max_trades_per_day
+    return replace(
+        limits,
+        max_trades_per_day=intents_per_day if held is None else min(held, intents_per_day),
+    )
+
+
 def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> StrategyConfig:
     unknown = sorted(set(raw) - set(TABLES))
     if unknown:
@@ -269,6 +282,7 @@ def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> S
         raise ConfigError("[run] names the instrument and the venue_key (venue/channel)")
     _sized_once(run)
     universe = _universe(raw)
+    limits = _one_daily_cap(limits, universe.max_intents_per_day)
     if universe.discover and limits.max_position_quote is None:
         # [controls].max_position counts units: ten units of BTC and ten of DOGE are not one cap.
         raise ConfigError(

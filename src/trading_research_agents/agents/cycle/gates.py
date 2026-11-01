@@ -221,6 +221,7 @@ def _cost_gate(p: Pass) -> bool:
         edge_bps=p.edge,
         cost=p.costs.cost,
         margin_bps=cfg.margin_bps,
+        edge_certainty=p.edge_certainty,
         edge_source=p.edge_source,
     )
     result.verdict = verdict

@@ -24,7 +24,7 @@ def test_reviewers_are_not_asked_when_code_will_refuse_anyway(
         envelope,
         {"structure_lead": analyst_answer()},
         reviewers=("pro", "contra", "neutral"),
-        targets=Targets(min_edge_multiple=Decimal("4")),
+        targets=Targets(min_edge_multiple=Decimal("4"), min_path_ev_bps=None),
     )
     result = run_cycle(cfg)
     assert "reviewer" not in fake.per_role
