@@ -252,11 +252,20 @@ def _targets(raw: dict[str, Any], exit_rule: ExitRule) -> Targets:
                 if "max_round_trips_per_day" in table
                 else None
             ),
-            max_break_even_win_rate=_or_dec(table, "max_break_even_win_rate", "0.5"),
-            min_path_ev_bps=_dec(table, "min_path_ev_bps") if "min_path_ev_bps" in table else None,
+            max_break_even_win_rate=_or_dec(table, "max_break_even_win_rate", "1"),
+            min_path_ev_bps=_path_floor(table),
         )
     except TargetError as exc:
         raise ConfigError(str(exc)) from exc
+
+
+def _path_floor(table: dict[str, Any]) -> Decimal | None:
+    """`[targets].min_path_ev_bps`: 0 when undeclared, `"off"` for none, otherwise the bps."""
+    if "min_path_ev_bps" not in table:
+        return Decimal(0)
+    if str(table["min_path_ev_bps"]).strip().lower() == "off":
+        return None
+    return _dec(table, "min_path_ev_bps")
 
 
 SIZING_KEYS = (

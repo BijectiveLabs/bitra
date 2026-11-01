@@ -80,7 +80,7 @@ class CycleConfig:
     settlement_interval_s: int = 28_800
     latency_slippage_bps: Decimal = Decimal(0)
     margin_bps: Decimal = Decimal(0)
-    min_confidence: float = 0.6
+    min_confidence: float = 0.0
     mode: str = "sandbox"
     # Two gates the operator declares: whether the context agrees with the direction, and whether
     # the trade is the shape this desk said it wanted. Both are applied by code, never by a model.

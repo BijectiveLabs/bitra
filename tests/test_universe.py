@@ -17,7 +17,6 @@ import pytest
 
 from test_cycle import chains, snapshot_with
 from trading_research_agents.agents.screen import figures_of, look, sweep
-from trading_research_agents.execution.targets import intents_today
 from trading_research_agents.execution.trigger import Trigger
 from trading_research_agents.execution.universe import (
     Candidate,
@@ -161,30 +160,18 @@ def test_a_pass_looks_at_everything_and_spends_a_cycle_on_the_top_of_the_order(
     assert taken["ETHUSDT"].admitted and not taken["BTCUSDT"].admitted
 
 
-def test_a_desk_that_has_traded_enough_today_stops_before_the_screen_chooses(
-    tmp_path: Path,
-) -> None:
-    root = tmp_path / "cycles"
-    root.mkdir(parents=True)
-    for i, name in enumerate(("BTCUSDT", "ETHUSDT")):
-        cycle_on_disk(
-            root,
-            f"2026-09-27T09-5{i}-00Z-{name}",
-            name,
-            intent={"at": f"2026-09-27T09-5{i}-00Z-{name}", "instrument": name},
-        )
-    assert intents_today(root, at=NOW, instrument=None) == 2
-    assert intents_today(root, at=NOW, instrument="BTCUSDT") == 1
+def test_the_universe_daily_cap_is_the_controls_daily_cap() -> None:
+    from test_config import agent_raw
+    from trading_research_agents.trading.config import parse_strategy_config
 
-    screened = sweep(
-        Universe(instruments=("BTCUSDT", "ETHUSDT"), max_intents_per_day=2),
-        chains(),
-        trigger=Trigger(),
-        root=root,
-        now=NOW,
-    )
-    assert screened.chosen == ()
-    assert any("across every instrument" in r for r in screened.refusals)
+    # Both count the intents written today across every instrument, so since 0.13 they are one
+    # limit, held by the scheduler and the risk gate; declared in both places, the smaller holds.
+    raw = agent_raw(universe={"instruments": ["BTCUSDT", "ETHUSDT"], "max_intents_per_day": 2})
+    assert parse_strategy_config(raw).limits.max_trades_per_day == 2
+    raw["controls"] = {**raw.get("controls", {}), "max_trades_per_day": 1}
+    assert parse_strategy_config(raw).limits.max_trades_per_day == 1
+    raw["controls"]["max_trades_per_day"] = 5
+    assert parse_strategy_config(raw).limits.max_trades_per_day == 2
 
 
 def test_the_universe_is_read_from_the_project() -> None:

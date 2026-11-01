@@ -14,6 +14,7 @@ from trading_research_agents.agents.cycle import run_cycle
 from trading_research_agents.data.schema import Candle
 from trading_research_agents.envelope.model import Envelope
 from trading_research_agents.execution.stops import StopError, VolatilityExit, average_true_range
+from trading_research_agents.execution.targets import Targets
 from trading_research_agents.trading.config import parse_strategy_config
 from trading_research_agents.trading.config_values import ConfigError
 
@@ -301,8 +302,9 @@ def test_levels_on_the_wrong_side_or_too_close_are_not_taken_as_given() -> None:
     )
     # A long's stop above the price is no stop: the market's measured one stands.
     assert wrong.source == "measured" and "no stop named" in wrong.notes[0]
+    # The floor is an experiment since 0.13, off unless declared; declared, it refuses.
     with pytest.raises(StopError, match="min_reward_to_risk"):
-        rule.place(
+        analyst_rule(min_reward_to_risk=Decimal("1.5")).place(
             BARS,
             horizon_bars=1,
             mid=mid,
@@ -363,17 +365,31 @@ def test_a_cycle_uses_the_analysts_levels_and_refuses_a_trade_its_costs_cannot_c
     flat = run_cycle(unnamed)
     assert flat.intent is None and any("cost gate" in r for r in flat.refusals), flat.refusals
 
+    # The break-even bound reads the levels alone, so since 0.13 it is an experiment: off unless
+    # declared, and declared it refuses as before.
+    thin_answer = [analyst_answer(horizon=4, stop_price=101.8, target_price=102.4)]
+    bounded = Targets(max_break_even_win_rate=Decimal("0.5"), min_path_ev_bps=None)
     thin, _, _ = cycle_config(
         tmp_path / "thin",
         envelope,
-        [analyst_answer(horizon=4, stop_price=101.8, target_price=102.4)],
+        thin_answer,
         chains=chains(closes=SWINGING),
         lookback_bars=8,
         volatility_exit=rule,
+        targets=bounded,
     )
     refused = run_cycle(thin)
     assert refused.intent is None
     assert any("max_break_even_win_rate" in r for r in refused.refusals), refused.refusals
+    unbounded, _, _ = cycle_config(
+        tmp_path / "unbounded",
+        envelope,
+        thin_answer,
+        chains=chains(closes=SWINGING),
+        lookback_bars=8,
+        volatility_exit=rule,
+    )
+    assert not any("max_break_even_win_rate" in r for r in run_cycle(unbounded).refusals)
 
 
 def test_the_analyst_mode_is_read_and_is_the_agent_desk_default() -> None:

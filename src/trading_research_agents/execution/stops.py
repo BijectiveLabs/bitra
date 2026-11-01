@@ -43,7 +43,9 @@ class VolatilityExit:
     max_stop_frac: Decimal = Decimal("0.03")
     atr_bars: int = 14
     analyst_levels: bool = False
-    min_reward_to_risk: Decimal = Decimal("1.5")
+    # A floor on the analyst's own target against its stop. Geometry alone: it says nothing about
+    # how often that target is reached, so since 0.13 it is an experiment and 0, none, by default.
+    min_reward_to_risk: Decimal = Decimal(0)
     max_reward_to_risk: Decimal = Decimal("4.0")
     min_stop_atr: Decimal = Decimal("1.0")
     # How the stop distance is measured: "atr", stop_atr x ATR x sqrt(hold); or "paths", where
@@ -57,12 +59,14 @@ class VolatilityExit:
             "reward_to_risk",
             "min_stop_frac",
             "max_stop_frac",
-            "min_reward_to_risk",
             "max_reward_to_risk",
         ):
             value = getattr(self, label)
             if not isinstance(value, Decimal) or not value.is_finite() or value <= 0:
                 raise StopError(f"[exit].{label} is a positive number, got {value!r}")
+        floor = self.min_reward_to_risk
+        if not isinstance(floor, Decimal) or not floor.is_finite() or floor < 0:
+            raise StopError(f"[exit].min_reward_to_risk is 0 (none) or positive, got {floor!r}")
         if self.min_stop_frac > self.max_stop_frac:
             raise StopError(
                 f"[exit].min_stop_frac {self.min_stop_frac} is above "

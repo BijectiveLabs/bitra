@@ -301,7 +301,11 @@ def _volatility_exit(exit_raw: dict[str, Any]) -> VolatilityExit | None:
     except StopError as exc:
         raise ConfigError(str(exc)) from exc
     # Where one number is needed up front: the widest stop, and the least reward a trade may carry.
-    floor = rule.min_reward_to_risk if rule.analyst_levels else rule.reward_to_risk
+    floor = (
+        rule.min_reward_to_risk
+        if rule.analyst_levels and rule.min_reward_to_risk > 0
+        else rule.reward_to_risk
+    )
     exit_raw["stop_frac"] = rule.max_stop_frac
     exit_raw["take_profit_frac"] = rule.max_stop_frac * floor
     return rule

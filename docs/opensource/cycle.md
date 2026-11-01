@@ -101,8 +101,8 @@ priced, and an `[execution].venue` that does not match `[run].venue_key` - that 
 refusal rather than a note.
 
 What it writes is the core and nothing more: data, one decision, the exits, one cost rule
-(`[targets].min_edge_multiple`, the edge as a multiple of the round trip), the risk gate and
-execution, with `[trigger]` deciding when a cycle is worth asking. Everything else that can refuse
+(`[targets].min_path_ev_bps`, what the trade is worth over its own paths net of the round
+trip), the risk gate and execution, with `[trigger]` deciding when a cycle is worth asking. Everything else that can refuse
 or resize a trade is an experiment: the confluence matrix, the conviction ladder, a regime the setup
 must fit, the trigger's widening, a floor in bps beside the multiple, reviewers, the team and the
 readings. They are written commented, under "Experiments", because none has been measured against
@@ -119,9 +119,10 @@ the universe (system: one data pull each, the trigger per instrument, ordered by
   -> structure lead      (proposes a direction; with a team, a blind confirmer must agree and a
                           flow specialist reads the book, funding and open interest)
   -> the round trip priced (system)
-  -> the stop and the target (the lead's levels, held in your [exit] bounds; break-even checked)
+  -> the stop and the target (the lead's levels, held in your [exit] bounds)
   -> paths               (system: how often the instrument's own paths reach the take before the
-                          stop at these levels; refuses only below [targets].min_path_ev_bps)
+                          stop at these levels; the trade's claimed edge, refused below
+                          [targets].min_path_ev_bps, 0 bps net by default)
   -> reviewers          (when configured: pro and contra apart, then neutral judges both)
   -> confluence matrix   (system: declared states and votes)   -> whether to trade at all
   -> conviction          (system: the same voices, weighted)    -> how much the desk wants on
@@ -161,7 +162,7 @@ quote = "USDT"                   # the settlement currency to look in
 # type_field = "symbolType"      # the venue's own market field that says what a market is,
 # exclude_types = ["stock", "etf", "commodity", "forex"]   # and the values to leave out
 max_per_cycle = 1                # how many one pass runs a full cycle on
-max_intents_per_day = 6          # across every instrument, not per one
+max_intents_per_day = 6          # held as [controls].max_trades_per_day since 0.13
 ```
 
 **Discovery (system, every pass).** One market list and one ticker call cover every linear perpetual
@@ -200,8 +201,9 @@ every time at no cost. `[universe].screener` is still read, so an older desk run
 
 Each instrument keeps its own history: its own trigger streak, its own carried research spend, its
 own daily round trips. A position on an instrument discovery stops listing is still counted by the
-desk and looked after by the keeper until it closes. `[universe].max_intents_per_day` is the one
-figure that counts the whole desk.
+desk and looked after by the keeper until it closes. `[controls].max_trades_per_day` is the one
+figure that counts the whole desk; `[universe].max_intents_per_day` counted the same intents and
+is held as it since 0.13, the smaller where both are declared.
 
 ## Before anyone is asked: the trigger
 
@@ -828,14 +830,19 @@ What the desk is trying to do, in numbers, checked before there is an intent:
 
 ```toml
 [targets]
-min_net_bps = 5                  # what must be left of the edge after every cost the gate priced
-min_edge_multiple = 2.0          # the claimed edge, as a multiple of the round trip
+min_path_ev_bps = 0              # the core: worth at least this over its own paths, net
+min_net_bps = 5                  # an experiment: what must be left of the edge after costs
+min_edge_multiple = 2.0          # an experiment: the edge, as a multiple of the round trip
 min_reward_risk = 1.5            # take profit against stop, both from [exit]
 max_research_bps = 25            # model spend since the last intent, against this notional
 max_round_trips_per_day = 6      # intents already written today for this instrument
 ```
 
-`min_edge_multiple` is the one that keeps a desk honest, and it is the difference between trading
+`min_path_ev_bps` is the core's rule: the trade's value over the instrument's own paths at its
+levels, the chance of the take against the chance of the stop, net of the round trip. Since 0.13
+that value is also the edge the other rules read; before, it was the distance to the take, as if
+every trade reached it. `min_edge_multiple` and `min_net_bps` are experiments on top of it.
+`min_edge_multiple` is the difference between trading
 and collecting tolls for a venue. A round trip costing 18 basis points against a claimed edge of 20
 is not a two basis point trade: the fees are certain, the edge is a probability, and slippage only
 ever moves one of them. Live cost cannot be known exactly in advance either - the spread the cycle
@@ -887,7 +894,7 @@ from. The system then:
 | a level on the wrong side of the price (a long's stop above it) | set aside; the measured stop below stands, and the record says why |
 | the stop inside `min_stop_atr` average true ranges (1 by default) | widened to it: a stop inside one bar's ordinary range is hit by noise before the idea is wrong, and the wider stop makes the position smaller, not the loss bigger |
 | the stop tighter than `min_stop_frac` or wider than `max_stop_frac` | held to that bound |
-| the target closer than `min_reward_to_risk` times the stop | the trade is refused; moving the analyst's target out would be inventing one |
+| the target closer than `min_reward_to_risk` times the stop, when declared (an experiment, off by default) | the trade is refused; moving the analyst's target out would be inventing one |
 | the target past `max_reward_to_risk` times the stop | brought in to it; a far target makes the break even look easy and is rarely reached |
 | no stop named | the volatility stop below; no target named, `reward_to_risk` times the stop |
 
@@ -897,7 +904,7 @@ mode = "analyst"
 min_stop_frac = 0.002        # a stop never tighter than 0.2 percent of price
 max_stop_frac = 0.03         # and never wider than 3 percent
 min_stop_atr = 1.0           # nor inside one bar's ordinary range; 0 turns this off
-min_reward_to_risk = 1.5     # a target closer than 1.5x the stop is refused
+# min_reward_to_risk = 1.5   # an experiment: refuse a target closer than 1.5x the stop
 max_reward_to_risk = 4.0     # a target past 4x the stop is brought in
 stop_atr = 1.5               # with no level named: the measured stop
 reward_to_risk = 2.0         # and the take profit at twice it
@@ -996,14 +1003,12 @@ money`): the best outcome the trade can have would still lose.
 - **A floor and a ceiling.** On a very quiet minute the measured stop can sit inside the spread and
   the fees; on a violent one it can be wider than anyone meant to risk. The bounds are yours, and
   the record says when one of them held.
-- **The analyst's target is its claim; the losers are counted separately.** When the analyst names
-  a target and it survives the bounds, that distance is the move the cost gate and the targets
-  weigh: it is the analyst's own reading, already held to `max_reward_to_risk`. A target alone
-  would count every trade as a winner, so it never stands alone: the break-even bound prices the
-  stops and the round trip against it and refuses a trade that needs more than half its kind to
-  win. A take profit the system set as a multiple of the stop claims nothing, so without a named
-  target `[agents].magnitude_bps` is still the number the gate weighs. The record says which one
-  was used (`edge_source`).
+- **The paths' value is the claim, not the target.** A target alone would count every trade as a
+  winner. Since 0.13 the edge the cost gate and the targets weigh is the trade's value over the
+  instrument's own paths at its levels: the take times the chance of reaching it first, less the
+  stop times the chance of the stop first, plus the paths that reach neither. With
+  `[targets].min_path_ev_bps = "off"`, the old claim stands: the analyst's own target, or
+  `[agents].magnitude_bps` without one. The record says which one was used (`edge_source`).
 - **No guessed stop.** When the candles cannot give a range, the trade is refused. Falling back to
   some default would put a stop on the venue that nothing measured.
 - **One mode at a time.** A table holding both `stop_frac` and `stop_atr` would be read by a person
@@ -1017,8 +1022,10 @@ priced, with no guess at the odds. A 2:1 bracket needs a third of its trades to 
 with a 20 bps stop and a 13 bps round trip it needs 55 percent. Compare it with the win rate your
 round trips actually reach.
 
-`[targets].max_break_even_win_rate` (0.5 by default) refuses a trade whose own stop, target and
-round trip would need more than that share of winners. It is the bound on the analyst's levels and
+`[targets].max_break_even_win_rate` (an experiment since 0.13, 1, off, unless declared) refuses a
+trade whose own stop, target and round trip would need more than that share of winners. It
+reads the levels alone and says nothing about how often the take is reached, which is what
+the paths read. It is the bound on the analyst's levels and
 on the measured ones alike, and it is why a one-minute desk refuses many trades a fifteen-minute
 desk takes: the round trip does not shrink with the timeframe. Set it to 1 to turn it off.
 
@@ -1046,10 +1053,12 @@ carries.
 
 Every cycle records the reading under `paths` in `cycle.json` and prints it beside the exits,
 with its value net of the round trip: `take first x take distance - stop first x stop distance +
-neither x the mean move of those paths - round trip`. The lead never sees it. Undeclared, it refuses nothing;
-`[targets].min_path_ev_bps` refuses a trade whose value is below the floor, and refuses one whose
-reading could not be made (too few candles, a market that did not move) rather than passing it
-unread. The `paths` row of the arena reads the same way, so whether the reading separates good
+neither x the mean move of those paths - round trip`. The lead never sees it. It is the trade's
+claimed edge, and `[targets].min_path_ev_bps` (0 by default) refuses a trade whose value is below
+the floor, and refuses one whose reading could not be made (too few candles, a market that did
+not move) rather than passing it unread. `"off"` records the reading and refuses nothing.
+The paths' odds are not calibrated on recorded outcomes yet; `tra hindsight` and the arena
+measure whether they separate good trades from bad. The `paths` row of the arena reads the same way, so whether the reading separates good
 trades from bad is measured before a desk leans on it.
 
 The reference is Kronos (arXiv 2508.02739), a model of candles that tested well: the candle as the
@@ -1321,11 +1330,11 @@ open two.
 | `structure_lead: flat` | the analyst saw nothing worth pricing |
 | `structure_lead: ... with no setup named` | a direction nobody could name the shape of is not a trade |
 | `structure_lead: not one figure ... survived` | the direction could not point at a figure in its own brief |
-| `structure_lead: confidence ... below` | the answer was under `[agents].min_confidence` |
+| `structure_lead: confidence ... below` | the answer was under `[agents].min_confidence`, when declared (an experiment, none by default) |
 | `exit: ... closed candle(s); an average true range over ... needs ...` | volatility mode could not measure a range; raise `[agents].lookback_bars` or lower `[exit].atr_bars` |
 | `exit: the take profit is ... a winner would lose money` | the take profit sits inside the round trip cost |
-| `exit: ...% of trades like this would have to reach the take profit ...` | the break even is above `[targets].max_break_even_win_rate` |
-| `exit: the analyst's target is ...x its stop ...` | the analyst's own target is closer than `[exit].min_reward_to_risk` allows |
+| `exit: ...% of trades like this would have to reach the take profit ...` | the break even is above `[targets].max_break_even_win_rate`, when declared |
+| `exit: the analyst's target is ...x its stop ...` | the analyst's own target is closer than `[exit].min_reward_to_risk` allows, when declared |
 | `risk: ... bps of equity at the stop` | the smallest size the venue takes still risks more than `[controls].max_risk_per_trade_bps` |
 | `desk: ... bps of equity is already at risk` | what the book already carries plus this trade is over `[desk].max_open_risk_bps` |
 | `desk: ... has at risk is not on the record` | a position is open whose risk nobody can state, so the desk's total cannot be stated either |

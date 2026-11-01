@@ -248,11 +248,11 @@ How to make the key on each exchange is in
 | What it trades | BTCUSDT on Bybit, as a taker | `[run].instrument`, `[universe]`, `--venue` |
 | Timeframe | decides on 15-minute bars, reads 1h and 4h as context | `[run].bar_interval_s`, `context_intervals` |
 | Strategy | none fixed: the analyst picks the setup the measured regime supports, or stays flat | `[agents].mechanism` |
-| Stop and target | the analyst names them; the stop is held between 0.2% and 3% and never inside one ATR, the target between 1.5x and 4x the stop | `[exit]` |
+| Stop and target | the analyst names them; the stop is held between 0.2% and 3% and never inside one ATR, the target brought in past 4x the stop | `[exit]` |
 | Risk per trade | 0.5% of equity lost at the stop, whatever the stop's distance | `[controls].max_risk_per_trade_bps` |
 | Bad days | no new entry after a 3% loss on the day or a 10% fall from the peak | `[controls]` |
 | Time limit | a position closes after 4 hours | `[exit].timeout_bars` |
-| Trades worth taking | the edge at least 2x the round trip, break even at half the trades or better, at most 6 a day | `[targets]` |
+| Trades worth taking | worth more than nothing over the instrument's own paths at the trade's levels, net of the round trip; at most 6 a day | `[targets]` |
 | Oversight | the risk gate on every new order; two auditors that report | `[controls]`, `[audit]` |
 
 Working on the code itself? See [Development](#development).
@@ -284,7 +284,8 @@ time, each with its own clock, and the line underneath says who is working right
 what waited and what was held, and why. Then the cycle itself: what the analyst proposed and from
 which figures, and every refusal with the number behind it. Here an ETH short in a ranging market
 stopped at its exits: with its own stop and target and the round trip, more than half of trades
-like it would have had to win just to break even:
+like it would have had to win just to break even (the break-even bound of the time, an
+experiment since 0.13):
 
 ![one cycle](assets/cycle.png)
 
@@ -335,7 +336,7 @@ flowchart TD
     briefs["the system writes the briefs<br/>each role sees only the figures its job needs"] --> readers
     readers["readings, by the system, no model<br/>macro, on-chain, sentiment against your lines"] --> tech
     tech["structure lead, alone or with its team<br/>a blind confirmer that must agree, a flow specialist<br/>a direction, a confidence, a horizon"] --> price["the system prices the round trip<br/>fee, spread, impact, funding, slippage"]
-    price --> exits{"the stop and the target<br/>the analyst's levels, held inside your bounds<br/>does the trade break even at half its kind winning?"}
+    price --> exits{"the stop and the target<br/>the analyst's levels, held inside your bounds<br/>worth more than its cost over its own paths?"}
     exits -- "no" --> refused
     exits -- "yes" --> round2["reviewers, as many as you declare<br/>a claim that cites no figure is thrown away"]
     round2 --> matrix{"confluence<br/>do your declared states agree with the direction?"}
