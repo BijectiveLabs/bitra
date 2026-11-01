@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 import statistics
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
@@ -60,6 +60,10 @@ class ArenaConfig:
     v1_hold_s: int = 14_400
     fit_days: int | None = None
     test_days: int | None = None
+    # The spread and slippage of a market whose liquidity is not the default's. A coin that trades
+    # a fraction of BTC's volume does not cross the same book, and one figure for every class of
+    # market overstates the edge exactly where it is thinnest.
+    instrument_costs: Mapping[str, Costs] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.instruments or len(set(self.instruments)) != len(self.instruments):
@@ -75,6 +79,14 @@ class ArenaConfig:
             raise MarketDataError("funding is 'archive' (measured) or 'none' (a market without)")
         if (self.fit_days is None) != (self.test_days is None):
             raise MarketDataError("walk-forward splits need both fit_days and test_days")
+        stray = sorted(set(self.instrument_costs) - set(self.instruments))
+        if stray:
+            raise MarketDataError(
+                f"costs are declared for {stray}, which this arena does not trade"
+            )
+
+    def costs_for(self, instrument: str) -> Costs:
+        return self.instrument_costs.get(instrument, self.costs)
 
     @property
     def interval_ns(self) -> int:
@@ -88,6 +100,9 @@ class ArenaConfig:
             "to": self.end.isoformat(),
             "rows": list(self.rows),
             "costs": self.costs.record(),
+            "instrument_costs": {
+                name: costs.record() for name, costs in sorted(self.instrument_costs.items())
+            },
             "interval_s": self.interval_s,
             "context_interval_s": self.context_interval_s,
             "context": list(self.context),
@@ -153,6 +168,7 @@ class _Run:
             histories=histories,
             instruments=config.instruments,
             costs=config.costs,
+            instrument_costs=config.instrument_costs,
             funding=self.funding,
             interval_ns=config.interval_ns,
             first_ns=midnight_ns(config.start - timedelta(days=WARMUP_DAYS)),
@@ -208,7 +224,7 @@ class _Run:
             decided_ns=decided_ns,
             hold_ns=hold_ns,
             tape=self.histories[instrument].tape,
-            costs=self.config.costs,
+            costs=self.config.costs_for(instrument),
             funding=self.funding[instrument],
         )
         if isinstance(outcome, Settlement):
@@ -287,7 +303,28 @@ def _reports(
         )
         if name == V1_RECORD:
             report["label"] = V1_LABEL
+        report["by_instrument"] = by_instrument(row.settled)
         yield report
+
+
+def by_instrument(settled: list[Settlement]) -> dict[str, dict[str, Any]]:
+    """Each market's own ideas, mean and sum net of its costs, and how many reached the take.
+
+    A row's total can come from one market alone; this is where that shows.
+    """
+    grouped: dict[str, list[Settlement]] = {}
+    for outcome in settled:
+        grouped.setdefault(outcome.instrument, []).append(outcome)
+    out: dict[str, dict[str, Any]] = {}
+    for name, found in sorted(grouped.items()):
+        nets = [float(s.net_bps) for s in found]
+        out[name] = {
+            "ideas": len(found),
+            "mean_net_bps": f"{statistics.mean(nets):.2f}",
+            "sum_net_bps": f"{sum(nets):.2f}",
+            "won": sum(1 for n in nets if n > 0),
+        }
+    return out
 
 
 def _ideas(rows: dict[str, _Row]) -> list[dict[str, Any]]:

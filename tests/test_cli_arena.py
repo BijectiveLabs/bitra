@@ -175,3 +175,32 @@ def test_a_venue_without_a_taker_channel_must_name_one(archive: Path, tmp_path: 
     )
     with pytest.raises(EnvelopeError, match="name the channel"):
         arena_report(args)
+
+
+def test_arena_toml_prices_a_market_at_its_own_costs(archive: Path, tmp_path: Path) -> None:
+    envelope = tmp_path / "envelope.toml"
+    envelope.write_text(ENVELOPE, encoding="utf-8")
+    body = (
+        "[arena]\n"
+        'instruments = ["BTCUSDT"]\n'
+        "from = 2025-07-05\n"
+        "to = 2025-07-05\n"
+        'venue = "bybit"\n'
+        "spread_bps = 1\n"
+        "slippage_bps = 0\n"
+        f'data = "{archive.as_posix()}"\n'
+        f'envelope = "{envelope.as_posix()}"\n'
+        f'out = "{(tmp_path / "out").as_posix()}"\n'
+        "[arena.instrument_costs.BTCUSDT]\n"
+        "slippage_bps = 15\n"
+    )
+    path = tmp_path / "arena.toml"
+    path.write_text(body, encoding="utf-8")
+    payload, lines, _ = arena_report(build_parser().parse_args(["arena", "--config", str(path)]))
+    own = payload["config"]["instrument_costs"]["BTCUSDT"]
+    # The spread left out is the default's; the slippage is the market's own.
+    assert own["spread_bps"] == "1" and own["slippage_bps"] == "15"
+    assert "  BTCUSDT: spread 1 and slippage 15 bps declared" in lines
+    path.write_text(body.replace("slippage_bps = 15", "slipage_bps = 15"), encoding="utf-8")
+    with pytest.raises(ValueError, match="reads spread_bps and slippage_bps"):
+        arena_report(build_parser().parse_args(["arena", "--config", str(path)]))

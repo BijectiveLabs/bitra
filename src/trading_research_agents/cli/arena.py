@@ -99,7 +99,7 @@ def arena_report(args: argparse.Namespace) -> Report:
         _bps(settings["spread_bps"], "spread_bps"),
         _bps(settings["slippage_bps"], "slippage_bps"),
     )
-    config = _config(settings, venue, costs)
+    config = _config(settings, venue, costs, _instrument_costs(settings, costs))
     cycles = Path(settings["runs"]) if V1_RECORD in config.rows else None
     result = run_arena(config, root=Path(settings["data"]), cycles=cycles)
     folder = write_arena(result, Path(settings["out"]))
@@ -130,7 +130,7 @@ def _from_file(path: Path) -> dict[str, Any]:
     if extra:
         raise ValueError(f"{path.name}: only [arena] is read; found [{'], ['.join(extra)}]")
     table = dict(raw.get("arena") or {})
-    unknown = sorted(set(table) - set(KEYS))
+    unknown = sorted(set(table) - set(KEYS) - {"instrument_costs"})
     if unknown:
         hints = [
             f"{name} (did you mean {close[0]}?)" if close else name
@@ -141,8 +141,30 @@ def _from_file(path: Path) -> dict[str, Any]:
     return table
 
 
-def _config(settings: dict[str, Any], venue: str, costs: Costs) -> ArenaConfig:
+def _instrument_costs(settings: dict[str, Any], default: Costs) -> dict[str, Costs]:
+    """`[arena.instrument_costs.<NAME>]`: a market's own spread and slippage, where its liquidity
+    is not the default's. A figure left out is the default's."""
+    table = settings.get("instrument_costs") or {}
+    if not isinstance(table, dict):
+        raise ValueError("[arena.instrument_costs] is a table of instruments")
+    out: dict[str, Costs] = {}
+    for name, entry in table.items():
+        unknown = sorted(set(entry) - {"spread_bps", "slippage_bps"})
+        if unknown:
+            raise ValueError(f"[arena.instrument_costs.{name}] reads spread_bps and slippage_bps")
+        out[str(name)] = Costs(
+            default.channel,
+            _bps(entry.get("spread_bps", default.spread_bps), f"{name}.spread_bps"),
+            _bps(entry.get("slippage_bps", default.slippage_bps), f"{name}.slippage_bps"),
+        )
+    return out
+
+
+def _config(
+    settings: dict[str, Any], venue: str, costs: Costs, instrument_costs: dict[str, Costs]
+) -> ArenaConfig:
     return ArenaConfig(
+        instrument_costs=instrument_costs,
         venue=venue,
         instruments=_names(settings["instruments"]),
         start=_day(settings["from"]),
@@ -222,6 +244,17 @@ def _row_line(row: dict[str, Any]) -> str:
     return f"{figures}  {interval}{row['verdict']}"
 
 
+def _by_instrument_lines(row: dict[str, Any]) -> list[str]:
+    markets = row.get("by_instrument") or {}
+    if not markets:
+        return []
+    said = ", ".join(
+        f"{name} {m['ideas']} ideas mean {m['mean_net_bps']} sum {m['sum_net_bps']}"
+        for name, m in markets.items()
+    )
+    return [f"  {row['row']} by instrument: {said}"]
+
+
 def _lines(result: ArenaResult, folder: Path) -> list[str]:
     config = result.config
     costs = config.costs.record()
@@ -234,7 +267,13 @@ def _lines(result: ArenaResult, folder: Path) -> list[str]:
         f"{'row':<12}{'ideas':>7}{'bets':>6}{'mean':>9}{'median':>9}{'hit':>7}"
         f"{'mean R':>8}{'sum':>10}{'sharpe':>8}  against random [95%], verdict",
     ]
+    lines[2:2] = [
+        f"  {name}: spread {own.spread_bps} and slippage {own.slippage_bps} bps declared"
+        for name, own in sorted(config.instrument_costs.items())
+    ]
     lines += [_row_line(row) for row in result.rows]
+    if len(config.instruments) > 1:
+        lines += [line for row in result.rows for line in _by_instrument_lines(row)]
     for name, market in result.coverage["markets"].items():
         lines.append(
             f"  {name}: {market['minutes']} minutes, {market['missing_minutes']} not seen, "

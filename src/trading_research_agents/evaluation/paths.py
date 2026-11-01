@@ -9,7 +9,7 @@ baselines and the `forecast` row on the same tape with the same costs.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import date
 from decimal import Decimal
 
@@ -40,11 +40,16 @@ class PathsPolicy:
     name = "paths"
     knowledge_cutoff: date | None = None
 
-    def __init__(self, costs: Costs, *, margin_bps: float = 0.0, paths: int = ARENA_PATHS) -> None:
-        channel = costs.channel
-        self.cost_bps = float(
-            channel.entry_fee_bps + channel.exit_fee_bps + costs.spread_bps + costs.slippage_bps
-        )
+    def __init__(
+        self,
+        costs: Costs,
+        *,
+        margin_bps: float = 0.0,
+        paths: int = ARENA_PATHS,
+        instrument_costs: Mapping[str, Costs] | None = None,
+    ) -> None:
+        self.costs = costs
+        self.instrument_costs = dict(instrument_costs or {})
         self.margin_bps = margin_bps
         self.paths = paths
         # The arena asks for the idea and for the score at the same decision; one reading serves.
@@ -55,7 +60,8 @@ class PathsPolicy:
         if read is None:
             return None
         readings, atr = read
-        values = {side: r.expected_bps(self.cost_bps) for side, r in readings.items()}
+        cost_bps = _round_trip_bps(self.instrument_costs.get(view.instrument, self.costs))
+        values = {side: r.expected_bps(cost_bps) for side, r in readings.items()}
         chosen = best_side(values["long"], values["short"], margin_bps=self.margin_bps)
         if chosen is None:
             return None
@@ -107,3 +113,10 @@ class PathsPolicy:
         except PathError:
             return None
         return readings, atr
+
+
+def _round_trip_bps(costs: Costs) -> float:
+    channel = costs.channel
+    return float(
+        channel.entry_fee_bps + channel.exit_fee_bps + costs.spread_bps + costs.slippage_bps
+    )

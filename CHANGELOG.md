@@ -19,6 +19,8 @@ All notable changes to this project are recorded here. The format follows
 - `tra check` lists the experiments a desk has on beside the core: reviewers, the team, readings,
   confluence, conviction, the bps floor, the paths floor, regime fit, the trigger's widening,
   discovery and Kelly sizing.
+- `tra arena` prices each market at its own costs, from `[arena.instrument_costs.<NAME>]` in
+  `arena.toml`, and breaks every row down by instrument: ideas, mean and sum net, and wins.
 
 ### Fixed
 

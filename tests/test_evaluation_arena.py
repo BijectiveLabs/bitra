@@ -200,3 +200,24 @@ def test_a_different_archive_is_a_different_run(archive: Path, tmp_path: Path) -
     second = write_arena(run_arena(config(), root=root), tmp_path / "out")
     assert first != second
     assert (first / "arena.json").is_file() and (second / "arena.json").is_file()
+
+
+def test_a_market_priced_at_its_own_costs_and_reported_on_its_own(archive: Path) -> None:
+    from trading_research_agents.evaluation.settle import Costs
+    from trading_research_agents.market_data.bars import MarketDataError
+
+    thin = Costs(COSTS.channel, COSTS.spread_bps + Decimal(20), COSTS.slippage_bps + Decimal(15))
+    plain = run_arena(config(rows=("momentum",)), root=archive)
+    priced = run_arena(config(rows=("momentum",), instrument_costs={"ETHUSDT": thin}), root=archive)
+    before = plain.rows[0]["by_instrument"]
+    after = priced.rows[0]["by_instrument"]
+    assert set(before) == {"BTCUSDT", "ETHUSDT"}
+    # BTC keeps the default; ETH pays its own 35 bps more on every round trip.
+    assert after["BTCUSDT"] == before["BTCUSDT"]
+    shift = float(after["ETHUSDT"]["mean_net_bps"]) - float(before["ETHUSDT"]["mean_net_bps"])
+    assert after["ETHUSDT"]["ideas"] == before["ETHUSDT"]["ideas"] and round(shift, 2) == -35.0
+    assert priced.config.record()["instrument_costs"]["ETHUSDT"]["spread_bps"] == str(
+        thin.spread_bps
+    )
+    with pytest.raises(MarketDataError, match="which this arena does not trade"):
+        config(instrument_costs={"SOLUSDT": thin})

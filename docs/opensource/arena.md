@@ -59,6 +59,19 @@ tra arena --config arena.toml
 `--funding none` is for a market that pays no funding, such as spot. Every idea in `ideas.jsonl`
 carries each component and its certainty.
 
+Markets do not cross the same book. A coin that trades a fraction of BTC's volume pays a wider
+spread and more slippage, and one figure for every market overstates the edge exactly where it is
+thinnest. Declare a market's own costs in `arena.toml`; a figure left out is the default's:
+
+```toml
+[arena.instrument_costs.ZECUSDT]
+spread_bps = 6
+slippage_bps = 15
+```
+
+Name the instruments you would trade. A universe discovered from today's volume cannot be replayed
+on any archive, so evidence comes from a declared list.
+
 ## Rows
 
 | Row | Definition |
@@ -115,8 +128,10 @@ with `random`'s: the difference and its 95 % interval, resampling whole days 4,0
 | sample too small | fewer than 30 independent bets or fewer than 10 days |
 | contaminated | the policy's knowledge cutoff falls after the window starts |
 
-A policy that exposes a score also gets its per-date rank IC against the next bar's return, with a
-t statistic. Coverage closes the report: minutes per market, the minutes not seen, and every
+Below the table, each row with more than one market is broken down by instrument: ideas, mean and
+sum net, and how many won. A row's total can come from one market alone, and this is where that
+shows. A policy that exposes a score also gets its per-date rank IC against the next bar's return,
+with a t statistic. Coverage closes the report: minutes per market, the minutes not seen, and every
 feature that was absent, with the reason.
 
 ## What a run writes

@@ -67,6 +67,10 @@ class FitContext:
     funding: Mapping[str, Funding]
     interval_ns: int
     first_ns: int
+    instrument_costs: Mapping[str, Costs] = field(default_factory=dict)
+
+    def costs_for(self, instrument: str) -> Costs:
+        return self.instrument_costs.get(instrument, self.costs)
 
 
 @dataclass(frozen=True)
@@ -101,7 +105,6 @@ class ForecastPolicy:
         self.refit_ns = refit_days * DAY_NS
         self.min_samples = min_samples
         self.margin_bps = margin_bps
-        self.cost_bps = _round_trip_bps(fit.costs)
         self._labels = _Labels()
         self._fitted: Fitted | None = None
         self._fitted_at: int | None = None
@@ -116,7 +119,7 @@ class ForecastPolicy:
                 values_by_side[side],
                 take_bps=float(TAKE_ATR) * atr,
                 stop_bps=float(STOP_ATR) * atr,
-                cost_bps=self.cost_bps,
+                cost_bps=_round_trip_bps(self.fit.costs_for(view.instrument)),
             )
             for side in SIDES
         )
@@ -248,7 +251,7 @@ class ForecastPolicy:
                 decided_ns=decided,
                 hold_ns=HOLD_BARS * self.fit.interval_ns,
                 tape=self.fit.histories[instrument].tape,
-                costs=self.fit.costs,
+                costs=self.fit.costs_for(instrument),
                 funding=self.fit.funding[instrument],
             )
             if isinstance(outcome, Settlement):
