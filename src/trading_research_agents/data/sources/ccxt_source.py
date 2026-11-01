@@ -37,6 +37,7 @@ from trading_research_agents.data.sources.ccxt_client import (
     fresh_connection,
     is_prediction,
     unanswered,
+    with_markets,
 )
 from trading_research_agents.data.sources.resolve import ResolveError, resolve
 from trading_research_agents.extras import install_hint
@@ -114,6 +115,9 @@ class CcxtSource:
         self.clock = clock
         self._intervals: dict[str, tuple[str, float]] = {}
         self._tier = tier
+        # A client this source built shares the venue's market list, loaded when first needed: a
+        # fallback source that never answers a read never pays for one.
+        self._unshared = client is None
         if client is None:
             client = self._build(settings or {})
         self._client = client
@@ -158,6 +162,11 @@ class CcxtSource:
         return self._read(kind, instrument, **options)
 
     def _read(self, kind: str, instrument: str, **options: Any) -> Fetched:
+        if self._unshared:
+            # One source per kind of data, each with its own client: without this, a desk reading
+            # four kinds loaded the venue's market list four times (4 to 8 s each, 2026-11-01).
+            with_markets(self._client, self.venue, self.environment)
+            self._unshared = False
         symbol = self._symbol(instrument)
         try:
             if kind == "ohlcv":

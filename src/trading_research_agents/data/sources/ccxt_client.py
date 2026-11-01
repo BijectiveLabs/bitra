@@ -17,7 +17,8 @@ import atexit
 import contextlib
 import inspect
 import threading
-from collections.abc import Mapping
+import time
+from collections.abc import Callable, Mapping
 from importlib import import_module
 from typing import Any
 
@@ -110,6 +111,48 @@ UNANSWERED = ("RequestTimeout", "NetworkError")
 def unanswered(exc: BaseException) -> bool:
     """Whether no answer arrived at all, as opposed to an answer the venue gave."""
     return type(exc).__name__ in UNANSWERED or isinstance(exc, TimeoutError | ConnectionError)
+
+
+# A venue's market list is several megabytes and takes seconds to load (measured on 2026-11-01:
+# 3.9 to 6.7 s for Bybit's 3536 markets). It changes when a market is listed or delisted, not
+# between two cycles, so one load serves every client of the same venue and environment for this
+# long. A symbol the shared list does not have is loaded again at once.
+MARKETS_TTL_S = 3600.0
+_LOADED: dict[tuple[str, str, str], tuple[Any, float]] = {}
+
+
+def with_markets(
+    client: Any,
+    venue: str,
+    environment: str,
+    symbol: str = "",
+    clock: Callable[[], float] = time.monotonic,
+    *,
+    signed: bool = False,
+) -> Any:
+    """`client` with its markets loaded, from an earlier client of the same venue and environment
+    when that one loaded them within `MARKETS_TTL_S`, else from the venue, once.
+
+    ccxt's own `set_markets_from_exchange` does the sharing, helpers included. Signed clients share
+    among themselves only: their account routing can change what a venue lists. A load that fails
+    is left to the caller's first read, which reports it as it always has.
+    """
+    key = (venue.strip().lower(), environment or "mainnet", "signed" if signed else "public")
+    held = _LOADED.get(key)
+    share = getattr(client, "set_markets_from_exchange", None)
+    if held is not None and clock() - held[1] < MARKETS_TTL_S and callable(share):
+        share(held[0])
+        if not symbol or symbol in (getattr(client, "markets", None) or {}):
+            return client
+    load = getattr(client, "load_markets", None)
+    if not callable(load):
+        return client
+    try:
+        load(True)
+    except Exception:
+        return client
+    _LOADED[key] = (client, clock())
+    return client
 
 
 def fresh_connection(client: Any) -> None:

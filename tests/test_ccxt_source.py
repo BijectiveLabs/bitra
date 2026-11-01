@@ -381,3 +381,38 @@ def test_only_the_classes_ccxt_raises_without_an_answer_are_unanswered() -> None
     ):
         assert not unanswered(getattr(ccxt, answered)("x")), answered
     assert not unanswered(ccxt.InsufficientFunds("x"))
+
+
+def test_one_market_load_serves_every_client_of_a_venue_and_environment() -> None:
+    from trading_research_agents.data.sources import ccxt_client
+    from trading_research_agents.data.sources.ccxt_client import MARKETS_TTL_S, with_markets
+
+    class Client:
+        loads = 0
+
+        def __init__(self) -> None:
+            self.markets: dict[str, Any] = {}
+
+        def load_markets(self, reload: bool = False) -> dict[str, Any]:
+            Client.loads += 1
+            self.markets = {"BTC/USDT:USDT": {}, "ETH/USDT:USDT": {}}
+            return self.markets
+
+        def set_markets_from_exchange(self, source: Any) -> None:
+            self.markets = source.markets
+
+    ccxt_client._LOADED.clear()
+    now = [0.0]
+    first = with_markets(Client(), "bybit", "demo", "BTC/USDT:USDT", clock=lambda: now[0])
+    second = with_markets(Client(), "bybit", "demo", "ETH/USDT:USDT", clock=lambda: now[0])
+    assert Client.loads == 1 and second.markets is first.markets
+    # Another environment is another list: a demo's contract sizes are not mainnet's.
+    with_markets(Client(), "bybit", "mainnet", "BTC/USDT:USDT", clock=lambda: now[0])
+    assert Client.loads == 2
+    # A symbol the shared list lacks, or a list past its age, is loaded again.
+    with_markets(Client(), "bybit", "demo", "NEW/USDT:USDT", clock=lambda: now[0])
+    assert Client.loads == 3
+    now[0] = MARKETS_TTL_S + 1
+    with_markets(Client(), "bybit", "demo", "BTC/USDT:USDT", clock=lambda: now[0])
+    assert Client.loads == 4
+    ccxt_client._LOADED.clear()

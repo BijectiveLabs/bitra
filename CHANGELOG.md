@@ -6,6 +6,16 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A venue's market list is loaded once per venue and environment and shared by every client for an
+  hour, through ccxt's own `set_markets_from_exchange`, instead of once per data source, per
+  cycle's order hand and per position read. Measured on the demo desk's settings from a slow link:
+  a sandbox cycle went from 24 s to 9.5 s, and a pass from 62 s to 57 s, most of what remains
+  being the screen's own reads. In venue mode the reload per cycle had aged decisions past
+  `[execution].max_decision_age_s` (121 s against 120), and every intent of the desk's last 58
+  cycles was refused before it was sent.
+
 ## [0.12.2] - 2026-10-31
 
 ### Fixed

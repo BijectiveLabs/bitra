@@ -54,12 +54,12 @@ def _discovered_universe(cfg: Any) -> tuple[Any, dict[str, Any] | None, list[str
     try:
         client = _DISCOVERY_CLIENTS.get(venue)
         if client is None:
-            from trading_research_agents.data.sources.ccxt_client import build
+            from trading_research_agents.data.sources.ccxt_client import build, with_markets
 
             client = build(venue, {"enableRateLimit": True})
             if client is None:
                 raise AttributeError(f"ccxt has no exchange named {venue!r}")
-            _DISCOVERY_CLIENTS[venue] = client
+            _DISCOVERY_CLIENTS[venue] = with_markets(client, venue, "mainnet")
         found = discover(client, venue, rules)
     except (DiscoverError, ImportError, AttributeError) as exc:
         why = f"discovery: {exc}; this pass looks at the declared instruments only"
@@ -168,7 +168,7 @@ def _execution_client(cfg: Any) -> Any:
     size or lot: MET is 1 coin a contract live and 10 on the demo. Whatever an order is sized,
     stepped or resolved by has to come from the list the order will be checked against.
     """
-    from trading_research_agents.data.sources.ccxt_client import build
+    from trading_research_agents.data.sources.ccxt_client import build, with_markets
 
     venue = cfg.execution.venue or cfg.run.venue_key.partition("/")[0]
     environment = _declared_environment(cfg)
@@ -181,7 +181,10 @@ def _execution_client(cfg: Any) -> Any:
             client.enable_demo_trading(True)
         elif environment == "testnet":
             client.set_sandbox_mode(True)
-        client.load_markets()
+        with_markets(client, venue, environment)
+        if not getattr(client, "markets", None):
+            # The shared load failed; loading here again raises the venue's own error, as before.
+            client.load_markets()
         _EXECUTION_CLIENTS[key] = client
     return _EXECUTION_CLIENTS[key]
 
