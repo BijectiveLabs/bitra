@@ -6,6 +6,20 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- `tra init --profile autonomous` writes the core: data, one decision, the exits, one cost rule
+  (`[targets].min_edge_multiple`), the risk gate and execution, with `[trigger]` deciding when a
+  cycle is worth asking. The conviction ladder, the confluence matrix, a regime the setup must fit,
+  the trigger's widening and `[targets].min_net_bps` are written commented under "Experiments",
+  because none has been measured against the core. A desk already written keeps what it declared.
+
+### Added
+
+- `tra check` lists the experiments a desk has on beside the core: reviewers, the team, readings,
+  confluence, conviction, the bps floor, the paths floor, regime fit, the trigger's widening,
+  discovery and Kelly sizing.
+
 ### Fixed
 
 - A venue's market list is loaded once per venue and environment and shared by every client for an

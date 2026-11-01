@@ -503,3 +503,22 @@ def test_a_unit_cap_over_several_instruments_is_a_thing_to_fix() -> None:
     assert "[controls].max_position_quote" in said
     assert _unit_cap_shared(desk(("BTCUSDT", "HYPEUSDT"), Decimal(200))) == []
     assert _unit_cap_shared(desk((), None)) == []
+
+
+def test_the_experiments_a_desk_has_on_are_named() -> None:
+    from trading_research_agents.cli.check_gates import experiments_on
+
+    agents = dict(AGENTS, reviewers=["pro", "contra"])
+    cfg = parse_strategy_config(
+        agent_raw(
+            agents=agents,
+            conviction={"weights": {"structure_lead": Decimal(2)}, "min_score": Decimal("0.4")},
+            trigger={"min_move_bps": Decimal(15), "widen_after": 6},
+            targets={"min_net_bps": Decimal(5)},
+        )
+    )
+    found = experiments_on(cfg)
+    assert found[0] == "reviewers (pro, contra)"
+    assert {"[conviction]", "[targets].min_net_bps", "[trigger].widen_after"} <= set(found)
+    # Regime fit is on unless a desk turns it off, so an older desk sees it listed.
+    assert "[regime].setups_must_fit" in found

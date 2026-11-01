@@ -92,7 +92,8 @@ def init_project(args: argparse.Namespace) -> int:
             lines.append(f"put {key} in .env (copy .env.example)")
     if autonomous:
         lines.append(
-            "the cycle is wired: the shelf, the matrix, the conviction ladder, the targets"
+            "the cycle is wired as the core: one decision, the exits, the cost rule, the risk "
+            "gate; the experiments are listed, off, in strategy.toml"
         )
         lines.append(
             "next: put your key in .env, then `tra check`"
@@ -146,12 +147,13 @@ def _for_venue(name: str, text: str, able: Any, keys: list[str], starter: str) -
             "max_notional = 200               # one order, in quote currency\n" + _exits_line(able)
         )
         text = text.replace("# max_notional = 200\n", "", 1)
-        if "\n[conviction]\n" in text:
-            # A desk the agents run across several instruments sizes in money, not in coins: 0.01
-            # is a fair BTC order and a meaningless ETH one.
+        if "\n[targets]\n" in text:
+            # The autonomous profile, the only one with a live [targets]. A desk the agents run
+            # across several instruments sizes in money, not in coins: 0.01 is a fair BTC order
+            # and a meaningless ETH one.
             text = re.sub(
                 r"(?m)^size = [0-9.]+ .*$",
-                "size_quote = 100                   # quote currency per order before conviction",
+                "size_quote = 100                   # quote currency per order",
                 text,
                 count=1,
             )
@@ -328,44 +330,12 @@ def _agent_config(text: str, provider_name: str, model: str) -> str:
 
 
 AUTONOMOUS_GATES = """
-[confluence]
-# Which readings must agree with the direction. Empty until you declare their sources in
-# sources/, because a reading that was never read has agreed to nothing and this gate fails closed.
-required = []
-long_states = ["bullish"]
-short_states = ["bearish"]
-on_missing = "refuse"
-min_support = 0                    # reviewers that must support it; needs [agents].reviewers
-
-[conviction]
-# What each voice is worth, and how much of the base size their agreement buys. With nothing on the
-# shelf yet, the only voice is the deciding analyst, so the score is its own confidence. Add a
-# weight beside each reading as you declare its sources.
-weights = { structure_lead = 2.0 }
-min_score = 0.4                    # below this the desk does not trade, whatever the gates said
-# max_leverage = 3.0               # notional against [run].equity; a ceiling, never a target
-
-[[conviction.ladder]]
-at_least = 0.75                    # everything agrees: the whole base size
-size_multiple = 1.0
-
-[[conviction.ladder]]
-at_least = 0.55
-size_multiple = 0.5
-
-[[conviction.ladder]]
-at_least = 0.4
-size_multiple = 0.25
-
 [targets]
-# What a trade has to be worth and how often you will take one. Yours to change; these are a start.
-# The multiple is the one to think about: the cost is certain and the edge is not, so a trade worth
-# a little more than it costs is a trade that needs everything to go right.
-min_net_bps = 5
+# The one cost rule of the core: the edge a trade claims has to be this many times what the round
+# trip costs. The cost is certain and the edge is not, so a trade worth a little more than it costs
+# is a trade that needs everything to go right.
 min_edge_multiple = 2.0
 max_round_trips_per_day = 6
-# max_research_bps = 25            # model spend since the last intent, against this notional;
-#                                  # needs [agents.pricing.<model>] to mean anything
 
 [trigger]
 # What has to have happened before the roster is paid to have an opinion. All of it is computed from
@@ -373,22 +343,41 @@ max_round_trips_per_day = 6
 min_move_bps = 15
 max_spread_bps = 8
 cooldown_s = 900
-widen_after = 6
 
-[audit]
-# The two auditors wake differently because they answer different questions. Something breaking is
-# an event, so the technical auditor wakes on an alarm - a provider that stopped answering, a data
-# chain that ran out, a venue that refused - and reports without acting. Whether the desk is earning
-# what it costs is a stretch of time, so the quant auditor runs on a count of cycles.
-on_alarm = true
-alarm_cooldown_s = 1800            # per kind of alarm, not overall
-quant_every_cycles = 20
-# quant_every = "24h"              # or on a clock, kept across restarts
-losing_streak = 3                  # losing round trips in a row that wake the quant auditor
+[regime]
+# The regime is measured and shown to the lead either way. Whether a setup that does not fit it is
+# refused is an experiment like those below: the lead already reads the regime it would be checked
+# against.
+setups_must_fit = false
 
-# What this desk watches. Left out, every cycle is [run].instrument. Declared, a pass looks at each
-# instrument for one data pull and no tokens, applies [trigger] to each, and spends its cycles on
-# whatever moved most against its own spread.
+# Experiments. Each layer below is off, because none has been measured against the core: data, one
+# decision, the exits, the cost rule above, the risk gate and execution. Turn on one at a time and
+# keep it only if `tra arena` shows the core with it beating the core without it, out of sample.
+# `tra check` lists the ones a desk has on.
+#
+# [conviction]                     # size by how strongly the voices agree
+# weights = { structure_lead = 2.0 }
+# min_score = 0.4
+# [[conviction.ladder]]
+# at_least = 0.75
+# size_multiple = 1.0
+#
+# [confluence]                     # readings that must agree with the direction
+# required = ["macro"]
+# long_states = ["bullish"]
+# short_states = ["bearish"]
+#
+# [audit]                          # two model auditors that report and never act
+# on_alarm = true
+# quant_every_cycles = 20
+#
+# In [regime]: setups_must_fit = true, a setup the measured regime does not support is refused.
+# In [trigger]: widen_after = 6, a larger move asked for after a run of refusals.
+# In [targets]: min_net_bps, a floor in bps beside the multiple.
+# In [agents]: reviewers = ["pro", "contra", "neutral"], team = ["blind_confirmer"], readings.
+
+# What this desk watches. Left out, every cycle is [run].instrument. For evidence, name the
+# instruments: a universe discovered from today's volume cannot be replayed on any archive.
 # [universe]
 # instruments = ["BTCUSDT", "ETHUSDT"]
 # max_per_cycle = 1
@@ -426,9 +415,10 @@ is left before it can decide anything:
 Then `tra check` tells you what is still missing, `tra run` decides once, and
 `tra run --every 15m` keeps deciding on each fifteen-minute bar.
 
-Optional, and worth doing in this order: fill in a file under `sources/` and its reading joins
-the roster; give that reading a weight in `[conviction].weights` and its agreement starts changing
-the size; name it in `[confluence].required` and its disagreement starts refusing the trade.
+The desk is the core: one decision, the exits, the cost rule, the risk gate and execution. The
+layers in the "Experiments" block of `strategy.toml` are off because none has been measured against
+the core. Turn on one at a time, and keep it only if `tra arena` shows the core with it doing better
+than the core without it, out of sample. `tra check` lists the experiments a desk has on.
 
 `docs.bijectivelabs.dev/opensource/boundaries` says what this software will not do, and why.
 """

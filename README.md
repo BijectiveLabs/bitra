@@ -597,7 +597,7 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | Command | What it does |
 |---|---|
 | `tra` | opens the console |
-| `tra init my-desk --profile autonomous` | a project wired for the agents, every file commented |
+| `tra init my-desk --profile autonomous` | a desk wired as the core for the agents; every experiment written off, commented |
 | `tra check` | every setting read against the others, with what to fix |
 | `tra keys --probe` | proves every key works; no key is printed, no prompt or order sent |
 | `tra models groq` | the models your key can use on a provider, read from the vendor; no prompt sent |
