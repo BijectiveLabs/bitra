@@ -61,3 +61,26 @@ def test_a_lock_left_by_a_dead_process_is_taken_over_and_released(tmp_path: Path
     shutdown.release(held)
     assert not held.exists()
     assert shutdown.alive(os.getpid())
+
+
+def test_a_run_killed_without_a_stop_line_is_named_when_the_next_one_starts(tmp_path: Path) -> None:
+    cycles = tmp_path / "runs" / "cycles"
+    screens = tmp_path / "runs" / "screens"
+    screens.mkdir(parents=True)
+    (screens / "2026-11-01T16-15-20Z.json").write_text("{}", encoding="utf-8")
+    cycles.mkdir(parents=True)
+    # A start whose process is gone and that never stopped: pid 0 is never alive.
+    (cycles / shutdown.LOG).write_text(
+        '{"at": "2026-11-01T12:36:15+00:00", "event": "started", "pid": 0}\n', encoding="utf-8"
+    )
+    shutdown.note_unrecorded_end(cycles)
+    lines = [json.loads(x) for x in (cycles / shutdown.LOG).read_text("utf-8").splitlines()]
+    assert lines[-1]["event"] == "ended_unrecorded"
+    assert lines[-1]["started_at"] == "2026-11-01T12:36:15+00:00"
+    assert lines[-1]["last_pass"] == "2026-11-01T16-15-20Z"  # noqa: S105 - a screen file name
+    # A run that stopped cleanly, and a run that is still alive, are left alone.
+    shutdown.note_unrecorded_end(cycles)
+    assert len((cycles / shutdown.LOG).read_text("utf-8").splitlines()) == 2
+    shutdown.journal(cycles, "started")
+    shutdown.note_unrecorded_end(cycles)
+    assert len((cycles / shutdown.LOG).read_text("utf-8").splitlines()) == 3

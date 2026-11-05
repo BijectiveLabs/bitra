@@ -6,6 +6,22 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `tra run` writes `ended_unrecorded` to `scheduler.jsonl` when the run before it never wrote a
+  stop line (a closed window, a power cut), with its pid, its start and the last pass its screens
+  recorded. A killed run left nothing, and the journal read as a desk that was still running.
+- `tra check` lists the experiments a desk has on beside the core: reviewers, the team, readings,
+  confluence, conviction, the bps floor, the paths floor, regime fit, the trigger's widening,
+  discovery and Kelly sizing.
+- `tra arena` prices each market at its own costs, from `[arena.instrument_costs.<NAME>]` in
+  `arena.toml`, and breaks every row down by instrument: ideas, mean and sum net, and wins.
+- Desk rows in the arena, `desk:<row>` such as `desk:paths`: the row asked the way a live desk asks
+  it, one market per pass, the one with the most room that has no open idea.
+- `[trigger].min_move_atr`, an experiment: the move asked for as a fraction of the instrument's own
+  ATR on the decision timeframe, so a fixed 15 bps is not noise on one coin and a real move on
+  another. With no ATR to read, `min_move_bps` applies.
+
 ### Changed
 
 - The edge the cost gate and `[targets]` weigh is the trade's value over the instrument's own paths
@@ -27,21 +43,15 @@ All notable changes to this project are recorded here. The format follows
   and `[agents].min_confidence` are written commented under "Experiments",
   because none has been measured against the core. A desk already written keeps what it declared.
 
-### Added
-
-- `tra check` lists the experiments a desk has on beside the core: reviewers, the team, readings,
-  confluence, conviction, the bps floor, the paths floor, regime fit, the trigger's widening,
-  discovery and Kelly sizing.
-- `tra arena` prices each market at its own costs, from `[arena.instrument_costs.<NAME>]` in
-  `arena.toml`, and breaks every row down by instrument: ideas, mean and sum net, and wins.
-- Desk rows in the arena, `desk:<row>` such as `desk:paths`: the row asked the way a live desk asks
-  it, one market per pass, the one with the most room that has no open idea.
-- `[trigger].min_move_atr`, an experiment: the move asked for as a fraction of the instrument's own
-  ATR on the decision timeframe, so a fixed 15 bps is not noise on one coin and a real move on
-  another. With no ATR to read, `min_move_bps` applies.
-
 ### Fixed
 
+- Every signed read a hand makes (the account balance, positions, open and closed orders, an order,
+  the fills) is repeated once on a fresh connection when it got no answer, or when the venue
+  refused it with `InvalidNonce` because it arrived after its own receive window. Before, only the
+  one position read repeated, and the balance read that a cycle needs first lost a whole cycle to a
+  single timeout, while two reads of the desk's open positions were refused 5.3 s and 8.7 s after
+  they were signed. An order is never repeated: creating, editing and cancelling stay out of the
+  list, and an order that gets no answer is still `UNKNOWN`.
 - A venue's market list is loaded once per venue and environment and shared by every client for an
   hour, through ccxt's own `set_markets_from_exchange`, instead of once per data source, per
   cycle's order hand and per position read. Measured on the demo desk's settings from a slow link:

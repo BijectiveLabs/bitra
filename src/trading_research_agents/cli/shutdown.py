@@ -80,6 +80,33 @@ def journal(where: Path, event: str, **fields: Any) -> None:
         append_line(where / LOG, line, durable=True)
 
 
+def note_unrecorded_end(where: Path) -> None:
+    """Say so, in the journal, when the run before this one never wrote a stop line.
+
+    A run that is killed (a closed window, a power cut, a machine that went to sleep for good)
+    writes nothing, so the journal alone would read as a desk that is still running. This is
+    called as a new run starts: the last event of the old one is a start whose process is gone,
+    and the last pass its screens recorded is the latest that the desk can be shown to have lived.
+    """
+    from trading_research_agents.records import read_lines
+
+    events = read_lines(Path(where) / LOG)
+    if not events or events[-1].get("event") != "started":
+        return
+    last = events[-1]
+    holder = int(last.get("pid") or 0)
+    if holder == os.getpid() or alive(holder):
+        return
+    passes = sorted((Path(where).parent / "screens").glob("*.json"))
+    journal(
+        where,
+        "ended_unrecorded",
+        ended_pid=holder,
+        started_at=last.get("at"),
+        last_pass=passes[-1].stem if passes else None,
+    )
+
+
 LOCK = "desk.lock"
 
 

@@ -258,6 +258,7 @@ class _DeskRun:
     def run(self) -> int:
         desk = self.desk
         lock = shutdown.claim(desk.out) if desk.mode == "venue" else None
+        shutdown.note_unrecorded_end(desk.out)
         shutdown.journal(
             desk.out,
             "started",
