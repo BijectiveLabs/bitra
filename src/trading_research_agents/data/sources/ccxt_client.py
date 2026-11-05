@@ -155,6 +155,57 @@ def with_markets(
     return client
 
 
+# A signed request carries the time it was signed at, and a venue refuses one that arrives after its
+# receive window. A request held up on a dead pooled connection arrives late, so the refusal is the
+# same stale connection seen from the other end: on 2026-11-01 Bybit refused two position reads of
+# a desk idle between passes, 5.3 s and 8.7 s after they were signed, against a 5 s window and a
+# clock 0.05 s from the venue's. Repeated on a fresh connection, the read is signed again.
+STALE_STAMP = "InvalidNonce"
+
+# The signed reads a hand makes. None of them changes anything at the venue, so each is safe to
+# repeat; creating, editing and cancelling an order are not in this list and are never repeated.
+SIGNED_READS = (
+    "fetch_balance",
+    "fetch_positions",
+    "fetch_position",
+    "fetch_open_orders",
+    "fetch_closed_orders",
+    "fetch_canceled_orders",
+    "fetch_order",
+    "fetch_my_trades",
+)
+
+
+def repeatable_read(exc: BaseException) -> bool:
+    """Whether a failed read is worth making once more on a fresh connection."""
+    return unanswered(exc) or type(exc).__name__ == STALE_STAMP
+
+
+def repeat_reads(client: Any) -> Any:
+    """Make each signed read of `client` repeat once on a fresh connection when it got no answer,
+    or an answer that its own timestamp had aged out of. A second failure is raised as it came."""
+    for name in SIGNED_READS:
+        read = getattr(client, name, None)
+        if not callable(read) or getattr(read, "repeats_once", False):
+            continue
+        setattr(client, name, _repeating(client, read))
+    return client
+
+
+def _repeating(client: Any, read: Callable[..., Any]) -> Callable[..., Any]:
+    def again(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return read(*args, **kwargs)
+        except Exception as exc:
+            if not repeatable_read(exc):
+                raise
+            fresh_connection(client)
+            return read(*args, **kwargs)
+
+    again.repeats_once = True  # type: ignore[attr-defined]
+    return again
+
+
 def fresh_connection(client: Any) -> None:
     """Drop the client's pooled connections, so the next request opens a new one.
 
