@@ -499,6 +499,10 @@ class RequestTimeout(NetworkError):  # noqa: N818 - named as ccxt names it
     pass
 
 
+class InvalidNonce(NetworkError):  # noqa: N818 - named as ccxt names it
+    """Bybit's 10002: the request reached the venue after its receive window had closed."""
+
+
 def sending_hand(venue: FakeExchange) -> VenueHand:
     return VenueHand(
         venue="bybit",
@@ -1193,6 +1197,56 @@ def test_a_read_on_a_connection_left_idle_is_repeated_once_on_a_fresh_one() -> N
     with pytest.raises(DispatchError, match="InsufficientFunds"):
         hand(refused).position()
     assert refused.reads == 1
+    # A request that sat on a dead connection arrives after its own timestamp has aged out; read
+    # again it is signed again (seen on 2026-11-01: 5.3 s and 8.7 s late against a 5 s window).
+    late = Idle(1, InvalidNonce("req_timestamp[1],server_timestamp[5342],recv_window[5000]"))
+    assert hand(late).position() == Decimal("0.01")
+    assert late.reads == 2 and late.session.closed == 1
+
+
+def test_the_account_read_that_stopped_a_cycle_is_repeated_and_an_order_never_is() -> None:
+    from trading_research_agents.data.sources.ccxt_client import SIGNED_READS
+    from trading_research_agents.trading.capital import read_account
+
+    class Session:
+        closed = 0
+
+        def close(self) -> None:
+            self.closed += 1
+
+    class Flaky(FakeExchange):
+        def __init__(self) -> None:
+            super().__init__()
+            self.session = Session()
+            self.balance_reads = 0
+            self.sent = 0
+
+        def fetch_balance(self) -> dict[str, Any]:
+            self.balance_reads += 1
+            if self.balance_reads == 1:
+                raise RequestTimeout("bybit GET /v5/account/wallet-balance")
+            return {"USDT": {"total": "1000", "free": "900", "used": "100"}}
+
+        def create_order(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+            self.sent += 1
+            raise RequestTimeout("bybit POST /v5/order/create")
+
+    client = Flaky()
+    hand = VenueHand(
+        venue="bybit",
+        symbol="BTC/USDT:USDT",
+        max_notional=Decimal(2000),
+        keys=("K", "S"),
+        client=client,
+    )
+    assert hand.client is client
+    assert read_account(client, "USDT").equity == Decimal("1000")
+    assert client.balance_reads == 2 and client.session.closed == 1
+    # Creating an order is not a read: its timeout is an UNKNOWN to reconcile, never a repeat.
+    assert "create_order" not in SIGNED_READS
+    with pytest.raises(RequestTimeout):
+        client.create_order("BTC/USDT:USDT", "limit", "buy", 1.0, 1.0, {})
+    assert client.sent == 1
 
 
 def test_a_decision_that_aged_during_the_venue_reads_is_not_sent() -> None:

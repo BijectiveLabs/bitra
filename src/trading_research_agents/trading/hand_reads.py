@@ -9,7 +9,7 @@ from contextlib import suppress
 from decimal import Decimal
 from typing import Any
 
-from trading_research_agents.data.sources.ccxt_client import fresh_connection, unanswered
+from trading_research_agents.data.sources.ccxt_client import repeat_reads
 from trading_research_agents.trading.capital import (
     CapitalError,
     liquidation_estimate,
@@ -44,6 +44,7 @@ class HandReads(HandTerms):
             raise DispatchError(f"[execution].exits is one of {list(EXITS)}")
         if self.client is None:
             self.client = self._build()
+        repeat_reads(self.client)
         options = getattr(self.client, "options", None)
         if isinstance(options, dict):
             # ccxt reads the margin mode for orders, leverage and its read-back from here when a
@@ -217,7 +218,7 @@ class HandReads(HandTerms):
         if fetch is None:
             return None
         try:
-            held = self._read_once_more_if_stale(fetch)
+            held = fetch(self.symbol)
         except Exception as exc:
             if type(exc).__name__ == "NotSupported":
                 # Seen on 2026-10-20: a venue that reads one position only for options through
@@ -241,21 +242,6 @@ class HandReads(HandTerms):
             return Decimal(0)
         signed = Decimal(str(contracts)) * self.contract_size()
         return -signed if str(held.get("side", "")).lower() == "short" else signed
-
-    def _read_once_more_if_stale(self, fetch: Any) -> Any:
-        """The position read, repeated once on a fresh connection when the first never answered.
-
-        A pooled connection left idle past the venue's keep-alive can hang until the client's
-        timeout (seen on 2026-10-26: four reads in ten after fifteen idle minutes). A read changes
-        nothing at the venue, so it is safe to repeat; an answer the venue gave is never repeated.
-        """
-        try:
-            return fetch(self.symbol)
-        except Exception as exc:
-            if not unanswered(exc):
-                raise
-            fresh_connection(self.client)
-            return fetch(self.symbol)
 
     def _position_in_list(self) -> Mapping[str, Any] | None:
         """This symbol's row of the venue's position list: empty when flat, None when unreadable."""
