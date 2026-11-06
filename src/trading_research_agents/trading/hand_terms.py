@@ -28,6 +28,7 @@ from trading_research_agents.trading.hand_state import (
     key_hint,
 )
 from trading_research_agents.trading.market import Market
+from trading_research_agents.trading.untagged import untagged
 from trading_research_agents.trading.venues.exits import exit_reads
 from trading_research_agents.trading.venues.limits import (
     client_id_prefix,
@@ -56,7 +57,7 @@ class HandTerms(HandState):
             raise DispatchError(f"ccxt has no exchange named {self.venue!r}")
         config = {**held, "enableRateLimit": True, **self.options}
         config["options"] = {**SIGNED_DEFAULTS, **dict(config.get("options") or {})}
-        client = build_client(self.venue, config)
+        client = untagged(build_client(self.venue, config))
         self.to_environment(client)
         route(self.venue, client, self.symbol)
         # Every cycle builds its hand afresh, so without this each one paid for the venue's whole

@@ -342,20 +342,47 @@ a tag, and the exchange shares part of the fee it already charges with whoever m
 On most venues the user pays the same fee either way. Hyperliquid is the exception: there the
 software's share is charged on top.
 
-This package adds no tag of its own today. ccxt, which sends the orders, adds its own on several
-venues. As read from ccxt 4.5.85:
+**This package sends no tag of its own, and it does not let ccxt send ccxt's.** ccxt, which builds
+and signs the orders, identifies itself to several venues so that they can pay its maintainers.
+You did not choose that, so every request this package sends with your keys is checked where it
+leaves, after ccxt has built and signed it (`trading/untagged.py`):
 
-| Venue | What ccxt sends | What it costs you |
+- a header that carries ccxt's identity is removed. Headers are not part of what a venue's
+  signature covers, so the request is otherwise unchanged;
+- a tag inside the signed content (the url or the body) cannot be removed without breaking the
+  signature. The request is **refused and not sent**, with the reason, as a rejection that never
+  reached the venue.
+
+Leaving a ccxt option empty does not do this: ccxt reads an empty value as absent and falls back to
+its own (checked: BingX still sent `X-SOURCE-KEY: CCXT`). That is why the check is on the request.
+
+What ccxt 4.5.91 puts on a request, and what happens to it. "Tested" means a request built by
+ccxt's own code for that venue is checked in `tests/test_untagged.py`; "by rule" means the same
+rule applies to where the source shows the tag, but no request for that venue is tested.
+
+| Venue | What ccxt sends | What happens |
 |---|---|---|
-| Bybit | `Referer: CCXT` on every signed request | nothing extra; the share comes out of Bybit's fee |
-| BingX | `X-SOURCE-KEY: CCXT` | nothing extra |
-| Bitget | `X-CHANNEL-API-CODE` with ccxt's channel code | nothing extra |
-| MEXC | `source: CCXT` | nothing extra |
-| OKX, Binance, HTX | a broker prefix on the client order id, but only when the order carries no id of its own | nothing, and no tag either: the desk always sends its own client order id |
-| Hyperliquid | by ccxt's default, an approval signed with your wallet for ccxt's builder address at up to 0.01%, then a builder fee of 1 basis point on every order. This package turns the fee off: the approval is signed at 0% and the builder is attached at zero | nothing extra by default. With the fee turned back on, **1 bp per order on top of Hyperliquid's fee** |
+| Bybit | `Referer: CCXT` on every signed POST | removed; tested |
+| BingX | `X-SOURCE-KEY: CCXT` | removed; tested |
+| Bitget | `X-CHANNEL-API-CODE: p4sve` | removed; tested |
+| Gate | `X-Gate-Channel-Id: ccxt` in the client's default headers | removed; tested (this one was missing from this page before) |
+| MEXC | `source: CCXT` header | removed; tested |
+| Alpaca | `APCA-PARTNER-ID: ccxt` in the default headers | removed; tested |
+| Bithumb, Paradex, Toobit | a partner or referrer header with the value `CCXT` | removed, by rule |
+| KuCoin | `KC-API-PARTNER` and its two companion headers | removed together, by rule; not run against the venue |
+| OKX, Binance | a broker prefix on the client order id when the order has none | none sent: the desk always sends its own client order id. An order without one is **refused** (tested for OKX) |
+| HTX | a broker prefix on the client order id when the order has none, **and** a `channel_code` on swap orders whether or not the order has an id | **refused**, since the tag is inside the signed content. HTX swap orders cannot be sent through this package until ccxt lets the code be left out |
+| Crypto.com, Pacifica, WOOFi Pro | a broker or builder code `CCXT` that ccxt's source places in the request | removed if it sits in a header, **refused** if it sits in the signed content, by rule; not run against the venue |
+| Hyperliquid | by ccxt's default, an approval signed with your wallet for ccxt's builder address at up to 0.01%, then a builder fee of 1 basis point on every order | the fee is off: the approval is signed at 0% and the builder is attached at zero. Nothing extra by default. With the fee turned back on, **1 bp per order on top of Hyperliquid's fee** |
 
-The default is set on every client that signs with your keys, and `[execution].ccxt_options` is
-laid over it, as handed to ccxt:
+Twenty-two exchanges in ccxt 4.5.91 hold the word `CCXT` or `ccxt` in quotes in their source. The
+ones above are read. For the other ten (Aster, Bitopro, BTSE, Coinbase, Cryptomus, Foxbit, WEEX,
+WhiteBIT, XT, Zebpay) the meaning of the word was not read; the rule above still applies to them
+wherever it appears in a header or a request. A test lists the 22 and fails when a
+ccxt upgrade adds another, so that someone reads it before it ships.
+
+The Hyperliquid default is set on every client that signs with your keys, and
+`[execution].ccxt_options` is laid over it, as handed to ccxt:
 
 ```toml
 [execution]
@@ -366,9 +393,9 @@ A desk that turns the fee on adds 1 bp to each side of its Hyperliquid channel i
 so the round trip the gates price is the one it pays. Credentials are refused in this table; they
 come from the environment only.
 
-Bijective plans to join these programmes as a software vendor. When a venue issues an id, it will
-be set the same way, shown by `tra check`, and you can replace it or leave it empty. The venue will
-be listed on this page first. Until then nothing this package sends carries a Bijective tag.
+Bijective has no broker id and no plan for one at the time of writing. If that changes, the id
+will be off unless you turn it on, shown by `tra check`, listed on this page before the release
+that sends it, and never a cost to you beyond the venue's own fee.
 
 ## Changing venue, and turning the others off
 

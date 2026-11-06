@@ -6,6 +6,20 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- ccxt's own broker and channel tags no longer leave with a user's order. A header that carries
+  ccxt's identity (Bybit, BingX, Bitget, Gate, MEXC, Alpaca and others) is removed from every
+  request signed with the user's keys, and a tag inside the signed content (HTX swap orders, an
+  order with no client order id on OKX or Binance) makes the request refused rather than sent.
+  Setting a ccxt option empty does not remove them, because ccxt reads it as absent, so the check
+  is on the request (`trading/untagged.py`). A test fails when a ccxt upgrade adds a new identity
+  literal.
+- Docs, Venues, Broker tags: rewritten from ccxt 4.5.91 with what happens on each venue. Gate's
+  `X-Gate-Channel-Id` was missing from the page, and HTX swap orders carry a `channel_code` even
+  with their own client order id, which the page had said they did not.
+- Docs, For exchanges: Bijective has no broker id; if one exists it is off unless the user turns it on.
+
 ### Added
 
 - `tra run` writes `ended_unrecorded` to `scheduler.jsonl` when the run before it never wrote a

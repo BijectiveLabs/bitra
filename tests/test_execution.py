@@ -482,6 +482,10 @@ def test_a_signed_client_starts_with_the_builder_fee_off(monkeypatch: pytest.Mon
     class Signed:
         def __init__(self) -> None:
             self.options: dict[str, Any] = {}
+            self.headers: dict[str, Any] = {}
+
+        def fetch(self, *args: Any) -> str:
+            return "{}"
 
         def enable_demo_trading(self, on: bool) -> None:
             self.demo = on

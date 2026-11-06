@@ -38,15 +38,17 @@ the venue's own exit, and the kill path. The current list, with what each venue 
 
 ## Broker and channel ids
 
-Orders do not carry a Bijective tag today. Where ccxt adds its own identifier, that is listed on
-[Venues](/opensource/venues#broker-tags) for every venue.
+Orders do not carry a Bijective tag, and ccxt's own tags are removed from them or the order is
+refused; [Venues](/opensource/venues#broker-tags) lists every venue and what happens there.
 
-Bijective intends to take part in exchanges' broker programmes as a software vendor. When an exchange
-issues an id, it will be:
+Bijective has no broker id and no plan for one at the time of writing. If an exchange issues one,
+it will be:
+
+- **off unless you turn it on.** No release sends it by default;
 
 - set the way the exchange documents it, through the venue's own field;
 - shown by `tra check`, so every user sees it;
-- replaceable or removable by the user in one line of configuration;
+- removable by the user in one line of configuration;
 - never a cost to the user beyond the exchange's own fee. A programme that charges users extra for
   the vendor's share is one we do not use as a default.
 
