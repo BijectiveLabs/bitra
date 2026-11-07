@@ -375,6 +375,25 @@ rule applies to where the source shows the tag, but no request for that venue is
 | Crypto.com, Pacifica, WOOFi Pro | a broker or builder code `CCXT` that ccxt's source places in the request | removed if it sits in a header, **refused** if it sits in the signed content, by rule; not run against the venue |
 | Hyperliquid | by ccxt's default, an approval signed with your wallet for ccxt's builder address at up to 0.01%, then a builder fee of 1 basis point on every order | the fee is off: the approval is signed at 0% and the builder is attached at zero. Nothing extra by default. With the fee turned back on, **1 bp per order on top of Hyperliquid's fee** |
 
+**Checked on the wire, 2026-11-07.** The package's venue end-to-end run (entry with its exits, a
+refused second entry, a reduce-only close, a resting order cancelled, the kill path, fills read
+back) was repeated on each practice API below with every request recorded as it left. No request
+carried a ccxt tag, and the orders were accepted and filled:
+
+| Venue | Practice API | Requests recorded | With a ccxt tag |
+|---|---|---|---|
+| Bybit | demo | 208 | 0 |
+| OKX | demo | 229 | 0 |
+| Bitget | demo | 215 | 0 |
+| Binance | demo | 239 | 0 |
+| Gate | testnet | 154 | 0 |
+
+The run has one step that waits for the price to reach a tight stop or take profit, and on Bybit,
+OKX, Bitget and Binance the price did not within 15 minutes; the kill path then closed the
+position and each account ended flat. BingX was not run again: its practice key was refused by the
+venue (`Incorrect apiKey`) with the tag check on and off alike, so the key has to be renewed first.
+Hyperliquid and the venues marked "ready for its run" are checked by the unit tests only.
+
 Twenty-two exchanges in ccxt 4.5.91 hold the word `CCXT` or `ccxt` in quotes in their source. The
 ones above are read. For the other ten (Aster, Bitopro, BTSE, Coinbase, Cryptomus, Foxbit, WEEX,
 WhiteBIT, XT, Zebpay) the meaning of the word was not read; the rule above still applies to them

@@ -15,6 +15,8 @@ All notable changes to this project are recorded here. The format follows
   Setting a ccxt option empty does not remove them, because ccxt reads it as absent, so the check
   is on the request (`trading/untagged.py`). A test fails when a ccxt upgrade adds a new identity
   literal.
+- Checked on the wire on the practice APIs of Bybit, OKX, Bitget, Binance and Gate: the full
+  order path ran and no request carried a ccxt tag. BingX was not run (its practice key expired).
 - Docs, Venues, Broker tags: rewritten from ccxt 4.5.91 with what happens on each venue. Gate's
   `X-Gate-Channel-Id` was missing from the page, and HTX swap orders carry a `channel_code` even
   with their own client order id, which the page had said they did not.
