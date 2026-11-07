@@ -5,7 +5,6 @@ from __future__ import annotations
 import difflib
 import importlib
 import importlib.util
-import sys
 import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
@@ -25,6 +24,7 @@ from trading_research_agents.execution.trigger import Trigger
 from trading_research_agents.execution.universe import Universe
 from trading_research_agents.strategy.core import Strategy
 from trading_research_agents.strategy.exits import ExitRule
+from trading_research_agents.strategy.load import CoreLoadError, load_class
 from trading_research_agents.trading.canary import CanaryLimits
 from trading_research_agents.trading.config_agents import (
     AGENTS_KEYS,
@@ -411,7 +411,7 @@ def _build_strategy(raw: dict[str, Any], base: Path | None) -> Strategy:
         class_name = str(raw.get("class", ""))
         if not class_name:
             raise ConfigError("[strategy].file needs [strategy].class naming the core")
-        cls = _class_from_file(_resolve(Path(file), base), class_name)
+        cls = class_from_file(_resolve(Path(file), base), class_name)
         label = f"{file}:{class_name}"
     else:
         raise ConfigError(
@@ -435,23 +435,12 @@ def _resolve(file: Path, base: Path | None) -> Path:
     return beside if beside.is_file() else file
 
 
-def _class_from_file(path: Path, class_name: str) -> Any:
-    if not path.is_file():
-        raise ConfigError(f"strategy file {str(path)!r} does not exist")
-    spec = importlib.util.spec_from_file_location(f"strategy_file_{path.stem}", path)
-    if spec is None or spec.loader is None:
-        raise ConfigError(f"cannot load strategy file {str(path)!r}")
-    module = importlib.util.module_from_spec(spec)
-    # Registered before execution: a dataclass in the file looks itself up in sys.modules.
-    sys.modules[spec.name] = module
+def class_from_file(path: Path, class_name: str) -> Any:
+    """The class `class_name` defined in the Python file at `path`; ConfigError when it is not."""
     try:
-        spec.loader.exec_module(module)
-    except Exception as exc:
-        sys.modules.pop(spec.name, None)
-        raise ConfigError(f"strategy file {str(path)!r} failed to load: {exc}") from exc
-    if not hasattr(module, class_name):
-        raise ConfigError(f"{str(path)!r} has no class {class_name!r}")
-    return getattr(module, class_name)
+        return load_class(path, class_name)
+    except CoreLoadError as exc:
+        raise ConfigError(str(exc)) from exc
 
 
 # What each table accepts, the same lists the loader refuses an unknown key against, so a proposed

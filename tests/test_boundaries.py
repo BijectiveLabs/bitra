@@ -37,8 +37,17 @@ _ALLOWED: dict[str, set[str]] = {
     "perception": {"llm", "market_data", "features"},
     # Plain numerics: a logistic fit, its calibration and the expected value of a side.
     "forecast": set(),
-    # The harness replays features over the archive and prices ideas with the desk's own costs.
-    "evaluation": {"features", "market_data", "data", "envelope", "execution", "forecast"},
+    # The harness replays features over the archive and prices ideas with the desk's own costs,
+    # and asks an operator's rule the way `tra run` does, so a replay and a run share one call.
+    "evaluation": {
+        "features",
+        "market_data",
+        "data",
+        "envelope",
+        "execution",
+        "forecast",
+        "strategy",
+    },
     "chain": {"ledger", "envelope", "data"},
     # The stops may be measured from the paths the forecast draws; the forecast imports nothing.
     "execution": {"ledger", "envelope", "data", "chain", "forecast"},
@@ -88,6 +97,8 @@ VENUE_NAMES = ("bybit", "binance", "hyperliquid", "okx", "coinbase", "deribit", 
 # methods without carrying a rule about the market: the agent core, where a model decides
 # from the operator's mechanism, and the config placeholder that stands in for it.
 STRATEGY_METHODS = {"on_bar"}
+# A rule is the other shape of a decision core: closed bars in, an idea out.
+RULE_METHODS = {"decide_on_bars"}
 MECHANISMS = {"agents/strategy.py:AgentStrategy", "trading/config.py:_Pending"}
 FITTED_CORE_METHODS = {"fit", "entry", "exit", "mark"}
 
@@ -182,7 +193,8 @@ def test_no_strategy_ships_inside_the_package() -> None:
             if _is_protocol(cls):
                 continue
             methods = _methods(cls)
-            strategy = methods >= STRATEGY_METHODS and _names_itself(cls)
+            core = methods >= STRATEGY_METHODS or methods >= RULE_METHODS
+            strategy = core and _names_itself(cls)
             if strategy or methods >= FITTED_CORE_METHODS:
                 label = f"{path.relative_to(SRC).as_posix()}:{cls.name}"
                 if label not in MECHANISMS:

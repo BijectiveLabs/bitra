@@ -303,3 +303,20 @@ def test_the_long_only_momentum_row_never_shorts(archive: Path) -> None:
     longs = [i for i in result.ideas if i["row"] == "momentum_long" and "cost" in i]
     shorts = [i for i in result.ideas if i["row"] == "momentum" and i.get("side") == "short"]
     assert longs and shorts and all(i["side"] == "long" for i in longs)
+
+
+EXAMPLE = Path(__file__).resolve().parent.parent / "examples" / "strategies" / "momentum_long.py"
+
+
+def test_the_example_rule_decides_as_the_fixed_baseline(archive: Path) -> None:
+    row = f"{EXAMPLE.as_posix()}:MomentumLong"
+    result = run_arena(config(rows=("momentum_long", row), hold_bars=6), root=archive)
+
+    def seen(name: str) -> list[tuple[object, ...]]:
+        return [
+            (i["instrument"], i["decided_ns"], i.get("side"), i.get("stop_bps"), i.get("exit_ns"))
+            for i in result.ideas
+            if i["row"] == name
+        ]
+
+    assert seen("momentum_long") and seen(row) == seen("momentum_long")

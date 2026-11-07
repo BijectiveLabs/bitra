@@ -18,6 +18,7 @@ from trading_research_agents.evaluation.baselines import (
 from trading_research_agents.evaluation.forecast import FitContext, ForecastPolicy
 from trading_research_agents.evaluation.paths import PathsPolicy
 from trading_research_agents.evaluation.policy import Policy
+from trading_research_agents.evaluation.rule_row import RuleRow, rule_from
 
 ENTRY_POINT_GROUP = "trading_research_agents.policies"
 RANDOM = "random"
@@ -56,6 +57,8 @@ def make_policy(
         return PathsPolicy(
             fit.costs, instrument_costs=fit.instrument_costs, hold_bars=fit.hold_bars
         )
+    if name.rpartition(":")[0].endswith(".py"):
+        return RuleRow(name, rule_from(name))
     if name == "buy_hold":
         return BuyHold(end_ns, interval_ns)
     if name == "momentum":

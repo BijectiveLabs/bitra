@@ -1,7 +1,13 @@
-"""What a strategy sees and what it may say."""
+"""What a strategy sees and what it may say.
+
+Two shapes of decision core. A `Strategy` is fed bar by bar and holds a target. A `Rule` is asked
+once per decision, with the closed bars before it, and answers with one idea or none: the shape
+`tra run` and the arena both ask, so a rule replayed and a rule run live are the same code.
+"""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
@@ -73,3 +79,40 @@ class Strategy(Protocol):
     def name(self) -> str: ...
 
     def on_bar(self, bar: Bar) -> Signal | None: ...
+
+
+@dataclass(frozen=True)
+class Idea:
+    """A rule's trade: a side, the stop and the take as distances in basis points of the entry
+    (None is no level), and the longest hold in bars of the decision interval."""
+
+    side: Target
+    stop_bps: Decimal | None
+    take_bps: Decimal | None
+    hold_bars: int
+    reason: str
+
+    def __post_init__(self) -> None:
+        if self.side is Target.FLAT:
+            raise ValueError("an idea is long or short; no idea is None")
+        if self.hold_bars < 1:
+            raise ValueError("an idea is held for at least one bar")
+        for name, level in (("stop", self.stop_bps), ("take", self.take_bps)):
+            if level is not None and (not level.is_finite() or level <= 0):
+                raise ValueError(f"the {name} distance is positive, or None for no level")
+        if not self.reason.strip():
+            raise ValueError("an idea states its reason")
+
+
+class Rule(Protocol):
+    """A pure decision asked at one moment.
+
+    Precondition: `bars` are the decision interval's closed bars, oldest first, contiguous, every
+    one traded and seen, the last closing at the decision. A gap ends the run, so a rule never
+    reads across one. Postcondition: an idea, or None for no trade. No state outlives the call.
+    """
+
+    @property
+    def name(self) -> str: ...
+
+    def decide_on_bars(self, bars: Sequence[Bar]) -> Idea | None: ...
