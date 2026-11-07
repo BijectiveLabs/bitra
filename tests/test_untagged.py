@@ -94,7 +94,12 @@ def test_an_okx_order_without_its_own_client_id_is_refused_not_sent() -> None:
     method = ORDER["okx"][0]
     client = ccxt.okx({"apiKey": "k", "secret": "s", "password": "p"})
     sent: list[str] = []
-    client.fetch = lambda url, method="GET", headers=None, body=None: sent.append(url) or "{}"
+
+    def record(url: str, method: str = "GET", headers: Any = None, body: Any = None) -> str:
+        sent.append(url)
+        return "{}"
+
+    client.fetch = record
     untagged(client)
     with pytest.raises(ccxt.BadRequest, match="6b9ad766b55dBCDE"):
         getattr(client, method)([{"instId": "BTC-USDT"}])
