@@ -33,19 +33,46 @@ slippage_bps = 0
 tra arena --config arena.toml
 ```
 
+## Years of history, at a daily pace
+
+The minute archive is built from trades. A replay of years of it does not fit in memory, and the
+venues' trade archives download slowly. For runs of years, store hour candles instead:
+
+```bash
+tra data klines BTCUSDT 2021-01-01 --to 2026-10-31
+tra data klines ETHUSDT 2021-01-01 --to 2026-10-31
+tra arena --tape klines --venue binanceusdm --instruments BTCUSDT,ETHUSDT \
+  --from 2022-01-01 --to 2026-10-31 --interval 1d --context-interval 7d --hold-bars 7 \
+  --spread-bps 2 --slippage-bps 2 --fit-days 365 --test-days 90
+```
+
+- `tra data klines` reads public data only. The candles must carry the taker split and the trade
+  count, which the flow features read; Binance USD-M's do, so it is the default venue. A venue
+  whose candles do not (Bybit's) is refused rather than given a split nobody measured. Funding
+  comes with them, from the same venue.
+- The files go to `data/klines/<venue>/<instrument>/`, one Parquet file of hours and one of
+  funding, with a manifest of their sha256. A file that differs from its manifest is refused.
+- On an hour tape, an idea enters at the open of the hour it was decided on, and a level is seen
+  only to the hour. An hour that reaches both levels counts as the stop, so the hour tape reads
+  every bracket at least as harshly as the minute archive does.
+- `--hold-bars` is the longest hold in bars of the decision interval. It is 24 unless declared,
+  which is a day on an hour desk and 24 days on a daily one.
+- The fees are the venue's channel in `envelope.toml`, as for any run.
+
 ## How a row is replayed
 
 - A decision is taken at every close of the decision interval (one hour by default), with the
   four-hour view beside it and BTCUSDT as context.
 - A view holds only bars that had closed and derivatives values published by then. A bar from
   after the decision is refused, and the run fails instead of reporting.
-- An idea enters at the open of the first traded minute at or after its decision, never at the
-  price it was decided on.
+- An idea enters at the open of the first traded bar of the tape at or after its decision, never
+  at the price it was decided on.
 - Each row holds at most one idea per market at a time.
-- Ideas are settled on one-minute bars: take, stop or time limit, whichever comes first. A minute
-  that reaches both levels counts as the stop; a level is filled at the level.
-- A minute nobody saw inside the hold, or a funding settlement the archive has no rate for,
-  leaves the idea unsettled. The report counts every unsettled idea by its reason.
+- Ideas are settled on the tape's bars, one-minute by default: take, stop or time limit,
+  whichever comes first. A bar that reaches both levels counts as the stop; a level is filled at
+  the level.
+- A bar nobody saw inside the hold, or a funding settlement the archive has no rate for, leaves
+  the idea unsettled. The report counts every unsettled idea by its reason.
 
 ## Costs
 
@@ -85,7 +112,8 @@ depend on the desk's own record of earlier looks.
 | Row | Definition |
 |---|---|
 | `buy_hold` | long at the window's first decision, held to its end |
-| `momentum` | long when `mom_z_24` is at least 1, short when it is at most -1; stop 1.5 ATR, take 3 ATR, held 24 bars |
+| `momentum` | long when `mom_z_24` is at least 1, short when it is at most -1; stop 1.5 ATR, take 3 ATR, held at most `--hold-bars` |
+| `momentum_long` | the long half of `momentum`, flat where it would short: crypto's published time-series momentum is long-biased (Liu and Tsyvinski, 2021) |
 | `fade` | the opposite side of `momentum`, on the same triggers and exits |
 | `random` | a seeded side at the times `momentum` fires, with its exits: the null every row is compared with |
 | `forecast` | the expected-value decision: a calibrated probability of the take before the stop, fitted walk-forward on the archive ([below](#the-forecast-row)) |
@@ -105,7 +133,7 @@ round trip. It runs only in the arena until the arena shows it is better.
 | Step | What it does |
 |---|---|
 | label | every past decision, each side, settled with the baselines' exits (stop 1.5 ATR, take 3 ATR, 24 bars): 1 when the take came first, 0 for a stop or for time running out |
-| fit | every 7 days, on the decisions of the last 60 days whose ideas had settled by then: one logistic model per side, on the older 70 % |
+| fit | every 7 days, on the last 1,440 decisions per market (60 days of hours, about four years of days) whose ideas had settled by then: one logistic model per side, on the older 70 % |
 | features | from a fixed, versioned list of price, path and order-flow figures, those present in at least 95 % of the settled decisions |
 | calibrate | on the newer 30 %: Platt or isotonic, whichever scored better on held-out halves |
 | decide | `p x take - (1 - p) x stop - round trip` for each side; the better side if it is above zero |
@@ -139,8 +167,8 @@ with `random`'s: the difference and its 95 % interval, resampling whole days 4,0
 Below the table, each row with more than one market is broken down by instrument: ideas, mean and
 sum net, and how many won. A row's total can come from one market alone, and this is where that
 shows. A policy that exposes a score also gets its per-date rank IC against the next bar's return,
-with a t statistic. Coverage closes the report: minutes per market, the minutes not seen, and every
-feature that was absent, with the reason.
+with a t statistic. Coverage closes the report: bars of the tape per market and their length, the bars not seen,
+and every feature that was absent, with the reason.
 
 ## What a run writes
 

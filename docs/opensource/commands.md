@@ -46,6 +46,7 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 |---|---|
 | `tra data get BTCUSDT 2025-01-01` | download a day, verify its checksum, audit it, write Parquet and funding |
 | `tra data bars BTCUSDT 2025-07-01 --to 2025-07-31` | one-minute flow bars from the venue archive and the market's derivatives history, into `data/market/` ([Market data](/opensource/market-data)) |
+| `tra data klines BTCUSDT 2021-01-01 --to 2026-10-31` | hour candles with the taker split, and funding, for arena runs of years, into `data/klines/` ([The arena](/opensource/arena#years-of-history-at-a-daily-pace)) |
 | `tra runs verify --market data` | every market day file and hour part against its manifest |
 | `tra record`, `tra record --once 30m` | order flow, the book, liquidations, derivatives and news kept while they happen, per `[record]` in `data.toml` ([Market data](/opensource/market-data#the-recorder)) |
 | `tra record status` | coverage, gaps and latency of the recording over the last day |

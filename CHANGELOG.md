@@ -6,6 +6,34 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `tra data klines`: hour candles with the taker split and the trade count, and the funding
+  settled under them, from public data, into `data/klines/`. For arena runs of years, which the
+  minute archive cannot hold in memory. Binance USD-M's candles carry the split; a venue whose
+  candles do not (Bybit) is refused rather than given a split nobody measured.
+- `tra arena --tape klines` settles on those hours; `--hold-bars` declares the longest hold in
+  bars of the decision interval (24 unless declared). A daily desk can now be replayed at its own
+  hold instead of 24 days.
+- Arena row `momentum_long`: the long half of `momentum`, fixed before any result was read.
+
+### Changed
+
+- Arena coverage counts bars of the tape (`bars`, `missing_bars`, `partial_bars`, `bar_s`)
+  instead of minutes, since a tape can now be hours. A reader of `arena.json` that read
+  `minutes` reads `bars`.
+- The forecast row's fit window is 1,440 decisions per market rather than 60 days: the same on an
+  hour desk, and about four years on a daily one, which in 60 days would have had too few samples
+  to fit at all.
+
+### Fixed
+
+- A market whose venue settled funding faster for a while (Binance settled SOLUSDT every two
+  hours from 9 to 18 November 2022) no longer leaves every later arena idea unsettled. The clock
+  became the shorter step and every regular eight hours read as six missing settlements. Slots
+  inside the regular interval that did not settle now count as zero; a gap longer than the regular
+  interval is still a missing settlement, and a hold across it is still refused.
+
 ## [0.13.0] - 2026-11-07
 
 ### Changed
