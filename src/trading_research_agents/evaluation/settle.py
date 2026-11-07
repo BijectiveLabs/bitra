@@ -1,8 +1,8 @@
 """Settlement of one idea on the minutes after it: take, stop or time, net of the desk's costs.
 
 The idea enters at the open of the first traded minute at or after its decision, never at the price
-it was decided on. A minute that reaches both levels counts as the stop, because the order inside a
-minute is unknown and the worse reading is the honest one; a level is filled at the level. A minute
+it was decided on. A bar that reaches both levels counts as the stop, because the order inside a
+bar is unknown and the worse reading is the honest one; a level is filled at the level. A bar
 nobody saw inside the hold leaves the idea unsettled, since whether a level was touched in it is
 unknown, and so does a funding settlement the archive holds no rate for.
 """
@@ -10,6 +10,7 @@ unknown, and so does a funding settlement the archive holds no rate for.
 from __future__ import annotations
 
 import math
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
@@ -18,7 +19,7 @@ from typing import Any
 
 from trading_research_agents.data.schema import Direction
 from trading_research_agents.envelope.model import Channel
-from trading_research_agents.evaluation.history import MinuteTape
+from trading_research_agents.evaluation.history import Tape
 from trading_research_agents.evaluation.policy import TradeIdea
 from trading_research_agents.execution.cost import (
     CostBreakdown,
@@ -153,13 +154,14 @@ def settle(
     idea: TradeIdea,
     decided_ns: int,
     hold_ns: int,
-    tape: MinuteTape,
+    tape: Tape,
     costs: Costs,
     funding: Funding,
 ) -> Settlement | Unsettled:
     """The idea's outcome on the minutes from its decision, or why the archive cannot say."""
-    if decided_ns % NS_PER_MINUTE or hold_ns <= 0 or hold_ns % NS_PER_MINUTE:
-        raise MarketDataError("a decision and its hold fall on minute boundaries")
+    step = tape.step_ns
+    if (decided_ns - tape.first_ns) % step or hold_ns <= 0 or hold_ns % step:
+        raise MarketDataError("a decision and its hold fall on the tape's bar boundaries")
     entry = _entry(tape, decided_ns)
     if isinstance(entry, str):
         return Unsettled(row, instrument, decided_ns, entry)
@@ -167,7 +169,7 @@ def settle(
     if path is None:
         return Unsettled(row, instrument, decided_ns, "the archive ends before the hold does")
     if any(m.gap is GapState.MISSING for m in path):
-        return Unsettled(row, instrument, decided_ns, "a minute inside the hold was not seen")
+        return Unsettled(row, instrument, decided_ns, "a bar inside the hold was not seen")
     if isinstance(funding, str):
         return Unsettled(row, instrument, decided_ns, f"funding: {funding}")
     price = entry.ohlc()[0]
@@ -195,14 +197,16 @@ def settle(
     )
 
 
-def _entry(tape: MinuteTape, decided_ns: int) -> FlowBar | str:
-    for k in range(ENTRY_WAIT_MINUTES):
-        span = tape.span(decided_ns + k * NS_PER_MINUTE, decided_ns + (k + 1) * NS_PER_MINUTE)
+def _entry(tape: Tape, decided_ns: int) -> FlowBar | str:
+    step = tape.step_ns
+    waits = max(1, ENTRY_WAIT_MINUTES * NS_PER_MINUTE // step)
+    for k in range(waits):
+        span = tape.span(decided_ns + k * step, decided_ns + (k + 1) * step)
         if span is None:
             return "the archive ends before the entry"
         bar = span[0]
         if bar.gap is GapState.MISSING:
-            return "the minute to enter in was not seen"
+            return "the bar to enter in was not seen"
         if not bar.empty:
             return bar
     return f"no trade within {ENTRY_WAIT_MINUTES} minutes of the decision to enter at"
@@ -266,4 +270,26 @@ def funding_schedule(points: Sequence[DerivPoint]) -> FundingSchedule | str:
         step = math.gcd(step, b - a)
     if step % NS_PER_S:
         return "funding settlements are not a whole number of seconds apart"
-    return FundingSchedule(interval_s=step // NS_PER_S, rates=rates, anchor_ts_ns=times[0] % step)
+    return FundingSchedule(
+        interval_s=step // NS_PER_S,
+        rates={**_unsettled_slots(times, step), **rates},
+        anchor_ts_ns=times[0] % step,
+    )
+
+
+def _unsettled_slots(times: Sequence[int], step: int) -> dict[int, Decimal]:
+    """Slots of the clock that fell inside the venue's regular interval and did not settle.
+
+    A venue may settle a market faster for a while (every two or four hours instead of eight) and
+    then return. The clock is then the shorter step, and every regular eight hours holds slots in
+    which nothing settled: their charge is zero, known from the settlements on either side. A gap
+    longer than the regular interval, the most common one, is a settlement the archive lacks, and
+    its slots stay unknown so a hold across them is refused.
+    """
+    gaps = Counter(b - a for a, b in pairwise(times))
+    regular = max(gaps, key=lambda gap: (gaps[gap], gap))
+    empty: dict[int, Decimal] = {}
+    for a, b in pairwise(times):
+        if b - a <= regular:
+            empty.update((slot, Decimal(0)) for slot in range(a + step, b, step))
+    return empty

@@ -29,8 +29,9 @@ from trading_research_agents.market_data.archive_book import read_book_range
 from trading_research_agents.market_data.archive_deriv import read_deriv_range
 from trading_research_agents.market_data.bars import FlowBar, MarketDataError
 from trading_research_agents.market_data.book import BookBar, resample_book
-from trading_research_agents.market_data.days import NS_PER_MINUTE, NS_PER_S
+from trading_research_agents.market_data.days import NS_PER_MINUTE, NS_PER_S, midnight_ns
 from trading_research_agents.market_data.deriv import LEVELS, DerivPoint, Series, Timeline
+from trading_research_agents.market_data.klines import HOUR_NS, missing_hour, read_klines
 from trading_research_agents.market_data.resample import resample
 
 
@@ -39,24 +40,33 @@ def label_of(interval_ns: int) -> str:
     return f"{seconds // 3600}h" if seconds % 3600 == 0 else f"{seconds // 60}m"
 
 
-class MinuteTape:
-    """Contiguous one-minute bars of one market, read by the minute's start."""
+class Tape:
+    """Contiguous bars of one length and one market, read by the bar's start.
+
+    The archive's tape is minutes. A tape of hour bars from a venue's candles settles a multi-year
+    replay that minutes would not fit in memory for; it can only see levels to the hour, and a
+    bar that reaches both of them counts as the stop, as a minute does.
+    """
 
     def __init__(self, bars: Sequence[FlowBar]) -> None:
         self.bars = tuple(bars)
         self.first_ns = self.bars[0].start_ns if self.bars else 0
+        self.step_ns = self.bars[0].end_ns - self.bars[0].start_ns if self.bars else NS_PER_MINUTE
         for i, bar in enumerate(self.bars):
-            if bar.start_ns != self.first_ns + i * NS_PER_MINUTE:
-                raise MarketDataError("a minute tape holds contiguous one-minute bars")
-            if bar.end_ns - bar.start_ns != NS_PER_MINUTE:
-                raise MarketDataError("a minute tape holds one-minute bars")
+            if bar.end_ns - bar.start_ns != self.step_ns:
+                raise MarketDataError("a tape holds bars of one length")
+            if bar.start_ns != self.first_ns + i * self.step_ns:
+                raise MarketDataError("a tape holds contiguous bars")
 
     def span(self, start_ns: int, end_ns: int) -> tuple[FlowBar, ...] | None:
-        """The minutes from `start_ns` up to `end_ns`; None when the tape does not hold them all."""
-        if start_ns % NS_PER_MINUTE or end_ns % NS_PER_MINUTE or end_ns <= start_ns:
-            raise MarketDataError("a span starts and ends on minute boundaries, in order")
-        first = (start_ns - self.first_ns) // NS_PER_MINUTE
-        last = (end_ns - self.first_ns) // NS_PER_MINUTE
+        """The bars from `start_ns` up to `end_ns`; None when the tape does not hold them all."""
+        step = self.step_ns
+        if (start_ns - self.first_ns) % step or (end_ns - self.first_ns) % step:
+            raise MarketDataError("a span starts and ends on bar boundaries, in order")
+        if end_ns <= start_ns:
+            raise MarketDataError("a span starts and ends on bar boundaries, in order")
+        first = (start_ns - self.first_ns) // step
+        last = (end_ns - self.first_ns) // step
         if first < 0 or last > len(self.bars):
             return None
         return self.bars[first:last]
@@ -75,7 +85,7 @@ class MarketHistory:
         book: Sequence[BookBar] = (),
     ) -> None:
         self.instrument = instrument
-        self.tape = MinuteTape(minutes)
+        self.tape = Tape(minutes)
         self.points = tuple(points)
         intervals = sorted(set(intervals_ns))
         self._bars = {i: resample(self.tape.bars, i) for i in intervals}
@@ -203,3 +213,31 @@ def load_history(
     recorded = book if any(b.samples for b in book) else ()
     history = MarketHistory(instrument, minutes, points, intervals_ns, book=recorded)
     return Loaded(history, manifests)
+
+
+def load_kline_history(
+    root: Path,
+    venue: str,
+    instrument: str,
+    first: date,
+    last: date,
+    intervals_ns: Sequence[int],
+) -> Loaded:
+    """The market's hour bars from `first` to `last` and its funding, from `tra data klines`.
+
+    An hour inside the window that the file does not hold is a missing bar, as a minute absent from
+    the archive is; the settlement leaves an idea that spans it unsettled.
+    """
+    stored = read_klines(root, venue, instrument)
+    start, end = midnight_ns(first), midnight_ns(last + timedelta(days=1))
+    held = {b.start_ns: b for b in stored.bars}
+    hours = [
+        held.get(at) or missing_hour(venue, instrument, at) for at in range(start, end, HOUR_NS)
+    ]
+    points = [p for p in stored.points if start <= p.as_of_ns < end]
+    folder = Path("klines") / venue / instrument
+    manifests = {
+        (folder / "1h.parquet").as_posix(): stored.sha256["bars"],
+        (folder / "funding.parquet").as_posix(): stored.sha256["funding"],
+    }
+    return Loaded(MarketHistory(instrument, hours, points, intervals_ns), manifests)

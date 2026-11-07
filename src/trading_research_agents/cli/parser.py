@@ -14,6 +14,7 @@ from trading_research_agents.cli.arguments import parse_decimal
 from trading_research_agents.cli.common import parse_month
 from trading_research_agents.cli.console import HISTORY_FILE
 from trading_research_agents.cli.data_commands import parse_duration
+from trading_research_agents.cli.klines import add_klines_command
 from trading_research_agents.cli.market import add_bars_command
 from trading_research_agents.cli.parser_desk import (
     _add_audit,
@@ -122,6 +123,7 @@ def _add_data(top: Any, venues: tuple[str, ...]) -> None:
     )
     get_cmd.add_argument("--json", action="store_true")
     add_bars_command(data, venues)
+    add_klines_command(data)
     pull_cmd = data.add_parser(
         "pull", help="one snapshot of live data through the chains in data.toml"
     )

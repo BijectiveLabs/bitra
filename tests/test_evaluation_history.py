@@ -10,16 +10,18 @@ import pytest
 from trading_research_agents.data.schema import Direction
 from trading_research_agents.evaluation.history import (
     MarketHistory,
-    MinuteTape,
+    Tape,
     Views,
     label_of,
     load_history,
+    load_kline_history,
 )
 from trading_research_agents.evaluation.policy import DecisionView, TradeIdea
 from trading_research_agents.features.core import LookAheadError
 from trading_research_agents.market_data.archive import SourceFile, write_flow_day
 from trading_research_agents.market_data.bars import FlowBar, GapState, MarketDataError
 from trading_research_agents.market_data.days import DAY_NS, NS_PER_MINUTE, midnight_ns
+from trading_research_agents.market_data.resample import resample
 
 HOUR = 60 * NS_PER_MINUTE
 DAY = date(2025, 7, 1)
@@ -61,14 +63,30 @@ def minutes(first: date, days: int, instrument: str = "BTCUSDT", seed: int = 3) 
 
 
 def test_a_tape_reads_minutes_by_their_start() -> None:
-    tape = MinuteTape(minutes(DAY, 1))
+    tape = Tape(minutes(DAY, 1))
     span = tape.span(T0, T0 + 3 * NS_PER_MINUTE)
     assert span is not None and [m.start_ns for m in span] == [
         T0 + i * NS_PER_MINUTE for i in range(3)
     ]
     assert tape.span(T0 + DAY_NS - NS_PER_MINUTE, T0 + DAY_NS + NS_PER_MINUTE) is None
-    with pytest.raises(MarketDataError, match="minute boundaries"):
+    with pytest.raises(MarketDataError, match="bar boundaries"):
         tape.span(T0 + 1, T0 + NS_PER_MINUTE)
+
+
+def test_a_tape_of_hour_bars_reads_hours_by_their_start() -> None:
+    tape = Tape(resample(minutes(DAY, 1), HOUR))
+    assert tape.step_ns == HOUR
+    span = tape.span(T0 + HOUR, T0 + 3 * HOUR)
+    assert span is not None and [b.start_ns for b in span] == [T0 + HOUR, T0 + 2 * HOUR]
+    assert tape.span(T0 + 23 * HOUR, T0 + 25 * HOUR) is None
+    with pytest.raises(MarketDataError, match="bar boundaries"):
+        tape.span(T0 + NS_PER_MINUTE, T0 + HOUR)
+
+
+def test_a_tape_refuses_bars_of_mixed_length() -> None:
+    hours = resample(minutes(DAY, 1), HOUR)
+    with pytest.raises(MarketDataError, match="one length"):
+        Tape([*hours[:2], *minutes(DAY + timedelta(days=1), 1)[:1]])
 
 
 def test_coarser_bars_are_those_closed_by_the_moment() -> None:
@@ -128,6 +146,31 @@ def test_load_history_reads_the_archive_with_its_hashes(tmp_path: Path) -> None:
     assert sorted(loaded.manifests) == [
         "market/bybit/BTCUSDT/flow_1m/2025-07-01.parquet",
         "market/bybit/BTCUSDT/flow_1m/2025-07-02.parquet",
+    ]
+
+
+def test_load_kline_history_reads_hours_and_funding_with_their_hashes(tmp_path: Path) -> None:
+    pytest.importorskip("pyarrow")
+    from trading_research_agents.market_data.deriv import DerivPoint, Series
+    from trading_research_agents.market_data.klines import write_klines
+
+    hours = resample(minutes(DAY, 2), HOUR)
+    funding = [DerivPoint(Series.FUNDING, T0 + 8 * HOUR, 1, Decimal("0.0001"))]
+    write_klines(tmp_path, hours, funding)
+    loaded = load_kline_history(
+        tmp_path, "bybit", "BTCUSDT", DAY, DAY + timedelta(days=2), [HOUR, DAY_NS]
+    )
+    history = loaded.history
+    assert history.tape.step_ns == HOUR and len(history.tape.bars) == 72
+    assert sum(1 for b in history.tape.bars if b.gap is GapState.MISSING) == 24
+    assert history.points == tuple(funding)
+    assert [b.end_ns for b in history.closed(DAY_NS, T0 + 2 * DAY_NS, 5)] == [
+        T0 + DAY_NS,
+        T0 + 2 * DAY_NS,
+    ]
+    assert sorted(loaded.manifests) == [
+        "klines/bybit/BTCUSDT/1h.parquet",
+        "klines/bybit/BTCUSDT/funding.parquet",
     ]
 
 

@@ -450,6 +450,15 @@ def data_bars_command(args: argparse.Namespace) -> int:
     return code
 
 
+def data_klines_command(args: argparse.Namespace) -> int:
+    """Hour candles and funding for a range of days, for arena runs of years."""
+    from trading_research_agents.cli.klines import data_klines
+
+    payload, lines, code = data_klines(args)
+    emit(payload, args.json, lines)
+    return code
+
+
 def data_pull(args: argparse.Namespace) -> int:
     """One snapshot: walk each declared chain once, write what answered and what did not."""
     from trading_research_agents.data.sources import load_data_config

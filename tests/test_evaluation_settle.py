@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 
@@ -7,7 +8,7 @@ import pytest
 
 from trading_research_agents.data.schema import Direction
 from trading_research_agents.envelope.model import Channel
-from trading_research_agents.evaluation.history import MinuteTape
+from trading_research_agents.evaluation.history import Tape
 from trading_research_agents.evaluation.policy import TradeIdea
 from trading_research_agents.evaluation.settle import (
     Costs,
@@ -16,13 +17,14 @@ from trading_research_agents.evaluation.settle import (
     funding_schedule,
     settle,
 )
-from trading_research_agents.execution.cost import CostError, FundingSchedule
-from trading_research_agents.market_data.bars import FlowBar, GapState, quiet_bar
+from trading_research_agents.execution.cost import CostError, FundingSchedule, funding_accrual_bps
+from trading_research_agents.market_data.bars import FlowBar, GapState, MarketDataError, quiet_bar
 from trading_research_agents.market_data.days import NS_PER_MINUTE, NS_PER_S, midnight_ns
 from trading_research_agents.market_data.deriv import DerivPoint, Series
 
 T0 = midnight_ns(date(2025, 7, 1))
 M = NS_PER_MINUTE
+H = 60 * NS_PER_MINUTE
 COSTS = Costs(
     Channel(
         venue="bybit",
@@ -89,7 +91,7 @@ def run(
         idea=made,
         decided_ns=T0,
         hold_ns=hold * M,
-        tape=MinuteTape(tape),
+        tape=Tape(tape),
         costs=COSTS,
         funding=funding,  # type: ignore[arg-type]
     )
@@ -135,6 +137,43 @@ def test_entry_waits_for_the_first_traded_minute() -> None:
     )
 
 
+def hour(i: int, o: str, h: str, lo: str, c: str) -> FlowBar:
+    bar = minute(0, o, h, lo, c)
+    return replace(bar, start_ns=T0 + i * H, end_ns=T0 + (i + 1) * H)
+
+
+def test_an_hour_tape_enters_at_the_hour_it_was_decided_on() -> None:
+    hours = [hour(0, "100", "100.1", "99.9", "100"), hour(1, "100", "100.6", "99.9", "100.4")]
+    hours += [hour(i, "100", "100.1", "99.9", "100") for i in range(2, 6)]
+    got = settle(
+        row="row",
+        instrument="BTCUSDT",
+        idea=idea(),
+        decided_ns=T0,
+        hold_ns=3 * H,
+        tape=Tape(hours),
+        costs=COSTS,
+        funding=None,
+    )
+    assert isinstance(got, Settlement) and got.entry_ns == T0 and got.ended == "take"
+    assert got.exit_ns == T0 + 2 * H
+
+
+def test_an_hour_tape_refuses_a_decision_inside_its_bar() -> None:
+    hours = [hour(i, "100", "100.1", "99.9", "100") for i in range(6)]
+    with pytest.raises(MarketDataError, match="bar boundaries"):
+        settle(
+            row="row",
+            instrument="BTCUSDT",
+            idea=idea(),
+            decided_ns=T0 + M,
+            hold_ns=3 * H,
+            tape=Tape(hours),
+            costs=COSTS,
+            funding=None,
+        )
+
+
 def test_what_the_archive_cannot_say_is_unsettled() -> None:
     quiet = run([still(i) for i in range(8)], idea())
     assert isinstance(quiet, Unsettled) and "no trade within 5 minutes" in quiet.reason
@@ -174,3 +213,25 @@ def test_the_schedule_is_read_from_the_archive() -> None:
 def test_declared_costs_are_not_negative() -> None:
     with pytest.raises(CostError, match="spread_bps"):
         Costs(COSTS.channel, spread_bps=Decimal(-1), slippage_bps=Decimal(0))
+
+
+def test_a_venue_that_settles_faster_for_a_while_keeps_its_eight_hour_clock() -> None:
+    hour = 3600 * NS_PER_S
+    times = [0, 8, 16, 18, 20, 22, 24, 32, 40]
+    points = [DerivPoint(Series.FUNDING, T0 + h * hour, 0, Decimal("0.0001")) for h in times]
+    schedule = funding_schedule(points)
+    assert isinstance(schedule, FundingSchedule) and schedule.interval_s == 2 * 3600
+    eight_hours = funding_accrual_bps(Direction.LONG, schedule, T0, T0 + 16 * hour)
+    assert eight_hours == Decimal(2)
+    burst = funding_accrual_bps(Direction.LONG, schedule, T0 + 16 * hour, T0 + 24 * hour)
+    assert burst == Decimal(4)
+
+
+def test_a_settlement_missing_from_the_regular_clock_is_still_refused() -> None:
+    hour = 3600 * NS_PER_S
+    times = [0, 8, 16, 18, 20, 22, 24, 32, 40, 56, 64, 72, 80]
+    points = [DerivPoint(Series.FUNDING, T0 + h * hour, 0, Decimal("0.0001")) for h in times]
+    schedule = funding_schedule(points)
+    assert isinstance(schedule, FundingSchedule)
+    with pytest.raises(CostError, match="no funding rate"):
+        funding_accrual_bps(Direction.LONG, schedule, T0 + 40 * hour, T0 + 56 * hour)
