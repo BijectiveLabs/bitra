@@ -48,8 +48,10 @@ class PathsPolicy:
         margin_bps: float = 0.0,
         paths: int = ARENA_PATHS,
         instrument_costs: Mapping[str, Costs] | None = None,
+        hold_bars: int = HOLD_BARS,
     ) -> None:
         self.costs = costs
+        self.hold_bars = hold_bars
         self.instrument_costs = dict(instrument_costs or {})
         self.margin_bps = margin_bps
         self.paths = paths
@@ -74,7 +76,7 @@ class PathsPolicy:
             playbook="paths",
             stop_bps=STOP_ATR * unit,
             take_bps=TAKE_ATR * unit,
-            max_hold_bars=HOLD_BARS,
+            max_hold_bars=self.hold_bars,
             reason=(
                 f"take first {taken.take_first:.3f}, stop first {taken.stop_first:.3f}, "
                 f"expected {value:+.2f} bps net"
@@ -106,7 +108,7 @@ class PathsPolicy:
                     side=side,
                     take_bps=float(TAKE_ATR) * atr,
                     stop_bps=float(STOP_ATR) * atr,
-                    horizon_bars=HOLD_BARS,
+                    horizon_bars=self.hold_bars,
                     settings=settings,
                 )
                 for side in ("long", "short")

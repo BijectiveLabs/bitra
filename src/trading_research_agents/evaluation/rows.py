@@ -7,7 +7,14 @@ from collections.abc import Callable
 from importlib.metadata import entry_points
 from typing import Any
 
-from trading_research_agents.evaluation.baselines import BuyHold, Fade, Momentum, RandomSide
+from trading_research_agents.evaluation.baselines import (
+    HOLD_BARS,
+    BuyHold,
+    Fade,
+    Momentum,
+    MomentumLong,
+    RandomSide,
+)
 from trading_research_agents.evaluation.forecast import FitContext, ForecastPolicy
 from trading_research_agents.evaluation.paths import PathsPolicy
 from trading_research_agents.evaluation.policy import Policy
@@ -17,7 +24,7 @@ RANDOM = "random"
 V1_RECORD = "v1_record"
 FORECAST = "forecast"
 PATHS = "paths"
-BASELINES = ("buy_hold", "momentum", "fade", RANDOM)
+BASELINES = ("buy_hold", "momentum", "momentum_long", "fade", RANDOM)
 
 
 class UnknownRowError(ValueError):
@@ -29,7 +36,13 @@ def _plugins() -> dict[str, Callable[[], Any]]:
 
 
 def make_policy(
-    name: str, *, seed: int, end_ns: int, interval_ns: int, fit: FitContext | None = None
+    name: str,
+    *,
+    seed: int,
+    end_ns: int,
+    interval_ns: int,
+    fit: FitContext | None = None,
+    hold_bars: int = HOLD_BARS,
 ) -> Policy:
     if name == FORECAST:
         if fit is None:
@@ -40,15 +53,19 @@ def make_policy(
             raise UnknownRowError(
                 "the paths row prices with the arena's costs; it needs the context"
             )
-        return PathsPolicy(fit.costs, instrument_costs=fit.instrument_costs)
+        return PathsPolicy(
+            fit.costs, instrument_costs=fit.instrument_costs, hold_bars=fit.hold_bars
+        )
     if name == "buy_hold":
         return BuyHold(end_ns, interval_ns)
     if name == "momentum":
-        return Momentum()
+        return Momentum(hold_bars)
+    if name == "momentum_long":
+        return MomentumLong(hold_bars)
     if name == "fade":
-        return Fade()
+        return Fade(hold_bars)
     if name == RANDOM:
-        return RandomSide(seed)
+        return RandomSide(seed, hold_bars)
     plugins = _plugins()
     factory = plugins.get(name)
     if factory is None:

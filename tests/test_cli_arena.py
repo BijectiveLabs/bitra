@@ -204,3 +204,18 @@ def test_arena_toml_prices_a_market_at_its_own_costs(archive: Path, tmp_path: Pa
     path.write_text(body.replace("slippage_bps = 15", "slipage_bps = 15"), encoding="utf-8")
     with pytest.raises(ValueError, match="reads spread_bps and slippage_bps"):
         arena_report(build_parser().parse_args(["arena", "--config", str(path)]))
+
+
+def test_the_hold_and_the_tape_are_declared_on_the_command_line(
+    archive: Path, tmp_path: Path
+) -> None:
+    args = args_for(
+        archive, tmp_path, "--spread-bps", "1", "--slippage-bps", "0", "--hold-bars", "6"
+    )
+    payload, _, _ = arena_report(args)
+    assert payload["config"]["hold_bars"] == 6 and payload["config"]["tape"] == "archive"
+    klines = args_for(
+        archive, tmp_path, "--spread-bps", "1", "--slippage-bps", "0", "--tape", "klines"
+    )
+    with pytest.raises(ValueError, match="kline manifest"):
+        arena_report(klines)

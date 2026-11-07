@@ -122,7 +122,7 @@ def test_every_row_is_reported_with_costs_and_coverage(archive: Path) -> None:
     settled = [i for i in result.ideas if i["row"] == "momentum" and "cost" in i]
     assert settled and all(i["cost"]["certainty"]["funding"] == "measured" for i in settled)
     market = result.coverage["markets"]["BTCUSDT"]
-    assert market["minutes"] == 11 * 1440 and market["missing_minutes"] == 0
+    assert market["bars"] == 11 * 1440 and market["missing_bars"] == 0 and market["bar_s"] == 60
     assert len(result.manifests) == 2 * DAYS * 2
 
 
@@ -142,7 +142,7 @@ def test_a_missing_day_is_coverage_not_a_crash(archive: Path, tmp_path: Path) ->
     gone.unlink()
     manifest_file(gone).unlink()
     result = run_arena(config(), root=root)
-    assert result.coverage["markets"]["BTCUSDT"]["missing_minutes"] == 1440
+    assert result.coverage["markets"]["BTCUSDT"]["missing_bars"] == 1440
     assert result.coverage["features_absent"]["mom_z_24"]["absent"] > 0
 
 
@@ -255,3 +255,51 @@ def test_a_pass_takes_the_free_market_with_the_most_room(monkeypatch: pytest.Mon
     assert pick({"BTCUSDT", "ETHUSDT", "SOLUSDT"}) == "ETHUSDT"
     assert pick({"BTCUSDT", "SOLUSDT"}) == "BTCUSDT"  # room before none, then the declared order
     assert pick({"SOLUSDT"}) == "SOLUSDT" and pick(set()) is None
+
+
+@pytest.fixture(scope="module")
+def klines(archive: Path, tmp_path_factory: pytest.TempPathFactory) -> Path:
+    from trading_research_agents.market_data.klines import write_klines
+    from trading_research_agents.market_data.resample import resample
+
+    root = tmp_path_factory.mktemp("klines")
+    for instrument, seed in (("BTCUSDT", 3), ("ETHUSDT", 5)):
+        hours = resample(minutes(instrument, seed), HOUR)
+        start = midnight_ns(FIRST)
+        points = [
+            DerivPoint(Series.FUNDING, start + h * HOUR, start + h * HOUR, Decimal("0.0001"))
+            for h in range(0, DAYS * 24, 8)
+        ]
+        write_klines(root, hours, points)
+    return root
+
+
+def test_hour_klines_settle_the_same_rows(klines: Path) -> None:
+    result = run_arena(config(tape="klines", hold_bars=6), root=klines)
+    by_row = {r["row"]: r for r in result.rows}
+    assert by_row["momentum"]["ideas"] > 0 and by_row["buy_hold"]["ideas"] == 2
+    momentum = [i for i in result.ideas if i["row"] == "momentum" and "cost" in i]
+    assert all(i["entry_ns"] % HOUR == 0 for i in momentum)
+    assert all(i["exit_ns"] - i["entry_ns"] <= 6 * HOUR for i in momentum)
+    assert sorted(result.manifests)[0] == "klines/bybit/BTCUSDT/1h.parquet"
+    assert result.record()["config"]["tape"] == "klines"
+    assert result.record()["config"]["hold_bars"] == 6
+    market = result.coverage["markets"]["BTCUSDT"]
+    assert market["bar_s"] == 3600 and market["bars"] == 11 * 24
+
+
+def test_the_hold_is_a_declared_number_of_bars(archive: Path) -> None:
+    result = run_arena(config(rows=("momentum",), hold_bars=3), root=archive)
+    held = [i for i in result.ideas if "cost" in i]
+    assert held and all(i["exit_ns"] - i["entry_ns"] <= 3 * HOUR for i in held)
+    with pytest.raises(ValueError, match="hold"):
+        config(hold_bars=0)
+    with pytest.raises(ValueError, match="tape"):
+        config(tape="ticks")
+
+
+def test_the_long_only_momentum_row_never_shorts(archive: Path) -> None:
+    result = run_arena(config(rows=("momentum", "momentum_long")), root=archive)
+    longs = [i for i in result.ideas if i["row"] == "momentum_long" and "cost" in i]
+    shorts = [i for i in result.ideas if i["row"] == "momentum" and i.get("side") == "short"]
+    assert longs and shorts and all(i["side"] == "long" for i in longs)

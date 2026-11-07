@@ -2,7 +2,11 @@
 there to be beaten, and a change to one changes every comparison, so the version is in every report.
 
 - `buy_hold`: long at the window's first decision, held to its end.
-- `momentum`: long when `mom_z_24` >= 1, short when <= -1; stop 1.5 x ATR, take 3 x ATR, 24 bars.
+- `momentum`: long when `mom_z_24` >= 1, short when <= -1; stop 1.5 x ATR, take 3 x ATR, held at
+  most the arena's declared hold (24 bars unless declared).
+- `momentum_long`: the long half of `momentum`, flat where it would short. Crypto's published
+  time-series momentum is long-biased (Liu and Tsyvinski 2021), and the rule is fixed here before
+  any result is read, so it is not chosen on the window it is scored on.
 - `fade`: the opposite side on the same triggers and exits.
 - `random`: a seeded side at the times momentum fires, with its exits; this is the null.
 """
@@ -38,7 +42,9 @@ def _trigger(z: float | None) -> Direction | None:
     return None
 
 
-def _idea(view: DecisionView, side: Direction, playbook: str, z: float) -> TradeIdea | None:
+def _idea(
+    view: DecisionView, side: Direction, playbook: str, z: float, hold_bars: int
+) -> TradeIdea | None:
     atr = view.feature("atr_bps")
     if not isinstance(atr, float) or atr <= 0:
         return None
@@ -48,7 +54,7 @@ def _idea(view: DecisionView, side: Direction, playbook: str, z: float) -> Trade
         playbook=playbook,
         stop_bps=STOP_ATR * unit,
         take_bps=TAKE_ATR * unit,
-        max_hold_bars=HOLD_BARS,
+        max_hold_bars=hold_bars,
         reason=f"mom_z_24 {z:+.3f}",
     )
 
@@ -57,18 +63,36 @@ class Momentum:
     name = "momentum"
     knowledge_cutoff: date | None = None
 
+    def __init__(self, hold_bars: int = HOLD_BARS) -> None:
+        self.hold_bars = hold_bars
+
     def decide(self, view: DecisionView) -> TradeIdea | None:
         z = _z(view)
         side = _trigger(z)
-        return None if z is None or side is None else _idea(view, side, "momentum", z)
+        if z is None or side is None:
+            return None
+        return _idea(view, side, "momentum", z, self.hold_bars)
 
     def score(self, view: DecisionView) -> float | None:
         return _z(view)
 
 
+class MomentumLong(Momentum):
+    name = "momentum_long"
+
+    def decide(self, view: DecisionView) -> TradeIdea | None:
+        z = _z(view)
+        if z is None or _trigger(z) is not Direction.LONG:
+            return None
+        return _idea(view, Direction.LONG, "momentum_long", z, self.hold_bars)
+
+
 class Fade:
     name = "fade"
     knowledge_cutoff: date | None = None
+
+    def __init__(self, hold_bars: int = HOLD_BARS) -> None:
+        self.hold_bars = hold_bars
 
     def decide(self, view: DecisionView) -> TradeIdea | None:
         z = _z(view)
@@ -76,7 +100,7 @@ class Fade:
         if z is None or side is None:
             return None
         other = Direction.SHORT if side is Direction.LONG else Direction.LONG
-        return _idea(view, other, "fade", z)
+        return _idea(view, other, "fade", z, self.hold_bars)
 
     def score(self, view: DecisionView) -> float | None:
         z = _z(view)
@@ -87,8 +111,9 @@ class RandomSide:
     name = "random"
     knowledge_cutoff: date | None = None
 
-    def __init__(self, seed: int) -> None:
+    def __init__(self, seed: int, hold_bars: int = HOLD_BARS) -> None:
         self.seed = seed
+        self.hold_bars = hold_bars
         self._draws: dict[str, random.Random] = {}
 
     def decide(self, view: DecisionView) -> TradeIdea | None:
@@ -101,7 +126,7 @@ class RandomSide:
             draw = random.Random(f"{self.seed}:{view.instrument}")  # noqa: S311
             self._draws[view.instrument] = draw
         side = draw.choice((Direction.LONG, Direction.SHORT))
-        return _idea(view, side, "random", z)
+        return _idea(view, side, "random", z, self.hold_bars)
 
 
 class BuyHold:

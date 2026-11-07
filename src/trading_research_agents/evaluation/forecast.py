@@ -1,15 +1,15 @@
 """The `forecast` row: the expected-value decision, fitted walk-forward on the archive it is on.
 
 At each decision the row needs a model fitted on outcomes that had finished by then. Every
-`refit_days` it takes the decisions of the last `fit_days` whose ideas had already settled, labels
+`refit_days` it takes the last `fit_decisions` decisions whose ideas had already settled, labels
 each side 1 when its take was reached first and 0 otherwise (a stop, or time running out), fits one
 logistic model per side on the older 70 % of them and a calibrator on the newer 30 %, and keeps
 both until the next refit. An idea is the side whose expected value, net of the round trip,
 clears the margin; with no model yet, or a feature absent, there is no idea.
 
-The exits are the baselines' (stop 1.5 x ATR, take 3 x ATR, 24 bars) so the row differs from
-momentum only in how it chooses, and the features are a fixed, versioned list that every archive
-of flow bars carries.
+The exits are the baselines' (stop 1.5 x ATR, take 3 x ATR, the declared hold) so the row
+differs from momentum only in how it chooses, and the features are a fixed, versioned list that
+every archive of flow bars carries.
 """
 
 from __future__ import annotations
@@ -52,6 +52,9 @@ FEATURES = (
 )
 SIDES = (Direction.LONG, Direction.SHORT)
 FIT_SHARE = 0.7
+# The fit window in decisions per market: 60 days on the hour desk the row was built on. Counted in
+# days instead, a daily desk would have 60 samples a market and never reach `min_samples`.
+FIT_DECISIONS = 1440
 # A feature absent from more decisions than this is left out of the fit rather than costing rows.
 PRESENT = 0.95
 
@@ -68,6 +71,7 @@ class FitContext:
     interval_ns: int
     first_ns: int
     instrument_costs: Mapping[str, Costs] = field(default_factory=dict)
+    hold_bars: int = HOLD_BARS
 
     def costs_for(self, instrument: str) -> Costs:
         return self.instrument_costs.get(instrument, self.costs)
@@ -95,13 +99,13 @@ class ForecastPolicy:
         self,
         fit: FitContext,
         *,
-        fit_days: int = 60,
+        fit_decisions: int = FIT_DECISIONS,
         refit_days: int = 7,
         min_samples: int = 200,
         margin_bps: float = 0.0,
     ) -> None:
         self.fit = fit
-        self.fit_ns = fit_days * DAY_NS
+        self.fit_ns = fit_decisions * fit.interval_ns
         self.refit_ns = refit_days * DAY_NS
         self.min_samples = min_samples
         self.margin_bps = margin_bps
@@ -133,7 +137,7 @@ class ForecastPolicy:
             playbook="forecast",
             stop_bps=STOP_ATR * unit,
             take_bps=TAKE_ATR * unit,
-            max_hold_bars=HOLD_BARS,
+            max_hold_bars=self.fit.hold_bars,
             reason=f"p {values_by_side[side]:.3f}, expected {chosen[1]:+.2f} bps net",
         )
 
@@ -243,13 +247,15 @@ class ForecastPolicy:
         atr = self.fit.views.view(instrument, decided).feature("atr_bps")
         if isinstance(atr, float) and atr > 0:
             unit = Decimal(f"{atr:.4f}")
-            idea = TradeIdea(side, "forecast", STOP_ATR * unit, TAKE_ATR * unit, HOLD_BARS, "label")
+            idea = TradeIdea(
+                side, "forecast", STOP_ATR * unit, TAKE_ATR * unit, self.fit.hold_bars, "label"
+            )
             outcome = settle(
                 row="forecast",
                 instrument=instrument,
                 idea=idea,
                 decided_ns=decided,
-                hold_ns=HOLD_BARS * self.fit.interval_ns,
+                hold_ns=self.fit.hold_bars * self.fit.interval_ns,
                 tape=self.fit.histories[instrument].tape,
                 costs=self.fit.costs_for(instrument),
                 funding=self.fit.funding[instrument],

@@ -45,6 +45,8 @@ HELP = {
     "v1_hold": "how long a v1 decision is held (default 4h)",
     "fit_days": "walk-forward fit window, in days",
     "test_days": "walk-forward test window, in days",
+    "hold_bars": "the longest hold, in bars of the decision interval (default 24)",
+    "tape": "archive (the minute archive, the default) or klines (hour candles, for years)",
     "out": "where the run is written (default runs/arena)",
 }
 KEYS = tuple(HELP)
@@ -60,6 +62,8 @@ DEFAULTS: dict[str, Any] = {
     "seed": 7,
     "runs": "runs/cycles",
     "v1_hold": "4h",
+    "hold_bars": 24,
+    "tape": "archive",
     "out": "runs/arena",
 }
 REQUIRED = ("instruments", "from", "to", "spread_bps", "slippage_bps")
@@ -179,6 +183,8 @@ def _config(
         v1_hold_s=_seconds(settings["v1_hold"]),
         fit_days=_count(settings.get("fit_days")),
         test_days=_count(settings.get("test_days")),
+        hold_bars=int(settings["hold_bars"]),
+        tape=str(settings["tape"]),
     )
 
 
@@ -276,8 +282,8 @@ def _lines(result: ArenaResult, folder: Path) -> list[str]:
         lines += [line for row in result.rows for line in _by_instrument_lines(row)]
     for name, market in result.coverage["markets"].items():
         lines.append(
-            f"  {name}: {market['minutes']} minutes, {market['missing_minutes']} not seen, "
-            f"{market['partial_minutes']} partial"
+            f"  {name}: {market['bars']} bars of {market['bar_s']} s, "
+            f"{market['missing_bars']} not seen, {market['partial_bars']} partial"
         )
     absent = sorted(result.coverage["features_absent"].items(), key=lambda kv: -kv[1]["absent"])
     for feature, entry in absent[:5]:

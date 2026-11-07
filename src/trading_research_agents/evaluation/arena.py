@@ -1,9 +1,11 @@
 """`tra arena`: every row replayed over the same archive, settled the same way, side by side.
 
 One clock drives every row: decisions at the closes of the decision interval inside the window, one
-open idea per market per row, entry at the next minute's open. The v1 record is the only row with
-times of its own. A run reads the archive and the declared costs and nothing else, so the same
-archive, configuration and seed give the same `arena.json`, byte for byte.
+open idea per market per row, entry at the open of the tape's next bar. The tape is the minute
+archive, or with `tape = "klines"` the hour candles `tra data klines` stored, for replays of
+years. The v1 record is the only row with times of its own. A run reads the archive and the
+declared costs and nothing else, so the same archive, configuration and seed give the same
+`arena.json`, byte for byte.
 """
 
 from __future__ import annotations
@@ -21,7 +23,13 @@ from trading_research_agents import __version__
 from trading_research_agents.evaluation.baselines import BASELINES_VERSION, HOLD_BARS
 from trading_research_agents.evaluation.desk import base_of, chosen
 from trading_research_agents.evaluation.forecast import FORECAST_VERSION, FitContext
-from trading_research_agents.evaluation.history import MarketHistory, Views, load_history
+from trading_research_agents.evaluation.history import (
+    Loaded,
+    MarketHistory,
+    Views,
+    load_history,
+    load_kline_history,
+)
 from trading_research_agents.evaluation.policy import DecisionView, Policy, Scored, TradeIdea
 from trading_research_agents.evaluation.rows import RANDOM, V1_RECORD, make_policy
 from trading_research_agents.evaluation.settle import (
@@ -42,6 +50,7 @@ from trading_research_agents.market_data.days import DAY_NS, NS_PER_S, day_of, m
 from trading_research_agents.market_data.deriv import LEVELS
 
 WARMUP_DAYS = 31
+TAPES = ("archive", "klines")
 V1_LABEL = "live record, not replay"
 
 
@@ -65,6 +74,10 @@ class ArenaConfig:
     # a fraction of BTC's volume does not cross the same book, and one figure for every class of
     # market overstates the edge exactly where it is thinnest.
     instrument_costs: Mapping[str, Costs] = field(default_factory=dict)
+    # Bars of the decision interval an idea is held at most. 24 on an hour desk is a day; a desk
+    # that decides daily declares its own, since 24 days is not the hold it means.
+    hold_bars: int = HOLD_BARS
+    tape: str = "archive"
 
     def __post_init__(self) -> None:
         if not self.instruments or len(set(self.instruments)) != len(self.instruments):
@@ -83,6 +96,10 @@ class ArenaConfig:
         spans = (self.interval_s, self.context_interval_s, self.v1_hold_s)
         if any(seconds <= 0 or seconds % 60 for seconds in spans):
             raise MarketDataError("intervals and holds are positive whole numbers of minutes")
+        if self.hold_bars <= 0:
+            raise MarketDataError("the hold is a positive number of bars")
+        if self.tape not in TAPES:
+            raise MarketDataError(f"the tape is one of {list(TAPES)}, not {self.tape!r}")
         if self.funding not in ("archive", "none"):
             raise MarketDataError("funding is 'archive' (measured) or 'none' (a market without)")
         if (self.fit_days is None) != (self.test_days is None):
@@ -119,6 +136,8 @@ class ArenaConfig:
             "v1_hold_s": self.v1_hold_s,
             "fit_days": self.fit_days,
             "test_days": self.test_days,
+            "hold_bars": self.hold_bars,
+            "tape": self.tape,
         }
 
 
@@ -180,6 +199,7 @@ class _Run:
             funding=self.funding,
             interval_ns=config.interval_ns,
             first_ns=midnight_ns(config.start - timedelta(days=WARMUP_DAYS)),
+            hold_bars=config.hold_bars,
         )
 
         def made(name: str) -> Policy:
@@ -189,6 +209,7 @@ class _Run:
                 end_ns=window.end_ns,
                 interval_ns=config.interval_ns,
                 fit=fit,
+                hold_bars=config.hold_bars,
             )
 
         self.policies: dict[str, Policy] = {
@@ -306,17 +327,30 @@ def run_arena(config: ArenaConfig, *, root: Path, cycles: Path | None = None) ->
 
 
 def _load(config: ArenaConfig, root: Path) -> tuple[dict[str, MarketHistory], dict[str, str]]:
-    longest_s = max(HOLD_BARS * config.interval_s, config.v1_hold_s)
+    longest_s = max(config.hold_bars * config.interval_s, config.v1_hold_s)
     first = config.start - timedelta(days=WARMUP_DAYS)
     last = config.end + timedelta(days=math.ceil(longest_s / 86_400) + 1)
     intervals = (config.interval_ns, config.context_interval_s * NS_PER_S)
     histories: dict[str, MarketHistory] = {}
     manifests: dict[str, str] = {}
     for name in dict.fromkeys((*config.instruments, *config.context)):
-        loaded = load_history(root, config.venue, name, first, last, intervals)
+        loaded = _load_one(config, root, name, first, last, intervals)
         histories[name] = loaded.history
         manifests.update(loaded.manifests)
     return histories, dict(sorted(manifests.items()))
+
+
+def _load_one(
+    config: ArenaConfig,
+    root: Path,
+    name: str,
+    first: date,
+    last: date,
+    intervals: tuple[int, int],
+) -> Loaded:
+    if config.tape == "klines":
+        return load_kline_history(root, config.venue, name, first, last, intervals)
+    return load_history(root, config.venue, name, first, last, intervals)
 
 
 def _reports(
@@ -376,12 +410,13 @@ def _coverage(
     markets: dict[str, Any] = {}
     for name in dict.fromkeys((*config.instruments, *config.context)):
         history = histories[name]
-        minutes = history.tape.span(window.start_ns, window.end_ns) or ()
+        bars = history.tape.span(window.start_ns, window.end_ns) or ()
         inside = [p for p in history.points if window.start_ns <= p.as_of_ns < window.end_ns]
         markets[name] = {
-            "minutes": len(minutes),
-            "missing_minutes": sum(1 for m in minutes if m.gap is GapState.MISSING),
-            "partial_minutes": sum(1 for m in minutes if m.gap is GapState.PARTIAL),
+            "bar_s": history.tape.step_ns // NS_PER_S,
+            "bars": len(bars),
+            "missing_bars": sum(1 for b in bars if b.gap is GapState.MISSING),
+            "partial_bars": sum(1 for b in bars if b.gap is GapState.PARTIAL),
             "deriv_points": {s.value: sum(1 for p in inside if p.series is s) for s in LEVELS},
         }
     reasons: dict[str, Counter[str]] = {}
@@ -405,7 +440,7 @@ def _splits(config: ArenaConfig, rows: dict[str, _Row]) -> Iterator[dict[str, An
         config.end,
         fit_days=config.fit_days,
         test_days=config.test_days,
-        embargo_bars=HOLD_BARS,
+        embargo_bars=config.hold_bars,
         interval_ns=config.interval_ns,
     )
     for split in found:

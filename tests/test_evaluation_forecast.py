@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 from typing import Any, cast
@@ -45,7 +46,7 @@ def policy(root: Path, **kwargs: object) -> ForecastPolicy:
 
 
 def test_a_sample_is_used_only_once_its_idea_had_settled(archive: Path) -> None:  # noqa: F811
-    row = policy(archive, fit_days=10)
+    row = policy(archive, fit_decisions=240)
     at = midnight_ns(START) + 8 * DAY_NS
     columns = row.columns_before(at)
     # The fixture prints three trades a minute, so trade intensity never varies and is left out.
@@ -99,3 +100,12 @@ def test_days_before_the_archive_began_do_not_choose_the_features(archive: Path)
     object.__setattr__(early, "first_ns", midnight_ns(START) - 40 * DAY_NS)
     columns = row.columns_before(midnight_ns(START) + 8 * DAY_NS)
     assert "mom_z_24" in columns and "ret_bps_1" in columns
+
+
+def test_the_fit_window_is_counted_in_decisions_so_a_daily_desk_can_fit(
+    archive: Path,  # noqa: F811
+) -> None:
+    hourly = policy(archive)
+    assert hourly.fit_ns == 60 * DAY_NS
+    daily = ForecastPolicy(replace(hourly.fit, interval_ns=DAY_NS))
+    assert daily.fit_ns == 1440 * DAY_NS
