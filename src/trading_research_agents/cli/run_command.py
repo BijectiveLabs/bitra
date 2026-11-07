@@ -62,12 +62,15 @@ def run_cycle_command(args: argparse.Namespace) -> int:
     """One cycle, end to end, from the files in the project."""
     _load_env(args)
     cfg = load_strategy_config(args.config)
-    if cfg.agents is None:
-        raise ConfigError("a cycle needs [strategy].agent and [agents] in strategy.toml")
+    if cfg.agents is None and cfg.rule is None:
+        raise ConfigError(
+            "a cycle needs its one decision: [strategy].agent with [agents], or a rule "
+            "([strategy].file and class naming a core with decide_on_bars, and edge_bps)"
+        )
     filled, _ = _fill_account_fees(args.envelope, cfg, dict(os.environ), datetime.now(UTC))
     if filled and not args.json:
         sys.stdout.write("\n".join(filled) + "\n")
-    if cfg.agents.magnitude_bps is None:
+    if cfg.agents is not None and cfg.agents.magnitude_bps is None:
         raise ConfigError("the claimed edge: [agents].magnitude_bps in strategy.toml")
     desk = _open_desk(args, cfg)
     cycle_cfg = _cycle_config(desk)
@@ -75,13 +78,19 @@ def run_cycle_command(args: argparse.Namespace) -> int:
     spine = _cycle_steps(cycle_cfg)
     # The auditors keep their own ledger, so what the desk spent deciding stays separable from what
     # it spent looking at itself.
-    audits = Auditing(
-        policy=cfg.audit,
-        settings=cfg.agents,
-        config=args.config,
-        runs=desk.out,
-        limits=cfg.limits,
-        kill_switch=cfg.kill_switch,
+    # The auditors are models. A rule desk declares none, so nothing wakes them; `tra audit` with
+    # an [agents] table is still there to ask one by hand.
+    audits = (
+        None
+        if cfg.agents is None
+        else Auditing(
+            policy=cfg.audit,
+            settings=cfg.agents,
+            config=args.config,
+            runs=desk.out,
+            limits=cfg.limits,
+            kill_switch=cfg.kill_switch,
+        )
     )
     return _DeskRun(desk, cycle_cfg, schedule, spine, audits).run()
 
@@ -140,7 +149,9 @@ def _open_desk(args: argparse.Namespace, cfg: Any) -> _Desk:
         rate=rate,
         keeper=keeper,
         usage=usage,
-        completer_for=_metered_completers(cfg.agents, usage, out),
+        completer_for=(
+            _no_model if cfg.agents is None else _metered_completers(cfg.agents, usage, out)
+        ),
     )
 
 
@@ -161,7 +172,8 @@ def _cycle_config(desk: _Desk) -> Any:
     from trading_research_agents.agents.cycle import CycleConfig
     from trading_research_agents.execution.targets import reward_risk
 
-    args, cfg, a, mode = desk.args, desk.cfg, desk.cfg.agents, desk.mode
+    args, cfg, mode = desk.args, desk.cfg, desk.mode
+    decision = _decision(desk)
     news = tuple(desk.declared.text)
     if not news and (desk.beside / "events.csv").is_file():
         news = (desk.beside / "events.csv",)
@@ -174,17 +186,17 @@ def _cycle_config(desk: _Desk) -> Any:
         completer_for=desk.completer_for,
         usage=desk.usage,
         root=desk.out,
-        mechanism=a.mechanism,
+        mechanism=decision["mechanism"],
         size=cfg.run.size,
         size_quote=cfg.run.size_quote,
-        magnitude_bps=a.magnitude_bps,
+        magnitude_bps=decision["magnitude_bps"],
         bar_interval_s=cfg.run.bar_interval_s,
-        lookback_bars=a.lookback_bars,
+        lookback_bars=decision["lookback_bars"],
         interval_s=cfg.run.bar_interval_s,
         settlement_interval_s=cfg.run.settlement_interval_s,
         latency_slippage_bps=cfg.run.slippage_bps,
         margin_bps=args.margin if args.margin is not None else Decimal(0),
-        min_confidence=a.min_confidence,
+        min_confidence=decision["min_confidence"],
         mode=mode,
         place=desk.hand,
         spot=facts[0],
@@ -198,8 +210,8 @@ def _cycle_config(desk: _Desk) -> Any:
         max_position_quote=cfg.limits.max_position_quote,
         equity=cfg.run.equity,
         size_step=cfg.run.step_for(desk.instrument),
-        reviewers=a.reviewers,
-        on_missing_reviewer=a.on_missing_reviewer,
+        reviewers=decision["reviewers"],
+        on_missing_reviewer=decision["on_missing_reviewer"],
         context_intervals=cfg.run.context_intervals,
         hold_limit=cfg.execution.hold_limit,
         timeout_bars=cfg.exit_rule.timeout_bars,
@@ -229,11 +241,42 @@ def _cycle_config(desk: _Desk) -> Any:
         data_options={declared.kind: dict(declared.options) for declared in desk.data_cfg.kinds},
         series={role: tuple(paths) for role, paths in desk.declared.series.items()},
         news=news,
-        # A declared roster wins; otherwise every reading with something to read is read.
-        readings=a.readings or desk.declared.readings,
-        team=a.team,
+        readings=decision["readings"],
+        team=decision["team"],
+        rule=cfg.rule,
         judge=desk_judge(args.data_config),
     )
+
+
+def _no_model(role: str) -> Any:
+    raise ConfigError(f"a rule desk declares no models, and {role} asked for one")
+
+
+def _decision(desk: _Desk) -> dict[str, Any]:
+    """What the cycle's one decision is told: the structure lead's settings, or a rule's."""
+    cfg, a = desk.cfg, desk.cfg.agents
+    if a is None:
+        return {
+            "mechanism": f"rule {cfg.rule.name}",
+            "magnitude_bps": cfg.edge_bps,
+            "lookback_bars": cfg.rule_lookback_bars,
+            "min_confidence": 0.0,
+            "reviewers": (),
+            "on_missing_reviewer": "refuse",
+            "readings": (),
+            "team": (),
+        }
+    return {
+        "mechanism": a.mechanism,
+        "magnitude_bps": a.magnitude_bps,
+        "lookback_bars": a.lookback_bars,
+        "min_confidence": a.min_confidence,
+        "reviewers": a.reviewers,
+        "on_missing_reviewer": a.on_missing_reviewer,
+        # A declared roster wins; otherwise every reading with something to read is read.
+        "readings": a.readings or desk.declared.readings,
+        "team": a.team,
+    }
 
 
 @dataclass
@@ -245,7 +288,7 @@ class _DeskRun:
     cycle_cfg: Any
     schedule: Schedule
     spine: list[str]
-    audits: Auditing
+    audits: Auditing | None
     ran: int = 0
     passes: int = 0
     cleared: int = CLEARED
@@ -380,7 +423,8 @@ class _DeskRun:
         payload, lines = _cycle_report(result, desk.usage, desk.mode)
         emit(payload, desk.args.json, lines, partial(_cycle_view, payload))
         self.ran += 1
-        self.audits.after(payload, self.ran, as_json=desk.args.json)
+        if self.audits is not None:
+            self.audits.after(payload, self.ran, as_json=desk.args.json)
         self.cleared = CLEARED if result.stopped_by is None else REFUSED
         return result
 

@@ -27,6 +27,7 @@ TEMPLATE_FILES = {
     "sources/sentiment.toml": "sources/sentiment.toml",
     "sources/news.toml": "sources/news.toml",
     "strategies/trailing_zscore.py": "core.py.tmpl",
+    "strategies/momentum_long.py": "momentum_long.py.tmpl",
     ".env.example": "env.example",
     ".gitignore": "gitignore",
     "README.md": "README.md",
@@ -75,6 +76,8 @@ def init_project(args: argparse.Namespace) -> int:
             text = _agent_config(text, args.agent or "your-provider", args.model or "your-model")
         if name == "strategy.toml" and autonomous:
             text = text.replace("\n[data]\n", AUTONOMOUS_GATES + "[data]\n", 1)
+        if name == "strategy.toml" and args.profile == "rule":
+            text = _rule_config(text)
         if name == "README.md" and autonomous:
             # A desk made for the agents starts with what the agents need; the research tools the
             # same file describes come after.
@@ -90,7 +93,14 @@ def init_project(args: argparse.Namespace) -> int:
         key = provider(args.agent).key_env
         if key:
             lines.append(f"put {key} in .env (copy .env.example)")
-    if autonomous:
+    if args.profile == "rule":
+        lines.append(
+            "the desk's one decision is strategies/momentum_long.py, an example rule on "
+            "daily bars; replay it with `tra arena --tape klines --rows "
+            "strategies/momentum_long.py:MomentumLong`, then write its mean net per trade "
+            "into [strategy].edge_bps"
+        )
+    elif autonomous:
         lines.append(
             "the cycle is wired as the core: one decision, the exits, the cost rule, the risk "
             "gate; the experiments are listed, off, in strategy.toml"
@@ -104,6 +114,35 @@ def init_project(args: argparse.Namespace) -> int:
         lines.append("next: cd there, `tra data get BTCUSDT 2025-01-01`, then `tra backtest`")
     emit({"directory": str(target), "files": list(TEMPLATE_FILES)}, args.json, lines)
     return CLEARED
+
+
+RULE_HEAD = """[strategy]
+file = "strategies/momentum_long.py"     # an example, not a recommendation: replay it first
+class = "MomentumLong"
+# edge_bps = 0                           # the rule's mean net per trade, bps, from your own
+#                                        # `tra arena` run of the rule's file; required,
+#                                        # because nothing here guesses it
+lookback_bars = 200                      # closed candles the rule is handed each decision
+
+[exit]
+# The rule names its own stop and take on each trade. This is the widest stop the desk accepts;
+# a rule's stop past it refuses the trade rather than being moved.
+mode = "analyst"
+max_stop_frac = 0.12
+timeout_bars = 6                         # six daily bars, the hold the arena measured
+
+"""
+
+
+def _rule_config(text: str) -> str:
+    """strategy.toml with the example daily rule as the desk's one decision, and no model."""
+    start, end = text.index("[strategy]"), text.index("[run]")
+    text = text[:start] + RULE_HEAD + text[end:]
+    return text.replace(
+        "bar_interval_s = 60\n",
+        "bar_interval_s = 86400                # one decision a day, at the daily close\n",
+        1,
+    )
 
 
 def _for_venue(name: str, text: str, able: Any, keys: list[str], starter: str) -> str:
@@ -331,10 +370,9 @@ def _agent_config(text: str, provider_name: str, model: str) -> str:
 
 AUTONOMOUS_GATES = """
 [targets]
-# The one cost rule of the core: what the trade is worth over the instrument's own paths at its
-# levels, net of the round trip. It weighs how often the take comes before the stop, which no
-# distance between a stop and a target can say. 0 is the default; "off" turns it off.
-min_path_ev_bps = 0
+# The paths are recorded on every cycle as a risk reading, not a gate: drawn from the instrument's
+# own candles they are a calibrated random walk, so their value says nothing about the edge
+# (Labs evidence, 2026-11-06). Declare min_path_ev_bps only to run that floor as an experiment.
 max_round_trips_per_day = 6
 
 [trigger]

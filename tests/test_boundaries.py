@@ -251,5 +251,7 @@ def test_templates_are_the_examples_with_the_core_beside_the_config() -> None:
     core = (TEMPLATES / "core.py.tmpl").read_text(encoding="utf-8")
     source = (EXAMPLES / "strategies" / "trailing_zscore.py").read_text(encoding="utf-8")
     assert core.replace('file = "strategies/', 'file = "examples/strategies/') == source
+    rule = (TEMPLATES / "momentum_long.py.tmpl").read_text(encoding="utf-8")
+    assert rule == (EXAMPLES / "strategies" / "momentum_long.py").read_text(encoding="utf-8")
     assert not (TEMPLATES / "__init__.py").exists()
     assert not list(TEMPLATES.glob("*.py")), "a template is not an importable module"

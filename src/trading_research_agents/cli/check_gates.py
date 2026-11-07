@@ -275,8 +275,9 @@ def _target_notes(cfg: Any, bad: list[str]) -> list[str]:
         )
     if targets.min_path_ev_bps is None:
         good.append(
-            "targets: [targets].min_path_ev_bps is off, so the cost gate weighs the distance to "
-            "the take as if it were certain; the paths' expected value is the core's cost rule"
+            "paths: recorded on every cycle as a risk reading, not a gate; drawn from the "
+            "instrument's own candles they measured no edge, so the cost gate weighs the claimed "
+            "edge instead"
         )
     priced = cfg.agents is not None and any(i > 0 or o > 0 for i, o in cfg.agents.pricing.values())
     if targets.max_research_bps is not None and not priced:
@@ -459,6 +460,11 @@ def _regime_note(cfg: Any) -> str:
 
     rule = cfg.regime
     frames = ", ".join(interval_name(s) for s in cfg.run.context_intervals)
+    if getattr(cfg, "rule", None) is not None:
+        return (
+            f"regime: not applied on a rule desk; the rule's idea is taken on its own terms on "
+            f"{interval_name(cfg.run.bar_interval_s)} bars"
+        )
     return (
         f"regime: measured on {interval_name(cfg.run.bar_interval_s)}"
         + (f" with {frames} as context" if frames else ", no higher timeframe declared")
@@ -473,6 +479,12 @@ def _regime_note(cfg: Any) -> str:
 
 def _exit_notes(cfg: Any, bad: list[str]) -> list[str]:
     """Where each trade's stop and take profit will sit, in words."""
+    if getattr(cfg, "rule", None) is not None:
+        return [
+            f"exits: the rule names its stop and take on each trade; a stop past "
+            f"{_bps(cfg.exit_rule.stop_frac * 10_000)} bps is refused, not moved; held at most "
+            f"{cfg.exit_rule.timeout_bars} bars"
+        ]
     rule = cfg.exit_rule
     scale = rule.volatility
     if scale is None:
@@ -544,6 +556,11 @@ def _risk_notes(cfg: Any, bad: list[str]) -> list[str]:
 def _trigger_notes(cfg: Any) -> list[str]:
     """What a quiet market costs this desk, which is the whole point of the trigger."""
     trigger = cfg.trigger
+    if trigger.idle and getattr(cfg, "rule", None) is not None:
+        return [
+            "trigger: not declared; a rule desk asks its rule on every scheduled cycle, which "
+            "costs one data pull and no model"
+        ]
     if trigger.idle:
         return [
             "trigger: not declared, so every scheduled cycle pays the whole roster whether or not "

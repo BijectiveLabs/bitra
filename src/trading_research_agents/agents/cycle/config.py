@@ -35,6 +35,7 @@ from trading_research_agents.llm.completer import Completer
 from trading_research_agents.llm.judge import Judge
 from trading_research_agents.llm.usage import UsageLedger
 from trading_research_agents.readings import READINGS
+from trading_research_agents.strategy.core import Rule
 from trading_research_agents.trading.market import Market
 
 # The third mode sends orders, and it only exists when the caller hands the cycle something to
@@ -175,6 +176,9 @@ class CycleConfig:
     # The typed judge, when declared: each structure read's reason checked against the measured
     # labels. Absent, that check is not made and the record says nothing was asked.
     judge: Judge | None = None
+    # The operator's rule, when the desk's one decision is a rule rather than the structure lead.
+    # No model is asked; `magnitude_bps` is then the edge the operator measured for it.
+    rule: Rule | None = None
     max_workers: int = 4
     # Progress, on its own wire. A watcher sees the steps as they happen and can change none of
     # them; the default is nobody watching.

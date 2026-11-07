@@ -96,10 +96,20 @@ def _check(args: argparse.Namespace) -> tuple[list[str], list[str], str]:
         good.extend(_desk_files(args, cfg, bad))
         shelf = declared_in(beside)
         good.extend(_shelf_notes(args, shelf, bad))
-        readings = (cfg.agents.readings if cfg.agents is not None else ()) or shelf.readings
-        roster = ("structure_lead", *readings)
-        read = f"{', '.join(readings)} read by the system" if readings else "no reading declared"
-        good.append(f"roster: structure_lead asks a model; {read}; `tra run` uses these")
+        if cfg.rule is not None:
+            roster: tuple[str, ...] = ()
+            good.append(
+                f"decision: the rule {cfg.rule.name}, no model asked; its claimed edge is "
+                f"[strategy].edge_bps {cfg.edge_bps} bps, from your own arena run; "
+                "`tra run` asks it on each closed bar"
+            )
+        else:
+            readings = (cfg.agents.readings if cfg.agents is not None else ()) or shelf.readings
+            roster = ("structure_lead", *readings)
+            read = (
+                f"{', '.join(readings)} read by the system" if readings else "no reading declared"
+            )
+            good.append(f"roster: structure_lead asks a model; {read}; `tra run` uses these")
         ready, missing = _gate_lines(
             cfg,
             roster,
@@ -161,10 +171,15 @@ def _desk_files(args: argparse.Namespace, cfg: Any, bad: list[str]) -> list[str]
     # An autonomous project decides on live chains, so a recorded dataset and a funding file are
     # what a backtest needs, not what a cycle needs. Saying otherwise sends an operator to fetch a
     # day of prints they will not use.
-    cycles = cfg.agents is not None
+    cycles = cfg.agents is not None or cfg.rule is not None
     found = _datasets(args.config)
     if cfg.run.instrument in found:
         good.append(f"dataset: {found[cfg.run.instrument]}")
+    elif cfg.rule is not None:
+        good.append(
+            "dataset: none; `tra run` decides on the live chains, and `tra arena --tape klines` "
+            f"replays the rule on `tra data klines {cfg.run.instrument} YYYY-MM-DD`"
+        )
     elif cycles:
         good.append(
             f"dataset: none; `tra run` decides on the live chains, and `tra backtest` is the "

@@ -104,6 +104,23 @@ class Idea:
             raise ValueError("an idea states its reason")
 
 
+def closed_run(bars: Sequence[Bar], at_ns: int) -> list[Bar]:
+    """The bars ending at `at_ns`, back to the first empty bar or break in time: what a rule reads.
+
+    Shared by the arena and `tra run`, so a rule is handed the same bars in a replay and live.
+    """
+    run: list[Bar] = []
+    for bar in reversed(bars):
+        if bar.empty:
+            break
+        if run and bar.end_ns != run[-1].start_ns:
+            break
+        if not run and bar.end_ns != at_ns:
+            break
+        run.append(bar)
+    return run[::-1]
+
+
 class Rule(Protocol):
     """A pure decision asked at one moment.
 

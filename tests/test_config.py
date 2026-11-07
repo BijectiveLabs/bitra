@@ -522,3 +522,45 @@ def test_the_experiments_a_desk_has_on_are_named() -> None:
     assert {"[conviction]", "[targets].min_net_bps", "[trigger].widen_after"} <= set(found)
     # Regime fit is on unless a desk turns it off, so an older desk sees it listed.
     assert "[regime].setups_must_fit" in found
+
+
+def rule_raw(**strategy: Any) -> dict[str, Any]:
+    out = raw(
+        {
+            "file": str(EXAMPLES / "strategies" / "momentum_long.py"),
+            "class": "MomentumLong",
+            "edge_bps": Decimal("100"),
+            **strategy,
+        }
+    )
+    out["exit"] = {"timeout_bars": 6}
+    out["run"] = {**out["run"], "bar_interval_s": 86400}
+    return out
+
+
+def test_a_rule_file_is_the_desk_decision_with_the_edge_it_measured() -> None:
+    cfg = parse_strategy_config(rule_raw())
+    assert cfg.rule is not None and cfg.rule.name == "example-momentum-long"
+    assert cfg.agents is None and cfg.edge_bps == Decimal("100")
+    assert cfg.exit_rule.timeout_bars == 6
+
+
+def test_a_rule_desk_names_the_edge_it_measured() -> None:
+    plain = rule_raw()
+    del plain["strategy"]["edge_bps"]
+    with pytest.raises(ConfigError, match="edge_bps"):
+        parse_strategy_config(plain)
+
+
+def test_a_bar_by_bar_strategy_is_not_a_rule() -> None:
+    cfg = load_strategy_config(EXAMPLES / "strategy.toml")
+    assert cfg.rule is None
+
+
+def test_backtest_paper_and_live_refuse_a_rule() -> None:
+    from trading_research_agents.cli.research_commands import bar_by_bar_core
+
+    with pytest.raises(ConfigError, match="tra run"):
+        bar_by_bar_core(parse_strategy_config(rule_raw()))
+    plain = load_strategy_config(EXAMPLES / "strategy.toml")
+    assert bar_by_bar_core(plain) is plain.strategy

@@ -28,6 +28,7 @@ from trading_research_agents.agents.cycle.pricing import (
 )
 from trading_research_agents.agents.cycle.record import _finish
 from trading_research_agents.agents.cycle.reviewers import _informative_votes, _votes
+from trading_research_agents.agents.cycle.rule import decided_by
 from trading_research_agents.agents.cycle.state import Pass, Step
 from trading_research_agents.agents.progress import DONE, REFUSED, announce
 from trading_research_agents.execution.confluence import confluent
@@ -288,6 +289,7 @@ def _intent_record(p: Pass) -> dict[str, Any]:
     fees = sum((c.bps for c in cost.components if c.name == "fee_round_trip"), Decimal(0))
     return {
         "instrument": cfg.instrument,
+        "decided_by": decided_by(p),
         "target": analyst.target,
         "setup": analyst.setup,
         "size": str(p.size),

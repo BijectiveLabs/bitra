@@ -45,6 +45,8 @@ class Pass:
     team_reads: dict[str, str] = field(default_factory=dict)
     reading_briefs: dict[str, dict[str, Any]] = field(default_factory=dict)
     analyst: Any = None
+    # The rule's idea, when a rule decided; its levels are the trade's exits.
+    rule_idea: Any = None
     costs: Any = None
     exits: dict[str, Any] = field(default_factory=dict)
     placement: Placement | None = None

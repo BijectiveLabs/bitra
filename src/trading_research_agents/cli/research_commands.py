@@ -32,6 +32,7 @@ from trading_research_agents.llm.providers import (
     CallOptions,
     provider,
 )
+from trading_research_agents.strategy.core import Strategy
 from trading_research_agents.trading import (
     ConfigError,
     Controls,
@@ -114,6 +115,17 @@ def _call_options(a: Any) -> CallOptions:
     )
 
 
+def bar_by_bar_core(cfg: Any) -> Strategy:
+    """The declared core, when it is fed bar by bar; a rule is refused by name, not by a crash."""
+    if cfg.rule is not None:
+        raise ConfigError(
+            f"{cfg.strategy.name} is a rule: `tra run` asks it and `tra arena` replays it; "
+            "backtest, paper and live feed a bar-by-bar strategy"
+        )
+    found: Strategy = cfg.strategy
+    return found
+
+
 def _trading_config(
     args: argparse.Namespace,
     feed: Any,
@@ -124,7 +136,7 @@ def _trading_config(
     observer: Any = None,
 ) -> TradingConfig:
     cfg = load_strategy_config(args.config)
-    strategy = cfg.strategy if cfg.agents is None else _agent_core(cfg, args.out)
+    strategy = bar_by_bar_core(cfg) if cfg.agents is None else _agent_core(cfg, args.out)
     funding = cfg.funding
     if funding is None:
         beside = _data_dir(args.config) / f"{cfg.run.instrument}-funding.json"

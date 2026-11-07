@@ -37,6 +37,7 @@ from trading_research_agents.agents.cycle.pricing import (
 )
 from trading_research_agents.agents.cycle.record import _finish
 from trading_research_agents.agents.cycle.reviewers import _before_votes, _run_reviewers
+from trading_research_agents.agents.cycle.rule import ask_the_rule, rule_exits
 from trading_research_agents.agents.cycle.state import Pass, Step
 from trading_research_agents.agents.cycle.team import check_reasons, combine, split, tasks
 from trading_research_agents.agents.parallel import Task, run_tasks
@@ -261,6 +262,18 @@ def _place_exits(p: Pass) -> bool:
     """Where the trade is wrong and where it is done, settled before anyone votes on it."""
     cfg, result, analyst = p.cfg, p.result, p.analyst
     mid = p.costs.cost.mid
+    if p.rule_idea is not None:
+        widest = cfg.stop_frac
+        stop = p.rule_idea.stop_bps
+        if widest is not None and stop is not None and stop / 10_000 > widest:
+            why = (
+                f"exit: the rule's stop is {stop} bps away, past the desk's widest stop {widest} "
+                "([exit].max_stop_frac, or stop_frac in fixed mode); the rule's level is not moved"
+            )
+            return _stop(p, why, "exit", "the rule's stop is too wide")
+        p.exits = rule_exits(mid, p.rule_idea)
+        result.exits = dict(_exit_view(mid, analyst.target, p.exits))
+        return _exits_pay(p, result.exits)
     try:
         p.exits, p.placement = _exits(
             cfg,
@@ -354,6 +367,16 @@ def _validate(p: Pass) -> bool:
     return True
 
 
+# A desk whose one decision is the operator's rule asks no model: no brief, no lead, no team, no
+# reviewers. The cost, the exits and the paths reading are the same steps every desk runs.
+RULE_DECIDING: tuple[Step, ...] = (
+    _funding_read,
+    ask_the_rule,
+    _price,
+    _place_exits,
+    read_the_paths,
+)
+
 DECIDING: tuple[Step, ...] = (
     _brief,
     _funding_read,
@@ -368,4 +391,4 @@ DECIDING: tuple[Step, ...] = (
     _validate,
 )
 
-__all__ = ["DECIDING", "price_at"]
+__all__ = ["DECIDING", "RULE_DECIDING", "price_at"]

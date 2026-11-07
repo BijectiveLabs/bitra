@@ -13,7 +13,7 @@ from decimal import Decimal
 from trading_research_agents.agents.alarms import DAILY_LOSS_MARK, DRAWDOWN_MARK
 from trading_research_agents.agents.briefs import data_brief
 from trading_research_agents.agents.cycle.config import CONTRACT_KINDS, CycleConfig
-from trading_research_agents.agents.cycle.decide import DECIDING
+from trading_research_agents.agents.cycle.decide import DECIDING, RULE_DECIDING
 from trading_research_agents.agents.cycle.gates import GATES
 from trading_research_agents.agents.cycle.outcome import decide_on_an_outcome
 from trading_research_agents.agents.cycle.pricing import _held, _prices, _quantized
@@ -48,7 +48,8 @@ def run_cycle(cfg: CycleConfig) -> CycleResult:
         return p.result
     if cfg.market is not None and cfg.market.outcome:
         return decide_on_an_outcome(p, cfg.market)
-    if not through(p, (*DECIDING, *GATES)):
+    deciding = DECIDING if cfg.rule is None else RULE_DECIDING
+    if not through(p, (*deciding, *GATES)):
         return p.result
     return _send(cfg, p.where, p.result)
 

@@ -7,31 +7,16 @@ reads across a gap. The rule's idea is settled by the harness like any other row
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from datetime import date
 from pathlib import Path
 
 from trading_research_agents.data.schema import Direction
 from trading_research_agents.evaluation.policy import DecisionView, TradeIdea
 from trading_research_agents.market_data.bars import FlowBar, GapState
-from trading_research_agents.strategy.core import Bar, Rule, Target
+from trading_research_agents.strategy.core import Bar, Rule, Target, closed_run
 from trading_research_agents.strategy.load import load_class
 
 SIDES = {Target.LONG: Direction.LONG, Target.SHORT: Direction.SHORT}
-
-
-def complete_run(bars: Sequence[Bar], at_ns: int) -> list[Bar]:
-    """The bars ending at `at_ns`, back to the first gap, empty bar or break in time."""
-    run: list[Bar] = []
-    for bar in reversed(bars):
-        if bar.empty:
-            break
-        if run and bar.end_ns != run[-1].start_ns:
-            break
-        if not run and bar.end_ns != at_ns:
-            break
-        run.append(bar)
-    return run[::-1]
 
 
 def as_bar(flow: FlowBar) -> Bar:
@@ -58,7 +43,7 @@ class RuleRow:
 
     def decide(self, view: DecisionView) -> TradeIdea | None:
         seen = [as_bar(b) for b in view.bars if b.gap is not GapState.MISSING]
-        idea = self.rule.decide_on_bars(complete_run(seen, view.at_ns))
+        idea = self.rule.decide_on_bars(closed_run(seen, view.at_ns))
         if idea is None:
             return None
         return TradeIdea(

@@ -22,7 +22,7 @@ from trading_research_agents.execution.regime import REGIME_KEYS, RegimeRule
 from trading_research_agents.execution.targets import Targets
 from trading_research_agents.execution.trigger import Trigger
 from trading_research_agents.execution.universe import Universe
-from trading_research_agents.strategy.core import Strategy
+from trading_research_agents.strategy.core import Rule, Strategy
 from trading_research_agents.strategy.exits import ExitRule
 from trading_research_agents.strategy.load import CoreLoadError, load_class
 from trading_research_agents.trading.canary import CanaryLimits
@@ -125,7 +125,7 @@ class RunSettings:
 
 @dataclass(frozen=True)
 class StrategyConfig:
-    strategy: Strategy
+    strategy: Strategy | Rule
     exit_rule: ExitRule
     limits: Limits
     kill_switch: Path | None
@@ -157,6 +157,17 @@ class StrategyConfig:
     regime: RegimeRule = field(default_factory=RegimeRule)
     # How far the desk's own record may lower the declared risk per trade.
     sizing: SizingRule = field(default_factory=SizingRule)
+    # A rule desk's claimed edge: the rule's mean net per trade, measured by the operator in the
+    # arena on their own costs. The cost gate weighs the round trip against it.
+    edge_bps: Decimal | None = None
+    # How many closed candles a rule is handed; enough for its longest window.
+    rule_lookback_bars: int = 200
+
+    @property
+    def rule(self) -> Rule | None:
+        """The rule `tra run` asks, when the declared core is a rule rather than a bar handler."""
+        found = self.strategy
+        return found if callable(getattr(found, "decide_on_bars", None)) else None  # type: ignore[return-value]
 
 
 def load_strategy_config(path: Path) -> StrategyConfig:
@@ -229,18 +240,21 @@ def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> S
     run_raw = _table(raw, "run")
     controls_raw = dict(raw.get("controls") or {})
     agents = _agents(raw, strategy_raw)
+    built = _build_strategy(strategy_raw, base) if agents is None else _placeholder(agents)
+    rule_desk = callable(getattr(built, "decide_on_bars", None))
     # An agent desk measures its costs from the book and states its mechanism in [agents], so the
-    # research figures a code core must declare have standard defaults here.
-    agent = agents is not None
+    # research figures a code core must declare have standard defaults here. A rule desk runs the
+    # same cycle, so it takes the same defaults.
+    agent = agents is not None or rule_desk
     if agent and "mode" not in exit_raw and "stop_frac" not in exit_raw:
         exit_raw["mode"] = "analyst"
     volatility = _volatility_exit(exit_raw)
-    if volatility is not None and agents is None:
+    if volatility is not None and not agent:
         raise ConfigError(
             f'[exit].mode = "{volatility.mode}" is placed by the agent cycle on each decision; '
             'a scripted strategy is simulated bar by bar on mode = "fixed"'
         )
-    strategy = _build_strategy(strategy_raw, base) if agents is None else _placeholder(agents)
+    strategy = built
     if "stop_frac" not in exit_raw:
         raise ConfigError(
             '[exit].stop_frac is the stop on every trade; or mode = "volatility" on an agent desk'
@@ -316,6 +330,8 @@ def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> S
     if funding_file is not None:
         funding = load_funding(_resolve(Path(str(funding_file)), base), run.settlement_interval_s)
     return StrategyConfig(
+        edge_bps=_rule_edge(strategy_raw) if rule_desk else None,
+        rule_lookback_bars=_or_int(strategy_raw, "lookback_bars", 200),
         strategy=strategy,
         exit_rule=exit_rule,
         limits=limits,
@@ -422,9 +438,25 @@ def _build_strategy(raw: dict[str, Any], base: Path | None) -> Strategy:
         instance = cls(**params)
     except (TypeError, ValueError) as exc:
         raise ConfigError(f"strategy {label!r}: {exc}") from exc
-    if not hasattr(instance, "on_bar") or not hasattr(instance, "name"):
-        raise ConfigError(f"{label!r} is not a Strategy: it needs `name` and `on_bar`")
+    core = hasattr(instance, "on_bar") or hasattr(instance, "decide_on_bars")
+    if not core or not hasattr(instance, "name"):
+        raise ConfigError(
+            f"{label!r} is not a Strategy: it needs `name` and `on_bar`, or `decide_on_bars` "
+            "for a rule"
+        )
     return instance  # type: ignore[no-any-return]
+
+
+def _rule_edge(strategy_raw: dict[str, Any]) -> Decimal:
+    if "edge_bps" not in strategy_raw:
+        raise ConfigError(
+            "[strategy].edge_bps is the rule's mean net per trade from your own `tra arena` run; "
+            "the cost gate weighs the round trip against it, and nothing here guesses it"
+        )
+    edge = _dec(strategy_raw, "edge_bps")
+    if edge <= 0:
+        raise ConfigError("[strategy].edge_bps is positive: a rule that measured no edge has none")
+    return edge
 
 
 def _resolve(file: Path, base: Path | None) -> Path:

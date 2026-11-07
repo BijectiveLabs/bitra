@@ -215,6 +215,8 @@ def _universe_notes(cfg: Any, bad: list[str]) -> list[str]:
 
 def _audit_notes(cfg: Any) -> list[str]:
     """When the auditors are asked without anyone typing the command."""
+    if getattr(cfg, "rule", None) is not None and cfg.agents is None:
+        return ["auditors: none on a rule desk, which declares no model to ask"]
     policy = cfg.audit
     if policy.idle:
         return [

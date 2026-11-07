@@ -113,7 +113,14 @@ def test_the_config_reads_volatility_mode_and_refuses_a_mixed_one() -> None:
     with pytest.raises(ConfigError, match="unknown"):
         parse_strategy_config(agent_raw(exit=exit_table(stop_frac=Decimal("0.01"), stopfrac=1)))
     code_core = agent_raw(exit=exit_table(mode="volatility"))
-    code_core["strategy"] = {"file": "strategies/trailing_zscore.py", "class": "TrailingZScore"}
+    zscore = (
+        Path(__file__).resolve().parent.parent / "examples" / "strategies" / "trailing_zscore.py"
+    )
+    code_core["strategy"] = {
+        "file": str(zscore),
+        "class": "TrailingZScore",
+        "params": {"lookback": 60, "entry_z": Decimal(2), "exit_z": Decimal("0.5")},
+    }
     with pytest.raises(ConfigError, match="placed by the agent cycle"):
         parse_strategy_config(code_core)
     with pytest.raises(ConfigError, match="is above"):

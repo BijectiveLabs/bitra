@@ -23,9 +23,12 @@ def _add_init(top: Any) -> None:
     init_cmd.add_argument("--model", help="the model for --agent")
     init_cmd.add_argument(
         "--profile",
-        choices=("default", "autonomous"),
+        choices=("default", "autonomous", "rule"),
         default="default",
-        help="autonomous lays the cycle down wired: the shelf, the gates and the ladder, live",
+        help=(
+            "autonomous lays the cycle down wired: the shelf, the gates and the ladder, live; "
+            "rule makes the example daily rule the desk's one decision, with no model"
+        ),
     )
     init_cmd.add_argument(
         "--venue",

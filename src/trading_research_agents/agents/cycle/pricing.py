@@ -106,6 +106,11 @@ def _claimed_edge(cfg: CycleConfig, placement: Placement | None) -> tuple[Decima
     if placement is not None and placement.target_named:
         take = (placement.take_frac * Decimal(10_000)).quantize(Decimal("0.01"))
         return take, "the analyst's own target, held inside the [exit] bounds"
+    if cfg.rule is not None:
+        return (
+            cfg.magnitude_bps,
+            "[strategy].edge_bps, the rule's mean net per trade the operator measured in the arena",
+        )
     return (
         cfg.magnitude_bps,
         "[agents].magnitude_bps, declared by the operator and not measured here",
