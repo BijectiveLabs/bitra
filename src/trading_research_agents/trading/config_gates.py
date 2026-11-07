@@ -260,9 +260,9 @@ def _targets(raw: dict[str, Any], exit_rule: ExitRule) -> Targets:
 
 
 def _path_floor(table: dict[str, Any]) -> Decimal | None:
-    """`[targets].min_path_ev_bps`: 0 when undeclared, `"off"` for none, otherwise the bps."""
+    """`[targets].min_path_ev_bps`: none when undeclared or `"off"`, otherwise the bps."""
     if "min_path_ev_bps" not in table:
-        return Decimal(0)
+        return None
     if str(table["min_path_ev_bps"]).strip().lower() == "off":
         return None
     return _dec(table, "min_path_ev_bps")

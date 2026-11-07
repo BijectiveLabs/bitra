@@ -57,6 +57,7 @@ def test_init_writes_a_project_and_never_overwrites(
         "sources/sentiment.toml",
         "sources/news.toml",
         "strategies/trailing_zscore.py",
+        "strategies/momentum_long.py",
         ".env.example",
         ".gitignore",
         "README.md",
@@ -341,7 +342,7 @@ def test_the_autonomous_profile_lays_the_cycle_down_wired(
     cfg = load_strategy_config(target / "strategy.toml")
     assert cfg.agents is not None and cfg.agents.role == "structure_lead"
     # The core: one cost rule live, and every layer beyond it off until the arena earns it a place.
-    assert cfg.targets.min_path_ev_bps == Decimal(0) and cfg.targets.min_edge_multiple is None
+    assert cfg.targets.min_path_ev_bps is None and cfg.targets.min_edge_multiple is None
     assert cfg.targets.min_net_bps is None and cfg.targets.max_break_even_win_rate == Decimal(1)
     assert cfg.conviction.idle and cfg.confluence.idle and not cfg.regime.setups_must_fit
     assert cfg.trigger.widen_after is None and cfg.trigger.min_move_bps == Decimal("15")

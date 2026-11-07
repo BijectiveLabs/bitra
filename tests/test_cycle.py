@@ -1660,12 +1660,13 @@ def test_the_paths_expected_value_is_the_edge_the_gates_weigh(
     assert result.verdict is not None and result.verdict.edge_certainty.value == "estimated"
 
 
-def test_the_core_rule_is_on_and_the_geometry_and_confidence_floors_are_off_by_default() -> None:
+def test_the_paths_and_the_geometry_and_confidence_floors_are_off_by_default() -> None:
     from test_config import agent_raw
     from trading_research_agents.trading.config import parse_strategy_config
 
+    # The paths are a calibrated random walk: a risk reading, not an edge, so no floor by default.
     cfg = parse_strategy_config(agent_raw())
-    assert cfg.targets.min_path_ev_bps == Decimal(0)
+    assert cfg.targets.min_path_ev_bps is None
     assert cfg.targets.max_break_even_win_rate == Decimal(1)
     assert cfg.agents is not None and cfg.agents.min_confidence == 0.0
     off = parse_strategy_config(agent_raw(targets={"min_path_ev_bps": "off"}))

@@ -53,10 +53,10 @@ class Targets:
     # round trip. Arithmetic on the trade's own levels alone, which says nothing about how often the
     # take is reached; an experiment since 0.13, so 1, off, unless declared.
     max_break_even_win_rate: Decimal = Decimal("1")
-    # The core's cost rule since 0.13: the value of the trade over the instrument's own paths at
-    # its levels, net of the round trip, in bps, must be at least this. It is the one rule that
-    # weighs how often the take comes before the stop; `"off"` turns it off.
-    min_path_ev_bps: Decimal | None = Decimal(0)
+    # An experiment: the value of the trade over the instrument's own paths at its levels, net of
+    # the round trip, in bps, must be at least this. Off unless declared, because the paths are a
+    # calibrated random walk and their value measured no edge (Labs evidence, 2026-11-06).
+    min_path_ev_bps: Decimal | None = None
 
     def __post_init__(self) -> None:
         if not Decimal(0) < self.max_break_even_win_rate <= Decimal(1):

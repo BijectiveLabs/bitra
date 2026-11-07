@@ -2,11 +2,11 @@
 
 The structure lead names a side and where it is wrong and done. Code then draws the market forward
 from its own closed candles and reads how often the take comes before the stop inside the hold.
-The reading is a number the lead never sees. Since 0.13 it is the trade's claimed edge: the cost
-gate and the targets weigh what the trade is worth over the paths, the chance of the take against
-the chance of the stop, instead of the distance to the take as if it were certain. The trade is
-refused below `[targets].min_path_ev_bps`, 0 bps net unless declared, and a reading that cannot be
-made refuses too. With the floor `"off"`, the reading is recorded and the old claim stands.
+The reading is a number the lead never sees, and a risk reading by default: how far the levels sit
+inside the market's own range over the hold. Drawn from the instrument's own candles the paths are
+a calibrated random walk, so their value is not an edge. A desk that declares
+`[targets].min_path_ev_bps` runs it as a floor, an experiment: the trade is refused below it, the
+paths' value becomes the claimed edge, and a reading that cannot be made refuses too.
 """
 
 from __future__ import annotations
