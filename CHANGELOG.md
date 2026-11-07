@@ -8,6 +8,16 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- A rule as the desk's one decision. A rule is a class in the operator's own file with `name` and
+  `decide_on_bars(bars)`: closed bars in, one idea (side, stop and take in bps, hold in bars) or
+  none out. `tra run` asks it with no model and no `[agents]` table; the arena replays it with
+  `--rows path/to/file.py:Class`, on the same bars, so replay and run share one code path.
+  `[strategy].edge_bps` is the claimed edge the cost gate weighs, taken from the operator's own
+  arena run; a rule's stop past the desk's widest stop refuses the trade. `tra check` describes a
+  rule desk as one.
+- `examples/strategies/momentum_long.py`: the arena's `momentum_long` row written as a rule, an
+  example and not a recommendation. On five years of Binance USD-M hours for BTC, ETH and SOL it
+  decided exactly as the row. `tra init --profile rule` lays down the daily desk around it.
 - `tra data klines`: hour candles with the taker split and the trade count, and the funding
   settled under them, from public data, into `data/klines/`. For arena runs of years, which the
   minute archive cannot hold in memory. Binance USD-M's candles carry the split; a venue whose
@@ -19,6 +29,10 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- `[targets].min_path_ev_bps` is off unless declared. The paths are a risk reading, recorded on
+  every cycle: drawn from the instrument's own candles they are a calibrated random walk, and over
+  16,458 readings their value told one moment from another no better than chance. A desk that
+  relied on the default floor of 0 declares `min_path_ev_bps = 0` to keep it.
 - Arena coverage counts bars of the tape (`bars`, `missing_bars`, `partial_bars`, `bar_s`)
   instead of minutes, since a tape can now be hours. A reader of `arena.json` that read
   `minutes` reads `bars`.

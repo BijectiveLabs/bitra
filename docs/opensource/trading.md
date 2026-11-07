@@ -59,9 +59,10 @@ class = "MyCore"
 lookback = 60
 ```
 
-[`examples/strategies/`](https://github.com/BijectiveLabs/bitra/blob/master/examples/strategies/) holds two cores so the runtime and the harness can be exercised end
-to end: `trailing_zscore.py` for the runtime and `pair_reversion.py` for the walk-forward
-harness. They come from the research record this project descends from, where both were
+[`examples/strategies/`](https://github.com/BijectiveLabs/bitra/blob/master/examples/strategies/) holds three cores so the runtime, the harness and the cycle can be exercised end
+to end: `trailing_zscore.py` for the runtime, `pair_reversion.py` for the walk-forward
+harness, and `momentum_long.py`, a rule `tra run` asks and `tra arena` replays
+([the cycle](/opensource/cycle#a-rule-as-the-one-decision)). They come from the research record this project descends from, where both were
 measured and closed. They are examples of the mechanism, not recommendations, and nothing
 in the package imports them. A test fails the build if a decision core appears inside the
 package.

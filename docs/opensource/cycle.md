@@ -9,10 +9,42 @@ refusal with a reason. It is the unit this project works in, and the unit an aud
 
 ```bash
 tra init my-desk --profile autonomous     # the core laid down wired, the experiments commented
+tra init my-desk --profile rule           # the example daily rule as the one decision, no model
 tra run                                   # data.toml, strategy.toml, envelope.toml and .env from the project
 tra run --instrument ETHUSDT --margin 5 --mode signals
 tra run --every 15m --cycles 12           # one cycle every fifteen minutes, on the boundary
 ```
+
+## A rule as the one decision
+
+The decision can be a rule rather than a model: a class in your own file with a `name` and
+`decide_on_bars(bars)`, which reads the decision interval's closed bars and answers with one idea
+(a side, the stop and the take in bps, the longest hold in bars) or none. No model is asked and no
+`[agents]` table is needed. Everything after the decision is the cycle every desk runs: the round
+trip priced on the book, the exits, the paths reading, the gates you declared, the risk gate and
+the venue.
+
+```toml
+[strategy]
+file = "strategies/momentum_long.py"     # an example, not a recommendation
+class = "MomentumLong"
+edge_bps = 105                           # the rule's mean net per trade from your own arena run
+lookback_bars = 200                      # closed candles the rule is handed
+
+[exit]
+mode = "analyst"
+max_stop_frac = 0.12                     # a rule's stop past this refuses the trade
+timeout_bars = 6
+```
+
+- The arena asks the same rule the same way (`--rows strategies/momentum_long.py:MomentumLong`),
+  on the same closed bars, so a replay and a run share one code path. On five years of Binance
+  USD-M hours for BTC, ETH and SOL the example decided exactly as the arena's fixed
+  `momentum_long` row.
+- `edge_bps` is required and is what the cost gate weighs the round trip against. Nothing guesses
+  it: take it from your own `tra arena` run, on your own costs.
+- The package ships no rule. `tra init --profile rule` copies the example beside your config.
+  `tra backtest`, `paper` and `live` feed a bar-by-bar strategy and refuse a rule by name.
 
 ## Running it on a schedule
 
@@ -100,9 +132,8 @@ instrument as the sources know it, a venue supplying data that is not the venue 
 priced, and an `[execution].venue` that does not match `[run].venue_key` - that last one is a
 refusal rather than a note.
 
-What it writes is the core and nothing more: data, one decision, the exits, one cost rule
-(`[targets].min_path_ev_bps`, what the trade is worth over its own paths net of the round
-trip), the risk gate and execution, with `[trigger]` deciding when a cycle is worth asking. Everything else that can refuse
+What it writes is the core and nothing more: data, one decision, the exits, the cost gate,
+the risk gate and execution, with `[trigger]` deciding when a cycle is worth asking. Everything else that can refuse
 or resize a trade is an experiment: the confluence matrix, the conviction ladder, a regime the setup
 must fit, the trigger's widening, a floor in bps beside the multiple, reviewers, the team and the
 readings. They are written commented, under "Experiments", because none has been measured against
@@ -121,8 +152,8 @@ the universe (system: one data pull each, the trigger per instrument, ordered by
   -> the round trip priced (system)
   -> the stop and the target (the lead's levels, held in your [exit] bounds)
   -> paths               (system: how often the instrument's own paths reach the take before the
-                          stop at these levels; the trade's claimed edge, refused below
-                          [targets].min_path_ev_bps, 0 bps net by default)
+                          stop at these levels; recorded as a risk reading, and a floor only
+                          when [targets].min_path_ev_bps is declared)
   -> reviewers          (when configured: pro and contra apart, then neutral judges both)
   -> confluence matrix   (system: declared states and votes)   -> whether to trade at all
   -> conviction          (system: the same voices, weighted)    -> how much the desk wants on
@@ -830,7 +861,7 @@ What the desk is trying to do, in numbers, checked before there is an intent:
 
 ```toml
 [targets]
-min_path_ev_bps = 0              # the core: worth at least this over its own paths, net
+min_path_ev_bps = 0              # an experiment: worth at least this over its own paths
 min_net_bps = 5                  # an experiment: what must be left of the edge after costs
 min_edge_multiple = 2.0          # an experiment: the edge, as a multiple of the round trip
 min_reward_risk = 1.5            # take profit against stop, both from [exit]
@@ -838,10 +869,11 @@ max_research_bps = 25            # model spend since the last intent, against th
 max_round_trips_per_day = 6      # intents already written today for this instrument
 ```
 
-`min_path_ev_bps` is the core's rule: the trade's value over the instrument's own paths at its
-levels, the chance of the take against the chance of the stop, net of the round trip. Since 0.13
-that value is also the edge the other rules read; before, it was the distance to the take, as if
-every trade reached it. `min_edge_multiple` and `min_net_bps` are experiments on top of it.
+`min_path_ev_bps` is an experiment, off unless declared: the trade's value over the
+instrument's own paths at its levels, net of the round trip. Declared, that value becomes the edge
+the other rules read. It is off because the paths are drawn from the instrument's own candles, a
+calibrated random walk, and over 16,458 readings their value told one moment from another no
+better than chance. `min_edge_multiple` and `min_net_bps` are experiments too.
 `min_edge_multiple` is the difference between trading
 and collecting tolls for a venue. A round trip costing 18 basis points against a claimed edge of 20
 is not a two basis point trade: the fees are certain, the edge is a probability, and slippage only
@@ -1003,12 +1035,11 @@ money`): the best outcome the trade can have would still lose.
 - **A floor and a ceiling.** On a very quiet minute the measured stop can sit inside the spread and
   the fees; on a violent one it can be wider than anyone meant to risk. The bounds are yours, and
   the record says when one of them held.
-- **The paths' value is the claim, not the target.** A target alone would count every trade as a
-  winner. Since 0.13 the edge the cost gate and the targets weigh is the trade's value over the
-  instrument's own paths at its levels: the take times the chance of reaching it first, less the
-  stop times the chance of the stop first, plus the paths that reach neither. With
-  `[targets].min_path_ev_bps = "off"`, the old claim stands: the analyst's own target, or
-  `[agents].magnitude_bps` without one. The record says which one was used (`edge_source`).
+- **The claim is what the operator measured, or the analyst's target.** A rule desk claims
+  `[strategy].edge_bps`, the rule's mean net per trade from the operator's own arena run. An
+  agent desk claims the analyst's own target when one was named, or `[agents].magnitude_bps`.
+  Only a desk that declares `[targets].min_path_ev_bps` claims the paths' value instead. The
+  record says which one was used (`edge_source`).
 - **No guessed stop.** When the candles cannot give a range, the trade is refused. Falling back to
   some default would put a stop on the venue that nothing measured.
 - **One mode at a time.** A table holding both `stop_frac` and `stop_atr` would be read by a person
@@ -1053,12 +1084,12 @@ carries.
 
 Every cycle records the reading under `paths` in `cycle.json` and prints it beside the exits,
 with its value net of the round trip: `take first x take distance - stop first x stop distance +
-neither x the mean move of those paths - round trip`. The lead never sees it. It is the trade's
-claimed edge, and `[targets].min_path_ev_bps` (0 by default) refuses a trade whose value is below
-the floor, and refuses one whose reading could not be made (too few candles, a market that did
-not move) rather than passing it unread. `"off"` records the reading and refuses nothing.
-The paths' odds are not calibrated on recorded outcomes yet; `tra hindsight` and the arena
-measure whether they separate good trades from bad. The `paths` row of the arena reads the same way, so whether the reading separates good
+neither x the mean move of those paths - round trip`. The lead never sees it. It is a risk
+reading by default: the odds are calibrated on average (within 1.5 points over 16,458 readings),
+but drawn from the instrument's own candles they carry no direction, so their value is not an
+edge. A desk that declares `[targets].min_path_ev_bps` runs it as a floor, an experiment: the
+reading becomes the claimed edge, a trade below the floor is refused, and so is one whose reading
+could not be made. The `paths` row of the arena reads the same way, so whether the reading separates good
 trades from bad is measured before a desk leans on it.
 
 The reference is Kronos (arXiv 2508.02739), a model of candles that tested well: the candle as the

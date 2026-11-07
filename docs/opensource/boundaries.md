@@ -37,7 +37,7 @@ where the software measures it instead of assuming it:
 |---|---|---|
 | A cited figure supports the claim made with it | the citation check confirms the figure was given and its value is right; whether it means what the claim says is a judgement, and a deterministic rule here would misread a reversion thesis as a contradiction | the judged reviewers argue for and against apart and a neutral judge weighs both; `tra hindsight` replays every decision against its reverse |
 | A high confidence or conviction means a better trade | neither is a calibrated probability | `tra hindsight`: rank correlation and confidence bands against outcomes |
-| The claimed edge is the expected move | it is the value over the instrument's own paths at the trade's levels, net of the round trip; the paths' odds are not yet calibrated on recorded outcomes | `[sizing]`: Kelly from the desk's own finished trades refuses entries when the record shows no edge |
+| The claimed edge is the expected move | it is what the operator declared: a rule's mean net per trade from their own arena run, or an agent desk's target or magnitude; nothing measures it live until trades finish | `[sizing]`: Kelly from the desk's own finished trades refuses entries when the record shows no edge |
 | The thresholds you chose hold out of sample | regime lines, weights, exit bounds and targets are parameters and can be fitted to the past | the research chain's walk-forward harness for scripted cores; a sensitivity sweep for agent desks is not built yet |
 | The prices the gate used match the fills | the gate prices on the book at the decision | `tra sizing`: entry slippage against the priced touch and fees against the priced schedule, per finished trade |
 

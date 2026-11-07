@@ -144,7 +144,7 @@ will do in your project, defaults included.
 | `[controls].max_position` | none | a cap in units; the risk per trade already bounds every size |
 | `[controls].max_drawdown_bps` | none (`tra init` writes `1000`) | no new entry once equity is this far below its peak |
 | `[exit]` | the analyst's stop and target, held inside bounds | see [where the stop and take profit sit](/opensource/cycle#where-the-stop-and-the-take-profit-sit) |
-| `[targets].min_path_ev_bps` | `0` | refuse a trade worth less than this over the instrument's own paths at its levels, net of the round trip; `"off"` turns it off |
+| `[targets].min_path_ev_bps` | off | an experiment: refuse a trade worth less than this over the instrument's own paths at its levels, net of the round trip |
 | `[exit].timeout_bars` | four hours of bars: `240` at 1m, `16` at 15m | a position closes by time after this many bars; a measured stop is sized over the same span |
 | `[run].bar_interval_s` | `60`; `tra init --agent` writes `900` with 1h and 4h as context | the decision timeframe; the round trip costs the same on any of them, so a longer one leaves more of the move |
 | `[run].settlement_interval_s` | `28800` | the funding clock used only when the venue does not report an instrument's own |
