@@ -4,7 +4,7 @@ description: "The live tier: real orders at the canary tier through ccxt, on the
 
 # The live tier
 
-Real orders exist in this release at one tier, canary (T3), behind a security review that runs as tests rather than sitting in a document. Production (T4) is not
+Real orders exist in this release at one tier, canary (T2), behind a security review that runs as tests rather than sitting in a document. Production (T3) is not
 reachable; the ladder refuses it, and a canary session is what produces the evidence that will
 one day argue for it.
 

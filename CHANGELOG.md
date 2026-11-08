@@ -37,6 +37,10 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- The promotion ladder has one paper tier: research, paper, canary, production (T0 to T3). The
+  T2 shadow tier was the same paper run with its intents kept, and it is gone. A `ladder.json`
+  written before is read on the new tiers (a desk at canary stays at canary) and saved with
+  `schema = 2`; one promotion fewer reaches canary.
 - `tra trade shadow` is `tra trade paper`, the name `tra paper` already had, and the event guard's
   modes are `paper` and `hold`. One word for a run on live data that sends no order.
 - The judge's kinds of event read a regulatory headline in its two directions, `restriction`

@@ -1,5 +1,5 @@
 ---
-description: "The trading agent runtime: replay, paper, shadow and canary tiers, the controls in front of every order, and how closed trades feed back into research."
+description: "The trading agent runtime: replay, paper and canary tiers, the controls in front of every order, and how closed trades feed back into research."
 ---
 
 # The trading agent
@@ -23,10 +23,9 @@ path: not to decide, not to assess risk, not to narrate an incident mid-run. The
 | Tier | Feed | Venue | Command |
 |---|---|---|---|
 | T0 research | recorded (Parquet from `tra data audit`) | simulated | `tra backtest` (`trade replay`) |
-| T1 paper | live public trades | simulated | `tra paper` (`trade paper`) |
-| T2 shadow | live public trades | simulated, intents recorded, zero orders | `tra paper` (`trade paper`) |
-| T3 canary | live public trades | any ccxt venue, hard caps | `tra live` (`trade live`), see [The live tier](/opensource/live) |
-| T4 production | | | **not in this release**; the ladder refuses it |
+| T1 paper | live public trades | simulated, intents recorded, zero orders | `tra paper` (`trade paper`) |
+| T2 canary | live public trades | any ccxt venue, hard caps | `tra live` (`trade live`), see [The live tier](/opensource/live) |
+| T3 production | | | **not in this release**; the ladder refuses it |
 
 The common spellings are aliases of the tiers. Real orders exist only at canary, through a
 plugin behind a security review that runs as tests ([The live tier](/opensource/live)); the research this

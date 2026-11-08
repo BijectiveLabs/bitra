@@ -59,7 +59,7 @@ this page makes on your own data.
 - [How it is built](#how-it-is-built)
 - [What we measured, and what it changed](#what-we-measured-and-what-it-changed)
 - [Get started](#get-started)
-- [What you see, in order](#what-you-see-in-order)
+- [The console](#the-console)
 - [How one cycle decides](#how-one-cycle-decides)
 - [Venues](#venues)
 - [Models and providers](#models-and-providers)
@@ -238,71 +238,15 @@ its defaults are in [The cycle](https://docs.bijectivelabs.dev/opensource/cycle)
 
 Working on the code itself? See [Development](#development).
 
-## What you see, in order
+## The console
 
-**1. The console.** Run `tra` inside your desk and it opens the console: what is ready, what isn't,
-and the next command to run. Under it is a prompt that takes every command and draws it right
-there. Arrow keys go back through what you typed, tab completes, `help` lists the commands and
-`exit` leaves. For scripts and cron, `tra -c "run --now"` runs one command and exits.
+Run `tra` inside your desk and it opens the console: what is ready, what isn't, and the next
+command to run. Under it is a prompt that takes every command and draws it right there. Arrow keys
+go back through what you typed, tab completes, `help` lists the commands and `exit` leaves. For
+scripts and cron, `tra -c "run --now"` runs one command and exits, and `--plain` or `--json` gives
+text or machine-readable output instead of panels.
 
 ![the console](assets/console.png)
-
-**2. The pass over your instruments.** Type `run --every 15m` and the desk first refreshes any data
-series that are due, one line each. Then it looks at every instrument on your list, one data pull
-apiece, and measures it. The screen steps through them live:
-
-![the screen pass](assets/pair-screener.png)
-
-**3. One cycle per instrument it takes.** The system found the candidates, measured them and
-ordered them by the room their own paths expect over the spread; no model chooses. The instruments
-taken get a full cycle. The terminal shows the whole pipeline from the
-start and updates it as each step begins and ends. Steps that run at the same time spin at the same
-time, each with its own clock, and the line underneath says who is working right now:
-
-![a scheduled desk at work](assets/trading-agents.png)
-
-**4. The result.** When the cycle finishes, the table gives way to the pass over the universe: what the system took,
-what waited and what was held, and why. Then the cycle itself: what the analyst proposed and from
-which figures, and every refusal with the number behind it. Here an ETH short in a ranging market
-stopped at its exits: with its own stop and target and the round trip, more than half of trades
-like it would have had to win just to break even (the break-even bound of the time, an
-experiment since 0.13):
-
-![one cycle](assets/cycle.png)
-
-Then the data the cycle used and how old it was, the series the readings read, the stop and
-take profit it would have placed, and which agents answered. A cycle that goes further adds what
-each reviewer argued, how conviction weighed the voices, the risk at the stop and the targets:
-
-![data, series, exits and agents](assets/one-cycle.png)
-
-**5. Between cycles.** The desk says when the next pass is, on the clock and in minutes, for
-example `next pass at 14:30:00 UTC, in 10m 57s`, and counts down to it. An auditor woken by an alarm
-gets a spinner of its own.
-
-The same cycle as plain text (`--plain`, a pipe or a log): the figures of a real run on live data
-(2026-09-29), printed by this release with the template's conviction weights, shortened:
-
-```
-cycle 2026-09-29T02-59-16Z BTCUSDT: 5.344s of agents, 15.042s of reviewers
-  funding        ccxt:bybit         age 4.267s
-  ohlcv          ccxt:bybit         age 32.746s
-  orderbook      ccxt:bybit         age 7.544s
-macro      read by the system: bullish (risk-on)
-sentiment  read by the system: bullish (positive)
-lead:      long on range_reversion at 0.65 over 5 bars: the close is stretched low in the window
-read: zscore=-0.587, vwap_gap_bps=-3.99, ret_1_bps=1.59
-reviewer contra    oppose on 2 cited figure(s)
-reviewer pro       support on 3 cited figure(s)
-conviction: 0.800 of 1.0 (macro 1.0 of 1.0, sentiment 0.5 of 0.5, structure_lead 1.300 of 2.0)
-risk: 8.29 bps of equity at the stop against the declared 50 bps, size 0.010
-cost: 12.87 bps round trip, 2.00 of it estimated
-gate: 25.0000 bps claimed clears 12.8723 bps cost plus 0.0000 bps margin
-  refused targets: the claimed edge is 1.94x the round trip and the desk declared 2.0x; the cost is certain and the edge is not
-```
-
-That trade was refused. It cleared the cost gate and still died, because this desk asks for an edge
-of twice the cost and got 1.94 times. A refusal names the figure behind it, every time.
 
 ## How one cycle decides
 
