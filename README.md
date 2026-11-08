@@ -4,7 +4,7 @@
 
 <h1 align="center">TRA</h1>
 
-<p align="center"><strong>Autonomous trading agents with deterministic execution. The agents propose; the system decides.</strong></p>
+<p align="center"><strong>A crypto trading desk with deterministic execution. A rule or a model proposes; the system decides.</strong></p>
 
 <!-- mcp-name: io.github.BijectiveLabs/bitra -->
 
@@ -38,25 +38,19 @@ TRA (trading research agents) is published as `bitra` on PyPI and runs as `tra`.
 0.10.1 the package was called `trading-research-agents`, and the same package is still
 published under that name.
 
-Language models are good at reading a market and saying what they think. They are bad at
-arithmetic, they don't know what a trade costs, and they will happily overrule a limit you set.
-This project uses them for the first part only. The system itself, fixed rules with no model
-involved, fetches the data and works out every figure. The agents read those figures and give an
-opinion. Then the system prices the trade, applies your limits, sizes it, and either writes it
-down or sends one order with the stop attached. Every decision and every refusal is kept on disk
-with its reason, so you can check afterwards what happened and why.
+TRA is a crypto trading desk you run yourself. It reads the market, takes one decision, prices the
+round trip, holds the decision against limits you declare, and either writes it down or sends one
+order with its stop attached. The decision can be a rule in your own file, with no model in the
+loop, or a language model that proposes. Either way the system, fixed code with no model involved,
+computes every figure, applies every limit, sizes the trade and sends the order. Every decision and
+every refusal is kept on disk with its reason, so you can check afterwards what happened and why.
 
-It's an early release, so expect settings to change between versions. What works
-today: linear perpetuals, spot pairs (stock perpetuals and tokenized stocks among them) and
-prediction market outcomes through one order path, a universe of perpetuals found and measured by
-the system and ordered by the room its own paths expect, the full autonomous cycle on live data, a structure lead that proposes, three readings of
-your own series computed by the system, up to three reviewers, stops and
-targets the lead names inside bounds you set, the gates that decide, sizing from your own rules,
-real orders on a venue's practice environment behind a mandate you sign and a signed risk gate,
-and two auditors that read the records. Under it, a market data
-plane records order flow, the order book, liquidations, derivatives and news minute by minute into a
-verified archive, and an arena replays any policy over that archive beside baselines built to be
-beaten, net of the desk's own costs.
+It is experimental. Settings change between versions, it has not been run with real capital by us,
+and the package ships no strategy that makes money. What it does give you: one order path to every
+exchange ccxt reaches, run end to end on six of them; an arena that replays any rule over years of
+data net of your own costs, beside buy-and-hold and a random null; a typed judge that reads the
+day's headlines and can hold an entry on an adverse event; and the records to check every claim
+this page makes on your own data.
 
 ---
 
@@ -64,6 +58,7 @@ beaten, net of the desk's own costs.
 
 - [What it solves](#what-it-solves)
 - [How it is built](#how-it-is-built)
+- [What we measured, and what it changed](#what-we-measured-and-what-it-changed)
 - [Get started](#get-started)
 - [What you see, in order](#what-you-see-in-order)
 - [How one cycle decides](#how-one-cycle-decides)
@@ -79,90 +74,84 @@ beaten, net of the desk's own costs.
 
 ## What it solves
 
-| The usual problem with trading agents | What happens here |
+| The usual problem with trading software that decides | What happens here |
 |---|---|
-| The model invents or miscalculates a number | Models never compute. Every figure comes from the system, and a figure a model cites is checked against its brief, value included. |
+| A model invents or miscalculates a number | Models never compute. Every figure comes from the system, and a figure a model cites is checked against its brief, value included. |
 | Nobody knows what a trade cost until it's done | The round trip (fees, spread, impact, funding, slippage) is priced before an order exists, and a trade whose claimed edge doesn't clear it is refused. |
-| The agent sizes its own position | Size comes from your conviction ladder and your risk limit. No model can make a trade bigger. |
+| The claimed edge is whatever someone hoped | A rule desk claims the mean net per trade you measured in the arena, on your own costs; nothing guesses it. |
 | A model "decides" to ignore your settings | Your declared thresholds decide. A model's opinion is recorded beside them, never instead of them. |
 | Something went wrong and there is no trace | Each cycle keeps its snapshot, briefs, answers, the intent and what the venue said. Nothing is rewritten. |
+| A timeout is read as "the order failed" | An order with no answer is unknown and read back by its client order id; it is never sent twice. |
 | A crash leaves a position with no stop | The stop and take profit go to the venue with the entry, or right after the fill where the venue takes them no other way, so they survive this process dying. |
-| Text from a feed tells the model what to do | The model that proposes a direction reads numbers the system computed; outside text reaches no model at all, and no model can send an order or reach a key. |
-| A strategy looks good on a lucky sample | The arena replays it over the recorded market beside buy-and-hold, momentum, its own fade and a seeded random null, net of costs, and says "sample too small" until the sample is not. |
+| Text from a feed tells a model what to do | Headlines are read only by the typed judge, as closed questions, after a check for instructions addressed to a machine; no model can send an order or reach a key. |
+| A strategy looks good on a lucky sample | The arena replays it over years of recorded market beside buy-and-hold, momentum, its own fade and a seeded random null, net of costs, and says "sample too small" until the sample is not. |
 
 None of these is hypothetical. [Why it is built this way](https://docs.bijectivelabs.dev/opensource/why)
 lists the documented failures behind each one, with their sources.
 
 ## How it is built
 
-Three kinds of work, kept apart because they fail differently. The system is in control; Jev, TypeSafe's
-typed judge, is the fast System One model that perceives and verifies; the reasoning seats deliberate only
-inside what the system computed, and their answers are checked before anything counts.
+Three kinds of work, kept apart because they fail differently.
 
-| | Does | Never does | Today |
-|---|---|---|---|
-| **The system** | records the market, computes every figure, reads your own series against your lines (the macro, on-chain and sentiment readings), prices the round trip, applies your limits, sizes, sends one order with its exits, settles every replayed idea | guess, or carry a stale value forward as current | everything around the model call |
-| **A reasoning model** | reads figures the system computed and proposes a direction, a setup and its levels, citing the figures it used | compute a number, size a trade, touch an order or a key, loosen a limit | the structure lead, with a blind confirmer and a flow specialist when you declare the team; reviewers when you declare them |
-| **Jev, the typed judge** | turns dated text into typed events with probabilities, screens text for instructions to a machine, checks each structure reason against the regime the system measured, and from 0.13 checks every claim against its brief | decide a direction from numbers, size, or reach an order | Jev through the TypeSafe adapter, behind a vendor-neutral port (`[judge]`): the archived headlines into text features, and the deciding team's reasons checked before a trade |
+| | Does | Never does |
+|---|---|---|
+| **The system** | records the market, computes every figure, prices the round trip, applies your limits, sizes, signs what the risk gate approves, sends one order with its exits, settles every replayed idea | guess, or carry a stale value forward as current |
+| **The decision** | a rule in your file (closed bars in, one idea or none out), or a language model that proposes a direction and its levels, citing the figures it used | compute a number, size a trade, touch an order or a key, loosen a limit |
+| **Jev, the typed judge** | reads each headline as closed questions and returns a probability for each answer: which kind of event, whether it concerns this asset, whether it speaks to a machine | decide a direction from numbers, compare dates, do arithmetic, size, or reach an order |
 
 ```mermaid
 flowchart LR
-    subgraph venues["venues, through ccxt"]
-        direction TB
-        streams["live streams<br/>trades, order book, liquidations"]
-        rest["REST history<br/>funding, open interest, mark, index, long/short"]
-        archives["daily trade archives"]
-    end
-    subgraph plane["market data plane: the system"]
-        direction TB
-        record["tra record<br/>one bar builder, hour parts, gap marks"]
-        bars["tra data bars<br/>the same builder over the archive"]
-        store[("verified archive<br/>Parquet, sha256 per file<br/>flow, book, derivatives, text")]
-    end
-    subgraph decide["decision: the system around the deciding team"]
-        direction TB
-        judge["Jev, the typed judge<br/>headlines into typed events<br/>reasons checked against the regime"]
-        features["features<br/>41 figures known at the bar's close"]
-        readings["readings: macro, on-chain, sentiment<br/>your series against your lines, no model"]
-        analyst["deciding team<br/>lead, blind confirmer, flow specialist<br/>propose, cite figures"]
-        gates["gates<br/>cost, exits, paths, confluence, conviction"]
-    end
-    shelf[("sources/<br/>dated series you declare")]
-    subgraph act["risk and execution: the system"]
-        direction TB
-        risk["risk gate, signed<br/>caps, loss at the stop, switches,<br/>daily loss, drawdown"]
-        order["one order<br/>stop and take profit attached"]
-    end
-    arena["tra arena<br/>policies replayed, settled net of costs,<br/>beside baselines and a random null"]
-    streams --> record --> store
-    archives --> bars --> store
-    rest --> record
-    rest --> bars
-    store --> features
-    store --> judge --> features
-    analyst --> judge --> gates
-    shelf --> readings --> gates
-    features --> analyst --> gates --> risk --> order --> venues
-    store --> arena
-    features --> arena
+    market["market data<br/>candles, book, funding,<br/>open interest, news"]
+    decision["the decision<br/>a rule in your file,<br/>or a model that proposes"]
+    guard["event guard<br/>Jev reads the headlines,<br/>the system weighs them"]
+    cost["cost and exits<br/>round trip priced,<br/>stop and take placed"]
+    risk["risk gate<br/>signs or refuses"]
+    venue["venue<br/>one order, exits attached"]
+    record[("the record<br/>every step, every refusal")]
+    arena["tra arena<br/>the same rule replayed<br/>net of costs, beside a null"]
+    market --> decision --> guard --> cost --> risk --> venue
+    decision -.-> record
+    guard -.-> record
+    risk -.-> record
+    market --> arena
 ```
 
-The shipped cycle reads its own live snapshot; the archive feeds the arena today and the decision
-path as the work below lands. Where it is going, in the order it is being built:
+A rule is asked the same way by `tra run` and by `tra arena`: the closed bars before the decision,
+cut back to the last unbroken run. So the rule you replay is the rule you run, line for line. The
+package ships no rule of its own; `examples/strategies/momentum_long.py` is an example, and a test
+fails the build if a decision core appears inside the package.
 
-| Release | Adds |
-|---|---|
-| 0.11, in 0.12.0 | the market data plane (`tra data bars`, `tra record`), the feature library, the arena; the macro, on-chain and sentiment analysts become readings that ask no model |
-| 0.12, in 0.12.0 | the lead's levels read against the instrument's own paths, a forecast and a calibrator fitted on recorded outcomes, risk as its own signed gate; Jev for dated text and the team's reasons |
-| 0.13 | the core as the default desk, with every other layer an experiment kept only if it beats the core out of sample; the arena prices each market at its own costs and replays the desk's one-market-per-pass selection; the model's decisions proven forward, on paper or demo, after its knowledge cutoff |
+The typed judge is kept to the job it is built for, and the system carries what its vendor lists as
+its weak points: recent headlines are chosen by when the system first saw them, so the judge never
+compares dates; each choice is asked in two orders, so a first-option bias shows as disagreement
+and the answer is dropped; one headline and its publisher go in each request and nothing else; and
+the weight of an event and its comparison with your threshold are arithmetic, in code.
 
-Each step is measured in the arena before it is trusted, and the four guarantees at the end of this
-page hold through all of it.
+## What we measured, and what it changed
+
+The design changed after we measured our own first version. Each study is in the repository's
+research notes with its script, so it can be run again.
+
+| Question | What we found | What changed |
+|---|---|---|
+| How much forecasting skill does a round trip of 15 bps demand? | At a four-hour hold, a forecast's correlation with the next move has to be 0.12 to 0.20 just to break even on BTC, ETH and SOL; at a daily hold, 0.04 to 0.06 | the example desk decides once a day and holds up to six days |
+| Is there information in the last move at short horizons? | Indistinguishable from zero at 1 to 12 hours on all three, even with maker fees | shorter horizons stay available as experiments, measured in the arena |
+| Are the simulated price paths an edge? | Calibrated on average (within 1.5 points over 16,458 readings), and no better than chance at telling one moment from another | the paths are a risk reading, not a gate (`[targets].min_path_ev_bps` is off unless declared) |
+| Does a fixed rule separate from chance at any horizon? | Only at the daily horizon, for a long-only momentum rule fixed before the run, on five years of hourly data | the rule desk (`tra init --profile rule`) is the starting point; models are measured against it |
+
+These are replays, partly on the period the horizon was chosen on, three instruments and one cost
+model. They are reasons for the design, not a promise about the future. Replay them on your data:
+
+```bash
+for coin in BTCUSDT ETHUSDT SOLUSDT; do tra data klines $coin 2021-01-01 --to 2026-10-31; done
+tra arena --tape klines --venue binanceusdm --channel bybit/taker-taker \
+  --instruments BTCUSDT,ETHUSDT,SOLUSDT --from 2022-01-01 --to 2026-10-31 --interval 1d --context-interval 7d --hold-bars 6 \
+  --rows buy_hold,momentum_long,random --spread-bps 2 --slippage-bps 2
+```
 
 ## Get started
 
-A few minutes and one model key. Every setting has a working default, so a new desk runs before you
-change anything; the table under step 6 says what those defaults are.
+A few minutes. The rule desk needs no model key.
 
 **1. Install.** You need Python 3.11 or newer. [uv](https://docs.astral.sh/uv/) is the quickest way:
 
@@ -179,14 +168,14 @@ uv tool upgrade bitra      # or: pip install -U 'bitra[ccxt,openai,anthropic,goo
 tra --version
 ```
 
-That is the release, and the version to run. The `develop` branch on GitHub is where the next
-one is built; a commit there is not a release ([more](#where-it-is-going)).
+That is the release. The `develop` branch is where the next one is built; the rule desk and the
+event guard below are on `develop` and not yet in a release ([more](#where-it-is-going)).
 
-**2. Make a desk.** A desk is a folder holding your settings and everything the agents decide. Name
-the provider you have a key for:
+**2. Make a desk.** A desk is a folder holding your settings and everything it decides.
 
 ```bash
-tra init my-desk --profile autonomous --agent groq
+tra init my-desk --profile rule                     # the example daily rule, no model
+tra init my-desk --profile autonomous --agent groq  # a language model as the decision, an experiment
 cd my-desk
 ```
 
@@ -199,36 +188,24 @@ cd my-desk
 
 Add `--venue okx` (or any ccxt id) to trade somewhere other than Bybit.
 
-**3. Add your key.** Copy the example file and put your key in it. Every command reads the `.env`
-next to `strategy.toml` on its own.
-
-```bash
-cp .env.example .env        # then set GROQ_API_KEY=... in .env
-```
+**3. Declare what you measured, or add your key.** A rule desk refuses to load until
+`[strategy].edge_bps` holds the rule's mean net per trade from your own `tra arena` run. An agent
+desk needs its model key: `cp .env.example .env`, then set it. Every command reads the `.env` next to
+`strategy.toml` on its own.
 
 **4. Check.** `tra check` reads every setting against the others and names the one thing to fix
-next. A desk that is ready ends with:
-
-```
-ok    provider groq: ready
-ready to run `tra run`
-```
+next. A desk that is ready ends with `ready to run `tra run``.
 
 **5. Run.** `tra run` decides once on live market data, in the sandbox: nothing leaves your
-machine. `tra run --every 15m` keeps deciding, once per fifteen-minute bar, on the clock. Or type
-`tra` on its own for the console, which takes the same commands.
-
-```bash
-tra run
-tra run --every 15m
-```
+machine. `tra run --every 1d` keeps deciding, once a day at the daily close. Or type `tra` on its
+own for the console, which takes the same commands.
 
 **6. When you want real orders.** Start on the exchange's demo or testnet API. Make the desk for
 that exchange from the start, and the rest is three commands:
 
 ```bash
-tra init my-desk --profile autonomous --agent groq --venue bitget
-cd my-desk                       # put the exchange's keys in .env beside your model key
+tra init my-desk --profile rule --venue bitget
+cd my-desk                       # put the exchange's keys in .env
 tra keys --probe --prepare       # reads the account; on a demo or testnet sets one-way mode
 tra mandate --sign "Your Name" --venue-mode
 tra check
@@ -240,20 +217,24 @@ How to make the key on each exchange is in
 [Exchange accounts and keys](https://docs.bijectivelabs.dev/opensource/exchange-keys), and
 [Toward real orders](#toward-real-orders) has the whole path.
 
-**What a new desk does before you change anything**
+**What a rule desk does before you change anything**
 
 | | Default | Where to change it |
 |---|---|---|
 | Orders | none: the sandbox writes each decision down and sends nothing | `[execution].mode` |
 | What it trades | BTCUSDT on Bybit, as a taker | `[run].instrument`, `[universe]`, `--venue` |
-| Timeframe | decides on 15-minute bars, reads 1h and 4h as context | `[run].bar_interval_s`, `context_intervals` |
-| Strategy | none fixed: the analyst picks the setup the measured regime supports, or stays flat | `[agents].mechanism` |
-| Stop and target | the analyst names them; the stop is held between 0.2% and 3% and never inside one ATR, the target brought in past 4x the stop | `[exit]` |
+| Decision | `strategies/momentum_long.py`, once a day at 00:00 UTC | `[strategy]`, `[run].bar_interval_s` |
+| Claimed edge | none until you declare it from your arena run | `[strategy].edge_bps` |
+| Stop and target | the rule names them; a stop wider than 12% refuses the trade | `[exit].max_stop_frac` |
+| Time limit | a position closes after six daily bars | `[exit].timeout_bars` |
 | Risk per trade | 0.5% of equity lost at the stop, whatever the stop's distance | `[controls].max_risk_per_trade_bps` |
 | Bad days | no new entry after a 3% loss on the day or a 10% fall from the peak | `[controls]` |
-| Time limit | a position closes after 4 hours | `[exit].timeout_bars` |
-| Trades worth taking | worth more than nothing over the instrument's own paths at the trade's levels, net of the round trip; at most 6 a day | `[targets]` |
-| Oversight | the risk gate on every new order; two auditors that report | `[controls]`, `[audit]` |
+| Event guard | off; once declared, `shadow` records what it would hold and holds nothing | `[event_guard]`, `[judge]` in `data.toml` |
+| Oversight | the risk gate on every new order | `[controls]` |
+
+An agent desk (`--profile autonomous`) decides on 15-minute bars by default, reads 1h and 4h as
+context, lets the analyst name its stop between 0.2% and 3%, and closes a position after four hours;
+its defaults are in [The cycle](https://docs.bijectivelabs.dev/opensource/cycle).
 
 Working on the code itself? See [Development](#development).
 
@@ -327,29 +308,31 @@ of twice the cost and got 1.94 times. A refusal names the figure behind it, ever
 
 ```mermaid
 flowchart TD
-    find[["the system finds the universe and measures each instrument<br/>one data pull each; every value carries its source and age"]] --> wake
-    wake{"trigger<br/>has anything moved since the last look?"}
-    wake -- "no" --> held["held: one data pull, no tokens spent"]
-    wake -- "yes" --> pick["the system orders what it admitted<br/>the room its own paths expect over the spread"]
-    pick -- "none taken" --> held
-    pick -- "taken" --> briefs
-    briefs["the system writes the briefs<br/>each role sees only the figures its job needs"] --> readers
-    readers["readings, by the system, no model<br/>macro, on-chain, sentiment against your lines"] --> tech
-    tech["structure lead, alone or with its team<br/>a blind confirmer that must agree, a flow specialist<br/>a direction, a confidence, a horizon"] --> price["the system prices the round trip<br/>fee, spread, impact, funding, slippage"]
-    price --> exits{"the stop and the target<br/>the analyst's levels, held inside your bounds<br/>worth more than its cost over its own paths?"}
-    exits -- "no" --> refused
-    exits -- "yes" --> round2["reviewers, as many as you declare<br/>a claim that cites no figure is thrown away"]
-    round2 --> matrix{"confluence<br/>do your declared states agree with the direction?"}
-    matrix -- "no" --> refused["a refusal that names its figure"]
-    matrix -- "yes" --> size["conviction<br/>how much, from your ladder"]
-    size --> risk{"risk per trade<br/>what does it lose at the stop?"}
-    risk --> gate{"cost gate and targets<br/>does the edge clear the cost, by your margin?"}
-    gate -- "no" --> refused
-    gate -- "yes" --> intent["the intent, written into the cycle"]
+    snap["snapshot<br/>every value with its source and age"] --> wake{"trigger, when declared<br/>has anything moved?"}
+    wake -- "no" --> held["held: one data pull, nothing asked"]
+    wake -- "yes" --> who{"the decision"}
+    who -- "rule desk" --> rule["your rule<br/>closed bars in, one idea or none"]
+    who -- "agent desk" --> lead["structure lead, with its team<br/>a direction, a setup, levels, cited figures"]
+    rule --> guard{"event guard, when declared<br/>an adverse event about this asset?"}
+    guard -- "hold mode, yes" --> refused["a refusal that names its figure"]
+    guard -- "no, or shadow" --> price
+    lead --> price["the round trip priced<br/>fee, spread, impact, funding, slippage"]
+    price --> exits["the stop and the target<br/>inside your [exit] bounds"]
+    exits --> gates{"the gates you declared<br/>cost, targets, desk exposure"}
+    gates -- "no" --> refused
+    gates -- "yes" --> riskgate{"risk gate<br/>loss at the stop, caps, switches"}
+    riskgate -- "no" --> refused
+    riskgate -- "signed" --> intent["the intent, written before anything is sent"]
     intent --> venue["venue mode only<br/>one order, the stop and take profit attached"]
 ```
 
-Who does what:
+A rule desk asks no model: the rule, the event guard when you declare one, and then the same steps
+every desk runs. An agent desk adds the structure lead and, when you declare them, its team and its
+reviewers; each of those is an experiment until the arena or the forward record shows it doing
+better than the rule alone.
+
+**On an agent desk,** who does what:
+
 
 | Role | Reads | Answers | Can never |
 |---|---|---|---|
@@ -496,11 +479,11 @@ on the way, each with its own cost model, exit rules and tests. Until a market t
 mode checks the type on every order and refuses it, because a market the system cannot yet price
 and protect is not one it should send to. [Boundaries](https://docs.bijectivelabs.dev/opensource/boundaries) says what each one takes.
 
-An agent desk goes through three steps, and you can stay at any of them as long as you like:
+A desk goes through three steps, and you can stay at any of them as long as you like:
 
 | Step | How | What happens | Needs |
 |---|---|---|---|
-| 1. Sandbox | `tra run` | the full cycle on live data; every decision written down, no order sent | a model key |
+| 1. Sandbox | `tra run` | the full cycle on live data; every decision written down, no order sent | a declared edge (rule desk) or a model key (agent desk) |
 | 2. Demo or testnet API | `tra run` with `[execution].mode = "venue"` and `environment = "demo"` or `"testnet"` | real orders on the exchange's demo or testnet API, exits attached, positions looked after | a signed mandate, a leverage, `max_notional`, practice keys |
 | 3. Real capital | the same, with `environment = "mainnet"` | real orders with real money | all of the above, plus the ladder at its canary tier (`tra ladder promote`, with evidence) |
 
@@ -598,6 +581,7 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | Command | What it does |
 |---|---|
 | `tra` | opens the console |
+| `tra init my-desk --profile rule` | a desk whose one decision is the example daily rule, with no model |
 | `tra init my-desk --profile autonomous` | a desk wired as the core for the agents; every experiment written off, commented |
 | `tra check` | every setting read against the others, with what to fix |
 | `tra keys --probe` | proves every key works; no key is printed, no prompt or order sent |
@@ -617,6 +601,7 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | `tra watch --every 5s` | a read-only view of a running desk |
 | `tra audit` | both auditors over the records; nothing is applied |
 | `tra arena --instruments BTCUSDT,ETHUSDT --from 2025-07-01 --to 2025-09-30 --spread-bps 1 --slippage-bps 0` | every policy replayed over the archive, settled net of costs, beside baselines and a random null |
+| `tra arena --tape klines --interval 1d --hold-bars 6 --rows strategies/momentum_long.py:MomentumLong,random ...` | your rule replayed over years of hour candles, the same call `tra run` makes |
 | `tra backtest`, `tra paper`, `tra live` | replay, shadow, canary |
 
 **Data**
@@ -627,6 +612,7 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | `tra data audit export.csv --mapping mapping.toml` | your own CSV or Parquet, through the same audit |
 | `tra data pull BTCUSDT` | one live snapshot through the chains in `data.toml` |
 | `tra data bars BTCUSDT 2025-07-01 --to 2025-07-31` | one-minute flow bars from the venue archive and the market's derivatives history, into the verified archive |
+| `tra data klines BTCUSDT 2021-01-01 --to 2026-10-31` | hour candles with the taker split, and funding, for arena runs of years |
 | `tra record`, `tra record --once 30m` | order flow, the book, liquidations, derivatives and news kept while they happen, per `[record]` in `data.toml` |
 | `tra record status` | coverage, gaps and latency of the recording over the last day |
 | `tra runs verify --market data` | every market day file and hour part against its manifest |
