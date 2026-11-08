@@ -18,7 +18,7 @@ forbids skipping forward.
 | 4 | Data requirements | no available instrument can measure the premise | hours to days | implemented |
 | 5 | Statistical validation | interval spans zero, loses to a matched null, or lives in one subperiod | days | implemented |
 | 6 | Strategy design | the exit is not bound to the mechanism | weeks | implemented ([The trading agent](/opensource/trading)) |
-| 7 | Shadow | net expectation negative in the live market, zero orders placed | weeks of calendar | implemented (`tra trade shadow`, then `tra chain validate` on its trades) |
+| 7 | Paper | net expectation negative in the live market, zero orders placed | weeks of calendar | implemented (`tra trade shadow`, then `tra chain validate` on its trades) |
 | 8 | Live capital | the canary loses against its own registration | capital | `tra live` at the canary tier, and venue mode in `tra run` ([The live tier](/opensource/live), [Capital, orders and positions](/opensource/capital)) |
 
 ## Layer 0: the cost floor
@@ -217,7 +217,7 @@ The verdict applies the registration's own kill criteria to the computed metrics
 (`net_return_bps`, `net_return_ci95_lower_bps`, `permutation_p_value`,
 `subperiod_min_net_bps`, ...). A fired `FALSIFIED` criterion becomes `NOT PROVEN` when the
 declared power was not achieved. A death on the sample's own merit is `idea`; one that lives in
-a single subperiod is `condition`. An idea that survives is `OPEN`, awaiting shadow at layer 7.
+a single subperiod is `condition`. An idea that survives is `OPEN`, awaiting paper at layer 7.
 Every result carries the registration seal and the SHA-256 of the trades it was computed from.
 
 What layer 5 does not deliver: live results. On the one strategy the research programme

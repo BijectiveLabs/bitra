@@ -141,7 +141,7 @@ afterwards what happened, and no more; a full order and portfolio platform is a 
 
 `tra live`, the research ladder's canary tier, sends through the same client and hand as venue
 mode, so the order path is one path whichever command sends, and the public trade stream that
-`tra trade shadow` and `tra live` read is ccxt's too. What is left venue by venue is what ccxt does
+`tra paper` and `tra live` read is ccxt's too. What is left venue by venue is what ccxt does
 not unify: the historical trade archives in `data/venues/`, and the account checks in
 `trading/venues/accounts.py`.
 
@@ -273,7 +273,7 @@ ask no model.
 | 4 | Data requirements | no available instrument can measure the premise | hours to days | implemented |
 | 5 | Statistical validation | interval spans zero, loses to a matched null, or lives in one subperiod | days | implemented |
 | 6 | Strategy design | the exit is not bound to the mechanism | weeks | implemented |
-| 7 | Shadow | net expectation negative in the live market, zero orders placed | weeks of calendar | implemented (`tra paper`, then layer 5 on its trades) |
+| 7 | Paper | net expectation negative in the live market, zero orders placed | weeks of calendar | implemented (`tra paper`, then layer 5 on its trades) |
 | 8 | Live capital | the venue does not behave as the simulation assumed | capital | canary tier only (`tra live`), hard caps, behind the ladder |
 
 The chain is strictly ordered by cost. A hypothesis does not reach layer 5 because somebody is

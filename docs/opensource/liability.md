@@ -8,7 +8,7 @@ This is software you run. It is published under the MIT License, which provides 
 warranty of any kind, and nothing here changes that. The lines below say, in plain
 words, where the decisions are made and by whom, so that nobody is surprised later.
 
-- **The sandbox is the default.** Replay, paper and shadow run against a simulated venue. No
+- **The sandbox is the default.** Replay and paper run against a simulated venue. No
   key is read, no order leaves the machine, and every figure the gates produce is a figure
   about recorded data. Most of what this project is for happens here.
 - **Live orders need what you supply.** A trade key you created on the venue and placed in your

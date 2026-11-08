@@ -23,8 +23,8 @@ path: not to decide, not to assess risk, not to narrate an incident mid-run. The
 | Tier | Feed | Venue | Command |
 |---|---|---|---|
 | T0 research | recorded (Parquet from `tra data audit`) | simulated | `tra backtest` (`trade replay`) |
-| T1 paper | live public trades | simulated | `tra paper` (`trade shadow`) |
-| T2 shadow | live public trades | simulated, intents recorded, zero orders | `tra paper` (`trade shadow`) |
+| T1 paper | live public trades | simulated | `tra paper` (`trade paper`) |
+| T2 shadow | live public trades | simulated, intents recorded, zero orders | `tra paper` (`trade paper`) |
 | T3 canary | live public trades | any ccxt venue, hard caps | `tra live` (`trade live`), see [The live tier](/opensource/live) |
 | T4 production | | | **not in this release**; the ladder refuses it |
 
@@ -92,7 +92,7 @@ a favourable guess manufactures an edge that does not exist.
 - Every intent (admitted or refused, with the reason), every fill, and every closed round trip
   is appended to its own file as it happens: `intents.jsonl`, `fills.jsonl`, `trades.jsonl`,
   and `run.json` at the end.
-- One code path. The runtime sees the feed and the venue as protocols; replay and shadow
+- One code path. The runtime sees the feed and the venue as protocols; replay and paper
   differ only in what they are given.
 
 ## What a round trip went through, not only what it earned
@@ -156,7 +156,7 @@ tra check                          # what is ready, what is missing, in plain wo
 tra backtest                       # newest dataset in data/, funding beside it, out under runs/
 tra chain validate --registration runs/<id>/preregistration.json \
     --trades runs/backtest-<time>/trades.jsonl --cost-bps 15 --block-length 7
-pip install 'bitra[shadow]'
+pip install 'bitra[ccxt]'
 tra paper                          # live public trades; touch KILL to flatten and stop
 ```
 
@@ -172,10 +172,10 @@ its own core.
 
 ## The live feed
 
-Live feeds are plugins, found by name through `trading.feeds`. `tra trade shadow` takes the
+Live feeds are plugins, found by name through `trading.feeds`. `tra paper` takes the
 name from the venue half of `[run].venue_key` (`bybit/taker-taker` selects `bybit`) or from
 `--feed NAME`, and refuses a name it cannot stream before opening a connection. Every venue ccxt
-streams is a feed, through the `ccxt` extra (`[shadow]` installs the same thing);
+streams is a feed, through the `ccxt` extra;
 [Venues](/opensource/venues) says how to add one ccxt does not cover.
 
 The feed reads the venue's public trade stream with no key, through ccxt's streaming side, which

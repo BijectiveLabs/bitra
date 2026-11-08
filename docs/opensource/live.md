@@ -12,7 +12,7 @@ one day argue for it.
 tra live --config strategy.toml --envelope envelope.toml --out runs/live-1 --env-file .env
 ```
 
-`tra live` is `tra trade live`. It runs the same loop as replay and shadow with two
+`tra live` is `tra trade live`. It runs the same loop as replay and paper with two
 differences: the venue sends orders, and every stop, take-profit and timeout is routed through
 it as a reduce-only order instead of being settled against the bar. No language model is
 anywhere on this path.

@@ -11,7 +11,7 @@ All notable changes to this project are recorded here. The format follows
 - The event guard (`[event_guard]`). On a rule desk the typed judge reads the headlines first
   seen in the last day; the system weighs every adverse event (hack, outage, delisting,
   restriction) that concerns the asset or the whole market and sets the heaviest against a
-  declared `hold_at`. `shadow`, the default, records on the intent what it would hold; `hold`
+  declared `hold_at`. `paper`, the default, records on the intent what it would hold; `hold`
   holds, and fails closed when the headlines could not be read. Every headline read is archived
   as first seen. `tra check` names the guard, an unknown kind and a missing judge.
 - The judge asks each headline's kind in two orders, and an answer that differs between them is
@@ -37,6 +37,8 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- `tra trade shadow` is `tra trade paper`, the name `tra paper` already had, and the event guard's
+  modes are `paper` and `hold`. One word for a run on live data that sends no order.
 - The judge's kinds of event read a regulatory headline in its two directions, `restriction`
   and `approval`, in place of one `regulatory` kind: bans and charges, and approvals and legal
   frameworks, move crypto prices opposite ways (Auer and Claessens, BIS 2018). The judge's

@@ -309,7 +309,7 @@ as a weak point:
 
 | The judge's weak point (vendor) | What the system does |
 |---|---|
-| not a calculator | the weight of an event (the kind's probability times how much it concerns the asset) and its comparison with the threshold are computed in code |
+| not a calculator | the weight of an event (the kind's probability times how much it concerns the asset) and its comparison with the threshold are computed by the system |
 | unreliable at comparing dates and times | which headlines are recent is decided by when the system first saw each one; the judge is never shown a date |
 | first-option bias in a choice | the kind is asked in two orders; if the answers differ the kind is absent, and counted |
 | accuracy falls with irrelevant state | one headline and its publisher per request, nothing else |
@@ -322,7 +322,7 @@ On a desk whose decision is a rule, the judge guards the rule's new entries:
 ```toml
 # strategy.toml
 [event_guard]
-mode = "shadow"                 # shadow records what it would hold; hold holds
+mode = "paper"                  # paper records what it would hold; hold holds
 hold_at = 0.7                   # declared, never assumed: the weight that holds an entry
 window_h = 24                   # headlines first seen in the last 24 hours
 kinds = ["hack", "outage", "delisting", "restriction"]   # the default
@@ -330,7 +330,7 @@ kinds = ["hack", "outage", "delisting", "restriction"]   # the default
 
 Before a new entry the judge reads the headlines from the declared news files, which are archived
 as first seen under `data/market/text/desk/`. The heaviest adverse event that concerns the asset,
-or the whole market, is set against `hold_at`. `shadow` holds nothing and records what it would
+or the whole market, is set against `hold_at`. `paper` holds nothing and records what it would
 have held on the intent, so one desk keeps both arms on the same days: the rule alone and the rule
 with the guard. `hold` holds the entry, and fails closed when it cannot read: no judge declared, a
 refused key, or a headline the judge could not answer. Every verdict records the model, the

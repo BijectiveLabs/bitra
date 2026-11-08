@@ -4,16 +4,15 @@
 
 <h1 align="center">TRA</h1>
 
-<p align="center"><strong>A crypto trading desk with deterministic execution. A rule or a model proposes; the system decides.</strong></p>
+<p align="center"><strong>A crypto trading desk with deterministic execution. A rule or a model proposes, the system decides.</strong></p>
 
 <!-- mcp-name: io.github.BijectiveLabs/bitra -->
 
 <p align="center">
-  <a href="https://github.com/BijectiveLabs/bitra/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/BijectiveLabs/bitra/actions/workflows/ci.yml/badge.svg?branch=master"></a>
+  <a href="https://github.com/BijectiveLabs/bitra/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/BijectiveLabs/bitra/actions/workflows/ci.yml/badge.svg?branch=develop"></a>
   <a href="https://pypi.org/project/bitra/"><img alt="PyPI" src="https://img.shields.io/pypi/v/bitra?style=flat-square&logo=pypi&logoColor=white&label=PyPI&cacheSeconds=1800"></a>
   <a href="https://pypi.org/project/bitra/"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/bitra?style=flat-square&logo=python&logoColor=white&label=python&cacheSeconds=1800"></a>
   <a href="https://github.com/BijectiveLabs/bitra/blob/master/LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square"></a>
-  <img alt="Status: alpha" src="https://img.shields.io/badge/status-alpha-orange?style=flat-square">
 </p>
 
 <p align="center">
@@ -41,7 +40,7 @@ published under that name.
 TRA is a crypto trading desk you run yourself. It reads the market, takes one decision, prices the
 round trip, holds the decision against limits you declare, and either writes it down or sends one
 order with its stop attached. The decision can be a rule in your own file, with no model in the
-loop, or a language model that proposes. Either way the system, fixed code with no model involved,
+loop, or a language model that proposes. Either way the system, with no model involved,
 computes every figure, applies every limit, sizes the trade and sends the order. Every decision and
 every refusal is kept on disk with its reason, so you can check afterwards what happened and why.
 
@@ -125,7 +124,7 @@ The typed judge is kept to the job it is built for, and the system carries what 
 its weak points: recent headlines are chosen by when the system first saw them, so the judge never
 compares dates; each choice is asked in two orders, so a first-option bias shows as disagreement
 and the answer is dropped; one headline and its publisher go in each request and nothing else; and
-the weight of an event and its comparison with your threshold are arithmetic, in code.
+the weight of an event and its comparison with your threshold are arithmetic, done by the system.
 
 ## What we measured, and what it changed
 
@@ -168,7 +167,8 @@ uv tool upgrade bitra      # or: pip install -U 'bitra[ccxt,openai,anthropic,goo
 tra --version
 ```
 
-That is the release. The `develop` branch is where the next one is built; the rule desk and the
+That is the release, and `master` is the stable branch that holds it. `develop`, the default
+branch on GitHub, is where the next one is built and changes often; the rule desk and the
 event guard below are on `develop` and not yet in a release ([more](#where-it-is-going)).
 
 **2. Make a desk.** A desk is a folder holding your settings and everything it decides.
@@ -229,7 +229,7 @@ How to make the key on each exchange is in
 | Time limit | a position closes after six daily bars | `[exit].timeout_bars` |
 | Risk per trade | 0.5% of equity lost at the stop, whatever the stop's distance | `[controls].max_risk_per_trade_bps` |
 | Bad days | no new entry after a 3% loss on the day or a 10% fall from the peak | `[controls]` |
-| Event guard | off; once declared, `shadow` records what it would hold and holds nothing | `[event_guard]`, `[judge]` in `data.toml` |
+| Event guard | off; once declared, `paper` records what it would hold and holds nothing | `[event_guard]`, `[judge]` in `data.toml` |
 | Oversight | the risk gate on every new order | `[controls]` |
 
 An agent desk (`--profile autonomous`) decides on 15-minute bars by default, reads 1h and 4h as
@@ -315,7 +315,7 @@ flowchart TD
     who -- "agent desk" --> lead["structure lead, with its team<br/>a direction, a setup, levels, cited figures"]
     rule --> guard{"event guard, when declared<br/>an adverse event about this asset?"}
     guard -- "hold mode, yes" --> refused["a refusal that names its figure"]
-    guard -- "no, or shadow" --> price
+    guard -- "no, or paper" --> price
     lead --> price["the round trip priced<br/>fee, spread, impact, funding, slippage"]
     price --> exits["the stop and the target<br/>inside your [exit] bounds"]
     exits --> gates{"the gates you declared<br/>cost, targets, desk exposure"}
@@ -602,7 +602,7 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | `tra audit` | both auditors over the records; nothing is applied |
 | `tra arena --instruments BTCUSDT,ETHUSDT --from 2025-07-01 --to 2025-09-30 --spread-bps 1 --slippage-bps 0` | every policy replayed over the archive, settled net of costs, beside baselines and a random null |
 | `tra arena --tape klines --interval 1d --hold-bars 6 --rows strategies/momentum_long.py:MomentumLong,random ...` | your rule replayed over years of hour candles, the same call `tra run` makes |
-| `tra backtest`, `tra paper`, `tra live` | replay, shadow, canary |
+| `tra backtest`, `tra paper`, `tra live` | replay, paper, canary |
 
 **Data**
 
@@ -666,9 +666,10 @@ where it stops.
 - **The rest of the not-built-yet list,** one piece at a time, without weakening a guarantee.
 
 **Use the release.** What PyPI installs is the latest release, and it is the version to run.
-Releases come from `master`. The `develop` branch is where the next release is built: it moves
-often, a commit there is not a release, and it can carry work that is unfinished or changed again
-before it ships. A set of changes becomes a release when it is merged into `master`, tagged and
+`master` holds that release and is the stable branch. `develop` is the default branch on GitHub,
+the one this page is read from, and it is where the next release is built: it changes often, a
+commit there is not a release, and it can carry work that is unfinished or changed again before it
+ships. A set of changes becomes a release when it is merged into `master`, tagged and
 published, and [CHANGELOG.md](https://github.com/BijectiveLabs/bitra/blob/master/CHANGELOG.md) says what each one brought.
 
 ## Documentation

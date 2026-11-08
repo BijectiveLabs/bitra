@@ -719,7 +719,7 @@ class MyFeedFactory:
 my-venue = "my_package.feed:MyFeedFactory"
 ```
 
-`tra trade shadow` picks the feed from the venue half of `[run].venue_key` in
+`tra paper` picks the feed from the venue half of `[run].venue_key` in
 `strategy.toml` (`my-venue/taker-taker` selects `my-venue`), or from `--feed NAME`. A name it
 cannot stream is refused before any connection is opened.
 
