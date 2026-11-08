@@ -12,6 +12,7 @@ from trading_research_agents.market_data.text import (
     TEXT,
     TextItem,
     TextLog,
+    append_text_part,
     read_text_range,
     write_text_part,
 )
@@ -66,3 +67,12 @@ def test_a_text_day_compacts_like_any_stream(tmp_path: Path) -> None:
     result = compact_day(tmp_path, "text", "coindesk", TEXT, DAY, now_ns=T0 + DAY_NS + HOUR)
     assert result.written and result.removed == 2
     assert [i.text for i in read_text_range(tmp_path, "coindesk", DAY, DAY)] == ["h0", "h3"]
+
+
+def test_a_second_write_in_the_same_hour_adds_to_it(tmp_path: Path) -> None:
+    first = TextItem("desk", T0 + NS_PER_MINUTE, None, "exchange halts withdrawals", "c")
+    second = TextItem("desk", T0 + 30 * NS_PER_MINUTE, None, "token listed", "c")
+    append_text_part([first], tmp_path, feed="desk", hour_start_ns=T0)
+    append_text_part([second, first], tmp_path, feed="desk", hour_start_ns=T0)
+    kept = read_text_range(tmp_path, "desk", DAY, DAY)
+    assert [i.text for i in kept] == ["exchange halts withdrawals", "token listed"]

@@ -564,3 +564,11 @@ def test_backtest_paper_and_live_refuse_a_rule() -> None:
         bar_by_bar_core(parse_strategy_config(rule_raw()))
     plain = load_strategy_config(EXAMPLES / "strategy.toml")
     assert bar_by_bar_core(plain) is plain.strategy
+
+
+def test_the_event_guard_is_read_from_its_table() -> None:
+    cfg = parse_strategy_config(rule_raw() | {"event_guard": {"mode": "hold", "hold_at": 0.7}})
+    assert cfg.event_guard is not None and cfg.event_guard.holds
+    assert parse_strategy_config(rule_raw()).event_guard is None
+    with pytest.raises(ConfigError, match="hold_at"):
+        parse_strategy_config(rule_raw() | {"event_guard": {"mode": "hold"}})

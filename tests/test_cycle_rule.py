@@ -176,3 +176,23 @@ def test_a_candle_without_a_trade_count_is_still_a_traded_bar() -> None:
     candle = Candle(0, price, price, price, price, Decimal(3))
     bars = as_bars([candle], 60)
     assert len(bars) == 1 and not bars[0].empty and bars[0].end_ns == 60 * 1_000_000_000
+
+
+def test_check_names_the_event_guard_and_its_unknown_kinds(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from trading_research_agents.cli.main import main
+
+    project = tmp_path / "desk"
+    assert main(["init", str(project), "--profile", "rule"]) == 0
+    config = project / "strategy.toml"
+    text = config.read_text("utf-8").replace("# edge_bps = ", "edge_bps = 105 #", 1)
+    guard = '\n[event_guard]\nmode = "shadow"\nhold_at = 0.7\nkinds = ["hack", "earthquake"]\n'
+    config.write_text(text + guard, "utf-8")
+    monkeypatch.chdir(project)
+    capsys.readouterr()
+    main(["check"])
+    out = capsys.readouterr()
+    said = out.out + out.err
+    assert "event guard: shadow" in said and "earthquake" in said
+    assert "no judge declared" in said

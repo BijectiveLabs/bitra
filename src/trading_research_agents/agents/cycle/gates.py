@@ -329,6 +329,9 @@ def _intent_record(p: Pass) -> dict[str, Any]:
         "entry_role": _channel(cfg).entry_role,
         # Each member's side, when the analyst did not decide alone.
         **({"team": dict(p.team_reads)} if p.team_reads else {}),
+        # What the event guard read and whether it would have held, so hindsight can set the rule
+        # alone against the rule with the guard on the same days.
+        **({"event_guard": result.briefs["event_guard"]} if "event_guard" in result.briefs else {}),
     }
 
 

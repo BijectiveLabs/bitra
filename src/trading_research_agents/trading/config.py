@@ -16,6 +16,7 @@ from trading_research_agents.execution.confluence import Matrix
 from trading_research_agents.execution.conviction import Conviction
 from trading_research_agents.execution.cost import FundingSchedule
 from trading_research_agents.execution.desk import Desk
+from trading_research_agents.execution.event_guard import EventGuard, event_guard
 from trading_research_agents.execution.kelly import SizingRule
 from trading_research_agents.execution.mandate import Mandate
 from trading_research_agents.execution.regime import REGIME_KEYS, RegimeRule
@@ -162,6 +163,8 @@ class StrategyConfig:
     edge_bps: Decimal | None = None
     # How many closed candles a rule is handed; enough for its longest window.
     rule_lookback_bars: int = 200
+    # Whether the typed judge's reading of the day's headlines may hold a rule's new entry.
+    event_guard: EventGuard | None = None
 
     @property
     def rule(self) -> Rule | None:
@@ -199,6 +202,7 @@ TABLES = (
     "conviction",
     "execution",
     "sizing",
+    "event_guard",
 )
 
 
@@ -332,6 +336,7 @@ def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> S
     return StrategyConfig(
         edge_bps=_rule_edge(strategy_raw) if rule_desk else None,
         rule_lookback_bars=_or_int(strategy_raw, "lookback_bars", 200),
+        event_guard=_event_guard(raw.get("event_guard")),
         strategy=strategy,
         exit_rule=exit_rule,
         limits=limits,
@@ -445,6 +450,15 @@ def _build_strategy(raw: dict[str, Any], base: Path | None) -> Strategy:
             "for a rule"
         )
     return instance  # type: ignore[no-any-return]
+
+
+def _event_guard(table: Any) -> EventGuard | None:
+    if table is not None and not isinstance(table, dict):
+        raise ConfigError("[event_guard] is a table")
+    try:
+        return event_guard(table)
+    except ValueError as exc:
+        raise ConfigError(str(exc)) from exc
 
 
 def _rule_edge(strategy_raw: dict[str, Any]) -> Decimal:

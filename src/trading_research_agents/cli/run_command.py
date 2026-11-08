@@ -244,8 +244,18 @@ def _cycle_config(desk: _Desk) -> Any:
         readings=decision["readings"],
         team=decision["team"],
         rule=cfg.rule,
+        event_guard=cfg.event_guard,
+        text_root=desk.beside / "data",
         judge=desk_judge(args.data_config),
+        judge_min_confidence=_judge_floor(args.data_config),
     )
+
+
+def _judge_floor(data_config: Path) -> float:
+    from trading_research_agents.perception.config import load_judge_config
+
+    declared = load_judge_config(data_config) if data_config.is_file() else None
+    return 0.5 if declared is None else declared.min_confidence
 
 
 def _no_model(role: str) -> Any:

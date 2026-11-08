@@ -21,6 +21,7 @@ from trading_research_agents.execution.conviction import (
     Conviction,
 )
 from trading_research_agents.execution.desk import Desk, Open
+from trading_research_agents.execution.event_guard import EventGuard
 from trading_research_agents.execution.kelly import SizingRule
 from trading_research_agents.execution.mandate import MODES as MANDATE_MODES
 from trading_research_agents.execution.regime import RegimeRule
@@ -179,6 +180,12 @@ class CycleConfig:
     # The operator's rule, when the desk's one decision is a rule rather than the structure lead.
     # No model is asked; `magnitude_bps` is then the edge the operator measured for it.
     rule: Rule | None = None
+    # Whether the judge's reading of the day's headlines may hold a rule's entry, and where the
+    # headlines it read are archived as first seen.
+    event_guard: EventGuard | None = None
+    # The judge's confidence below which a kind is absent, from data.toml [judge].min_confidence.
+    judge_min_confidence: float = 0.5
+    text_root: Path | None = None
     max_workers: int = 4
     # Progress, on its own wire. A watcher sees the steps as they happen and can change none of
     # them; the default is nobody watching.

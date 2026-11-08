@@ -280,7 +280,31 @@ def _data_config_notes(
     judged, unjudged = judge_lines(data_config, env)
     good.extend(judged)
     bad.extend(unjudged)
+    good.extend(_guard_notes(cfg, declared=bool(judged or unjudged), bad=bad))
     return good
+
+
+def _guard_notes(cfg: Any, *, declared: bool, bad: list[str]) -> list[str]:
+    """What the event guard will do, and what it is missing."""
+    from trading_research_agents.perception.guard import unknown_kinds
+
+    guard = cfg.event_guard
+    if guard is None:
+        return []
+    unknown = unknown_kinds(guard.kinds)
+    if unknown:
+        bad.append(f"[event_guard].kinds: {unknown} are not kinds the judge is asked about")
+    if not declared:
+        bad.append(
+            "[event_guard] is declared and no judge declared in data.toml [judge], so the "
+            "headlines are not read" + ("; in hold mode every entry is held" if guard.holds else "")
+        )
+    action = "holds the entry" if guard.holds else "records what it would hold, and holds nothing"
+    return [
+        f"event guard: {guard.mode}; an adverse event ({', '.join(guard.kinds)}) concerning the "
+        f"asset at {guard.hold_at} or more, in headlines first seen in the last "
+        f"{guard.window_h} h, {action}; the judge reads, the system decides"
+    ]
 
 
 def _provider_notes(cfg: Any, env: Mapping[str, str], bad: list[str]) -> list[str]:

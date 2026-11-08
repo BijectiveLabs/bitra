@@ -38,7 +38,15 @@ TEXT_VENUE = "text"
 # How far back a restarted recorder reads its own archive to know what it has already kept.
 REMEMBER = timedelta(days=7)
 
-__all__ = ["TEXT", "TextItem", "TextLog", "read_text_range", "write_text_day", "write_text_part"]
+__all__ = [
+    "TEXT",
+    "TextItem",
+    "TextLog",
+    "append_text_part",
+    "read_text_range",
+    "write_text_day",
+    "write_text_part",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,6 +97,24 @@ def write_text_part(
         raise ArchiveError(f"{len(outside)} item(s) were not first seen in hour {hour:02d}")
     path = part_file(root, TEXT_VENUE, feed, TEXT, day, hour)
     return _write(items, path, feed, day, hour, ())
+
+
+def append_text_part(
+    items: Sequence[TextItem], root: Path, *, feed: str, hour_start_ns: int
+) -> DayManifest:
+    """The hour's part with `items` added to what it already holds, each item kept once.
+
+    A desk that reads text on its own passes may write the same hour more than once; writing the
+    part again with only the new items would lose the earlier ones.
+    """
+    day, hour = hour_of(hour_start_ns)
+    path = part_file(root, TEXT_VENUE, feed, TEXT, day, hour)
+    held = read_text_file(path, feed) if path.is_file() else []
+    merged: dict[tuple[int | None, str], TextItem] = {}
+    for item in (*held, *items):
+        # The first sighting stands: an item seen again is not a later fact.
+        merged.setdefault(item.key, item)
+    return write_text_part(list(merged.values()), root, feed=feed, hour_start_ns=hour_start_ns)
 
 
 def write_text_day(

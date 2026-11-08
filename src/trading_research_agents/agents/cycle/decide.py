@@ -26,6 +26,7 @@ from trading_research_agents.agents.cycle.briefing import (
     _regime_line,
 )
 from trading_research_agents.agents.cycle.config import TARGETS
+from trading_research_agents.agents.cycle.event_guard import guard_the_entry
 from trading_research_agents.agents.cycle.paths import read_the_paths
 from trading_research_agents.agents.cycle.pricing import (
     _break_even,
@@ -372,6 +373,7 @@ def _validate(p: Pass) -> bool:
 RULE_DECIDING: tuple[Step, ...] = (
     _funding_read,
     ask_the_rule,
+    guard_the_entry,
     _price,
     _place_exits,
     read_the_paths,

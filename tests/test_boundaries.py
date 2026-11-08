@@ -34,7 +34,7 @@ _ALLOWED: dict[str, set[str]] = {
     # Features read bars and derivatives, and the regime rule and ATR the execution gate owns.
     "features": {"market_data", "execution"},
     # The one place a typed judge meets market data: archived text in, typed events out.
-    "perception": {"llm", "market_data", "features"},
+    "perception": {"llm", "market_data", "features", "data"},
     # Plain numerics: a logistic fit, its calibration and the expected value of a side.
     "forecast": set(),
     # The harness replays features over the archive and prices ideas with the desk's own costs,
@@ -58,7 +58,8 @@ _ALLOWED: dict[str, set[str]] = {
     "store": GATES | {"llm"},
     "surface": GATES,
     # The cycle reads the lead's levels against the paths the forecast draws.
-    "agents": GATES | {"llm", "store", "surface", "readings", "forecast"},
+    # The event guard asks the typed judge through perception, which owns the text archive.
+    "agents": GATES | {"llm", "store", "surface", "readings", "forecast", "perception"},
     "mcp": GATES | {"surface"},
     "cli": GATES
     | {
