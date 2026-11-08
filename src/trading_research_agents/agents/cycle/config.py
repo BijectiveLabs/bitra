@@ -85,7 +85,8 @@ class CycleConfig:
     min_confidence: float = 0.0
     mode: str = "sandbox"
     # Two gates the operator declares: whether the context agrees with the direction, and whether
-    # the trade is the shape this desk said it wanted. Both are applied by code, never by a model.
+    # the trade is the shape this desk said it wanted. Both are applied by the system, never by a
+    # model.
     matrix: Matrix = field(default_factory=Matrix)
     targets: Targets = field(default_factory=Targets)
     # How much goes behind the idea, from the same declarations the matrix reads. Left undeclared,
@@ -132,7 +133,8 @@ class CycleConfig:
     # the operator, and it is written into the cycle rather than left to be inferred.
     forced: bool = False
     # The exit rule as declared, so the cycle can price the stop and the take profit for the venue.
-    # Code computes them from the operator's own fractions; no model is asked where a stop goes.
+    # The system computes them from the operator's own fractions; no model is asked where a stop
+    # goes.
     stop_frac: Decimal | None = None
     take_frac: Decimal | None = None
     # [exit].mode = "volatility": each trade's stop measured from the decision timeframe's range.
@@ -153,8 +155,8 @@ class CycleConfig:
     # What actually sends an order, when the operator is in venue mode and the mandate cleared.
     place: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None
     # The instrument is a spot market on the venue orders go to. A short there needs a borrow, so it
-    # is refused by code before it is priced; funding and open interest belong to contracts, so
-    # they are not asked for, rather than asked for and refused every cycle.
+    # is refused by the system before it is priced; funding and open interest belong to contracts,
+    # so they are not asked for, rather than asked for and refused every cycle.
     spot: bool = False
     # What the underlying is, from the venue's own market fields. An equity's exchange keeps
     # hours: with equity_session "regular" an entry waits for the session and a hold may not run

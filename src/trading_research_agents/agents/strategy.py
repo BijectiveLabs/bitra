@@ -1,6 +1,6 @@
 """The structure lead as a decision core: a model decides, the runtime and controls execute.
 
-It satisfies the `Strategy` protocol like any code core, so replay, paper, shadow and canary
+It satisfies the `Strategy` protocol like any scripted core, so replay, paper, shadow and canary
 run it unchanged. What differs is the cadence and the budget: the model is asked once per
 closed bar, at most as often as the budget allows, and only on bars a minute or longer, since
 a call takes seconds. A call that fails, times out or comes back malformed is no signal, and

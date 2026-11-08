@@ -1,8 +1,8 @@
 """What the desk is trying to do, in numbers, checked before there is an intent.
 
 Trading, not investing: the operator states what a trade has to be worth and how often the desk is
-willing to do it, and code holds the line. Five declarations, all in basis points or counts, all
-the client's to set:
+willing to do it, and the system holds the line. Five declarations, all in basis points or counts,
+all the client's to set:
 
   min_net_bps              what must be left of the edge after every cost the gate priced
   min_edge_multiple        the claimed edge as a multiple of the round trip it has to pay for

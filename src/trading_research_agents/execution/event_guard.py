@@ -2,7 +2,7 @@
 
 The judge reads; the system decides. An adverse event (by default a hack, an outage, a delisting or
 a restriction by a regulator, a court or a government) that concerns the instrument's asset, or the
-whole market, at or above `hold_at` holds the entry. In `shadow`, the default, it only records what
+whole market, at or above `hold_at` holds the entry. In `paper`, the default, it only records what
 it would have held, so one desk keeps both arms on the same days: the rule alone, and the rule
 with the guard. `hold` holds, and fails closed when the headlines could not be read.
 """
@@ -13,7 +13,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-MODES = ("shadow", "hold")
+MODES = ("paper", "hold")
 DEFAULT_KINDS = ("hack", "outage", "delisting", "restriction")
 KEYS = ("mode", "hold_at", "window_h", "kinds")
 
@@ -64,7 +64,7 @@ def event_guard(table: Mapping[str, Any] | None) -> EventGuard | None:
         )
     kinds = table.get("kinds", DEFAULT_KINDS)
     return EventGuard(
-        mode=str(table.get("mode", "shadow")),
+        mode=str(table.get("mode", "paper")),
         hold_at=float(table["hold_at"]),
         window_h=int(table.get("window_h", 24)),
         kinds=tuple(str(k) for k in kinds),

@@ -119,7 +119,7 @@ def run_session(cfg: SessionConfig) -> SessionResult:
 
 
 def _read_by_code(said: dict[str, Any] | None) -> tuple[str, str]:
-    """The progress row of a reading: skipped without a series, else what code declared."""
+    """The progress row of a reading: skipped without a series, else what the system declared."""
     if said is None:
         return "skipped", ""
     return "done", f"read by the system: {said['declared_state']['declared']}"

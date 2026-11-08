@@ -719,13 +719,13 @@ def test_fetch_goes_through_the_venue_plugin_and_its_checksum(
         server.server_close()
 
 
-def test_shadow_refuses_an_unknown_feed_before_touching_the_network(
+def test_paper_refuses_an_unknown_feed_before_touching_the_network(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     code = main(
         [
             "trade",
-            "shadow",
+            "paper",
             "--config",
             str(EXAMPLES / "strategy.toml"),
             "--envelope",

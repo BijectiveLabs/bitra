@@ -666,7 +666,7 @@ def test_the_readings_are_read_by_code_and_ask_no_model(tmp_path: Path, envelope
     assert len(fake.calls) == 1 and usage.tokens > 0
     assert result.context["macro"]["declared_state"]["declared"] == "bearish"
     assert result.context["onchain"]["declared_state"]["declared"] == "undeclared"
-    assert {said["read_by"] for said in result.context.values()} == {"code"}
+    assert {said["read_by"] for said in result.context.values()} == {"system"}
     assert ("macro", "done", "read by the system: risk-off") in steps
     from trading_research_agents.cli.cycle_report import _cycle_report
 
@@ -1221,7 +1221,7 @@ def test_a_reading_leaves_its_declared_state_without_a_model(
     result = run_cycle(cfg)
     said = result.context["macro"]
     # Nothing is asked, so nothing can fail: the code over the operator's thresholds stands.
-    assert said == {"declared_state": said["declared_state"], "read_by": "code"}
+    assert said == {"declared_state": said["declared_state"], "read_by": "system"}
     assert said["declared_state"]["declared"] == "undeclared"
 
 
@@ -1505,7 +1505,7 @@ def test_a_case_nobody_answers_is_decided_by_code_without_asking_the_judge(
     )
     assert len(stances.calls) == 2
     judged = result.context["reviewer_neutral"]
-    assert judged["verdict"] == "support" and judged["judged"] == "code"
+    assert judged["verdict"] == "support" and judged["judged"] == "system"
     assert "neutral was not asked" in judged["reason"]
     assert result.confluence is not None and result.confluence.support == 1
     assert result.acted

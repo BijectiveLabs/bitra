@@ -105,19 +105,20 @@ class AgentSettings:
             effort=(
                 str(table["effort"])
                 if table.get("effort")
-                # A role that reads a table code computed does not need to think long. Only where
-                # an effort is declared at all: a model with no reasoning setting refuses the field.
+                # A role that reads a table the system computed does not need to think long.
+                # Only where an effort is declared at all: a model with no reasoning setting
+                # refuses the field.
                 else (LOW_EFFORT if role in TABLE_READERS and self.effort else self.effort)
             ),
         )
 
 
-# Roles whose brief is a table of figures code already computed.
+# Roles whose brief is a table of figures the system already computed.
 TABLE_READERS = ("reviewer",)
 
 
-# The readings: code reads the operator's series against the operator's thresholds. The `readings`
-# package owns these names; they are repeated here because the gates never import it.
+# The readings: the system reads the operator's series against the operator's thresholds. The
+# `readings` package owns these names; they are repeated here because the gates never import it.
 READINGS = ("macro", "onchain", "sentiment")
 
 
@@ -144,7 +145,9 @@ RENAMED_SEATS = {
 # Seats retired in 0.12 because a written rule does their job, with what does it now. A desk that
 # still configures one runs unchanged; `tra check` names the rule.
 RETIRED_SEATS = {
-    "market_screener": "code orders the universe by the room its paths expect over the spread",
+    "market_screener": (
+        "the system orders the universe by the room its paths expect over the spread"
+    ),
     "risk_manager": "the risk gate and the controls hold the risk in the system",
     "executor": "a research session splits its allocation by an equal-share rule",
 }

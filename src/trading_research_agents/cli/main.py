@@ -66,8 +66,8 @@ from trading_research_agents.cli.research_commands import (
     mcp_serve,
     signals_export,
     trade_live,
+    trade_paper,
     trade_replay,
-    trade_shadow,
 )
 from trading_research_agents.cli.review_commands import (
     arena_command,
@@ -312,10 +312,10 @@ HANDLERS = {
     ("chain", "validate"): chain_validate,
     ("ledger", "show"): ledger_show,
     ("trade", "replay"): trade_replay,
-    ("trade", "shadow"): trade_shadow,
+    ("trade", "paper"): trade_paper,
     ("trade", "live"): trade_live,
     ("backtest", "replay"): trade_replay,
-    ("paper", "shadow"): trade_shadow,
+    ("paper", "paper"): trade_paper,
     ("live", "live"): trade_live,
     ("init", "init"): init_project,
     ("mcp", "serve"): mcp_serve,

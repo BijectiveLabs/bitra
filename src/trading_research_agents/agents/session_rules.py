@@ -4,8 +4,8 @@ Each rule here was a role's prompt: the screener kept an instrument when its cos
 its figures were not degenerate; the risk manager demoted the ladder when measured latency was a
 multiple of the declared one, when the rolling net fell below the registered claim, or when the
 same control kept refusing, and halted when a control tripped; the executor split the allocation.
-Written as code they give the same answer every time, cost no token and can be read before they
-act. Every ruling names the figure that decided it.
+Written as the system they give the same answer every time, cost no token and can be read before
+they act. Every ruling names the figure that decided it.
 """
 
 from __future__ import annotations
@@ -26,7 +26,8 @@ def screen_by_rule(
     figures: Sequence[Any],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Keep an instrument whose cost floor cleared, whose figures are not degenerate and on which
-    a declared event recurs; label it with the regime code proposed. Exclude the rest by name."""
+    a declared event recurs; label it with the regime the system proposed. Exclude the rest by
+    name."""
     kept: list[dict[str, Any]] = []
     excluded: list[dict[str, Any]] = []
     for f in figures:

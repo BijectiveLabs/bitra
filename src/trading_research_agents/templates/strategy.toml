@@ -99,7 +99,7 @@ kill_switch = "KILL"               # `tra kill` sets it: flatten and stop; `tra 
 #
 # The readings, when you want to name them outright. Left out, a cycle reads whichever readings
 # have something declared on the shelf: sources/macro.toml, sources/onchain.toml,
-# sources/derivatives.toml, sources/sentiment.toml, sources/news.toml. A reading is code over your
+# sources/derivatives.toml, sources/sentiment.toml, sources/news.toml. A reading is the system's arithmetic over your
 # series and your thresholds; it asks no model. The structure lead is always asked.
 # readings = ["macro", "sentiment"]
 #

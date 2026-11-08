@@ -1,8 +1,8 @@
-"""The confluence gate: whether the context agrees with the direction, decided in code.
+"""The confluence gate: whether the context agrees with the direction, decided by the system.
 
 The operator's own thresholds decide. This gate reads the declared state of each reading - the one
-code computes from the thresholds in the operator's series files - and never a sentence a model
-wrote. That is what keeps a sentence from being an input to a trade.
+the system computes from the thresholds in the operator's series files - and never a sentence a
+model wrote. That is what keeps a sentence from being an input to a trade.
 
 It fails closed. A reading the operator marked as required whose declaration is `undeclared` or
 `mixed` has produced no state, and a state nobody produced is not a neutral state: the cycle refuses
@@ -123,7 +123,7 @@ def confluent(
 ) -> Confluence:
     """Apply the matrix to the declared states and the reviewers' votes.
 
-    `states` is what code derived from the operator's thresholds, one entry per reading read.
+    `states` is what the system derived from the operator's thresholds, one entry per reading read.
     `votes` are the reviewers' verdicts after their claims were checked against the brief.
     """
     allowed = matrix.allowed_for(target)

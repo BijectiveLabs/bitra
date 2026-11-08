@@ -5,7 +5,7 @@ the question a desk actually has: how much. An analyst, three readings and three
 only worth their cost if what they say changes the size of the trade, and not merely whether it
 happens.
 
-The rule is code, and the weights are the operator's. That is deliberate. A model asked "how
+The rule is the system's, and the weights are the operator's. That is deliberate. A model asked "how
 confident are you, and how big should this be" will answer differently on Tuesday than on Monday
 from the same figures, and a size that depends on which sentence was written last cannot be
 backtested, reproduced or audited. So a score is computed from what each reading declared, what

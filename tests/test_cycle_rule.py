@@ -188,12 +188,12 @@ def test_check_names_the_event_guard_and_its_unknown_kinds(
     assert main(["init", str(project), "--profile", "rule"]) == 0
     config = project / "strategy.toml"
     text = config.read_text("utf-8").replace("# edge_bps = ", "edge_bps = 105 #", 1)
-    guard = '\n[event_guard]\nmode = "shadow"\nhold_at = 0.7\nkinds = ["hack", "earthquake"]\n'
+    guard = '\n[event_guard]\nmode = "paper"\nhold_at = 0.7\nkinds = ["hack", "earthquake"]\n'
     config.write_text(text + guard, "utf-8")
     monkeypatch.chdir(project)
     capsys.readouterr()
     main(["check"])
     out = capsys.readouterr()
     said = out.out + out.err
-    assert "event guard: shadow" in said and "earthquake" in said
+    assert "event guard: paper" in said and "earthquake" in said
     assert "no judge declared" in said

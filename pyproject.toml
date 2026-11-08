@@ -74,8 +74,8 @@ mcp = [
 openai = [
     "openai>=1",
 ]
-# The public trade stream for `tra paper` and `tra live` is ccxt's, so this is the ccxt extra
-# under the name the docs have always used for it.
+# The ccxt extra under the name it had before `tra paper` was the command's name; kept so an
+# install written that way still brings ccxt in. The docs name `[ccxt]`.
 shadow = [
     "ccxt>=4.5",
 ]

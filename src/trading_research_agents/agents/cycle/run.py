@@ -1,8 +1,8 @@
 """The cycle from the snapshot to the first question: what is free to know before a model is paid.
 
-Code takes a snapshot, asks the trigger whether anything has moved, checks the session, converts a
-size declared in quote currency, and reads the account. Each of these can end the cycle before a
-single token is spent, and each says why.
+The system takes a snapshot, asks the trigger whether anything has moved, checks the session,
+converts a size declared in quote currency, and reads the account. Each of these can end the cycle
+before a single token is spent, and each says why.
 """
 
 from __future__ import annotations

@@ -78,7 +78,7 @@ def _reviewer_notes(cfg: Any) -> list[str]:
     weight = cfg.conviction.reviewer_weight
     how = (
         "; the advocates build their cases apart and neutral judges them, its verdict the one "
-        "that counts; with a case on one side only, code decides without asking it"
+        "that counts; with a case on one side only, the system decides without asking it"
         if judge_mode(stances)
         else ""
     )

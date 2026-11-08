@@ -108,7 +108,7 @@ AUDIT_KEYS = (
     "quant_every",
     "losing_streak",
     # Retired in 0.12 with the risk manager seat: read so a desk that set it still runs, and
-    # ignored; `tra check` says so. The risk gate and the controls hold the risk in code.
+    # ignored; `tra check` says so. The risk gate and the controls hold the risk.
     "risk_manager",
 )
 

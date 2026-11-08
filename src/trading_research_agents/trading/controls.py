@@ -1,4 +1,4 @@
-"""Capital controls as code. Independent of the strategy, and they fail closed.
+"""Capital controls as the system. Independent of the strategy, and they fail closed.
 
 The per-strategy tier of the circuit-breaker hierarchy: maximum risk per trade, maximum
 position, maximum order rate, a daily loss limit, and a kill switch. A control that cannot be
@@ -72,7 +72,7 @@ class Limits:
 
 
 class KillSwitch:
-    """Armed by a file or by code. Once armed it stays armed for the life of the process."""
+    """Armed by a file or by the system. Once armed it stays armed for the life of the process."""
 
     def __init__(self, path: Path | None = None) -> None:
         self.path = path

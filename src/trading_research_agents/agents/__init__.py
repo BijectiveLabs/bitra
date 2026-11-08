@@ -2,7 +2,7 @@
 
 A role is a schema, a parser and a prompt. The model client, the call budget and the usage
 ledger are one layer below, in `llm`; the gates are one layer below that. Nothing here places
-an order: a role answers, and code decides what to do with the answer.
+an order: a role answers, and the system decides what to do with the answer.
 """
 
 from trading_research_agents.agents.pipeline import RunConfig, propose

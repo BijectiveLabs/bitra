@@ -133,10 +133,10 @@ timeout_bars = 6                         # six daily bars, the hold the arena me
 
 # The typed judge as the event guard: it reads the headlines your news files declare, and the
 # system holds a new entry on an adverse event concerning the asset. Needs [judge] in data.toml.
-# shadow records what it would hold and holds nothing, so the rule alone and the rule with the
+# paper records what it would hold and holds nothing, so the rule alone and the rule with the
 # guard are both on the record; hold holds. hold_at is yours to choose; nothing here assumes it.
 # [event_guard]
-# mode = "shadow"
+# mode = "paper"
 # hold_at = 0.7
 # window_h = 24
 # kinds = ["hack", "outage", "delisting", "restriction"]

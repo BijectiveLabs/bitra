@@ -6,9 +6,9 @@ applied to each, and an order that puts the instrument with the most movement ag
 at the front. What comes out is one or two instruments the cycle then runs in full, and a record of
 every instrument that was looked at and why it was not chosen.
 
-No model is asked here. Code decides which instruments are admissible and in what order: the room
-the instrument's own paths draw over the hold against its spread first, then the move already seen,
-then the order the operator wrote.
+No model is asked here. The system decides which instruments are admissible and in what order: the
+room the instrument's own paths draw over the hold against its spread first, then the move already
+seen, then the order the operator wrote.
 """
 
 from __future__ import annotations
@@ -125,7 +125,7 @@ def correlation(left: Sequence[float], right: Sequence[float]) -> Decimal | None
 
 
 def measured(snapshot: Snapshot, interval_s: int, rule: RegimeRule) -> dict[str, Any]:
-    """What code can say about an instrument from the bars of one look, kept in the screen."""
+    """What the system can say about an instrument from the bars of one look, kept in the screen."""
     try:
         candles = list(snapshot.get("ohlcv").value or ())
     except KeyError:

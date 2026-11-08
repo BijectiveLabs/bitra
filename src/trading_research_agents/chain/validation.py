@@ -198,7 +198,7 @@ def decide(
             f"{registration.power.required_sample} declared observations",
         )
     return Decision(
-        Verdict.OPEN, Axis.DATA, (), power_achieved, "survived layer 5; awaiting shadow at layer 7"
+        Verdict.OPEN, Axis.DATA, (), power_achieved, "survived layer 5; awaiting paper at layer 7"
     )
 
 

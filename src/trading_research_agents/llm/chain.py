@@ -10,9 +10,9 @@ Two failures are not the same and are not treated the same. A provider that coul
 a reason to try the next link. A budget that is spent is the operator's own limit, and no link in
 the world is allowed past it, so it stops the chain where it stands.
 
-What makes this safe for a role that has to be stateless: the brief is built by code, so a second
-model asked after the first one failed is handed exactly what the first one was handed. There is no
-conversation to lose, no context to rebuild, and no "the new model has to understand the last
+What makes this safe for a role that has to be stateless: the brief is built by the system, so a
+second model asked after the first one failed is handed exactly what the first one was handed. There
+is no conversation to lose, no context to rebuild, and no "the new model has to understand the last
 answer" - the cycle's record already holds the last answer, and the next call starts from figures.
 """
 

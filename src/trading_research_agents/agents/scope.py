@@ -2,8 +2,8 @@
 
 A desk works because a job has edges. The analyst that proposes a direction does not size the
 order, the role that prices the round trip does not decide whether the idea is any good, and none
-of them places anything. Here those edges are written down once, in code, so they are the same in
-a cycle, in a session and in a test.
+of them places anything. Here those edges are written down once, in this file, so they are the same
+in a cycle, in a session and in a test.
 
 Four things keep a role inside its job, and only the last is words:
 
@@ -49,7 +49,7 @@ NOT_YOURS: dict[str, tuple[str, ...]] = {
     "another role": ("the reviewer", "the structure lead", "the blind confirmer"),
 }
 # No role is told the desk's rules, so a rule one states is a rule it made up. Every role, the one
-# that decides included, is held to this: recorded beside the answer, which code never reads.
+# that decides included, is held to this: recorded beside the answer, which the system never reads.
 INVENTED_RULE: tuple[str, tuple[str, ...]] = (
     "a rule of the desk",
     (

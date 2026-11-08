@@ -236,20 +236,20 @@ def trade_replay(args: argparse.Namespace) -> int:
     )
 
 
-def trade_shadow(args: argparse.Namespace) -> int:
+def trade_paper(args: argparse.Namespace) -> int:
     cfg = load_strategy_config(args.config)
     _run_dir(args, "paper")
     # The channel key is venue/channel; the venue half names the feed unless told otherwise.
     feed = _live_feed(args, cfg, args.feed or cfg.run.venue_key.partition("/")[0])
     return _report(
-        args, _run_watched(args, lambda o: _trading_config(args, feed, "shadow", observer=o))
+        args, _run_watched(args, lambda o: _trading_config(args, feed, "paper", observer=o))
     )
 
 
 def _live_feed(args: argparse.Namespace, cfg: Any, name: str) -> Any:
     """The public feed, and the clock that ends the session when the operator named one.
 
-    A shadow session runs until it is stopped, which is right for a desk and wrong for the first
+    A paper session runs until it is stopped, which is right for a desk and wrong for the first
     one anybody runs: `--minutes` gives it an end without anybody having to reach for Ctrl-C.
     """
     stop = threading.Event()

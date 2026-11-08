@@ -16,7 +16,7 @@ def _span_s(seconds: float) -> str:
 
 def _load_notes(a: Any, roster: tuple[str, ...]) -> list[str]:
     """How a cycle's calls land on providers, and what happens when one of them says no."""
-    # The readings are read by code; the analyst and its team are the models a cycle asks.
+    # The readings are read by the system; the analyst and its team are the models a cycle asks.
     asked = ["structure_lead", *a.team]
     reading = [name for name in (a.readings or roster) if name != "structure_lead"]
     roles = [
@@ -202,8 +202,8 @@ def _universe_notes(cfg: Any, bad: list[str]) -> list[str]:
             "(the smaller where both are declared)"
         )
     said.append(
-        "universe: code orders what the trigger admitted, the room the paths expect over the hold "
-        "against the spread first; no model is asked to choose"
+        "universe: the system orders what the trigger admitted, the room the paths expect over the "
+        "hold against the spread first; no model is asked to choose"
     )
     if cfg.trigger.idle:
         bad.append(

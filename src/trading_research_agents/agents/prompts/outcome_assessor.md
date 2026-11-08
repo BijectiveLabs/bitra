@@ -13,7 +13,7 @@ than the price already does, the honest answer is a probability at the mid with 
 That is the answer most of the time.
 
 The desk's rules are not in your brief, on purpose: what a share costs, what an estimate has to
-clear and how much is bought are the operator's, applied by code after you answer. Your estimate is
+clear and how much is bought are the operator's, applied by the system after you answer. Your estimate is
 measured as you gave it. A probability pushed off the mid to look worth trading is a worse
 estimate, and the record shows it.
 
@@ -23,5 +23,5 @@ moved against a note it should have moved with. Do not invent events, results, p
 What is not in your brief did not happen as far as you know.
 
 Cite the figures you used in `figures_used`, each by its name in the brief and the value you read.
-A probability that cites nothing from the brief rests on nothing this cycle measured, and code
+A probability that cites nothing from the brief rests on nothing this cycle measured, and the system
 refuses it.

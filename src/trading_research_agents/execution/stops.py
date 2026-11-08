@@ -5,10 +5,10 @@ volatility mode the stop is a number of average true ranges on the decision time
 the square root of the bars the trade is meant to last, and held between a floor and a ceiling the
 operator declares; the take profit is the stop times the declared reward to risk.
 
-In analyst mode the analyst names where its idea is wrong and where it is done. Code checks the
-side, holds the stop inside the same floor and ceiling, holds the target inside the declared reward
-to risk, and falls back to the measured stop when the analyst names none. Size still comes from
-the risk per trade, so a wider stop means a smaller position, never more risk.
+In analyst mode the analyst names where its idea is wrong and where it is done. The system checks
+the side, holds the stop inside the same floor and ceiling, holds the target inside the declared
+reward to risk, and falls back to the measured stop when the analyst names none. Size still comes
+from the risk per trade, so a wider stop means a smaller position, never more risk.
 """
 
 from __future__ import annotations

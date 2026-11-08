@@ -47,7 +47,7 @@ def guarded(tmp_path: Path, envelope: Envelope, **changes: object):  # type: ign
     settings: dict[str, object] = {
         "rule": Always(),
         "judge": judge(),
-        "event_guard": EventGuard(mode="shadow", hold_at=0.5),
+        "event_guard": EventGuard(mode="paper", hold_at=0.5),
         "news": (news(tmp_path),),
         "text_root": tmp_path / "data",
     }
@@ -56,14 +56,14 @@ def guarded(tmp_path: Path, envelope: Envelope, **changes: object):  # type: ign
     return run_cycle(cfg)
 
 
-def test_in_shadow_the_guard_records_what_it_would_hold_and_the_rule_trades(
+def test_on_paper_the_guard_records_what_it_would_hold_and_the_rule_trades(
     tmp_path: Path,
     envelope: Envelope,  # noqa: F811
 ) -> None:
     result = guarded(tmp_path, envelope)
     assert result.intent is not None, result.refusals
     said = result.intent["event_guard"]
-    assert said["would_hold"] is True and said["mode"] == "shadow"
+    assert said["would_hold"] is True and said["mode"] == "paper"
     assert said["kind"] == "hack" and said["model"] == "jev-1.14.0"
     assert said["min_confidence"] == 0.5 and said["hold_at"] == 0.5
     assert said["headline"] == "exchange hot wallet drained"
@@ -114,7 +114,7 @@ def test_in_hold_mode_a_guard_without_a_judge_fails_closed(
 
 
 def test_the_guard_is_declared_with_its_threshold() -> None:
-    made = event_guard({"mode": "shadow", "hold_at": 0.7})
+    made = event_guard({"mode": "paper", "hold_at": 0.7})
     assert made is not None and made.kinds == ("hack", "outage", "delisting", "restriction")
     assert event_guard(None) is None
     with pytest.raises(ValueError, match="hold_at"):

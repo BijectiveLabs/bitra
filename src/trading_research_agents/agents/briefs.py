@@ -1,4 +1,4 @@
-"""What each agent is handed: figures code computed from one snapshot, and nothing else.
+"""What each agent is handed: figures the system computed from one snapshot, and nothing else.
 
 An agent that adds up bars itself will eventually add them up wrong, and nobody will know which
 call it happened on. So the arithmetic is here, in one place, with tests, and the model receives
@@ -173,7 +173,8 @@ def structure_brief(
 
     `context` is the higher timeframes' candles and `previous_open_interest` the open interest the
     last snapshot of this instrument recorded. Both are optional; a missing piece is left out, never
-    estimated. Nothing another analyst reads or says is in here: the readings are weighed by code.
+    estimated. Nothing another analyst reads or says is in here: the readings are weighed by the
+    system.
     """
     rule = rule or RegimeRule()
     if lookback_bars < 2:

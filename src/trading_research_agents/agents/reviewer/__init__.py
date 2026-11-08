@@ -2,7 +2,7 @@
 
 Three stances of the same role - pro, contra, neutral - asked after the deciding analyst answers.
 Writes: nothing. Sizes: nothing. Its vote reaches the confluence gate as a count, and only after
-code has checked every claim against the brief. See `role.py` and `tools.py`.
+the system has checked every claim against the brief. See `role.py` and `tools.py`.
 """
 
 from trading_research_agents.agents.reviewer.role import (

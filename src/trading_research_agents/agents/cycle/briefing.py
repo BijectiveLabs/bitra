@@ -1,5 +1,5 @@
-"""What the cycle reads beside the market: the readings by code, the higher timeframes, and the
-analyst's own last reading."""
+"""What the cycle reads beside the market: the readings by the system, the higher timeframes, and
+the analyst's own last reading."""
 
 from __future__ import annotations
 
@@ -276,7 +276,7 @@ def _reading_brief(
 
 
 def _conviction_states(result: CycleResult) -> dict[str, Mapping[str, Any]]:
-    """The declared state of each reading, computed by code from the operator's thresholds."""
+    """The declared state of each reading, computed by the system from the operator's thresholds."""
     return {
         role: said["declared_state"]
         for role, said in result.context.items()
@@ -287,7 +287,7 @@ def _conviction_states(result: CycleResult) -> dict[str, Mapping[str, Any]]:
 def _context_of(briefs: Mapping[str, dict[str, Any]]) -> dict[str, Any]:
     """What each reading's series say against the operator's own thresholds."""
     return {
-        name: {"declared_state": declared_state(name, briefs[name]), "read_by": "code"}
+        name: {"declared_state": declared_state(name, briefs[name]), "read_by": "system"}
         for name in READINGS
         if name in briefs
     }

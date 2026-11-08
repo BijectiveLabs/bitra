@@ -107,7 +107,7 @@ class Channel:
 
         `maker-taker` is an entry that rests on the book and an exit that crosses it, and that is
         the difference between the two fees beside it. A name that does not say is `undeclared`,
-        and code that has to know refuses rather than guessing on the cheap side.
+        and the system that has to know refuses rather than guessing on the cheap side.
         """
         halves = self.name.lower().split("-")
         if len(halves) == 2 and all(half in ("maker", "taker") for half in halves):

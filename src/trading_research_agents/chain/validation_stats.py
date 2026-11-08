@@ -286,7 +286,7 @@ class AnchorReport:
 def anchor_robustness(
     nets: Sequence[float], t_stats: Sequence[float], reported_index: int
 ) -> AnchorReport:
-    """Sensitivity of a result to the phase of a periodic rebalance, checked by code.
+    """Sensitivity of a result to the phase of a periodic rebalance, checked by the system.
 
     Nineteen pre-registrations once fixed a rebalance hour without recording it as a choice; the
     published headline turned out to be the best of twenty-four undisclosed phases. A single

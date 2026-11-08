@@ -428,7 +428,7 @@ def test_a_session_hands_the_roles_measured_briefs(tmp_path: Path, envelope: Env
         )
     )
     # The macro role is read by code: its declared state, and no model asked for it.
-    assert result.macro is not None and result.macro["read_by"] == "code"
+    assert result.macro is not None and result.macro["read_by"] == "system"
     assert result.macro["declared_state"]["declared"] == "bullish"
     assert not any("macro" in call.system[:200].lower() for call in fake.calls)
     figures = json.loads((tmp_path / "out" / "figures.json").read_text("utf-8"))[0]

@@ -94,11 +94,11 @@ def _run_reviewers(
     """Ask each declared stance about the proposal, then keep only the claims that cite a figure.
 
     The proposal is the analyst's reading as given. The round trip, the claimed edge and the
-    desk's rules are left out: whether a trade clears them is code's question, and a vote that
+    desk's rules are left out: whether a trade clears them is the system's question, and a vote that
     could see them would be a second, softer cost gate.
 
     With neutral beside pro or contra, the advocates build their cases apart, neither seeing the
-    other's, and neutral judges the two cases once code has checked every claim in them.
+    other's, and neutral judges the two cases once the system has checked every claim in them.
     """
     # The analyst's last reading is its own continuity, not evidence about this proposal.
     figures = {k: v for k, v in figures_of(asked).items() if not k.startswith("previous.")}
@@ -190,11 +190,11 @@ def _judge(
     proposal: Mapping[str, Any],
     figures: Mapping[str, str],
 ) -> None:
-    """Neutral reads both cases, as code checked them, and its verdict is the one that counts.
+    """Neutral reads both cases, as the system checked them, and its verdict is the one that counts.
 
     Only claims that survived the check reach it, so an invented figure never gets as far as being
-    weighed. When there is nothing to weigh, code says so without paying for a call: no case on
-    either side is an abstention, and a case nobody answered is uncontested.
+    weighed. When there is nothing to weigh, the system says so without paying for a call: no case
+    on either side is an abstention, and a case nobody answered is uncontested.
     """
     name = "reviewer_neutral"
     cases = {s: result.context.get(f"reviewer_{s}") or {} for s in ("pro", "contra")}
@@ -219,7 +219,7 @@ def _judge(
             "claims": [],
             "discarded": [],
             "reason": f"{decided}; judged by the system, neutral was not asked",
-            "judged": "code",
+            "judged": "system",
         }
         announce(cfg.watch, name, DONE, f"{verdict}: {decided}")
         return
@@ -281,7 +281,7 @@ def _counted(result: CycleResult) -> list[tuple[str, Mapping[str, Any]]]:
 
 
 def _votes(result: CycleResult) -> tuple[str, ...]:
-    """The reviewers' verdicts, after code checked the claims they rest on."""
+    """The reviewers' verdicts, after the system checked the claims they rest on."""
     return tuple(str(said["verdict"]) for _, said in _counted(result))
 
 

@@ -1,10 +1,10 @@
 """The lead's levels read against the instrument's own paths, after the exits are placed.
 
-The structure lead names a side and where it is wrong and done. Code then draws the market forward
-from its own closed candles and reads how often the take comes before the stop inside the hold.
-The reading is a number the lead never sees, and a risk reading by default: how far the levels sit
-inside the market's own range over the hold. Drawn from the instrument's own candles the paths are
-a calibrated random walk, so their value is not an edge. A desk that declares
+The structure lead names a side and where it is wrong and done. The system then draws the market
+forward from its own closed candles and reads how often the take comes before the stop inside the
+hold. The reading is a number the lead never sees, and a risk reading by default: how far the levels
+sit inside the market's own range over the hold. Drawn from the instrument's own candles the paths
+are a calibrated random walk, so their value is not an edge. A desk that declares
 `[targets].min_path_ev_bps` runs it as a floor, an experiment: the trade is refused below it, the
 paths' value becomes the claimed edge, and a reading that cannot be made refuses too.
 """

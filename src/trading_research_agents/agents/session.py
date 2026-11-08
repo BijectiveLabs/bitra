@@ -76,7 +76,7 @@ class SessionError(ValueError):
 
 @dataclass(frozen=True)
 class Figures:
-    """What code measures about a dataset before any model sees it."""
+    """What the system measures about a dataset before any model sees it."""
 
     instrument: str
     rows: int
@@ -290,7 +290,7 @@ class _Session:
         self, reading: str, series_path: Path | None, reference: Path | None
     ) -> dict[str, Any] | None:
         """A measured brief over the operator's series, aligned as-of to a reference dataset, and
-        what the operator's thresholds declare on it. Read by code; no model is asked."""
+        what the operator's thresholds declare on it. Read by the system; no model is asked."""
         if series_path is None:
             return None
         try:
@@ -308,7 +308,7 @@ class _Session:
         (self.out / f"{reading}-brief.json").write_text(
             json.dumps(brief, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
         )
-        return {"declared_state": declared_state(reading, brief), "read_by": "code"}
+        return {"declared_state": declared_state(reading, brief), "read_by": "system"}
 
     def analyse(self, instrument: str, path: Path, limits: Limits) -> RunReport:
         s = self.cfg.strategy
@@ -354,7 +354,7 @@ class _Session:
     def risk(
         self, reports: dict[str, RunReport], limits: Limits, ladder: Ladder
     ) -> tuple[RiskRuling, Limits]:
-        """The written risk rule over what code measured from each run; applied through the
+        """The written risk rule over what the system measured from each run; applied through the
         action surface, which can only demote the ladder or arm the kill switch."""
         measured = risk_brief(
             [(name, self.out / name) for name in reports],

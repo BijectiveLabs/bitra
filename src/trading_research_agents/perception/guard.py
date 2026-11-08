@@ -1,8 +1,9 @@
 """The strongest adverse event among the judged headlines, for one asset: arithmetic, by the system.
 
 The judge gives a probability for each kind of event and for whom a headline concerns. Combining
-them is arithmetic, which the vendor says to keep in code: an event's weight is the probability of
-the kind times how much it concerns the asset or the whole market, whichever is larger.
+them is arithmetic, which the vendor says to keep out of the judge: an event's weight is the
+probability of the kind times how much it concerns the asset or the whole market, whichever is
+larger.
 """
 
 from __future__ import annotations

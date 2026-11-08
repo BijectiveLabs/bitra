@@ -121,8 +121,8 @@ def _completer_for_role(
     A reviewer that reads a table and a lead that reasons over sixty bars do not need the
     same model, and the difference is most of a token bill. `[agents.roles.<role>]` is where an
     operator says so, and `fallback` is where they say what to do when that provider is rate
-    limited or down: the next one is tried with the same brief, because the brief is built by code
-    and there is no conversation to carry over.
+    limited or down: the next one is tried with the same brief, because the brief is built by the
+    system and there is no conversation to carry over.
     """
     settings = a.for_role(role)
     links = [Link(f"{settings.provider}:{settings.model or 'default'}", _link(a, settings, floor))]

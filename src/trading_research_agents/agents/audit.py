@@ -7,7 +7,8 @@ both stop there. A proposal is a sentence and a configuration key; applying it i
 their own file. Nothing here writes a config, promotes a ladder or touches a venue.
 
 The report goes to `audits/<time>/`: the briefs as they were given, the answers as they came back,
-what code discarded and why, and a short `proposals.md` a person can read without a JSON viewer.
+what the system discarded and why, and a short `proposals.md` a person can read without a JSON
+viewer.
 """
 
 from __future__ import annotations

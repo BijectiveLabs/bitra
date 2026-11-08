@@ -1,4 +1,4 @@
-"""What an auditor may say, and what code does with it before anyone reads it.
+"""What an auditor may say, and what the system does with it before anyone reads it.
 
 Both auditors answer in the same shape: findings, each one tied to figures from the brief, each one
 carrying a proposal, and a proposal may name one configuration key with a value to change it to.

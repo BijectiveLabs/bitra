@@ -302,20 +302,21 @@ def _add_agent(top: Any) -> None:
 
 
 def _add_trade(top: Any) -> None:
-    trade = top.add_parser("trade", help="the trading agent: replay, shadow").add_subparsers(
+    trade = top.add_parser("trade", help="the trading agent: replay, paper, live").add_subparsers(
         dest="command", required=True
     )
     replay_cmd = trade.add_parser("replay", help="recorded trades through the strategy")
-    shadow_cmd = trade.add_parser("shadow", help="live public trades; zero orders sent")
+    paper_trade_cmd = trade.add_parser("paper", help="live public trades; zero orders sent")
+    paper_trade_cmd.set_defaults(command="paper")
     live_cmd = trade.add_parser("live", help="the canary tier: real orders, hard caps")
     # The common spellings are aliases of the tiers: backtest, paper, live.
     backtest_cmd = top.add_parser("backtest", help="alias of trade replay")
     backtest_cmd.set_defaults(command="replay")
-    paper_cmd = top.add_parser("paper", help="alias of trade shadow")
-    paper_cmd.set_defaults(command="shadow")
+    paper_cmd = top.add_parser("paper", help="alias of trade paper")
+    paper_cmd.set_defaults(command="paper")
     live_alias = top.add_parser("live", help="alias of trade live")
     live_alias.set_defaults(command="live")
-    for cmd in (replay_cmd, shadow_cmd, live_cmd, backtest_cmd, paper_cmd, live_alias):
+    for cmd in (replay_cmd, paper_trade_cmd, live_cmd, backtest_cmd, paper_cmd, live_alias):
         cmd.add_argument("--config", type=Path, default=Path("strategy.toml"))
         cmd.add_argument("--envelope", type=Path, default=Path("envelope.toml"))
         cmd.add_argument("--out", type=Path, default=None, help="default: runs/<command>-<time>")
@@ -324,12 +325,12 @@ def _add_trade(top: Any) -> None:
         cmd.add_argument(
             "--parquet", type=Path, default=None, help="default: the newest dataset in data/"
         )
-    for cmd in (shadow_cmd, live_cmd, paper_cmd, live_alias):
+    for cmd in (paper_trade_cmd, live_cmd, paper_cmd, live_alias):
         cmd.add_argument("--max-reconnects", type=int, default=None)
         cmd.add_argument(
             "--feed", help="live feed plugin; defaults to the venue named in [run].venue_key"
         )
-    for cmd in (shadow_cmd, paper_cmd):
+    for cmd in (paper_trade_cmd, paper_cmd):
         cmd.add_argument(
             "--minutes",
             type=float,

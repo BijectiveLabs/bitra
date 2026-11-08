@@ -1,4 +1,4 @@
-"""Claims have to point at a figure that exists, and code is what checks they do.
+"""Claims have to point at a figure that exists, and the system is what checks they do.
 
 Two roles argue from figures: the reviewers, about one proposal, and the auditors, about what the
 desk and the package have actually been doing. Both are held to the same rule - name the figure by

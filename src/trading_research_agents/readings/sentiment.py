@@ -60,7 +60,7 @@ def sentiment_brief(
             }
         )
     # Headlines age by the hour, not the week; the newest of the last day are what is read. Each is
-    # named, so an answer can point at the one it rests on and code can check it.
+    # named, so an answer can point at the one it rests on and the system can check it.
     since = at_ns - int(min(look_back, notes_window).total_seconds() * NS_PER_S)
     fresh = [e for e in notes if since <= e.when_ns <= at_ns][-max_notes:]
     recent = [{"name": f"note_{n}", **e.record()} for n, e in enumerate(fresh, start=1)]

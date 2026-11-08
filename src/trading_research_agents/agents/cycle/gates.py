@@ -305,8 +305,8 @@ def _intent_record(p: Pass) -> dict[str, Any]:
         "horizon_bars": analyst.horizon_bars,
         "confidence": analyst.confidence,
         "reason": analyst.reason,
-        # What the direction was read from, after code checked each figure against the brief. An
-        # intent that cannot say this is an intent nobody can review a month later.
+        # What the direction was read from, after the system checked each figure against the brief.
+        # An intent that cannot say this is an intent nobody can review a month later.
         "cited": result.cited,
         "edge_bps": str(p.edge),
         "edge_source": p.verdict.edge_source,

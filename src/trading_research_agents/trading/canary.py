@@ -3,7 +3,7 @@
 A canary exists to find out whether the live venue behaves the way the simulation assumed:
 fills, fees, latency, reconciliation. It is not there to make money, so its caps are set by
 what a defect would cost, not by what the strategy might earn. Every cap is a number the
-operator wrote down before the session; none has a default the code would pick for them.
+operator wrote down before the session; none has a default the system would pick for them.
 """
 
 from __future__ import annotations

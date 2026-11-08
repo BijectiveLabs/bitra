@@ -154,7 +154,8 @@ def _step_label(name: str) -> str:
 
 
 def screen_view(record: Mapping[str, Any]) -> Group:
-    """One pass over the universe: what code found and measured, and the order it took them in."""
+    """One pass over the universe: what the system found and measured, and the order it took
+    them in."""
     from trading_research_agents.execution.universe import why_no_cycle
 
     table = Table(box=box.SIMPLE_HEAD, show_edge=False, pad_edge=False, title="the universe")

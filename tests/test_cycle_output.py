@@ -166,7 +166,7 @@ def test_a_reviewer_counts_for_what_it_says_beyond_its_stance() -> None:
             "reviewer_pro": {"verdict": pro},
             "reviewer_contra": {"verdict": contra},
             "reviewer_neutral": {"verdict": neutral},
-            "macro": {"declared_state": {"declared": "bearish"}, "read_by": "code"},
+            "macro": {"declared_state": {"declared": "bearish"}, "read_by": "system"},
         }
         return _informative_votes(SimpleNamespace(context=context))  # type: ignore[arg-type]
 

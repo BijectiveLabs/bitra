@@ -1,7 +1,7 @@
 """The actions a role may take. Every one of them makes the session safer, never looser.
 
 A caller may tighten a limit, step the ladder down, or arm the kill switch. It may not
-widen a limit, promote, or disarm anything; a request to do so is refused here, by code, and
+widen a limit, promote, or disarm anything; a request to do so is refused here, by the system, and
 the refusal is what the role is told. Sending an order is not an action on this surface: it
 goes through the runtime, which admits or refuses it through the same controls the CLI uses.
 """

@@ -1,4 +1,4 @@
-"""What the two auditors read: the cycles this desk already ran, counted by code.
+"""What the two auditors read: the cycles this desk already ran, counted by the system.
 
 An auditor reads the record, never the market and never a key. Everything here comes from files the
 project wrote itself - `runs/cycles/*/cycle.json` and `usage.jsonl` - so an audit can be re-run

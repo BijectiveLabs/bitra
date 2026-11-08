@@ -397,6 +397,6 @@ def test_levels_that_beat_the_analysts_own_day_after_day_are_named() -> None:
                 )
             )
     levels = levels_check(found)
-    assert levels["verdict"] == "the levels code applied did better than the analyst's own"
+    assert levels["verdict"] == "the levels the system applied did better than the analyst's own"
     assert levels["difference_bps"] == "30.0" and levels["days"] == 6
     assert levels_check(found[:4])["verdict"] == "too few to tell"

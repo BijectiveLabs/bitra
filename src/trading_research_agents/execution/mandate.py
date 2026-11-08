@@ -94,8 +94,9 @@ class Mandate:
     # check above catches a market that moved; this catches one that did not move but whose figures
     # are no longer the ones the decision was made on.
     max_decision_age_s: float = 120.0
-    # The capital side of an order. Leverage is the operator's to declare and code's to apply and
-    # verify; it never decides the size, only the margin a size ties up and where liquidation sits.
+    # The capital side of an order. Leverage is the operator's to declare and the system's to apply
+    # and verify; it never decides the size, only the margin a size ties up and where liquidation
+    # sits.
     leverage: Decimal | None = None
     margin_mode: str = "isolated"
     # A taker entry goes out as a limit IOC this far through the touch, never as a naked market

@@ -1,5 +1,5 @@
 """What a research session measures per instrument before it screens: figures from the dataset,
-and a regime code labels from two of them.
+and a regime the system labels from two of them.
 
 The regime rule is deliberately plain and written down: a variance ratio (1-minute against
 10-minute returns) above one with positive first-lag autocorrelation reads as trending, below

@@ -1,4 +1,5 @@
-"""The regime price structure is in, measured by code, and whether a named setup belongs in it."""
+"""The regime price structure is in, measured by the system, and whether a named setup belongs
+in it."""
 
 from __future__ import annotations
 
@@ -71,7 +72,7 @@ def misfit(
     fade_below: float = 0.0,
     structure: Mapping[str, Any] | None = None,
 ) -> str:
-    """Why this setup does not fit what code measured, or empty when it does.
+    """Why this setup does not fit what the system measured, or empty when it does.
 
     Each setup is a claim about the market with a direction built into it, and the figures that
     make the claim are in the brief. A setup whose direction contradicts its own figures is a

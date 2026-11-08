@@ -7,7 +7,7 @@ can read any of them, and a tool that walks them does not need a manifest to kno
     runs/<project>/cycles/<cycle id>/
       snapshot.json      what the engine saw, with provenance and age
       inputs.json.gz     the raw values the briefs were computed from
-      briefs/<agent>.json  the figures code handed each agent
+      briefs/<agent>.json  the figures the system handed each agent
       answers/<agent>.json what the agent answered, with tokens and latency
       intents.jsonl      every intent with the control's verdict
       placed.json        what the venue did with it

@@ -50,10 +50,10 @@ class Decision:
     stop_bps: Decimal | None
     take_bps: Decimal | None
     round_trip_bps: Decimal | None
-    # The levels the analyst named, before code held them to the operator's bounds.
+    # The levels the analyst named, before the system held them to the operator's bounds.
     own_stop_bps: Decimal | None = None
     own_take_bps: Decimal | None = None
-    # What the analyst said its confidence was, and the conviction score code built from the
+    # What the analyst said its confidence was, and the conviction score the system built from the
     # voices, so whether either one actually separates good decisions from bad can be measured.
     confidence: float | None = None
     conviction: Decimal | None = None
@@ -420,7 +420,7 @@ def side_check(found: Sequence[Outcome], seed: int = SEED) -> dict[str, Any]:
 
 
 def levels_check(found: Sequence[Outcome], seed: int = SEED) -> dict[str, Any]:
-    """The levels code applied against the ones the analyst named, on the same decisions.
+    """The levels the system applied against the ones the analyst named, on the same decisions.
 
     Same side, same entry, same round trip: the only difference is where the stop and the take
     sat, so this measures what the operator's bounds did to the analyst's own reading.
@@ -443,7 +443,7 @@ def levels_check(found: Sequence[Outcome], seed: int = SEED) -> dict[str, Any]:
     result["difference_bps"] = _bps(statistics.mean(diffs))
     result["interval_bps"] = [_bps(low), _bps(high)]
     if low > 0:
-        result["verdict"] = "the levels code applied did better than the analyst's own"
+        result["verdict"] = "the levels the system applied did better than the analyst's own"
     elif high < 0:
         result["verdict"] = "the analyst's own levels did better; review the [exit] bounds"
     else:

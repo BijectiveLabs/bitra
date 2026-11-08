@@ -1,9 +1,9 @@
 """The cycle from the briefs to a priced proposal: the readings, the analyst, the cost, the exits.
 
-The readings come first, read by code. The structure lead answers inside its schema, and code
-checks every figure it cited, the setup against the measured regime, and its confidence. The round
-trip is priced on the snapshot's own book, and the stop and the take profit are placed inside the
-operator's bounds before any reviewer is paid to argue about the trade.
+The readings come first, read by the system. The structure lead answers inside its schema, and the
+system checks every figure it cited, the setup against the measured regime, and its confidence. The
+round trip is priced on the snapshot's own book, and the stop and the take profit are placed inside
+the operator's bounds before any reviewer is paid to argue about the trade.
 """
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ def _stop(p: Pass, refusal: str, step: str, detail: str, *, stopped: bool = Fals
 
 
 def _brief(p: Pass) -> bool:
-    """The readings, by code, then the structure brief the analyst decides from."""
+    """The readings, by the system, then the structure brief the analyst decides from."""
     cfg, result = p.cfg, p.result
     p.reading_briefs = _readings(cfg, p.snapshot, result)
     context = _context_frames(cfg, result)
@@ -148,7 +148,7 @@ def _ask_lead(p: Pass) -> bool:
 
 
 def _check_answer(p: Pass) -> bool:
-    """What code checks in the answer before anything is priced."""
+    """What the system checks in the answer before anything is priced."""
     cfg, result, analyst = p.cfg, p.result, p.analyst
     kept, lost = survived(analyst.figures_used, figures_of(p.asked))
     result.cited = [figure.record() for figure in kept]
@@ -338,13 +338,13 @@ def _exits_pay(p: Pass, view: dict[str, Any]) -> bool:
 
 
 def _validate(p: Pass) -> bool:
-    """The declared stances, unless code is already certain to refuse whatever they say."""
+    """The declared stances, unless the system is already certain to refuse whatever they say."""
     cfg, result = p.cfg, p.result
     if not cfg.reviewers:
         return True
     early = _before_votes(cfg, result, p.costs, p.edge)
     if early:
-        # Refused by code that does not read a single vote, so asking three models first
+        # Refused by the system that does not read a single vote, so asking three models first
         # would only pay for an answer nothing can use.
         result.refusals.append(f"{early}; the reviewers were not asked")
         announce(cfg.watch, early.partition(":")[0], REFUSED, early.partition(": ")[2])

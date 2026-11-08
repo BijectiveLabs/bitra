@@ -1,9 +1,9 @@
-"""The brief a reviewer gets, and the check code runs over the claims it comes back with.
+"""The brief a reviewer gets, and the check the system runs over the claims it comes back with.
 
 A reviewer's words only count when they rest on a figure it was actually given. So every claim
-names a figure by the brief's own name and repeats that figure's value, and code compares the two:
-a figure that is not in the brief is discarded, a value that does not match is discarded, and both
-discards are recorded. A verdict with no surviving claim becomes `abstain`, because a verdict
+names a figure by the brief's own name and repeats that figure's value, and the system compares the
+two: a figure that is not in the brief is discarded, a value that does not match is discarded, and
+both discards are recorded. A verdict with no surviving claim becomes `abstain`, because a verdict
 resting on nothing is nothing.
 
 The comparison is fair to a model that rounds. "-1.63" against a brief's "-1.631" is the same

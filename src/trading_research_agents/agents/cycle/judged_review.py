@@ -1,10 +1,11 @@
 """The neutral review by the typed judge: two checked cases in, a probability per verdict out.
 
 Weighing a case for against a case against, each claim already checked against the figures by
-code, is a closed choice between three verdicts, which is the job a typed judge is built for and a
-reasoning model is not: the judge returns a probability for each verdict rather than a sentence,
-answers in a tenth of a second, and its versioned model is recorded on every verdict. A verdict
-counts only when the judge gives it at least `DECIDES`; below that the neutral seat abstains.
+the system, is a closed choice between three verdicts, which is the job a typed judge is built for
+and a reasoning model is not: the judge returns a probability for each verdict rather than a
+sentence, answers in a tenth of a second, and its versioned model is recorded on every verdict. A
+verdict counts only when the judge gives it at least `DECIDES`; below that the neutral seat
+abstains.
 """
 
 from __future__ import annotations

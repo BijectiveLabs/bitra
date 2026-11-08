@@ -1,4 +1,4 @@
-"""A bounded tool loop: the model picks a tool from a catalog or answers, code runs the tool.
+"""A bounded tool loop: the model picks a tool from a catalog or answers, the system runs the tool.
 
 This is the reason-act loop every agent framework ships, written as forty lines of code the
 package owns. What keeps it safe is not the loop but its edges: the catalog is closed (a tool

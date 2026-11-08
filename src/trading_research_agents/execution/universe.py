@@ -10,10 +10,10 @@ the last look, the width of the book, the cooldown after an intent - is applied 
 what survives is ordered by a written rule: the move already seen against what it costs to cross the
 spread. That is the same reasoning the trigger does, asked across a row instead of down one.
 
-The ordering is code because it decides where capital gets to be considered at all. First comes the
-room ahead: the range the instrument's own paths draw over the hold, against the spread it costs to
-cross. A market that is expected to move far for what it costs is worth a cycle before one that has
-merely moved. The move already seen orders what the paths cannot read.
+The ordering is the system's because it decides where capital gets to be considered at all. First
+comes the room ahead: the range the instrument's own paths draw over the hold, against the spread it
+costs to cross. A market that is expected to move far for what it costs is worth a cycle before one
+that has merely moved. The move already seen orders what the paths cannot read.
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ class Universe:
     max_per_cycle: int = 1
     max_intents_per_day: int | None = None
     # Retired in 0.12 with the screener seat: read so a desk that set it still runs, and ignored;
-    # `tra check` says so. Code orders the universe.
+    # `tra check` says so. The system orders the universe.
     screener: bool = False
     # Discovery: every linear perpetual the venue lists, filtered to what can be traded, the most
     # traded `top` of them added to `instruments` each pass.
@@ -109,7 +109,7 @@ class Candidate:
     # one. Two names moving together are one trade in two places.
     correlation: Decimal | None = None
     correlated_with: str = ""
-    # What code measured on this instrument, beyond the trigger's
+    # What the system measured on this instrument, beyond the trigger's
     # figures: regime, stretch, volume, the venue's 24 hours, correlation with BTC.
     features: Mapping[str, Any] = field(default_factory=dict)
     # The range the instrument's own paths draw over the hold, in bps of the mid; None when too

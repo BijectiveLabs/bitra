@@ -1,9 +1,10 @@
 """Every linear perpetual a venue lists, filtered to the ones a desk could actually trade.
 
-Code does this part, every pass, from two public calls: the market list and one ticker for every
-market. Nothing here ranks for opportunity; it only removes what cannot be traded at all (too thin,
-too wide, too new, not crypto, not reachable at the desk's leverage) and orders the rest by how much
-trades in it. Which of them is worth a cycle is the pass's question, asked later, by code.
+The system does this part, every pass, from two public calls: the market list and one ticker for
+every market. Nothing here ranks for opportunity; it only removes what cannot be traded at all (too
+thin, too wide, too new, not crypto, not reachable at the desk's leverage) and orders the rest by
+how much trades in it. Which of them is worth a cycle is the pass's question, asked later, by the
+system.
 """
 
 from __future__ import annotations

@@ -4,12 +4,12 @@ The lead is the structure lead. A peer, when declared, reads the lead's brief bl
 in the lead's schema; the two must name the same side, and the team's confidence is the lower of
 theirs. A flow specialist, when declared, reads the flow figures, which then leave the technical
 brief; its side and confidence become a declared state that conviction and confluence weigh. Every
-answer's citations are checked by code against the brief that member was given.
+answer's citations are checked by the system against the brief that member was given.
 
-The typed judge, when declared, reads each structure answer's reason beside the labels code
+The typed judge, when declared, reads each structure answer's reason beside the labels the system
 measured (the regime, the structure, the regime on each timeframe) and says how likely the reason
 describes the market that way. Below one half the trade is refused. Numbers and dates are never
-asked of it: code checks those.
+asked of it: the system checks those.
 """
 
 from __future__ import annotations

@@ -138,7 +138,7 @@ class StrategyConfig:
     canary: CanaryLimits | None = None
     funding: FundingSchedule | None = None
     agents: AgentSettings | None = None
-    # Two gates the operator declares and code applies: whether the context agrees with the
+    # Two gates the operator declares and the system applies: whether the context agrees with the
     # direction, and whether the trade is the shape this desk said it wanted.
     confluence: Matrix = field(default_factory=Matrix)
     targets: Targets = field(default_factory=Targets)
@@ -247,8 +247,8 @@ def parse_strategy_config(raw: dict[str, Any], *, base: Path | None = None) -> S
     built = _build_strategy(strategy_raw, base) if agents is None else _placeholder(agents)
     rule_desk = callable(getattr(built, "decide_on_bars", None))
     # An agent desk measures its costs from the book and states its mechanism in [agents], so the
-    # research figures a code core must declare have standard defaults here. A rule desk runs the
-    # same cycle, so it takes the same defaults.
+    # research figures a scripted core must declare have standard defaults here. A rule desk runs
+    # the same cycle, so it takes the same defaults.
     agent = agents is not None or rule_desk
     if agent and "mode" not in exit_raw and "stop_frac" not in exit_raw:
         exit_raw["mode"] = "analyst"

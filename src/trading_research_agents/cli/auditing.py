@@ -1,4 +1,5 @@
-"""The auditors woken between cycles, on their own ledger. They report; code holds the risk."""
+"""The auditors woken between cycles, on their own ledger. They report; the system holds the
+risk."""
 
 from __future__ import annotations
 

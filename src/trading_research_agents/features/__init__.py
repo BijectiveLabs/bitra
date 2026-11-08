@@ -1,4 +1,4 @@
-"""Figures a decision reads, computed by code at a bar's close from what was known then.
+"""Figures a decision reads, computed by the system at a bar's close from what was known then.
 
 A figure whose inputs are missing, stale or unseen is `Absent` with the reason.
 """

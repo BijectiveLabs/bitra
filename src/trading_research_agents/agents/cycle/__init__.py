@@ -1,11 +1,11 @@
 """One cycle: what the engine saw, what the agents said, what the cost gate decided.
 
-The order is fixed and short. Code takes a snapshot, which costs nothing, and asks the trigger
-whether anything has happened worth paying a model to look at. Code builds the briefs. Agents read
-the briefs, in parallel, and answer inside a schema. Code prices the round trip on the book it is
-holding, sizes the position from the agreement and then from what the account can afford to lose
-at the stop, and compares what is left with the edge the analyst claimed. Only then is there an
-intent, and in the default mode that intent goes to a file rather than to a venue.
+The order is fixed and short. The system takes a snapshot, which costs nothing, and asks the trigger
+whether anything has happened worth paying a model to look at. The system builds the briefs. Agents
+read the briefs, in parallel, and answer inside a schema. The system prices the round trip on the
+book it is holding, sizes the position from the agreement and then from what the account can afford
+to lose at the stop, and compares what is left with the edge the analyst claimed. Only then is there
+an intent, and in the default mode that intent goes to a file rather than to a venue.
 
 Two steps here belong to a risk manager and are deliberately not a model's to make. How much goes
 behind an idea comes from the conviction ladder; how much the account may lose if the stop is hit
