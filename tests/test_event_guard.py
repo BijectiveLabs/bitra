@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
@@ -71,9 +72,7 @@ def test_in_shadow_the_guard_records_what_it_would_hold_and_the_rule_trades(
     assert [i.text for i in kept] == ["exchange hot wallet drained"]
 
 
-def result_day():  # type: ignore[no-untyped-def]
-    from datetime import date
-
+def result_day() -> date:
     return date(2026, 9, 27)
 
 
