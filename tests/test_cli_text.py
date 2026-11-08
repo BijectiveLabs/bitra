@@ -62,6 +62,7 @@ class Scripted(FakeJudge):
         machine = 0.97 if "instructions" in state["headline"] else 0.01
         self.answers = {
             "kind": Picked("hack", 0.9, dict.fromkeys(KINDS, 0.0) | {"hack": 0.92}),
+            "kind_reversed": Picked("hack", 0.9, dict.fromkeys(KINDS, 0.0) | {"hack": 0.88}),
             "about_BTC": Checked(0.9),
             "about_ETH": Checked(0.1),
             "about_market": Checked(0.3),
@@ -95,15 +96,21 @@ def test_check_names_the_judge_and_a_missing_key(tmp_path: Path) -> None:
     path.write_text(DATA_TOML, encoding="utf-8")
     # A replay reads recorded verdicts only, so it needs no key.
     assert judge_lines(path, {}) == (
-        ["judge: typesafe jev-1.14.0, cache replay; text features read its verdicts"],
+        [
+            "judge: typesafe jev-1.14.0, cache replay; [event_guard] and `tra text judge` read "
+            "its verdicts"
+        ],
         [],
     )
     path.write_text(DATA_TOML.replace('"replay"', '"record"'), encoding="utf-8")
     good, bad = judge_lines(path, {"TYPESAFE_API_KEY": "ts-0123456789"})
-    assert good == ["judge: typesafe jev-1.14.0, cache record; text features read its verdicts"]
+    assert good == [
+        "judge: typesafe jev-1.14.0, cache record; [event_guard] and `tra text judge` read "
+        "its verdicts"
+    ]
     assert bad == []
     good, bad = judge_lines(path, {})
-    assert bad == ["judge: TYPESAFE_API_KEY is not set; the text features are absent until it is"]
+    assert bad == ["judge: TYPESAFE_API_KEY is not set; the headlines are not read until it is"]
     path.write_text("[record]\nvenue = 'bybit'\n", encoding="utf-8")
     assert judge_lines(path, {}) == ([], [])
     path.write_text('[judge]\nprovider = "typesafe"\nmodel = "jev-latest"\n', encoding="utf-8")

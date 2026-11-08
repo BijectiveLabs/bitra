@@ -87,9 +87,9 @@ def judge_lines(path: Path, env: Mapping[str, str]) -> tuple[list[str], list[str
     if cfg is None:
         return [], []
     if cfg.cache is not CacheMode.REPLAY and not env.get(cfg.key_env):
-        return [], [f"judge: {cfg.key_env} is not set; the text features are absent until it is"]
+        return [], [f"judge: {cfg.key_env} is not set; the headlines are not read until it is"]
     named = f"{cfg.provider} {cfg.model}, cache {cfg.cache.value}"
-    return [f"judge: {named}; text features read its verdicts"], []
+    return [f"judge: {named}; [event_guard] and `tra text judge` read its verdicts"], []
 
 
 def desk_judge(path: Path) -> Judge | None:

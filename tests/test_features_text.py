@@ -62,3 +62,11 @@ def test_a_report_seen_after_the_decision_is_a_defect() -> None:
 def test_the_catalog_carries_the_text_features() -> None:
     names = {f.spec.name for f in DEFAULT_FEATURES}
     assert {"text_count_24", *(f"text_{k}_p_24" for k in KINDS if k != "none")} <= names
+
+
+def test_regulatory_news_is_read_in_its_two_directions() -> None:
+    from trading_research_agents.features.text import KINDS
+
+    # Bans and charges, and approvals and legal frameworks, move crypto prices opposite ways
+    # (Auer and Claessens, BIS Quarterly Review, 2018), so one kind for both would cancel out.
+    assert "restriction" in KINDS and "approval" in KINDS and "regulatory" not in KINDS

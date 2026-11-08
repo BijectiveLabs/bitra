@@ -26,7 +26,10 @@ KINDS: Mapping[str, str] = {
     "delisting": "an asset is delisted, or trading in it is suspended, on an exchange",
     "hack": "funds are stolen, or a protocol, bridge or exchange is exploited or breached",
     "outage": "an exchange, chain or protocol halts, stalls or stops withdrawals",
-    "regulatory": "a regulator or a court acts on, charges, bans or approves something in crypto",
+    "restriction": "a regulator, a court or a government bans, charges, sanctions or restricts "
+    "something in crypto",
+    "approval": "a regulator, a court or a government approves, licenses or sets out a legal "
+    "framework for something in crypto",
     "macro": "a scheduled economic release or a central bank decision",
     "none": "none of these",
 }
@@ -44,6 +47,8 @@ class TextEvent:
     # Probability that the headline concerns each asset, and `market` for the market as a whole.
     concerns: Mapping[str, float] = field(default_factory=dict)
     model: str = ""
+    # The headline as read, so a decision that rests on the event can name it.
+    text: str = ""
 
     def relevance(self, asset: str) -> float:
         return max(self.concerns.get(asset, 0.0), self.concerns.get(MARKET, 0.0))

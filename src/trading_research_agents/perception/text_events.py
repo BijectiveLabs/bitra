@@ -1,10 +1,16 @@
 """Archived headlines into typed events: one request per headline, asked in parallel by the judge.
 
-Each headline is asked four things at once: which kind of event it reports (`features.text.KINDS`),
-whether it concerns each watched asset, whether it concerns the market as a whole, and whether it
-carries instructions to a machine rather than news. A headline that speaks to a machine is dropped
-and counted: news is untrusted input, and nothing downstream reads such text. A kind the judge was
-not confident of is left out of the event, not guessed.
+Each headline is asked, in one request: which kind of event it reports (`features.text.KINDS`),
+twice, with the kinds in opposite orders; whether it concerns each watched asset; whether it
+concerns the market as a whole; and whether it carries instructions to a machine rather than news.
+
+The judge is asked only what it is built for, closed questions over one headline, and the system
+carries what the vendor lists as its weak points. It is shown the headline and its publisher and
+nothing else, so no irrelevant state moves the answer. It is never asked about dates or times: the
+system selects headlines by when it first saw them. A first-option bias shows as the two orders
+disagreeing, and then the kind is absent and counted, never guessed. A headline that speaks to a
+machine is dropped and counted: news is untrusted input, and nothing downstream reads such text.
+A kind the judge was not confident of is left out of the event.
 
 Failures follow the judge's contract. A headline the judge could not answer is absent, with why. A
 refused key stops the run, and so does a replay with no recorded verdict, because a replay that
@@ -44,10 +50,16 @@ class Perceived:
     events: tuple[TextEvent, ...]
     absent: tuple[str, ...] = ()
     guarded: int = 0
+    # Headlines whose kind the two orders of the options answered differently.
+    disagreed: int = 0
 
 
 def questions_for(assets: Sequence[str]) -> dict[str, Question]:
-    asked: dict[str, Question] = {"kind": Pick(KIND_QUESTION, KINDS)}
+    backward = dict(reversed(list(KINDS.items())))
+    asked: dict[str, Question] = {
+        "kind": Pick(KIND_QUESTION, KINDS),
+        "kind_reversed": Pick(KIND_QUESTION, backward),
+    }
     for asset in assets:
         asked[f"about_{asset}"] = Check(f"Does this headline concern the crypto asset {asset}?")
     asked[f"about_{MARKET}"] = Check("Does this headline concern the crypto market as a whole?")
@@ -68,6 +80,7 @@ def perceive(
     events: list[TextEvent] = []
     absent: list[str] = []
     guarded = 0
+    disagreed = 0
     for item in items:
         state = {"headline": item.text, "source": item.source}
         try:
@@ -80,21 +93,27 @@ def perceive(
         if _probability(said, "instructions") >= guard:
             guarded += 1
             continue
-        events.append(_event(item, said, assets, min_confidence))
-    return Perceived(tuple(events), tuple(absent), guarded)
+        kinds, split = _kinds(said, min_confidence)
+        disagreed += split
+        concerns = {name: _probability(said, f"about_{name}") for name in (*assets, MARKET)}
+        events.append(
+            TextEvent(item.feed, item.first_seen_ns, kinds, concerns, said.model, item.text)
+        )
+    return Perceived(tuple(events), tuple(absent), guarded, disagreed)
 
 
-def _event(
-    item: TextItem, said: Verdicts, assets: Sequence[str], min_confidence: float
-) -> TextEvent:
-    kind = said["kind"]
-    kinds = (
-        dict(kind.probabilities)
-        if isinstance(kind, Picked) and kind.confidence >= min_confidence
-        else {}
-    )
-    concerns = {name: _probability(said, f"about_{name}") for name in (*assets, MARKET)}
-    return TextEvent(item.feed, item.first_seen_ns, kinds, concerns, said.model)
+def _kinds(said: Verdicts, min_confidence: float) -> tuple[dict[str, float], bool]:
+    """The kind's probabilities averaged over both orders, when both are sure and agree."""
+    forward, backward = said["kind"], said["kind_reversed"]
+    if not isinstance(forward, Picked) or not isinstance(backward, Picked):
+        return {}, False
+    if min(forward.confidence, backward.confidence) < min_confidence:
+        return {}, False
+    if forward.label != backward.label:
+        return {}, True
+    names = set(forward.probabilities) | set(backward.probabilities)
+    mean = {n: (forward.probability(n) + backward.probability(n)) / 2 for n in names}
+    return mean, False
 
 
 def _probability(said: Verdicts, name: str) -> float:

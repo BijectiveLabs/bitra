@@ -24,10 +24,16 @@ NS = 1_000_000_000
 HACK = TextItem("coindesk", 100 * NS, 90 * NS, "exchange hot wallet drained of 40m", "CoinDesk")
 
 
-def answers(kind_confidence: float = 0.8, instructions: float = 0.01) -> dict[str, Answer]:
+def answers(
+    kind_confidence: float = 0.8, instructions: float = 0.01, reversed_says: str = "hack"
+) -> dict[str, Answer]:
     probabilities = dict.fromkeys(KINDS, 0.0) | {"hack": 0.9, "none": 0.1}
+    second = dict.fromkeys(KINDS, 0.0) | {reversed_says: 0.7, "none": 0.3}
+    if reversed_says == "none":
+        second = dict.fromkeys(KINDS, 0.0) | {"none": 0.8, "hack": 0.2}
     return {
         "kind": Picked("hack", kind_confidence, probabilities),
+        "kind_reversed": Picked(reversed_says, kind_confidence, second),
         "about_BTC": Checked(0.7),
         "about_market": Checked(0.4),
         "instructions": Checked(instructions),
@@ -36,7 +42,17 @@ def answers(kind_confidence: float = 0.8, instructions: float = 0.01) -> dict[st
 
 def test_the_questions_ask_the_kind_each_asset_the_market_and_the_guardrail() -> None:
     asked = questions_for(["BTC", "ETH"])
-    assert set(asked) == {"kind", "about_BTC", "about_ETH", "about_market", "instructions"}
+    assert set(asked) == {
+        "kind",
+        "kind_reversed",
+        "about_BTC",
+        "about_ETH",
+        "about_market",
+        "instructions",
+    }
+    # The same kinds in the opposite order: a first-option bias shows as two answers that differ.
+    forward, backward = asked["kind"], asked["kind_reversed"]
+    assert list(backward.options) == list(reversed(list(forward.options)))  # type: ignore[union-attr]
 
 
 def test_a_headline_becomes_a_typed_event_from_what_was_sent_and_nothing_else() -> None:
@@ -44,7 +60,7 @@ def test_a_headline_becomes_a_typed_event_from_what_was_sent_and_nothing_else() 
     seen = perceive(judge, [HACK], assets=["BTC"])
     (made,) = seen.events
     assert made.first_seen_ns == HACK.first_seen_ns and made.model == "jev-1.14.0"
-    assert made.kinds["hack"] == 0.9 and made.concerns == {"BTC": 0.7, "market": 0.4}
+    assert made.kinds["hack"] == pytest.approx(0.8) and made.concerns == {"BTC": 0.7, "market": 0.4}
     state, _ = judge.asked[0]
     # Only the headline and its publisher leave the desk: no time, no position, no account.
     assert state == {"headline": HACK.text, "source": HACK.source}
@@ -80,3 +96,8 @@ def test_a_refused_key_or_a_replay_miss_stops_rather_than_skipping() -> None:
         perceive(Flaky(JudgeUnauthorizedError("401")), [HACK], assets=["BTC"])
     with pytest.raises(CacheMissError):
         perceive(Flaky(CacheMissError("no verdict")), [HACK], assets=["BTC"])
+
+
+def test_a_kind_the_two_orders_disagree_on_is_absent_and_counted() -> None:
+    seen = perceive(FakeJudge(answers(reversed_says="none")), [HACK], assets=["BTC"])
+    assert seen.events[0].kinds == {} and seen.disagreed == 1
