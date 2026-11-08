@@ -166,6 +166,7 @@ def test_check_describes_a_rule_desk_as_a_rule(
     assert "paths: recorded on every cycle as a risk reading" in said
     assert "dataset: none; `tra run` decides on the live chains" in said
     assert "funding: live" in said
+    assert "ready to run `tra data get" not in said
 
 
 def test_a_candle_without_a_trade_count_is_still_a_traded_bar() -> None:

@@ -379,7 +379,7 @@ def _live_notes(
 def _next_command(args: argparse.Namespace, cfg: Any) -> str:
     if not args.config.is_file():
         return "tra init my-desk --profile autonomous"
-    if cfg is not None and cfg.agents is not None:
+    if cfg is not None and (cfg.agents is not None or cfg.rule is not None):
         return "tra run"
     if cfg is not None and cfg.run.instrument not in _datasets(args.config):
         return f"tra data get {cfg.run.instrument} YYYY-MM-DD"
