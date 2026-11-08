@@ -254,7 +254,7 @@ perceives and verifies, between the figures the system computes and the seats th
 
 | Job | Jev | Why |
 |---|---|---|
-| Typed events from dated text: listing, delisting, hack or exploit, outage, regulatory action, macro release, with the asset it concerns | yes | a closed set of labels with probabilities to threshold, where the macro and sentiment labellers it replaced cost a quarter of the tokens and no gate read them |
+| Typed events from dated text: listing, delisting, hack or exploit, outage, a restriction or an approval by a regulator, a court or a government, macro release, with the asset it concerns | yes | a closed set of labels with probabilities to threshold, where the macro and sentiment labellers it replaced cost a quarter of the tokens and no gate read them |
 | Screening fetched text for instructions to a machine before any model reads it | yes | outside text is untrusted input |
 | Checking each structure reason against the regime the system measured | yes | a reason that does not describe the market is caught by a check, not by a second opinion |
 | Checking every claim of a proposal against its brief | from 0.13 | the semantic half of the review; the numeric half stays in the system |
@@ -273,10 +273,12 @@ min_confidence = 0.5            # below this the kind of event is absent, not a 
 cache = "record"                # record | replay | off
 ```
 
-Each headline is asked four things in one request: which kind of event it reports (a listing, a
-delisting, a hack or exploit, an outage, a regulatory action, a macro release, or none of these),
-whether it concerns each asset the desk records, whether it concerns the market as a whole, and
-whether it carries instructions to a machine rather than news. A headline that speaks to a machine
+Each headline is asked, in one request: which kind of event it reports (a listing, a delisting,
+a hack or exploit, an outage, a restriction, an approval, a macro release, or none of these), twice,
+with the kinds in opposite orders; whether it concerns each asset the desk records; whether it
+concerns the market as a whole; and whether it carries instructions to a machine rather than news.
+Restrictions and approvals are two kinds because they move crypto prices opposite ways (Auer and
+Claessens, BIS Quarterly Review, 2018). A headline that speaks to a machine
 is dropped and counted. Only the headline and its publisher are sent: never a position, a balance,
 an order or a key, and any credential that appears in the text is replaced before it leaves.
 
@@ -299,6 +301,40 @@ than as decisions, and the arena measures them before anything leans on them.
 
 `tra text judge --from 2026-10-25` reads the archived headlines of a range of days and prints what
 the features would read; `tra check` names the judge, its pinned model and a missing key.
+
+### What the system carries, so the judge does only its own job
+
+The judge is kept in the place it is built for, and the system takes every part the vendor lists
+as a weak point:
+
+| The judge's weak point (vendor) | What the system does |
+|---|---|
+| not a calculator | the weight of an event (the kind's probability times how much it concerns the asset) and its comparison with the threshold are computed in code |
+| unreliable at comparing dates and times | which headlines are recent is decided by when the system first saw each one; the judge is never shown a date |
+| first-option bias in a choice | the kind is asked in two orders; if the answers differ the kind is absent, and counted |
+| accuracy falls with irrelevant state | one headline and its publisher per request, nothing else |
+| adversarial content can move the answer | a separate question screens for instructions to a machine; such text is dropped and counted |
+
+### The event guard
+
+On a desk whose decision is a rule, the judge guards the rule's new entries:
+
+```toml
+# strategy.toml
+[event_guard]
+mode = "shadow"                 # shadow records what it would hold; hold holds
+hold_at = 0.7                   # declared, never assumed: the weight that holds an entry
+window_h = 24                   # headlines first seen in the last 24 hours
+kinds = ["hack", "outage", "delisting", "restriction"]   # the default
+```
+
+Before a new entry the judge reads the headlines from the declared news files, which are archived
+as first seen under `data/market/text/desk/`. The heaviest adverse event that concerns the asset,
+or the whole market, is set against `hold_at`. `shadow` holds nothing and records what it would
+have held on the intent, so one desk keeps both arms on the same days: the rule alone and the rule
+with the guard. `hold` holds the entry, and fails closed when it cannot read: no judge declared, a
+refused key, or a headline the judge could not answer. Every verdict records the model, the
+thresholds and the headline it rested on.
 
 ## Choosing a model per role
 

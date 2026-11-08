@@ -174,7 +174,7 @@ flowchart TB
     compact["compaction<br/>a closed day joined, verified, parts removed;<br/>unseen hours written as missing"]
     readers["readers and the BarFeed port<br/>a file whose bytes changed is refused"]
     judge["typed judge, optional<br/>headlines into typed events"]
-    features["features<br/>41 figures known at the bar's close"]
+    features["features<br/>42 figures known at the bar's close"]
     arena["the arena<br/>replay, settlement, statistics"]
     ws --> flow
     ws --> book

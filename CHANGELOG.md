@@ -8,6 +8,14 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- The event guard (`[event_guard]`). On a rule desk the typed judge reads the headlines first
+  seen in the last day; the system weighs every adverse event (hack, outage, delisting,
+  restriction) that concerns the asset or the whole market and sets the heaviest against a
+  declared `hold_at`. `shadow`, the default, records on the intent what it would hold; `hold`
+  holds, and fails closed when the headlines could not be read. Every headline read is archived
+  as first seen. `tra check` names the guard, an unknown kind and a missing judge.
+- The judge asks each headline's kind in two orders, and an answer that differs between them is
+  absent and counted: the vendor lists a first-option bias among the judge's weak points.
 - A rule as the desk's one decision. A rule is a class in the operator's own file with `name` and
   `decide_on_bars(bars)`: closed bars in, one idea (side, stop and take in bps, hold in bars) or
   none out. `tra run` asks it with no model and no `[agents]` table; the arena replays it with
@@ -29,6 +37,10 @@ All notable changes to this project are recorded here. The format follows
 
 ### Changed
 
+- The judge's kinds of event read a regulatory headline in its two directions, `restriction`
+  and `approval`, in place of one `regulatory` kind: bans and charges, and approvals and legal
+  frameworks, move crypto prices opposite ways (Auer and Claessens, BIS 2018). The judge's
+  `min_confidence` from `[judge]` now reaches the reading; before, the default was used.
 - `[targets].min_path_ev_bps` is off unless declared. The paths are a risk reading, recorded on
   every cycle: drawn from the instrument's own candles they are a calibrated random walk, and over
   16,458 readings their value told one moment from another no better than chance. A desk that
