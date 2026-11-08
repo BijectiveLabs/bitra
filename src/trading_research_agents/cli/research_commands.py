@@ -1,4 +1,4 @@
-"""The research commands: the falsification chain, ideas through the agent, replay, shadow and
+"""The research commands: the falsification chain, ideas through the agent, replay, paper and
 canary, signals, the ladder and the ledger.
 """
 

@@ -1,4 +1,4 @@
-"""One loop for replay, paper and shadow.
+"""One loop for replay, paper and the live tier.
 
     print -> venue.poll (fills) -> bars -> exits on the open position -> strategy
           -> controls -> venue

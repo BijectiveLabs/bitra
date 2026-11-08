@@ -47,7 +47,7 @@ kill_switch = "KILL"               # `tra kill` sets it: flatten and stop; `tra 
 # max_trades_per_day = 6           # orders across every instrument per UTC day
 # max_losing_streak = 3            # losing round trips in a row that end the day's entries
 
-# ---- live tier (T3 canary). Keys never live here: BYBIT_API_KEY / BYBIT_API_SECRET come from
+# ---- live tier (T2 canary). Keys never live here: BYBIT_API_KEY / BYBIT_API_SECRET come from
 # the environment or `--env-file`. Uncomment both tables to run `tra live`.
 # [live]
 # venue = "bybit"                  # a live venue plugin; defaults to the venue half of venue_key

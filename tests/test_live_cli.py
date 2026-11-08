@@ -197,7 +197,7 @@ def test_live_refuses_without_the_tables_the_ladder_or_the_keys(
     assert code == 1 and "is at RESEARCH" in capsys.readouterr().err
 
     ladder = Ladder(tmp_path / "ladder.json", live_available=True)
-    for evidence in ("replay OPEN", "paper OPEN", "shadow OPEN"):
+    for evidence in ("replay OPEN", "paper OPEN"):
         ladder.promote(evidence=evidence, signed_by="op")
     assert Ladder(tmp_path / "ladder.json").tier == Tier.CANARY
     with pytest.raises(LadderError, match="PRODUCTION is not reachable"):

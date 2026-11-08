@@ -1,6 +1,6 @@
 """The promotion ladder. Up slowly, with evidence and a signature; down instantly, without either.
 
-    T0 research  ->  T1 paper  ->  T2 shadow  ->  T3 canary  ->  T4 production
+    T0 research  ->  T1 paper  ->  T2 canary  ->  T3 production
 
 A strategy does not reach a tier because somebody is confident about it. Each step up needs a
 receipt naming the evidence (a layer-5 verdict on the trades the previous tier produced) and an
@@ -22,9 +22,20 @@ from typing import Any
 class Tier(IntEnum):
     RESEARCH = 0
     PAPER = 1
-    SHADOW = 2
-    CANARY = 3
-    PRODUCTION = 4
+    CANARY = 2
+    PRODUCTION = 3
+
+
+SCHEMA = 2
+# Before 0.14 the ladder had a T2 shadow tier, the same paper run with its intents kept, so the
+# tiers above it sat one number higher. A state written then is read on the one paper tier.
+FIRST_SCHEMA_TIERS = {
+    0: Tier.RESEARCH,
+    1: Tier.PAPER,
+    2: Tier.PAPER,
+    3: Tier.CANARY,
+    4: Tier.PRODUCTION,
+}
 
 
 LIVE_TIERS = frozenset({Tier.CANARY, Tier.PRODUCTION})
@@ -66,13 +77,18 @@ class Ladder:
 
     def _load(self) -> dict[str, Any]:
         if not self.path.exists():
-            return {"tier": int(Tier.RESEARCH), "history": []}
+            return {"schema": SCHEMA, "tier": int(Tier.RESEARCH), "history": []}
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             raise LadderError(f"{self.path}: unreadable ladder state: {exc}") from exc
         if not isinstance(data, dict) or "tier" not in data:
             raise LadderError(f"{self.path}: ladder state is not a ladder")
+        if data.get("schema") != SCHEMA:
+            first = FIRST_SCHEMA_TIERS.get(int(data["tier"]))
+            if first is None:
+                raise LadderError(f"{self.path}: tier {data['tier']} is not a tier this ladder had")
+            data = {**data, "schema": SCHEMA, "tier": int(first)}
         return data
 
     def _save(self) -> None:
@@ -102,7 +118,7 @@ class Ladder:
         if target in LIVE_TIERS and not self.live_available:
             raise LadderError(
                 f"{target.name} needs a live venue plugin, and none is registered; the ladder "
-                f"stops at {Tier.SHADOW.name}"
+                f"stops at {Tier.PAPER.name}"
             )
         if target is Tier.PRODUCTION and not self.production_available:
             raise LadderError(

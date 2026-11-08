@@ -186,20 +186,39 @@ def test_ladder_goes_up_with_evidence_and_down_on_a_reason(tmp_path: Path) -> No
     with pytest.raises(LadderError, match="signed"):
         ladder.promote(evidence="validation.json abc", signed_by="")
     first = ladder.promote(evidence="layer 5 OPEN on T0 replay, seal abc", signed_by="operator")
-    second = ladder.promote(evidence="two weeks paper, layer 5 OPEN", signed_by="operator")
-    assert (first.to_tier, second.to_tier) == (Tier.PAPER, Tier.SHADOW)
-    assert Ladder(tmp_path / "ladder.json").tier == Tier.SHADOW
+    assert first.to_tier == Tier.PAPER
+    assert Ladder(tmp_path / "ladder.json").tier == Tier.PAPER
     with pytest.raises(LadderError, match="needs a live venue"):
-        ladder.promote(evidence="two weeks shadow", signed_by="operator")
+        ladder.promote(evidence="two weeks paper, layer 5 OPEN", signed_by="operator")
     demotion = ladder.demote(reason="daily loss limit tripped", to=Tier.RESEARCH)
     assert (
         demotion.to_tier == Tier.RESEARCH and Ladder(tmp_path / "ladder.json").tier == Tier.RESEARCH
     )
     with pytest.raises(LadderError, match="nothing below"):
         ladder.demote(reason="x")
-    assert [h["kind"] for h in ladder.history] == ["promotion", "promotion", "demotion"]
+    assert [h["kind"] for h in ladder.history] == ["promotion", "demotion"]
     with pytest.raises(LadderError, match="UTC"):
         ladder.promote(evidence="e", signed_by="o", at=datetime(2026, 9, 13))
+
+
+def test_the_ladder_has_one_paper_tier() -> None:
+    assert [t.name for t in Tier] == ["RESEARCH", "PAPER", "CANARY", "PRODUCTION"]
+
+
+def test_a_ladder_written_with_two_paper_tiers_is_read_on_the_one(tmp_path: Path) -> None:
+    import json
+
+    path = tmp_path / "ladder.json"
+    # Before 0.14 the ladder had T2 shadow, the same paper run with its intents kept.
+    for old, new in ((1, Tier.PAPER), (2, Tier.PAPER), (3, Tier.CANARY), (4, Tier.PRODUCTION)):
+        path.write_text(json.dumps({"tier": old, "history": []}), encoding="utf-8")
+        assert Ladder(path).tier == new
+    path.write_text(json.dumps({"tier": 3, "history": []}), encoding="utf-8")
+    ladder = Ladder(path, live_available=True)
+    ladder.demote(reason="the record says so")
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved["schema"] == 2 and saved["tier"] == int(Tier.PAPER)
+    assert Ladder(path).tier == Tier.PAPER
 
 
 # The runtime, end to end

@@ -228,7 +228,7 @@ def show_ledger(ledger_path: str = "ledger.jsonl") -> dict[str, Any]:
 def show_ladder(ladder_path: str = "ladder.json") -> dict[str, Any]:
     """Show the promotion ladder: the tier a strategy is on and how it got there.
 
-    Tiers run research, paper, shadow, canary, production; canary and production send real
+    Tiers run research, paper, canary, production; canary and production send real
     orders. Use it before acting on a run, to know what the strategy is allowed to do. Read-only:
     promotion is never available through this surface. Returns the tier and every promotion and
     demotion with its reason.
@@ -238,7 +238,7 @@ def show_ladder(ladder_path: str = "ladder.json") -> dict[str, Any]:
 
 
 def read_run_report(run_dir: str) -> dict[str, Any]:
-    """Read one run's report: what a replay, shadow or canary run did, and how it ended.
+    """Read one run's report: what a replay, paper or canary run did, and how it ended.
 
     Returns run.json as written (label, instrument, strategy, prints, bars, intents, refusals,
     fills, net bps, what stopped it) and the count of closed round trips in its trades.jsonl. Use

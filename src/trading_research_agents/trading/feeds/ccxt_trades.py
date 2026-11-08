@@ -1,4 +1,4 @@
-"""Public trades from any venue ccxt streams, for shadow and the live tier. No key is read.
+"""Public trades from any venue ccxt streams, for paper and the live tier. No key is read.
 
 ccxt's streaming side (`ccxt.pro`, shipped inside the `ccxt` package) keeps the socket, the
 venue's ping and the subscription; this turns what it returns into the package's `Trade`. It runs

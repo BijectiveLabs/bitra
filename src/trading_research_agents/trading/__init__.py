@@ -1,6 +1,6 @@
 """The trading agent: a validated strategy, a feed, a venue, and controls that fail closed.
 
-One code path for replay, paper and shadow. What differs is the feed and the venue, both behind
+One code path for replay, paper and live. What differs is the feed and the venue, both behind
 protocols; the runtime does not know which it was given. No language model is anywhere on the
 order path. Every intent, every refusal and every fill is written down as it happens.
 """

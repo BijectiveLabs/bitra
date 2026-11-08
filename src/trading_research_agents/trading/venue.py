@@ -1,6 +1,6 @@
 """Where intents go. A simulated venue fills by the execution rules; live venues are plugins.
 
-The simulated venue is the same object for replay, paper and shadow. It fills an entry at the
+The simulated venue is the same object for replay and paper. It fills an entry at the
 first print after the measured latency, never at the print that fired the signal, and it prices
 the round trip with the cost identity from the operator's envelope. Nothing here places an
 order anywhere. A live venue satisfies the same protocol from `trading/venues/`, and the

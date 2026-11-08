@@ -81,7 +81,7 @@ def evidence_check(ladder_path: Path) -> list[dict[str, Any]]:
     if not ladder_path.is_file():
         return []
     state = json.loads(ladder_path.read_text("utf-8"))
-    words = ("validation", "layer 5", "open", "replay", "paper", "shadow", "canary", "seal")
+    words = ("validation", "layer 5", "open", "replay", "paper", "canary", "seal")
     out = []
     for h in state.get("history", []):
         if h.get("kind") != "promotion":
