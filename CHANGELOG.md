@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-11
+
 ### Added
 
 - The event guard (`[event_guard]`). On a rule desk the typed judge reads the headlines first
