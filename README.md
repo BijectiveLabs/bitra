@@ -691,4 +691,4 @@ of those gates, which is why they can propose but never size, price or send.
 
 MIT. See [LICENSE](https://github.com/BijectiveLabs/bitra/blob/master/LICENSE); [NOTICE](https://github.com/BijectiveLabs/bitra/blob/master/NOTICE) lists the third-party software this package builds on.
 
-Built by [Bijective Labs](https://github.com/BijectiveLabs).
+Built by [Bijective Labs](https://www.bijectivelabs.dev).
