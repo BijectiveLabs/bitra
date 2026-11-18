@@ -778,7 +778,7 @@ The 0.11 and 0.12 steps of the roadmap, released together.
 
 ### Changed
 
-- One address per role: the product page `www.bijectivelabs.dev/open-source` is the homepage on
+- One address per role: the product page `www.bijectivelabs.dev/bitra` is the homepage on
   PyPI, in the citation and in the README's web badge; the docs stay at `docs.bijectivelabs.dev`;
   company links go to `www.bijectivelabs.dev` without a redirect.
 - Docs: the venues page says Bybit and OKX have both been run end to end on the demo API, matching its own

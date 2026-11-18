@@ -11,8 +11,8 @@ vendor that speaks the OpenAI chat API.
 | Name | Extra | Key variable | Endpoint | Structured output |
 |---|---|---|---|---|
 | `anthropic` | `[anthropic]` | `ANTHROPIC_API_KEY` | the SDK's | JSON schema, prompt caching on the doctrine |
-| `google` | `[google]` | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | the SDK's | JSON schema |
 | `openai` | `[openai]` | `OPENAI_API_KEY` | the SDK's | strict JSON schema |
+| `google` | `[google]` | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | the SDK's | JSON schema |
 | `deepseek` | `[openai]` | `DEEPSEEK_API_KEY` | `https://api.deepseek.com` | JSON mode |
 | `groq` | `[openai]` | `GROQ_API_KEY` | `https://api.groq.com/openai/v1` | enforced schema; JSON mode where a model cannot |
 | `xai` | `[openai]` | `XAI_API_KEY` | `https://api.x.ai/v1` | JSON mode |

@@ -49,7 +49,7 @@ bitra = "trading_research_agents.cli:main"
 trading-research-agents = "trading_research_agents.cli:main"
 
 [project.urls]
-Homepage = "https://www.bijectivelabs.dev/open-source"
+Homepage = "https://www.bijectivelabs.dev/bitra"
 Documentation = "https://docs.bijectivelabs.dev"
 Repository = "https://github.com/BijectiveLabs/bitra"
 Issues = "https://github.com/BijectiveLabs/bitra/issues"

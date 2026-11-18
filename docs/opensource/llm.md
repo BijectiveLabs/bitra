@@ -87,7 +87,7 @@ same answer the data layer gives - a chain:
 [agents]
 provider = "groq"
 model = "openai/gpt-oss-120b"
-fallback = ["google:gemini-flash-latest", "anthropic:claude-opus-5-5"]
+fallback = ["anthropic:claude-opus-5-5", "google:gemini-flash-latest"]
 
 [agents.roles.reviewer]
 model = "openai/gpt-oss-20b"
