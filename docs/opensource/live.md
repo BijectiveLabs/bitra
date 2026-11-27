@@ -59,7 +59,8 @@ directory before any order is sent.
   not the venue's; the session stops.
 - **Fills are confirmed, not assumed.** The order is read back from the venue, and its filled
   amount and average price are the fill, in the base. An order that has finished but does not yet
-  say what it filled is asked again rather than read as nothing. A partial fill is a smaller
+  say what it filled is asked again rather than read as nothing, and so is a cancelled or expired
+  order that executed in part but has no average price yet. A partial fill is a smaller
   position and a second reduce-only order for the remainder when it closes.
 - **Reconciliation after every fill.** The venue's position must agree with the model to the last
   unit. A disagreement is a `VenueError`: the loop stops, the kill switch is armed, nothing more is

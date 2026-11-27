@@ -232,9 +232,20 @@ class CcxtLiveVenue:
         state = str(status.get("status") or "").lower()
         if state not in (*FILLED, *ENDED):
             return None
-        if status.get("filled") is None or (state in FILLED and status.get("average") is None):
+        if status.get("filled") is None:
             # Finished, but not yet saying with what; a fill read as nothing would be lost.
             return None
+        if state in FILLED and status.get("average") is None:
+            return None
+        if state in ENDED and status.get("average") is None:
+            try:
+                done = Decimal(str(status.get("filled") or 0))
+            except (InvalidOperation, ValueError, TypeError):
+                raise VenueError(f"{order.client_id}: the order fields are not numbers") from None
+            if done > 0:
+                # A cancelled partial has executed size but no venue average. Keep it pending
+                # until the average is available; clearing it would lose the partial fill.
+                return None
         self._pending = None
         try:
             done = Decimal(str(status.get("filled") or 0))

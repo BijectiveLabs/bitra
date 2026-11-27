@@ -370,6 +370,18 @@ def test_a_partial_fill_is_reported_at_its_executed_size(envelope: Envelope) -> 
     assert any("partial" in e for e in v.events)
 
 
+def test_a_cancelled_partial_fill_waits_for_its_average(envelope: Envelope) -> None:
+    double = Double()
+    double.fill_fraction = Decimal("0.5")
+    v = venue(double, envelope)
+    v.preflight()
+    v.submit(intent(Direction.LONG, "0.02"))
+    order_id = next(iter(double.orders))
+    double.orders[order_id]["average"] = None
+    assert v.poll(print_(1)) is None
+    assert v.pending is not None
+
+
 def test_reconciliation_failure_is_a_venue_error(envelope: Envelope) -> None:
     double = Double()
     double.drift_position_after_fill = Decimal("0.005")
