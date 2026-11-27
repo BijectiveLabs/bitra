@@ -322,6 +322,32 @@ def test_manifest_refuses_absence_and_malformed_files(tmp_path: Path) -> None:
     path.write_text("{not json", encoding="utf-8")
     with pytest.raises(ManifestError, match="not valid JSON"):
         read_manifest(path)
+    path.write_text("[]", encoding="utf-8")
+    with pytest.raises(ManifestError, match="JSON object"):
+        read_manifest(path)
+
+
+def test_manifest_rejects_string_audit_passed(tmp_path: Path) -> None:
+    created = datetime(2026, 9, 13, tzinfo=UTC)
+    report = audit(
+        [
+            make_trade(1, BASE_NS, instrument="BTCUSDT", side=Side.BUY),
+        ],
+        max_gap=timedelta(minutes=1),
+    )
+    manifest = manifest_from_audit(
+        report,
+        sources=(Source("BTCUSDT2025-01-01.csv.gz", "ab" * 32, 1234),),
+        normaliser_version=NORMALISER_VERSION,
+        created_at=created,
+    )
+    path = tmp_path / "manifest.json"
+    write_manifest(path, manifest)
+    record = json.loads(path.read_text(encoding="utf-8"))
+    record["audit"]["passed"] = "false"
+    path.write_text(json.dumps(record), encoding="utf-8")
+    with pytest.raises(ManifestError, match=r"audit\.passed must be a boolean"):
+        read_manifest(path)
 
 
 def test_trade_refuses_defaulted_or_impossible_values() -> None:
