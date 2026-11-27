@@ -55,7 +55,7 @@ The Binance time unit is inferred from the digit count (13, 16 or 19) and any ot
 rejected. `is_buyer_maker = True` means the buyer rested and the seller crossed, so the taker
 side is `sell`.
 
-Archives are read in place (`.csv.gz`, `.zip` with one member, or `.csv`); nothing is unpacked
+Archives are read in place (`.csv.gz`, `.zip` with one `.csv` member, or `.csv`); nothing is unpacked
 to disk.
 
 ### Any other source: a column map

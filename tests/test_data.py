@@ -183,6 +183,11 @@ def test_archives_are_read_in_place(tmp_path: Path) -> None:
         archive.writestr("b.csv", "y")
     with pytest.raises(ArchiveError, match="expected one CSV"):
         list(open_archive_lines(two))
+    noncsv = tmp_path / "payload.zip"
+    with zipfile.ZipFile(noncsv, "w") as archive:
+        archive.writestr("payload.bin", "venue,instrument\n")
+    with pytest.raises(ArchiveError, match="not a CSV"):
+        list(open_archive_lines(noncsv))
     with pytest.raises(ArchiveError, match="unsupported"):
         list(open_archive_lines(tmp_path / "x.parquet"))
 

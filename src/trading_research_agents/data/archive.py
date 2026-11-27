@@ -34,7 +34,10 @@ def open_archive_lines(path: Path) -> Iterator[str]:
             members = [m for m in archive.namelist() if not m.endswith("/")]
             if len(members) != 1:
                 raise ArchiveError(f"{path.name} holds {len(members)} files; expected one CSV")
-            with archive.open(members[0]) as raw:
+            member = members[0]
+            if not member.lower().endswith(".csv"):
+                raise ArchiveError(f"{path.name}: ZIP member {member!r} is not a CSV")
+            with archive.open(member) as raw:
                 yield from io.TextIOWrapper(raw, encoding="utf-8", newline="")
         return
     if suffix == ".csv":
