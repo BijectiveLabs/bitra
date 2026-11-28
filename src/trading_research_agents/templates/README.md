@@ -26,4 +26,4 @@ promoted to canary with evidence and your signature:
     tra ladder promote --evidence "..." --signed-by you                        # to T2, canary
     tra live
 
-Where the responsibility sits: docs.bijectivelabs.dev/opensource/liability in the project's repository.
+Where the responsibility sits: bijectivelabs.github.io/bitra/opensource/liability in the project's repository.
