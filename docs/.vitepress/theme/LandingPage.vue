@@ -9,7 +9,7 @@
 
         <div class="landing-cards">
           <!-- Open Source Card: a real link, so crawlers and screen readers follow it -->
-          <a class="landing-card" href="/opensource/" aria-label="Open Source documentation">
+          <a class="landing-card" :href="withBase('/opensource/')" aria-label="Open Source documentation">
             <div class="card-icon" aria-hidden="true">
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M6 9 12 15 18 9"/>
@@ -70,12 +70,12 @@
           providers. MIT licensed, published by Bijective Labs.
         </p>
         <nav class="about-links" aria-label="Start here">
-          <a href="/opensource/quick-start">Quick start</a>
-          <a href="/opensource/cycle">The cycle</a>
-          <a href="/opensource/agents">Agents</a>
-          <a href="/opensource/providers">Model providers</a>
-          <a href="/opensource/venues">Venues</a>
-          <a href="/opensource/commands">Command line</a>
+          <a :href="withBase('/opensource/quick-start')">Quick start</a>
+          <a :href="withBase('/opensource/cycle')">The cycle</a>
+          <a :href="withBase('/opensource/agents')">Agents</a>
+          <a :href="withBase('/opensource/providers')">Model providers</a>
+          <a :href="withBase('/opensource/venues')">Venues</a>
+          <a :href="withBase('/opensource/commands')">Command line</a>
           <a href="https://www.bijectivelabs.dev/open-source">Website</a>
           <a href="https://github.com/BijectiveLabs/bitra">GitHub</a>
           <a href="https://pypi.org/project/bitra/">PyPI</a>
@@ -87,6 +87,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { withBase } from 'vitepress'
 
 const isDark = ref(false)
 let themeObserver: MutationObserver | null = null

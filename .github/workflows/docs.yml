@@ -65,7 +65,7 @@ jobs:
       - name: Notify search engines
         continue-on-error: true
         env:
-          SITE: https://docs.bijectivelabs.dev
+          SITE: https://bijectivelabs.github.io/bitra
           KEY: c501f126290de4b6f7310d7cbc3a4678
         run: |
           urls=$( { curl -fsS "$SITE/sitemap.xml" | grep -o '<loc>[^<]*' | sed 's/<loc>//'; echo "$SITE/llms.txt"; } | jq -R . | jq -sc .)
