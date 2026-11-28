@@ -25,7 +25,7 @@
 
 <p align="center">
   <a href="https://www.bijectivelabs.dev/bitra"><img alt="Website" src="https://img.shields.io/badge/web-bijectivelabs.dev%2Fbitra-1d2a3d?style=flat-square"></a>
-  <a href="https://docs.bijectivelabs.dev"><img alt="Documentation" src="https://img.shields.io/badge/docs-docs.bijectivelabs.dev-1f6feb?style=flat-square"></a>
+  <a href="https://bijectivelabs.github.io/bitra/"><img alt="Documentation" src="https://img.shields.io/badge/docs-bijectivelabs.github.io%2Fbitra-1f6feb?style=flat-square"></a>
   <a href="https://www.bijectivelabs.dev/insights"><img alt="Insights" src="https://img.shields.io/badge/insights-bijectivelabs.dev%2Finsights-6f42c1?style=flat-square"></a>
   <a href="https://github.com/BijectiveLabs/bitra/blob/master/CHANGELOG.md"><img alt="Changelog" src="https://img.shields.io/badge/changelog-CHANGELOG.md-E05735?style=flat-square"></a>
   <a href="https://github.com/BijectiveLabs/bitra/blob/master/SECURITY.md"><img alt="Security policy" src="https://img.shields.io/badge/security-policy-2ea44f?style=flat-square"></a>
@@ -85,7 +85,7 @@ this page makes on your own data.
 | Text from a feed tells a model what to do | Headlines are read only by the typed judge, as closed questions, after a check for instructions addressed to a machine; no model can send an order or reach a key. |
 | A strategy looks good on a lucky sample | The arena replays it over years of recorded market beside buy-and-hold, momentum, its own fade and a seeded random null, net of costs, and says "sample too small" until the sample is not. |
 
-None of these is hypothetical. [Why it is built this way](https://docs.bijectivelabs.dev/opensource/why)
+None of these is hypothetical. [Why it is built this way](https://bijectivelabs.github.io/bitra/opensource/why)
 lists the documented failures behind each one, with their sources.
 
 ## How it is built
@@ -247,7 +247,7 @@ tra check
 `--venue` writes what that exchange needs into `[execution]`: a 3x isolated
 leverage, at most 200 per order, and how its stop and take profit are placed. Change any of it.
 How to make the key on each exchange is in
-[Exchange accounts and keys](https://docs.bijectivelabs.dev/opensource/exchange-keys), and
+[Exchange accounts and keys](https://bijectivelabs.github.io/bitra/opensource/exchange-keys), and
 [Toward real orders](#toward-real-orders) has the whole path.
 
 **What a rule desk does before you change anything**
@@ -267,7 +267,7 @@ How to make the key on each exchange is in
 
 An agent desk (`--profile autonomous`) decides on 15-minute bars by default, reads 1h and 4h as
 context, lets the analyst name its stop between 0.2% and 3%, and closes a position after four hours;
-its defaults are in [The cycle](https://docs.bijectivelabs.dev/opensource/cycle).
+its defaults are in [The cycle](https://bijectivelabs.github.io/bitra/opensource/cycle).
 
 Working on the code itself? See [Development](#development).
 
@@ -327,7 +327,7 @@ no decision ever rested on that label, and the calls were retired. Each series
 is either a file you keep or a feed the desk refreshes itself (FRED, the Crypto Fear & Greed Index,
 or any paid vendor that answers JSON over https). `tra sources show` lists every series with where it
 came from and how old its last value is, and a value older than its `max_age` is shown as stale and
-never counted. [Data sources](https://docs.bijectivelabs.dev/opensource/sources) has the details.
+never counted. [Data sources](https://bijectivelabs.github.io/bitra/opensource/sources) has the details.
 
 Which reviewers run is yours to declare. A vote never decides on its own: it moves conviction by
 the weight you give it (`[conviction].reviewer_weight`), and a stance counts for what it says beyond
@@ -347,8 +347,8 @@ this cycle as well. A setup that doesn't fit the regime, such as a trend trade i
 market, is refused by name; `[regime]` holds the lines.
 
 Everything after the models answer is arithmetic over numbers you declared. No model can place, cancel or
-resize an order, read a file outside the project, or edit your configuration. [Agents](https://docs.bijectivelabs.dev/opensource/agents) has
-the full table of what an agent can reach, and [The cycle](https://docs.bijectivelabs.dev/opensource/cycle) walks through every step.
+resize an order, read a file outside the project, or edit your configuration. [Agents](https://bijectivelabs.github.io/bitra/opensource/agents) has
+the full table of what an agent can reach, and [The cycle](https://bijectivelabs.github.io/bitra/opensource/cycle) walks through every step.
 
 ## Venues
 
@@ -371,7 +371,7 @@ differs from one venue to the next is what ccxt reports it can do:
 
 "Everything" means ccxt reports the five things a safe order needs: send it, attach the exits, read
 the position, read the open orders, cancel. How to make a key on each supported exchange is in
-[Exchange accounts and keys](https://docs.bijectivelabs.dev/opensource/exchange-keys).
+[Exchange accounts and keys](https://bijectivelabs.github.io/bitra/opensource/exchange-keys).
 Any other venue that takes orders can be integrated through the shared ccxt order path.
 
 Adding the venue you trade on is four steps, and one command writes most of it:
@@ -382,7 +382,7 @@ tra venues okx --setup    # the blocks to paste into envelope.toml, data.toml, s
 ```
 
 Your fees are filled in from your account when it reports them, and from the venue's standard
-tier until then, labelled as such; a fee you write yourself is kept and checked against the account. [Venues](https://docs.bijectivelabs.dev/opensource/venues) has the full table, the keys each
+tier until then, labelled as such; a fee you write yourself is kept and checked against the account. [Venues](https://bijectivelabs.github.io/bitra/opensource/venues) has the full table, the keys each
 venue needs, and the four steps.
 
 ## Models and providers
@@ -431,7 +431,7 @@ free tier meters each model on its own, so roles can share a provider across two
 model keeps its own allowance; `tra check` judges the load per model and says when one is too much. Every
 call is a line in `usage.jsonl` with its tokens and latency, and nothing caps spend unless you
 declare a ceiling. `tra keys --probe` proves each key works without sending a prompt. A vendor of
-your own is about thirty lines ([Model providers](https://docs.bijectivelabs.dev/opensource/providers)).
+your own is about thirty lines ([Model providers](https://bijectivelabs.github.io/bitra/opensource/providers)).
 
 ## Toward real orders
 
@@ -445,12 +445,12 @@ What it trades today, through one order path and the same gates:
 - **Prediction market outcomes**, for a desk that lists `prediction`, decided on a probability by
   their own analyst and priced to resolution.
 
-That is where the project started, not where it stops. For spot, [Venues](https://docs.bijectivelabs.dev/opensource/venues#where-an-order-goes-and-what-an-instrument-is)
+That is where the project started, not where it stops. For spot, [Venues](https://bijectivelabs.github.io/bitra/opensource/venues#where-an-order-goes-and-what-an-instrument-is)
 says how to set a desk up. The order paths are tested against the supported ccxt shapes.
 Dated futures, inverse contracts and options are
 on the way, each with its own cost model, exit rules and tests. Until a market type has those, venue
 mode checks the type on every order and refuses it, because a market the system cannot yet price
-and protect is not one it should send to. [Boundaries](https://docs.bijectivelabs.dev/opensource/boundaries) says what each one takes.
+and protect is not one it should send to. [Boundaries](https://bijectivelabs.github.io/bitra/opensource/boundaries) says what each one takes.
 
 A desk goes through three steps, and you can stay at any of them as long as you like:
 
@@ -467,7 +467,7 @@ own before any of this: `tra data get BTCUSDT 2025-01-01` and `tra backtest` rep
 exchange's archive net of every cost, `tra paper --minutes 30` runs it on the live feed with
 nothing sent, and `tra live` is a small canary session behind hard caps. The example core is there
 to show the path, not to make money, and the replay prints its net as it comes out, loss or gain.
-[The live tier](https://docs.bijectivelabs.dev/opensource/live) has the details.
+[The live tier](https://bijectivelabs.github.io/bitra/opensource/live) has the details.
 
 Venue mode is the only mode that can lose money, so it has a door in front of it. Read the
 mandate with `tra mandate`; when you accept it, `tra mandate --sign "Your Name"` keeps it in the
@@ -504,7 +504,7 @@ Underneath, on every venue: the order goes only to the environment you declared 
 mainnet); an open position or a working order refuses a second entry; a size off the venue's step is
 refused rather than rounded; a clock more than a second off the venue's refuses before anything is
 signed; and Ctrl-C or a service stop cancels a resting order before the process leaves. Every close
-goes to `positions.jsonl` and every finished trade to `round_trips.jsonl`. [Capital, orders and positions](https://docs.bijectivelabs.dev/opensource/capital) has
+goes to `positions.jsonl` and every finished trade to `round_trips.jsonl`. [Capital, orders and positions](https://bijectivelabs.github.io/bitra/opensource/capital) has
 every setting, every refusal and the arithmetic behind each one.
 
 One thing to know before you rely on it: the position checks run at the start of each pass of
@@ -598,7 +598,7 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | Command | What it does |
 |---|---|
 | `tra ladder show`, `promote`, `demote` | which tier the desk stands at; one step up with evidence, or down |
-| `tra chain floor`, `observe`, `check`, `validate` | the research chain, layer by layer ([The falsification chain](https://docs.bijectivelabs.dev/opensource/chain)) |
+| `tra chain floor`, `observe`, `check`, `validate` | the research chain, layer by layer ([The falsification chain](https://bijectivelabs.github.io/bitra/opensource/chain)) |
 | `tra ledger show` | every idea that died, and what killed it |
 | `tra agent session`, `eval`, `trace` | the research session, model comparison, a run read back |
 | `tra mcp serve` | the read-only gates as tools for any MCP host |
@@ -617,11 +617,11 @@ Some rules are guarantees, enforced by the system and tests, and every change ha
 
 Other things are simply not built yet, and contributions are welcome: inverse, dated futures and
 options; on-chain venues outside ccxt; more than one account; transfers and treasury; routing
-and execution algorithms; portfolio accounting. [Boundaries](https://docs.bijectivelabs.dev/opensource/boundaries) lists each one with what it does
+and execution algorithms; portfolio accounting. [Boundaries](https://bijectivelabs.github.io/bitra/opensource/boundaries) lists each one with what it does
 today and what a contribution would need. The example strategy cores are examples: your edge is
 yours to declare.
 
-[Liability](https://docs.bijectivelabs.dev/opensource/liability) says plainly where responsibility sits when real capital is involved.
+[Liability](https://bijectivelabs.github.io/bitra/opensource/liability) says plainly where responsibility sits when real capital is involved.
 
 ## Where it is going
 
@@ -644,26 +644,26 @@ published, and [CHANGELOG.md](https://github.com/BijectiveLabs/bitra/blob/master
 
 ## Documentation
 
-The full documentation is at [docs.bijectivelabs.dev](https://docs.bijectivelabs.dev). Its source is in
+The full documentation is at [bijectivelabs.github.io/bitra](https://bijectivelabs.github.io/bitra/). Its source is in
 `docs/`, so a change in behaviour and the page that describes it go in the same pull request.
 
 | Read this | For |
 |---|---|
-| [Why it is built this way](https://docs.bijectivelabs.dev/opensource/why) | the documented failures it is built against, each with its source, and what we found building it |
-| [The cycle](https://docs.bijectivelabs.dev/opensource/cycle) | the cycle step by step, and every setting that shapes it |
-| [Agents](https://docs.bijectivelabs.dev/opensource/agents) | each role, what it reads, and what an agent can and cannot reach |
-| [Data sources](https://docs.bijectivelabs.dev/opensource/sources) | where the macro, on-chain and sentiment figures come from, fetching them, and freshness |
-| [Market data](https://docs.bijectivelabs.dev/opensource/market-data), [The arena](https://docs.bijectivelabs.dev/opensource/arena) | the recorded archive and the recorder; replaying policies over it, net of costs |
-| [Capital, orders and positions](https://docs.bijectivelabs.dev/opensource/capital) | equity, margin, leverage, liquidation, daily loss, time exits, the kill switch, and the records they leave |
-| [Venues](https://docs.bijectivelabs.dev/opensource/venues) | which venues work, and adding yours |
-| [Working with language models](https://docs.bijectivelabs.dev/opensource/llm), [Model providers](https://docs.bijectivelabs.dev/opensource/providers) | how models are used: fallback, spend, adding a provider |
-| [The live tier](https://docs.bijectivelabs.dev/opensource/live), [The trading agent](https://docs.bijectivelabs.dev/opensource/trading) | the ladder from replay to a live session |
-| [Your own data](https://docs.bijectivelabs.dev/opensource/your-data), [The data gate](https://docs.bijectivelabs.dev/opensource/data) | trade history, series and vendor feeds you bring, in CSV, JSON or Parquet, and the checks every file passes |
-| [Boundaries](https://docs.bijectivelabs.dev/opensource/boundaries), [Liability](https://docs.bijectivelabs.dev/opensource/liability) | what is guaranteed, what is not built yet, and who is responsible |
-| [The agent](https://docs.bijectivelabs.dev/opensource/agent), [The MCP server](https://docs.bijectivelabs.dev/opensource/mcp) | the research agent, and the MCP server |
-| [Architecture](https://docs.bijectivelabs.dev/opensource/architecture) | packages, import rules, file formats |
-| [The falsification chain](https://docs.bijectivelabs.dev/opensource/chain), [Execution realism](https://docs.bijectivelabs.dev/opensource/execution), [The kill ledger](https://docs.bijectivelabs.dev/opensource/ledger) | the research chain, execution realism, verdicts |
-| [Command line](https://docs.bijectivelabs.dev/opensource/commands) | every `tra` command |
+| [Why it is built this way](https://bijectivelabs.github.io/bitra/opensource/why) | the documented failures it is built against, each with its source, and what we found building it |
+| [The cycle](https://bijectivelabs.github.io/bitra/opensource/cycle) | the cycle step by step, and every setting that shapes it |
+| [Agents](https://bijectivelabs.github.io/bitra/opensource/agents) | each role, what it reads, and what an agent can and cannot reach |
+| [Data sources](https://bijectivelabs.github.io/bitra/opensource/sources) | where the macro, on-chain and sentiment figures come from, fetching them, and freshness |
+| [Market data](https://bijectivelabs.github.io/bitra/opensource/market-data), [The arena](https://bijectivelabs.github.io/bitra/opensource/arena) | the recorded archive and the recorder; replaying policies over it, net of costs |
+| [Capital, orders and positions](https://bijectivelabs.github.io/bitra/opensource/capital) | equity, margin, leverage, liquidation, daily loss, time exits, the kill switch, and the records they leave |
+| [Venues](https://bijectivelabs.github.io/bitra/opensource/venues) | which venues work, and adding yours |
+| [Working with language models](https://bijectivelabs.github.io/bitra/opensource/llm), [Model providers](https://bijectivelabs.github.io/bitra/opensource/providers) | how models are used: fallback, spend, adding a provider |
+| [The live tier](https://bijectivelabs.github.io/bitra/opensource/live), [The trading agent](https://bijectivelabs.github.io/bitra/opensource/trading) | the ladder from replay to a live session |
+| [Your own data](https://bijectivelabs.github.io/bitra/opensource/your-data), [The data gate](https://bijectivelabs.github.io/bitra/opensource/data) | trade history, series and vendor feeds you bring, in CSV, JSON or Parquet, and the checks every file passes |
+| [Boundaries](https://bijectivelabs.github.io/bitra/opensource/boundaries), [Liability](https://bijectivelabs.github.io/bitra/opensource/liability) | what is guaranteed, what is not built yet, and who is responsible |
+| [The agent](https://bijectivelabs.github.io/bitra/opensource/agent), [The MCP server](https://bijectivelabs.github.io/bitra/opensource/mcp) | the research agent, and the MCP server |
+| [Architecture](https://bijectivelabs.github.io/bitra/opensource/architecture) | packages, import rules, file formats |
+| [The falsification chain](https://bijectivelabs.github.io/bitra/opensource/chain), [Execution realism](https://bijectivelabs.github.io/bitra/opensource/execution), [The kill ledger](https://bijectivelabs.github.io/bitra/opensource/ledger) | the research chain, execution realism, verdicts |
+| [Command line](https://bijectivelabs.github.io/bitra/opensource/commands) | every `tra` command |
 | `CHANGELOG.md` | what changed |
 
 ## Development
