@@ -236,7 +236,7 @@ export default withMermaid(
       search: { provider: 'local' },
       socialLinks: [{ icon: 'github', link: repo }],
       nav: [
-        { text: 'Open Source', link: '/opensource/' },
+        { text: 'Bitra', link: '/opensource/' },
         { text: 'Bijective Labs', link: 'https://www.bijectivelabs.dev' }
       ],
       sidebar: { '/opensource/': sidebar },
