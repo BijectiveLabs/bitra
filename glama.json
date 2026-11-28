@@ -8,6 +8,6 @@
     "type": "git",
     "url": "https://github.com/BijectiveLabs/bitra"
   },
-  "homepage": "https://docs.bijectivelabs.dev/opensource/mcp",
+  "homepage": "https://bijectivelabs.github.io/bitra/opensource/mcp",
   "transport": "stdio"
 }

@@ -7,5 +7,5 @@ contact_links:
     url: https://github.com/BijectiveLabs/bitra/security/advisories/new
     about: Report it privately. Never open a public issue for a security problem.
   - name: Documentation
-    url: https://docs.bijectivelabs.dev
+    url: https://bijectivelabs.github.io/bitra/
     about: Settings, commands and the reason behind every gate.
