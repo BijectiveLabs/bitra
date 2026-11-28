@@ -8,8 +8,8 @@
         </div>
 
         <div class="landing-cards">
-          <!-- Open Source Card: a real link, so crawlers and screen readers follow it -->
-          <a class="landing-card" :href="withBase('/opensource/')" aria-label="Open Source documentation">
+          <!-- Bitra card: a real link, so crawlers and screen readers follow it -->
+          <a class="landing-card" :href="withBase('/opensource/')" aria-label="Bitra documentation">
             <div class="card-icon" aria-hidden="true">
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M6 9 12 15 18 9"/>
@@ -17,27 +17,18 @@
                 <rect x="2" y="7" width="20" height="14" rx="2"/>
               </svg>
             </div>
-            <h2 class="card-title">Open Source</h2>
+            <h2 class="card-title">Bitra</h2>
             <p class="card-description">Autonomous trading agents with deterministic execution</p>
             <span class="card-cta">
-              <span>Enter Open Source</span>
+              <span>Enter Bitra</span>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M5 12h14M12 5l7 7-7 7"/>
               </svg>
             </span>
           </a>
 
-          <!-- The Platform Card -->
-          <article 
-            class="landing-card disabled-card" 
-            tabindex="-1" 
-            role="button" 
-            aria-label="The Platform documentation (coming soon)"
-            aria-disabled="true"
-            @click.stop.prevent=""
-            @keydown.enter.stop.prevent=""
-            @keydown.space.prevent=""
-          >
+          <!-- Bijective card: the platform's own documentation site -->
+          <a class="landing-card" href="https://docs.bijectivelabs.dev/bijective/" aria-label="Bijective documentation">
             <div class="card-icon" aria-hidden="true">
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                 <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5"/>
@@ -46,15 +37,15 @@
                 <line x1="2" y1="8.5" x2="12" y2="15.5"/>
               </svg>
             </div>
-            <h2 class="card-title">The Platform</h2>
-            <p class="card-description"></p>
-            <button class="card-cta" aria-label="Enter The Platform">
-              <span>Coming Soon</span>
+            <h2 class="card-title">Bijective</h2>
+            <p class="card-description">Self-hosted, multi-asset trading platform with risk evaluation before every order</p>
+            <span class="card-cta">
+              <span>Enter Bijective</span>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M5 12h14M12 5l7 7-7 7"/>
               </svg>
-            </button>
-          </article>
+            </span>
+          </a>
         </div>
       </section>
 
@@ -76,7 +67,7 @@
           <a :href="withBase('/opensource/providers')">Model providers</a>
           <a :href="withBase('/opensource/venues')">Venues</a>
           <a :href="withBase('/opensource/commands')">Command line</a>
-          <a href="https://www.bijectivelabs.dev/open-source">Website</a>
+          <a href="https://www.bijectivelabs.dev/bitra">Website</a>
           <a href="https://github.com/BijectiveLabs/bitra">GitHub</a>
           <a href="https://pypi.org/project/bitra/">PyPI</a>
         </nav>
