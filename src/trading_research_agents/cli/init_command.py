@@ -279,7 +279,8 @@ AGENT_HEAD = (
     "[strategy]\n"
     'agent = "structure_lead"          # the model decides on each closed bar\n'
     "# file = ... / class = ...             # or a scripted strategy instead\n"
-    "#                                       # (bijectivelabs.github.io/bitra/opensource/trading)\n\n"
+    "#                                       # (bijectivelabs.github.io/bitra/opensource/\n"
+    "#                                       # trading)\n\n"
 )
 
 
