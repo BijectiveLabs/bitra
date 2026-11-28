@@ -24,7 +24,7 @@
 </p>
 
 <p align="center">
-  <a href="https://www.bijectivelabs.dev/open-source"><img alt="Website" src="https://img.shields.io/badge/web-bijectivelabs.dev%2Fopen--source-1d2a3d?style=flat-square"></a>
+  <a href="https://www.bijectivelabs.dev/bitra"><img alt="Website" src="https://img.shields.io/badge/web-bijectivelabs.dev%2Fbitra-1d2a3d?style=flat-square"></a>
   <a href="https://bijectivelabs.github.io/bitra/"><img alt="Documentation" src="https://img.shields.io/badge/docs-bijectivelabs.github.io%2Fbitra-1f6feb?style=flat-square"></a>
   <a href="https://www.bijectivelabs.dev/insights"><img alt="Insights" src="https://img.shields.io/badge/insights-bijectivelabs.dev%2Finsights-6f42c1?style=flat-square"></a>
   <a href="https://github.com/BijectiveLabs/bitra/blob/master/CHANGELOG.md"><img alt="Changelog" src="https://img.shields.io/badge/changelog-CHANGELOG.md-E05735?style=flat-square"></a>
@@ -46,7 +46,7 @@ every refusal is kept on disk with its reason, so you can check afterwards what 
 
 It is experimental. Settings change between versions, it has not been run with real capital by us,
 and the package ships no strategy that makes money. What it does give you: one order path to every
-exchange ccxt reaches, run end to end on six of them; an arena that replays any rule over years of
+exchange ccxt reaches; an arena that replays any rule over years of
 data net of your own costs, beside buy-and-hold and a random null; a typed judge that reads the
 day's headlines and can hold an entry on an adverse event; and the records to check every claim
 this page makes on your own data.
@@ -100,19 +100,52 @@ Three kinds of work, kept apart because they fail differently.
 
 ```mermaid
 flowchart LR
-    market["market data<br/>candles, book, funding,<br/>open interest, news"]
-    decision["the decision<br/>a rule in your file,<br/>or a model that proposes"]
-    guard["event guard<br/>Jev reads the headlines,<br/>the system weighs them"]
-    cost["cost and exits<br/>round trip priced,<br/>stop and take placed"]
-    risk["risk gate<br/>signs or refuses"]
-    venue["venue<br/>one order, exits attached"]
-    record[("the record<br/>every step, every refusal")]
-    arena["tra arena<br/>the same rule replayed<br/>net of costs, beside a null"]
-    market --> decision --> guard --> cost --> risk --> venue
-    decision -.-> record
-    guard -.-> record
-    risk -.-> record
+    subgraph inputs["MARKET INPUT"]
+        market["Market data<br/>candles, book, funding,<br/>open interest and news"]
+    end
+
+    subgraph decision["DECISION"]
+        proposal["Rule or model<br/>proposes direction and levels"]
+        judge["Typed judge<br/>closed-question news signals"]
+    end
+
+    subgraph control["SYSTEM CONTROL"]
+        cost["Cost engine<br/>fees, spread, impact,<br/>funding and slippage"]
+        risk["Deterministic risk gate<br/>size, limits and mandate"]
+        record[("Immutable records<br/>snapshots, answers,<br/>intent and refusals")]
+    end
+
+    subgraph execution["EXECUTION"]
+        venue["ccxt venue<br/>one signed order"]
+        exits["Entry with exits<br/>stop and take profit"]
+    end
+
+    arena["TRA Arena<br/>walk-forward replay<br/>cost-adjusted results"]
+
+    market --> proposal
+    market --> judge
     market --> arena
+    proposal --> cost
+    judge --> cost
+    cost --> risk
+    risk -->|"approved"| venue
+    risk -.->|"refused"| record
+    venue --> exits
+    proposal -.-> record
+    judge -.-> record
+    risk -.-> record
+    venue -.-> record
+
+    style inputs fill:#eef6ff,stroke:#7aa7d8,stroke-width:1px
+    style decision fill:#f7f1ff,stroke:#9b7cc7,stroke-width:1px
+    style control fill:#fff7e8,stroke:#d2a65c,stroke-width:1px
+    style execution fill:#ecf8f1,stroke:#65a880,stroke-width:1px
+    style arena fill:#f2f4f7,stroke:#87939f,stroke-width:1px
+    style record fill:#eef0f2,stroke:#87939f,stroke-width:1px
+    style cost fill:#ffffff,stroke:#d2a65c
+    style risk fill:#ffffff,stroke:#d2a65c
+    style venue fill:#ffffff,stroke:#65a880
+    style exits fill:#ffffff,stroke:#65a880
 ```
 
 A rule is asked the same way by `tra run` and by `tra arena`: the closed bars before the decision,
@@ -155,15 +188,15 @@ A few minutes. The rule desk needs no model key.
 **1. Install.** You need Python 3.11 or newer. [uv](https://docs.astral.sh/uv/) is the quickest way:
 
 ```bash
-uv tool install 'bitra[ccxt,openai,anthropic,google,data]'
+uv tool install 'bitra[ccxt,anthropic,openai,google,data]'
 ```
 
 That brings every model provider and every exchange in. Without uv, run
-`pip install 'bitra[ccxt,openai,anthropic,google,data]'` inside a virtual
+`pip install 'bitra[ccxt,anthropic,openai,google,data]'` inside a virtual
 environment. To move to the newest release later:
 
 ```bash
-uv tool upgrade bitra      # or: pip install -U 'bitra[ccxt,openai,anthropic,google,data]'
+uv tool upgrade bitra      # or: pip install -U 'bitra[ccxt,anthropic,openai,google,data]'
 tra --version
 ```
 
@@ -181,10 +214,10 @@ cd my-desk
 
 | `--agent` | Key in `.env` | Model, when you name none |
 |---|---|---|
-| `groq` | `GROQ_API_KEY` (free tier) | `openai/gpt-oss-120b` |
-| `google` | `GEMINI_API_KEY` | `gemini-flash-latest` |
 | `anthropic` | `ANTHROPIC_API_KEY` | `claude-opus-5-5` |
 | `openai`, `deepseek`, `xai`, `openrouter`, ... | see [Models and providers](#models-and-providers) | name one with `--model`; `tra models <provider>` lists them |
+| `google` | `GEMINI_API_KEY` | `gemini-flash-latest` |
+| `groq` | `GROQ_API_KEY` (free tier) | `openai/gpt-oss-120b` |
 
 Add `--venue okx` (or any ccxt id) to trade somewhere other than Bybit.
 
@@ -200,18 +233,18 @@ next. A desk that is ready ends with `ready to run `tra run``.
 machine. `tra run --every 1d` keeps deciding, once a day at the daily close. Or type `tra` on its
 own for the console, which takes the same commands.
 
-**6. When you want real orders.** Start on the exchange's demo or testnet API. Make the desk for
+**6. When you want venue execution.** Make the desk for
 that exchange from the start, and the rest is three commands:
 
 ```bash
 tra init my-desk --profile rule --venue bitget
 cd my-desk                       # put the exchange's keys in .env
-tra keys --probe --prepare       # reads the account; on a demo or testnet sets one-way mode
+tra keys --probe --prepare       # validates the account and prepares the venue settings
 tra mandate --sign "Your Name" --venue-mode
 tra check
 ```
 
-`--venue` writes what that exchange needs into `[execution]`: its demo or testnet API, 3x isolated
+`--venue` writes what that exchange needs into `[execution]`: a 3x isolated
 leverage, at most 200 per order, and how its stop and take profit are placed. Change any of it.
 How to make the key on each exchange is in
 [Exchange accounts and keys](https://bijectivelabs.github.io/bitra/opensource/exchange-keys), and
@@ -321,28 +354,25 @@ the full table of what an agent can reach, and [The cycle](https://bijectivelabs
 
 A cycle reaches venues through ccxt, so every exchange ccxt supports is already integrated: the
 same order path, the same gates and the same checks, with nothing in the core naming a venue. What
-differs from one venue to the next is what ccxt reports it can do, the second column, and how far
-it has been tested, the last:
+differs from one venue to the next is what ccxt reports it can do:
 
-| Venue | What a cycle can do there | Practice environment | Run end to end by us |
-|---|---|---|---|
-| **Bybit** (the default) | everything: orders with the stop and take profit attached | demo, testnet | **yes**, on the demo API: real orders, exits attached, a resting order cancelled |
-| **OKX** | everything | demo (ccxt's testnet switch) | **yes**, on the demo API: real orders, exits attached, closed by the venue's own exits |
-| **Bitget** | everything, on a classic or a unified trading account | demo | **yes**, on the demo API, unified account |
-| **BingX** | everything | demo (VST, ccxt's testnet switch) | **yes**, on the demo API |
-| **Binance**, **Gate** | orders, with the stop and take profit placed right after the fill (`exits = "separate"`) | demo (Binance), testnet (Gate) | **yes**, on their practice APIs |
-| WEEX, BloFin, WOO X | everything | testnet | ready for its run |
-| Hyperliquid, Pacifica, WOOFi Pro, ModeTrade (decentralised) | everything | testnet | ready for its run; [report wanted for Hyperliquid](https://github.com/BijectiveLabs/bitra/issues/7) |
-| KuCoin Futures, Deepcoin | everything | none | integrated; no practice environment |
-| dYdX, Paradex, Extended, Lighter (decentralised); Deribit, Crypto.com, Coinbase International | orders, but no exits at the venue through ccxt, and some cannot set leverage | testnet | not for a desk that needs its exits at the venue |
-| Kraken, Kraken Futures, Phemex | data for now: ccxt does not report their positions, and no order is sent into a position nobody can see | | |
+| Venue | What a cycle can do there | Integration status |
+|---|---|---|
+| **Bybit** (the default) | everything: orders with the stop and take profit attached | Integrated |
+| **OKX** | everything | Integrated |
+| **Bitget** | everything, on a classic or a unified trading account | Integrated |
+| **BingX** | everything | Integrated |
+| **Binance**, **Gate** | orders, with the stop and take profit placed right after the fill (`exits = "separate"`) | Integrated |
+| WEEX, BloFin, WOO X | everything | Integrated |
+| Hyperliquid, Pacifica, WOOFi Pro, ModeTrade (decentralised) | everything | Integrated; [report wanted for Hyperliquid](https://github.com/BijectiveLabs/bitra/issues/7) |
+| KuCoin Futures, Deepcoin | everything | Integrated |
+| dYdX, Paradex, Extended, Lighter (decentralised); Deribit, Crypto.com, Coinbase International | orders, but no exits at the venue through ccxt, and some cannot set leverage | Partial |
+| Kraken, Kraken Futures, Phemex | data for now: ccxt does not report their positions, and no order is sent into a position nobody can see | Data only |
 
 "Everything" means ccxt reports the five things a safe order needs: send it, attach the exits, read
-the position, read the open orders, cancel. "Run end to end" is the stronger claim, a full run
-with real orders on the venue's demo or testnet API, and Bybit, OKX, Bitget, BingX, Binance and Gate
-have had it so far. How to make a key on each is in
-[Exchange accounts and keys](https://bijectivelabs.github.io/bitra/opensource/exchange-keys). Any other venue that takes orders can have that run at any time: start on its practice environment, watch a
-few cycles and read what it sends. Each report moves a venue into the last column.
+the position, read the open orders, cancel. How to make a key on each supported exchange is in
+[Exchange accounts and keys](https://bijectivelabs.github.io/bitra/opensource/exchange-keys).
+Any other venue that takes orders can be integrated through the shared ccxt order path.
 
 Adding the venue you trade on is four steps, and one command writes most of it:
 
@@ -360,20 +390,20 @@ venue needs, and the four steps.
 You choose the provider and the model; nothing is hard-coded. Each provider reads its key from the
 environment (or the `.env` beside your config) and nowhere else.
 
-| Provider | Key in `.env` | Install with | Structured output | Tested live here |
-|---|---|---|---|---|
-| `groq` | `GROQ_API_KEY` | `openai` | JSON schema, falling back to JSON mode; checked by the system | **yes**: `openai/gpt-oss-120b` and `openai/gpt-oss-20b`, every live cycle in our records |
-| `google` | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | `google-genai` | JSON schema | **yes**: `gemini-flash-latest`, as the fallback |
-| `anthropic` | `ANTHROPIC_API_KEY` | `anthropic` | JSON schema | unit-tested; default model `claude-opus-5-5` |
-| `openai` | `OPENAI_API_KEY` | `openai` | strict JSON schema | unit-tested |
-| `deepseek` | `DEEPSEEK_API_KEY` | `openai` | JSON mode | preset only |
-| `mistral` | `MISTRAL_API_KEY` | `openai` | JSON schema | preset only |
-| `xai` | `XAI_API_KEY` | `openai` | JSON mode | preset only |
-| `openrouter` | `OPENROUTER_API_KEY` | `openai` | JSON mode | preset only |
-| `qwen` | `DASHSCOPE_API_KEY` | `openai` | JSON mode | preset only; pass `--base-url` for your region |
-| `ollama` | none | `openai` | JSON mode | preset only; a local server |
-| `local` | none | `openai` | JSON mode | any OpenAI-compatible server; pass `--base-url` |
-| `9router` | `9ROUTER_API_KEY` | `openai` | JSON schema | preset only; a local router |
+| Provider | Key in `.env` | Install with | Structured output |
+|---|---|---|---|
+| `anthropic` | `ANTHROPIC_API_KEY` | `anthropic` | JSON schema |
+| `openai` | `OPENAI_API_KEY` | `openai` | strict JSON schema |
+| `google` | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | `google-genai` | JSON schema |
+| `groq` | `GROQ_API_KEY` | `openai` | JSON schema, falling back to JSON mode |
+| `deepseek` | `DEEPSEEK_API_KEY` | `openai` | JSON mode |
+| `mistral` | `MISTRAL_API_KEY` | `openai` | JSON schema |
+| `xai` | `XAI_API_KEY` | `openai` | JSON mode |
+| `openrouter` | `OPENROUTER_API_KEY` | `openai` | JSON mode |
+| `qwen` | `DASHSCOPE_API_KEY` | `openai` | JSON mode; pass `--base-url` for your region |
+| `ollama` | none | `openai` | JSON mode; local server |
+| `local` | none | `openai` | JSON mode; OpenAI-compatible server |
+| `9router` | `9ROUTER_API_KEY` | `openai` | JSON schema; local router |
 
 TypeSafe is not in this table because Jev is not a model for `[agents]`: it is the typed judge,
 declared in `data.toml` under `[judge]` with `TYPESAFE_API_KEY` (a key from
@@ -389,7 +419,7 @@ provider = "groq"
 model = "openai/gpt-oss-120b"
 effort = "medium"                    # minimal | low | medium | high | xhigh | max, where the
                                      # vendor takes it; left out, the vendor's default applies
-fallback = ["google:gemini-flash-latest", "anthropic:claude-opus-5-5"]
+fallback = ["anthropic:claude-opus-5-5", "google:gemini-flash-latest"]
 
 [agents.roles.reviewer]             # a role can run on its own model
 model = "a-cheaper-model"
@@ -408,7 +438,7 @@ your own is about thirty lines ([Model providers](https://bijectivelabs.github.i
 What it trades today, through one order path and the same gates:
 
 - **Linear perpetuals** (USDT- or USDC-margined swaps) on any venue ccxt reaches, long and short,
-  with the leverage and margin mode you declare. The default, run end to end on six exchanges.
+  with the leverage and margin mode you declare.
 - **Spot pairs**, long only and paid in full, for a desk that lists `spot` in `[execution].markets`.
 - **Stock perpetuals and tokenized stocks**, which are a perpetual and a spot pair to the venue,
   with the underlying exchange's hours respected.
@@ -416,9 +446,8 @@ What it trades today, through one order path and the same gates:
   their own analyst and priced to resolution.
 
 That is where the project started, not where it stops. For spot, [Venues](https://bijectivelabs.github.io/bitra/opensource/venues#where-an-order-goes-and-what-an-instrument-is)
-says how to set a desk up. Spot, a stock perpetual and a tokenized stock have been run on the Bybit
-and OKX demos; prediction outcomes have run in sandbox on live data, and their order path is tested
-against ccxt's shapes until a practice venue is run. Dated futures, inverse contracts and options are
+says how to set a desk up. The order paths are tested against the supported ccxt shapes.
+Dated futures, inverse contracts and options are
 on the way, each with its own cost model, exit rules and tests. Until a market type has those, venue
 mode checks the type on every order and refuses it, because a market the system cannot yet price
 and protect is not one it should send to. [Boundaries](https://bijectivelabs.github.io/bitra/opensource/boundaries) says what each one takes.
@@ -428,12 +457,10 @@ A desk goes through three steps, and you can stay at any of them as long as you 
 | Step | How | What happens | Needs |
 |---|---|---|---|
 | 1. Sandbox | `tra run` | the full cycle on live data; every decision written down, no order sent | a declared edge (rule desk) or a model key (agent desk) |
-| 2. Demo or testnet API | `tra run` with `[execution].mode = "venue"` and `environment = "demo"` or `"testnet"` | real orders on the exchange's demo or testnet API, exits attached, positions looked after | a signed mandate, a leverage, `max_notional`, practice keys |
+| 2. Venue execution | `tra run` with `[execution].mode = "venue"` and the configured environment | orders, exits and positions follow the venue path | a signed mandate, a leverage, `max_notional`, venue keys |
 | 3. Real capital | the same, with `environment = "mainnet"` | real orders with real money | all of the above, plus the ladder at its canary tier (`tra ladder promote`, with evidence) |
 
-Steps 1 and 2 have been run end to end on the demo or testnet APIs of Bybit, OKX, Bitget, BingX,
-Binance and Gate. Step 3 has not
-been run by us; treat it as yours to verify, small, first.
+Step 3 has not been run by us; treat it as yours to verify, small, first.
 
 If you bring a scripted strategy of your own instead of the agents, it has a research path of its
 own before any of this: `tra data get BTCUSDT 2025-01-01` and `tra backtest` replay a day of the
@@ -530,7 +557,7 @@ error. `--json` gives machine-readable output and `--plain` gives text instead o
 | `tra check` | every setting read against the others, with what to fix |
 | `tra keys --probe` | proves every key works; no key is printed, no prompt or order sent |
 | `tra models groq` | the models your key can use on a provider, read from the vendor; no prompt sent |
-| `tra init my-desk --profile autonomous --venue okx` | a desk wired for one exchange: data, orders, demo or testnet API, keys |
+| `tra init my-desk --profile autonomous --venue okx` | a desk wired for one exchange: data, orders, execution settings and keys |
 | `tra venues` | every venue the docs describe, and what each can do |
 | `tra venues okx --setup` | what a venue can do, and the blocks to paste to trade on it |
 | `tra mandate` | the text venue mode requires; `--sign "Your Name"` keeps it as `MANDATE.md` and signs `[execution]` in one step |
@@ -604,9 +631,8 @@ where it stops.
 - **More market types.** Spot, stock perpetuals, tokenized stocks and prediction markets are
   built; inverse and dated futures and options follow, each added with its own cost model, exit rules,
   sizing and tests before venue mode accepts it.
-- **More venues run end to end.** Every venue ccxt supports already goes through the same order
-  path and gates. Each one joins the six already in the last column of the venues table after a
-  full run on its demo or testnet API, ours or yours.
+- **More venue integrations.** Every venue ccxt supports already goes through the same order
+  path and gates. Each venue remains subject to focused integration verification.
 - **The rest of the not-built-yet list,** one piece at a time, without weakening a guarantee.
 
 **Use the release.** What PyPI installs is the latest release, and it is the version to run.
@@ -665,4 +691,4 @@ of those gates, which is why they can propose but never size, price or send.
 
 MIT. See [LICENSE](https://github.com/BijectiveLabs/bitra/blob/master/LICENSE); [NOTICE](https://github.com/BijectiveLabs/bitra/blob/master/NOTICE) lists the third-party software this package builds on.
 
-Built by [Bijective Labs](https://github.com/BijectiveLabs).
+Built by [Bijective Labs](https://www.bijectivelabs.dev).

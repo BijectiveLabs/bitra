@@ -62,10 +62,10 @@ kill_switch = "KILL"               # `tra kill` sets it: flatten and stop; `tra 
 # session_loss_limit_bps = 100
 # max_session_minutes = 120
 
-# ---- the structure lead as the core instead of a scripted strategy (docs.bijectivelabs.dev/opensource/agents). Replace the
+# ---- the structure lead as the core instead of a scripted strategy (bijectivelabs.github.io/bitra/opensource/agents). Replace the
 # [strategy] table with `agent = "structure_lead"` and declare the budget:
 # [agents]
-# provider = "deepseek"            # any registered provider (docs.bijectivelabs.dev/opensource/providers)
+# provider = "deepseek"            # any registered provider (bijectivelabs.github.io/bitra/opensource/providers)
 # model = "deepseek-flash"
 # mechanism = "positions forced to close into the settlement window"
 # lookback_bars = 60
@@ -157,7 +157,7 @@ kill_switch = "KILL"               # `tra kill` sets it: flatten and stop; `tra 
 # confidence, each reading by how far its series sit past the lines you drew in sources/
 # (-1 to 1), each reviewer for or against. The score is their net over the weight they expressed:
 # agreement lifts it, opposition lowers it in proportion, and only opposition that outweighs the
-# case refuses the trade. docs.bijectivelabs.dev/opensource/cycle works four cases through. Nothing here can make a trade
+# case refuses the trade. bijectivelabs.github.io/bitra/opensource/cycle works four cases through. Nothing here can make a trade
 # larger than [controls] and [run].size already allow - it can only make it smaller.
 # [conviction]
 # weights = { structure_lead = 2.0, flow_specialist = 1.0, onchain = 1.5, macro = 1.0, sentiment = 0.5 }

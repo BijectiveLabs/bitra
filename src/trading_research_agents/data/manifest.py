@@ -107,6 +107,12 @@ def from_record(record: dict[str, Any]) -> Manifest:
     if record.get("schema") != SCHEMA:
         raise ManifestError(f"unsupported manifest schema {record.get('schema')!r}")
     try:
+        audit = record["audit"]
+        if not isinstance(audit, dict):
+            raise TypeError("audit must be an object")
+        audit_passed = audit["passed"]
+        if not isinstance(audit_passed, bool):
+            raise TypeError("audit.passed must be a boolean")
         return Manifest(
             venue=record["venue"],
             instrument=record["instrument"],
@@ -118,9 +124,9 @@ def from_record(record: dict[str, Any]) -> Manifest:
                 Source(s["path"], s["sha256"], int(s["size"])) for s in record["sources"]
             ),
             normaliser_version=record["normaliser_version"],
-            audit_passed=bool(record["audit"]["passed"]),
+            audit_passed=audit_passed,
             findings=tuple(
-                Finding(f["check"], f["severity"], f["detail"]) for f in record["audit"]["findings"]
+                Finding(f["check"], f["severity"], f["detail"]) for f in audit["findings"]
             ),
             created_at=datetime.fromisoformat(record["created_at"]),
         )
@@ -137,4 +143,6 @@ def read_manifest(path: Path) -> Manifest:
         record = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise ManifestError(f"{path}: not valid JSON: {exc}") from exc
+    if not isinstance(record, dict):
+        raise ManifestError(f"{path}: manifest must contain a JSON object")
     return from_record(record)

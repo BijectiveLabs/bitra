@@ -6,7 +6,7 @@ import { withMermaid } from 'vitepress-plugin-mermaid'
 const repo = 'https://github.com/BijectiveLabs/bitra'
 const host = 'https://bijectivelabs.github.io/bitra'
 const pypi = 'https://pypi.org/project/bitra/'
-const website = 'https://www.bijectivelabs.dev/open-source'
+const website = 'https://www.bijectivelabs.dev/bitra'
 const description =
   'Documentation for TRA, open-source autonomous trading agents with deterministic ' +
   'execution by ' +

@@ -55,7 +55,7 @@ The Binance time unit is inferred from the digit count (13, 16 or 19) and any ot
 rejected. `is_buyer_maker = True` means the buyer rested and the seller crossed, so the taker
 side is `sell`.
 
-Archives are read in place (`.csv.gz`, `.zip` with one member, or `.csv`); nothing is unpacked
+Archives are read in place (`.csv.gz`, `.zip` with one `.csv` member, or `.csv`); nothing is unpacked
 to disk.
 
 ### Any other source: a column map
@@ -246,7 +246,8 @@ the manifest for the reader to judge; the audit does not judge them.
 Written beside the data as `manifest.json`: venue, instrument, first and last timestamp (UTC),
 rows accepted and rejected, every source file with its SHA-256 and size, the normaliser
 version, the audit result with all findings, and the creation time. A manifest that does not
-parse as this schema is refused, and a manifest is never written for a dataset with no rows.
+parse as this schema is refused, including one that is not a JSON object or whose `audit.passed`
+is not a boolean, and a manifest is never written for a dataset with no rows.
 
 ## The dataset
 

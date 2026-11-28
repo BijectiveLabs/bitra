@@ -6,6 +6,21 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-11-28
+
+### Changed
+
+- The documentation is at https://bijectivelabs.github.io/bitra/. Every address it had on
+  docs.bijectivelabs.dev forwards to the same page there, so existing links keep working.
+
+### Fixed
+
+- The data archive, its manifest and partial fills are checked more tightly (#25).
+
+### Dependencies
+
+- pyarrow 26.0.0 and opentelemetry-api 1.45.2.
+
 ## [0.14.0] - 2026-11-11
 
 ### Added
@@ -778,7 +793,7 @@ The 0.11 and 0.12 steps of the roadmap, released together.
 
 ### Changed
 
-- One address per role: the product page `www.bijectivelabs.dev/open-source` is the homepage on
+- One address per role: the product page `www.bijectivelabs.dev/bitra` is the homepage on
   PyPI, in the citation and in the README's web badge; the docs stay at `docs.bijectivelabs.dev`;
   company links go to `www.bijectivelabs.dev` without a redirect.
 - Docs: the venues page says Bybit and OKX have both been run end to end on the demo API, matching its own

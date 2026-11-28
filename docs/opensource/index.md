@@ -25,7 +25,7 @@ prediction market outcomes through one order path, a universe of perpetuals foun
 the system and ordered by the room its own paths expect, the full autonomous cycle on live data, a structure lead that proposes, three readings of
 your own series computed by the system, up to three reviewers, stops and
 targets the analyst names inside bounds you set, the gates that decide, sizing from your own rules,
-real orders on a venue's practice environment behind a mandate you sign and a signed risk gate,
+venue execution behind a mandate you sign and a signed risk gate,
 and two auditors that read the records.
 
 The command is `tra`. Start with the [quick start](/opensource/quick-start).
@@ -93,13 +93,12 @@ Today, through one order path and the same gates:
 
 | Market | How | Run |
 |---|---|---|
-| Linear perpetuals (USDT- or USDC-margined swaps) | long and short, with the leverage and margin mode you declare; the default | end to end on the demo or testnet APIs of Bybit, OKX, Bitget, BingX, Binance and Gate |
-| Spot pairs | long only, paid in full; list `spot` in `[execution].markets` | the order path and a desk cycle on the Bybit and OKX demos |
-| Stock perpetuals and tokenized stocks | a perpetual and a spot pair to the venue, entered only while the underlying's session trades | a stock perpetual on the OKX demo, a tokenized stock on the Bybit demo |
+| Linear perpetuals (USDT- or USDC-margined swaps) | long and short, with the leverage and margin mode you declare; the default | integrated order and risk path |
+| Spot pairs | long only, paid in full; list `spot` in `[execution].markets` | integrated order path |
+| Stock perpetuals and tokenized stocks | a perpetual and a spot pair to the venue, entered only while the underlying's session trades | integrated order path |
 | Prediction market outcomes | long only, decided on a probability by the outcome assessor and priced to resolution; list `prediction` | sandbox cycles on live data; the order path is tested against ccxt's shapes |
 
-Every exchange ccxt supports is reached through that same path, and any other can have its run on
-its demo or testnet API at any time ([Venues](/opensource/venues),
+Every exchange ccxt supports is reached through that same path ([Venues](/opensource/venues),
 [Exchange accounts and keys](/opensource/exchange-keys)).
 
 That is where the project started, not where it stops. Dated futures, inverse contracts and options
@@ -115,8 +114,7 @@ The project is in active development, and these pages describe where it stands t
 - **More market types:** spot, stock perpetuals, tokenized stocks and prediction markets are
   built; inverse and dated futures and options follow, each with its own cost model, exit rules, sizing
   and tests before venue mode accepts it.
-- **More venues run end to end:** each joins the six already run after a full run on its demo or
-  testnet API, ours or yours.
+- **More venue integrations:** each venue goes through the shared order path and focused integration checks.
 - **The rest of the not-built-yet list** in [Boundaries](/opensource/boundaries), one piece at a
   time, without weakening a guarantee.
 

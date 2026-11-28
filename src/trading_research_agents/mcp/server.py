@@ -77,7 +77,7 @@ def build_server(roots: Sequence[Path] | None = None) -> Any:
         SERVER_NAME,
         instructions=INSTRUCTIONS,
         version=__version__,
-        website_url="https://docs.bijectivelabs.dev/opensource/mcp",
+        website_url="https://bijectivelabs.github.io/bitra/opensource/mcp",
     )
     reads = annotations_cls(read_only_hint=True, open_world_hint=False)
 

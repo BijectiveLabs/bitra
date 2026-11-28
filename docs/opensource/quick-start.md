@@ -51,10 +51,10 @@ cd my-desk
 
 | `--agent` | Key in `.env` | Model, when you name none |
 |---|---|---|
-| `groq` | `GROQ_API_KEY` (free tier) | `openai/gpt-oss-120b` |
-| `google` | `GEMINI_API_KEY` | `gemini-flash-latest` |
 | `anthropic` | `ANTHROPIC_API_KEY` | `claude-opus-5-5` |
 | `openai`, `deepseek`, `xai`, `openrouter`, ... | see [Model providers](/opensource/providers) | name one with `--model`; `tra models <provider>` lists them |
+| `google` | `GEMINI_API_KEY` | `gemini-flash-latest` |
+| `groq` | `GROQ_API_KEY` (free tier) | `openai/gpt-oss-120b` |
 
 Add `--venue okx` (or any ccxt id) to trade somewhere other than Bybit.
 
@@ -82,18 +82,18 @@ tra run
 tra run --every 15m
 ```
 
-**6. When you want real orders.** Start on the exchange's demo or testnet API. Make the desk for
+**6. When you want venue execution.** Make the desk for
 that exchange from the start, and the rest is three commands:
 
 ```bash
 tra init my-desk --profile autonomous --agent groq --venue bitget
 cd my-desk                       # put the exchange's keys in .env beside your model key
-tra keys --probe --prepare       # reads the account; on a demo or testnet sets one-way mode
+tra keys --probe --prepare       # validates the account and prepares the venue settings
 tra mandate --sign "Your Name" --venue-mode
 tra check
 ```
 
-`--venue` writes everything that exchange needs into `[execution]`: its demo or testnet API, 3x
+`--venue` writes everything that exchange needs into `[execution]`: 3x
 isolated leverage, at most 200 per order, how its stop and take profit are placed, and orders sized
 at 100 of the quote currency. Change any of it; `tra check` says what each line does. How to make
 the key on each exchange is in [Exchange accounts and keys](/opensource/exchange-keys), and
@@ -165,7 +165,7 @@ An agent desk goes through three steps, and you can stay at any of them as long 
 | Step | How | What happens | Needs |
 |---|---|---|---|
 | 1. Sandbox | `tra run` | the full cycle on live data; every decision written down, no order sent | a model key |
-| 2. Demo or testnet API | `tra run` with `[execution].mode = "venue"` and `environment = "demo"` or `"testnet"` | real orders on the exchange's demo or testnet API, exits attached, positions looked after | a signed mandate, a leverage, `max_notional`, practice keys |
+| 2. Venue execution | `tra run` with `[execution].mode = "venue"` and the configured environment | venue orders, exits and positions follow the configured execution path | a signed mandate, a leverage, `max_notional`, venue keys |
 | 3. Real capital | the same, with `environment = "mainnet"` | real orders with real money | all of the above, plus the ladder at its canary tier (`tra ladder promote`, with evidence) |
 
 Venue mode is the only mode that can lose money, so it has a door in front of it. Read the
