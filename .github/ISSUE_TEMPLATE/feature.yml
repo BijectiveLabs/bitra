@@ -27,4 +27,4 @@ body:
     id: guarantee
     attributes:
       label: Does it loosen a guarantee?
-      description: Boundaries (docs.bijectivelabs.dev/opensource/boundaries) lists them. If it does, say why the guarantee still holds.
+      description: Boundaries (bijectivelabs.github.io/bitra/opensource/boundaries) lists them. If it does, say why the guarantee still holds.

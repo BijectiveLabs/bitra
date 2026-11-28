@@ -279,7 +279,8 @@ AGENT_HEAD = (
     "[strategy]\n"
     'agent = "structure_lead"          # the model decides on each closed bar\n'
     "# file = ... / class = ...             # or a scripted strategy instead\n"
-    "#                                       # (docs.bijectivelabs.dev/opensource/trading)\n\n"
+    "#                                       # (bijectivelabs.github.io/bitra/opensource/\n"
+    "#                                       # trading)\n\n"
 )
 
 
@@ -472,5 +473,5 @@ layers in the "Experiments" block of `strategy.toml` are off because none has be
 the core. Turn on one at a time, and keep it only if `tra arena` shows the core with it doing better
 than the core without it, out of sample. `tra check` lists the experiments a desk has on.
 
-`docs.bijectivelabs.dev/opensource/boundaries` says what this software will not do, and why.
+`bijectivelabs.github.io/bitra/opensource/boundaries` says what this software will not do, and why.
 """
