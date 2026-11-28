@@ -1,7 +1,7 @@
 """The kill ledger: a closed vocabulary and an append-only record of every test and its end.
 
 The vocabulary and the consistency rules between verdicts and axes are on
-docs.bijectivelabs.dev/opensource/ledger.
+bijectivelabs.github.io/bitra/opensource/ledger.
 """
 
 from trading_research_agents.ledger.entry import LedgerEntry, LedgerError, ReversalPoint
