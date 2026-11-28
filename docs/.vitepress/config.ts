@@ -32,13 +32,6 @@ function packageVersion(): string | undefined {
 
 const version = packageVersion()
 
-// The platform's pages are brought in at build time by platform.mjs, which writes this sidebar.
-// A build without them serves TRA alone.
-const platformSidebarFile = new URL('./platform-sidebar.json', import.meta.url)
-const platformSidebar = existsSync(platformSidebarFile)
-  ? JSON.parse(readFileSync(platformSidebarFile, 'utf-8'))
-  : []
-
 // 'opensource/cycle.md' -> 'opensource/cycle', 'opensource/index.md' -> 'opensource/'
 function pagePath(relativePath: string): string {
   return relativePath.replace(/(^|\/)index\.md$/, '$1').replace(/\.md$/, '')
@@ -210,9 +203,6 @@ export default withMermaid(
       if (pageData.relativePath.startsWith('opensource/') && pageData.titleTemplate === undefined) {
         pageData.titleTemplate = ':title | TRA'
       }
-      if (pageData.relativePath.startsWith('bijective/') && pageData.titleTemplate === undefined) {
-        pageData.titleTemplate = ':title | Bijective platform'
-      }
     },
     transformHead({ pageData, siteData, title }) {
       const path = pagePath(pageData.relativePath)
@@ -244,18 +234,12 @@ export default withMermaid(
       search: { provider: 'local' },
       socialLinks: [{ icon: 'github', link: repo }],
       nav: [
-        ...(platformSidebar.length ? [{ text: 'Platform', link: '/bijective/' }] : []),
         { text: 'Open Source', link: '/opensource/' },
         { text: 'Bijective Labs', link: 'https://www.bijectivelabs.dev' }
       ],
-      sidebar: { '/opensource/': sidebar, '/bijective/': platformSidebar },
+      sidebar: { '/opensource/': sidebar },
       editLink: {
-        // A platform page is edited where it lives, in the platform repository. The function runs in
-        // the browser, so it names both repositories literally.
-        pattern: ({ filePath }) =>
-          filePath.startsWith('bijective/')
-            ? `https://github.com/BijectiveLabs/bijective/edit/dev/docs/${filePath.slice(10)}`
-            : `https://github.com/BijectiveLabs/bitra/edit/develop/docs/${filePath}`,
+        pattern: `${repo}/edit/develop/docs/:path`,
         text: 'Edit this page on GitHub'
       },
       outline: {
@@ -270,7 +254,7 @@ export default withMermaid(
       lastUpdatedText: 'Last updated',
       returnToTopLabel: 'Return to top',
       footer: {
-        message: 'TRA is released under the MIT License, the Bijective platform under Apache-2.0.',
+        message: 'Released under the MIT License.',
         copyright: 'Copyright 2026 Bijective Labs'
       }
     }
