@@ -6,6 +6,21 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-11-28
+
+### Changed
+
+- The documentation is at https://bijectivelabs.github.io/bitra/. Every address it had on
+  docs.bijectivelabs.dev forwards to the same page there, so existing links keep working.
+
+### Fixed
+
+- The data archive, its manifest and partial fills are checked more tightly (#25).
+
+### Dependencies
+
+- pyarrow 26.0.0 and opentelemetry-api 1.45.2.
+
 ## [0.14.0] - 2026-11-11
 
 ### Added
