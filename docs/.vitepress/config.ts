@@ -4,7 +4,7 @@ import { defineConfig, type HeadConfig, type SiteConfig } from 'vitepress'
 import { withMermaid } from 'vitepress-plugin-mermaid'
 
 const repo = 'https://github.com/BijectiveLabs/bitra'
-const host = 'https://docs.bijectivelabs.dev'
+const host = 'https://bijectivelabs.github.io/bitra'
 const pypi = 'https://pypi.org/project/bitra/'
 const website = 'https://www.bijectivelabs.dev/open-source'
 const description =
@@ -175,6 +175,8 @@ function writeTextCopies(siteConfig: SiteConfig) {
 export default withMermaid(
   defineConfig({
     lang: 'en-US',
+    // Served by GitHub Pages under the repository's name.
+    base: '/bitra/',
     title: 'Bijective',
     titleTemplate: ':title | Bijective Docs',
     description,
@@ -184,7 +186,7 @@ export default withMermaid(
     srcExclude: ['**/node_modules/**'],
     sitemap: { hostname: host },
     head: [
-      ['link', { rel: 'icon', href: '/icon.svg' }],
+      ['link', { rel: 'icon', href: '/bitra/icon.svg' }],
       ['link', { rel: 'preconnect', href: 'https://fonts.googleapis.com' }],
       ['link', { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' }],
       ['link', { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@100;300;400&display=swap' }],
